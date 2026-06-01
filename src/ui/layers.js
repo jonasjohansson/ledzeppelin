@@ -1,35 +1,30 @@
-// Clip-deck layer UI (Task 4 — "Resolume clips"). Reworks the old single-
-// generator-per-layer panel into a clip deck: each layer holds a deck of clips,
-// one of which is ACTIVE ("playing"); clicking a clip triggers it (the
-// compositor crossfades over the layer's transitionMs). You edit whichever clip
-// is active. Clip effects live on the active clip; layer effects apply to the
-// whole layer — the schema's param split made visible.
+// Single-layer clip composer (Resolume-flavoured, simplified). The old multi-
+// layer stack is gone: the composition is ONE layer holding a deck of clips.
+// A clip is a source (generator) + params + an effect chain.
 //
-// createLayerPanel({ getShow, setShow, onChange }) → { el, refresh() }
-//   getShow():   returns the current show
-//   setShow(s):  persist the (whole) edited show (composition-only — no rebuild)
-//   onChange():  optional, called after every edit
+// Interaction model (matches the reference, minus the layer stack):
+//   - A right RAIL lists draggable SOURCES and EFFECTS.
+//   - Drag a SOURCE onto a clip cell → replaces that clip's source (and triggers
+//     it so the change is visible). Drag a source onto the "+" cell → new clip.
+//   - Drag an EFFECT onto a clip cell, or onto the selected clip's "drop effect"
+//     zone → appends it to that clip's effect chain.
+//   - Click a clip cell → trigger it (the compositor crossfades over the layer's
+//     transition time).
 //
-// "TOP" CONVENTION (unchanged): the compositor iterates
-// show.composition.layers in array order, blitting each onto the accumulator, so
-// the LAST array element renders ON TOP. This panel lists layers visually
-// top-first: the topmost card is the last array element. "▲" moves a layer
-// toward the front (higher array index); "▼" toward the back.
+// The model is unchanged and still stores `composition.layers` (length 1 here),
+// so save/load and the compositor keep working. All edits route through the
+// id-based model helpers (whole-show in, new-show out) → setShow.
 //
-// All edits go through the id-based model helpers (which take the WHOLE show and
-// return a NEW show), then through setShow — immutability is preserved end to end.
+// createLayerPanel({ getShow, setShow, onChange }) → { el, refresh() }  (name
+// kept for app.js compatibility).
 
 import {
   generatorNames, effectNames, getEntry,
 } from '../engine/shaders/manifest.js';
 import {
-  addLayer, removeLayer, moveLayer, patchLayer, setLayerParam,
-  addLayerEffect, removeLayerEffect, moveLayerEffect,
   addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
-  setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
+  setClipParam, addClipEffect, removeClipEffect, moveClipEffect, patchLayer,
 } from '../model/layers.js';
-
-const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -58,7 +53,6 @@ const fmt = (v) => {
 };
 
 // A range slider with a live numeric readout, writing back on every input.
-// The readout updates locally so slider drags do not require a re-render.
 const sliderField = (label, value, min, max, onInput) => {
   const step = (max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1;
   const out = el('span', { className: 'ly-readout', textContent: fmt(value) });
@@ -77,9 +71,7 @@ const sliderField = (label, value, min, max, onInput) => {
   return el('label', { className: 'fx-field ly-param' }, [head, range]);
 };
 
-// Build a control for one manifest param, defensive about future types.
-// Slider/number drags call onInput live (no re-render) — only the readout
-// changes in place, so focus is never lost. Structural edits re-render.
+// Build a control for one manifest param.
 function paramControl(p, value, onInput) {
   if (p.type === 'color') {
     const i = el('input', { type: 'color', value: value || '#ffffff' });
@@ -91,116 +83,74 @@ function paramControl(p, value, onInput) {
     i.addEventListener('change', () => onInput(i.checked));
     return field(p.key, i);
   }
-  // float (and unknown → treat as numeric slider)
   const min = p.min ?? 0, max = p.max ?? 1;
   const v = value == null ? (p.default ?? min) : value;
   return sliderField(p.key, v, min, max, onInput);
 }
 
-// createLayerPanel({ getShow, setShow, onChange })
-export function createLayerPanel({ getShow, setShow, onChange }) {
-  const root = el('div', { className: 'fx-panel ly-panel' });
+// Module-level drag payload. HTML5 dataTransfer.getData isn't readable during
+// `dragover` (only on `drop`), but we need the kind there to decide whether a
+// target accepts the drag — so we stash it here on dragstart and clear on
+// dragend. dataTransfer still carries the payload for completeness.
+let drag = null; // { kind: 'source' | 'effect', name }
 
-  // Persist a whole new show (composition-only edit — no geometry rebuild) and
-  // re-render. Helpers return the SAME show reference on no-op edits; we still
-  // call setShow (cheap) so the contract stays simple. Used for STRUCTURAL edits
-  // (add/remove/reorder, trigger, generator change) which require a re-render.
+export function createLayerPanel({ getShow, setShow, onChange }) {
+  const root = el('div', { className: 'fx-panel cmp2-panel' });
+
+  // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).
   function commit(nextShow) {
     setShow(nextShow);
     onChange?.();
     render();
   }
-
-  // LIVE edit: persist without re-rendering (so a focused slider keeps focus).
-  // Used for param slider/number/color/bool drags — the compositor reads
-  // show.composition.layers each frame, so the change is visible immediately.
+  // LIVE edit: persist without re-render so a focused slider keeps focus.
   function commitLive(nextShow) {
     setShow(nextShow);
     onChange?.();
   }
 
   const show = () => getShow();
-  const layersOf = () => getShow().composition?.layers || [];
+  const firstLayer = () => getShow().composition?.layers?.[0] || null;
 
   function render() {
     root.textContent = '';
-    root.append(el('div', { className: 'fx-title', textContent: 'Layers' }));
-    root.append(el('div', { className: 'ly-hint', textContent: 'top of list = rendered on top' }));
+    root.append(el('div', { className: 'fx-title', textContent: 'Composition' }));
 
-    const layers = layersOf();
-    const genOpts = generatorNames();
-    const fxOpts = effectNames();
-
-    // Display top-first: last array element at the top of the panel.
-    for (let i = layers.length - 1; i >= 0; i--) {
-      root.append(layerCard(layers[i], i, layers.length, genOpts, fxOpts));
+    const layer = firstLayer();
+    if (!layer) {
+      root.append(el('div', { className: 'ly-hint', textContent: 'no composition layer' }));
+      return;
     }
 
-    root.append(el('button', {
-      className: 'fx-add', textContent: '+ layer',
-      onclick: () => commit(addLayer(show())),
-    }));
+    const body = el('div', { className: 'composer-body' });
+    body.append(composerMain(layer));
+    body.append(composerRail());
+    root.append(body);
   }
 
-  function layerCard(layer, i, count, genOpts, fxOpts) {
-    const card = el('div', { className: 'fx-card ly-card' });
+  // --- left column: deck + selected-clip editor ------------------------------
+  function composerMain(layer) {
+    const col = el('div', { className: 'composer-main' });
     const id = layer.id;
 
-    // --- header: editable name + reorder/delete --------------------------
-    const isTop = i === count - 1, isBottom = i === 0;
-    const nameInput = el('input', {
-      className: 'ly-nameedit', value: layer.name ?? layer.id ?? `layer ${i}`,
-      title: 'layer name',
-    });
-    nameInput.addEventListener('change',
-      () => commit(patchLayer(show(), id, { name: nameInput.value })));
-    const ctrls = el('div', { className: 'ly-btns' });
-    ctrls.append(
-      el('button', { textContent: '▲', title: 'move up (toward front)', disabled: isTop,
-        onclick: () => commit(moveLayer(show(), id, +1)) }),
-      el('button', { textContent: '▼', title: 'move down (toward back)', disabled: isBottom,
-        onclick: () => commit(moveLayer(show(), id, -1)) }),
-      el('button', { textContent: '✕', title: 'delete layer', className: 'ly-rmfx',
-        onclick: () => commit(removeLayer(show(), id)) }),
-    );
-    card.append(el('div', { className: 'ly-head' }, [nameInput, ctrls]));
+    col.append(el('div', { className: 'composer-label', textContent: 'CLIPS' }));
+    col.append(el('div', { className: 'ly-hint',
+      textContent: 'click to trigger · drag a source onto a clip to fill it' }));
+    col.append(clipDeck(layer, id));
 
-    // --- blend / opacity / transition ------------------------------------
-    card.append(field('blend', selectInput(BLEND_MODES, layer.blend ?? 'add',
-      (x) => commit(patchLayer(show(), id, { blend: x })))));
-    card.append(sliderField('opacity', layer.opacity == null ? 1 : layer.opacity, 0, 1,
-      (v) => commitLive(patchLayer(show(), id, { opacity: v }))));
-    card.append(sliderField('transition (ms)', layer.transitionMs ?? 500, 0, 5000,
+    // Crossfade time between clips (the transition the deck triggers).
+    col.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
       (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) }))));
 
-    // --- clip deck -------------------------------------------------------
-    card.append(el('div', { className: 'fx-pts', textContent: 'clips' }));
-    card.append(clipDeck(layer, id, genOpts));
-
-    // --- active-clip editor ----------------------------------------------
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
-    if (active) card.append(activeClipEditor(layer, id, active, genOpts, fxOpts));
-
-    // --- layer effects (distinct from clip effects) ----------------------
-    card.append(el('div', { className: 'fx-pts ly-fxlabel ly-fxlabel-layer',
-      textContent: 'layer FX (whole layer)' }));
-    const layerFx = layer.effects || [];
-    for (let fx = 0; fx < layerFx.length; fx++) {
-      card.append(layerEffectBlock(layer, id, fx, layerFx, fxOpts));
-    }
-    card.append(el('div', { className: 'ly-addfx' }, [
-      selectInput([{ value: '', label: '+ add layer FX…' }, ...fxOpts], '', (x) => {
-        if (x) commit(addLayerEffect(show(), id, x));
-      }),
-    ]));
-
-    return card;
+    if (active) col.append(selectedClipEditor(id, active));
+    return col;
   }
 
-  // The clip deck: a row of cells, the active one lit. Click a cell to trigger
-  // (= setActiveClip; the compositor crossfades). Each cell carries reorder
-  // (◀/▶) + remove (×) affordances, plus an "add clip" cell with a generator picker.
-  function clipDeck(layer, id, genOpts) {
+  // The clip deck. Each cell: click = trigger; accepts a dragged SOURCE (replace
+  // + trigger) or EFFECT (append to that clip). The "+" cell accepts a SOURCE to
+  // create a new clip, with a generator <select> as a no-drag fallback.
+  function clipDeck(layer, id) {
     const deck = el('div', { className: 'clip-deck' });
     const clips = layer.clips || [];
     for (let ci = 0; ci < clips.length; ci++) {
@@ -208,17 +158,28 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
       const isActive = clip.id === layer.activeClipId;
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : ''),
-        title: isActive ? 'active (playing) — click another to trigger' : 'click to trigger',
+        title: isActive ? 'active — click another clip to trigger' : 'click to trigger',
       });
-      // Trigger on cell click (but not when an inner affordance was clicked).
       cell.addEventListener('click', (e) => {
         if (e.target.closest('.clip-aff')) return;
         if (!isActive) commit(setActiveClip(show(), id, clip.id));
+      });
+      makeDropTarget(cell, (payload) => {
+        if (payload.kind === 'source') {
+          // Replace the source AND trigger so the result is immediately visible.
+          let next = changeClipGenerator(show(), id, clip.id, payload.name);
+          next = setActiveClip(next, id, clip.id);
+          commit(next);
+        } else if (payload.kind === 'effect') {
+          commit(addClipEffect(show(), id, clip.id, payload.name));
+        }
       });
       cell.append(
         el('div', { className: 'clip-name', textContent: clip.name || clip.id }),
         el('div', { className: 'clip-gen', textContent: clip.generator || '—' }),
       );
+      const fxCount = (clip.effects || []).length;
+      if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
       const aff = el('div', { className: 'clip-aff' });
       aff.append(
         el('button', { textContent: '◀', title: 'move clip earlier', disabled: ci === 0,
@@ -232,30 +193,38 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
       if (isActive) cell.append(el('span', { className: 'clip-badge', textContent: '●' }));
       deck.append(cell);
     }
-    // Add-clip cell: a generator picker that appends a new clip.
+
+    // Add-clip cell: a drop target for sources + a <select> fallback.
     const addCell = el('div', { className: 'clip-cell clip-add' }, [
       el('div', { className: 'clip-name', textContent: '+ add clip' }),
-      selectInput([{ value: '', label: 'generator…' }, ...genOpts], '', (x) => {
+      el('div', { className: 'clip-gen', textContent: 'drop a source' }),
+      selectInput([{ value: '', label: 'or pick…' }, ...generatorNames()], '', (x) => {
         if (x) commit(addClip(show(), id, x));
       }),
     ]);
+    makeDropTarget(addCell, (payload) => {
+      if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
+    });
     deck.append(addCell);
     return deck;
   }
 
-  // Editor for the layer's ACTIVE clip: generator select, generator params, and
-  // the clip's own effect chain. Generator/effect params write clip.params via
-  // setClipParam; live slider drags persist without re-render (commitLive).
-  function activeClipEditor(layer, id, clip, genOpts, fxOpts) {
+  // Editor for the layer's active clip: rename, source params, and its effect
+  // chain (with a drop zone). Source is changed by dragging onto a clip cell.
+  function selectedClipEditor(id, clip) {
     const box = el('div', { className: 'clip-editor' });
-    box.append(el('div', { className: 'clip-editor-head',
-      textContent: `editing: ${clip.name || clip.id}` }));
 
-    // Generator select (changing it resets that generator's params).
-    box.append(field('generator', selectInput(genOpts, clip.generator,
-      (x) => commit(changeClipGenerator(show(), id, clip.id, x)))));
+    const nameInput = el('input', {
+      className: 'ly-nameedit', value: clip.name || clip.id, title: 'clip name',
+    });
+    nameInput.addEventListener('change',
+      () => commit(patchClipName(show(), id, clip.id, nameInput.value)));
+    box.append(el('div', { className: 'clip-editor-head' }, [
+      el('span', { textContent: 'selected:' }), nameInput,
+    ]));
+    box.append(el('div', { className: 'clip-src', textContent: `source: ${clip.generator || '—'}` }));
 
-    // Generator params (auto-generated from manifest).
+    // Source params (auto-generated from the manifest).
     const gen = getEntry(clip.generator);
     if (gen && gen.params.length) {
       box.append(el('div', { className: 'fx-pts', textContent: `${gen.name} params` }));
@@ -266,24 +235,22 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
       }
     }
 
-    // Clip effects (on the active clip only).
-    box.append(el('div', { className: 'fx-pts ly-fxlabel ly-fxlabel-clip',
-      textContent: 'clip FX (this clip)' }));
+    // Effect chain.
+    box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'EFFECTS' }));
     const fxs = clip.effects || [];
     for (let fx = 0; fx < fxs.length; fx++) {
-      box.append(clipEffectBlock(layer, id, clip, fx, fxs));
+      box.append(clipEffectBlock(id, clip, fx, fxs));
     }
-    box.append(el('div', { className: 'ly-addfx' }, [
-      selectInput([{ value: '', label: '+ add clip FX…' }, ...fxOpts], '', (x) => {
-        if (x) commit(addClipEffect(show(), id, clip.id, x));
-      }),
-    ]));
+    const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
+    makeDropTarget(dropZone, (payload) => {
+      if (payload.kind === 'effect') commit(addClipEffect(show(), id, clip.id, payload.name));
+    });
+    box.append(dropZone);
     return box;
   }
 
-  // One CLIP effect block: header (name + reorder/remove) + its param controls.
-  // Params write clip.params['fx.key'] via setClipParam.
-  function clipEffectBlock(layer, id, clip, fx, effects) {
+  // One clip effect block: header (reorder/remove) + its param controls.
+  function clipEffectBlock(id, clip, fx, effects) {
     const name = effects[fx];
     const entry = getEntry(name);
     const block = el('div', { className: 'ly-fx ly-fx-clip' });
@@ -311,37 +278,64 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
     return block;
   }
 
-  // One LAYER effect block: header (name + reorder/remove) + its param controls.
-  // Params write layer.params['fx.key'] via setLayerParam (distinct namespace
-  // from clip effects — see the schema's param split).
-  function layerEffectBlock(layer, id, fx, effects, _fxOpts) {
-    const name = effects[fx];
-    const entry = getEntry(name);
-    const block = el('div', { className: 'ly-fx ly-fx-layer' });
+  // --- right column: draggable Sources + Effects libraries -------------------
+  function composerRail() {
+    const rail = el('div', { className: 'composer-rail' });
+    rail.append(el('div', { className: 'composer-label', textContent: 'SOURCES' }));
+    rail.append(libList('source', generatorNames()));
+    rail.append(el('div', { className: 'composer-label composer-label-fx', textContent: 'EFFECTS' }));
+    rail.append(libList('effect', effectNames()));
+    return rail;
+  }
 
-    const btns = el('div', { className: 'ly-btns' });
-    btns.append(
-      el('button', { textContent: '▲', title: 'effect earlier', disabled: fx === 0,
-        onclick: () => commit(moveLayerEffect(show(), id, fx, -1)) }),
-      el('button', { textContent: '▼', title: 'effect later', disabled: fx === effects.length - 1,
-        onclick: () => commit(moveLayerEffect(show(), id, fx, +1)) }),
-      el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
-        onclick: () => commit(removeLayerEffect(show(), id, fx)) }),
-    );
-    block.append(el('div', { className: 'ly-fxhead' }, [
-      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${name}` }), btns,
-    ]));
-
-    if (entry) {
-      for (const p of entry.params) {
-        const key = entry.name + '.' + p.key;
-        block.append(paramControl(p, layer.params?.[key],
-          (v) => commitLive(setLayerParam(show(), id, key, v))));
-      }
+  function libList(kind, names) {
+    const list = el('div', { className: 'lib-list' });
+    for (const name of names) {
+      const item = el('div', {
+        className: 'lib-item lib-' + kind, textContent: name, draggable: true,
+        title: kind === 'source' ? 'drag onto a clip' : 'drag onto a clip or the drop zone',
+      });
+      item.addEventListener('dragstart', (e) => {
+        drag = { kind, name };
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', `${kind}:${name}`);
+      });
+      item.addEventListener('dragend', () => { drag = null; });
+      list.append(item);
     }
-    return block;
+    return list;
+  }
+
+  // Wire an element as a drop target that accepts the module drag payload.
+  function makeDropTarget(node, onDrop) {
+    node.addEventListener('dragover', (e) => {
+      if (!drag) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      node.classList.add('drop-hover');
+    });
+    node.addEventListener('dragleave', () => node.classList.remove('drop-hover'));
+    node.addEventListener('drop', (e) => {
+      node.classList.remove('drop-hover');
+      if (!drag) return;
+      e.preventDefault();
+      const payload = drag;
+      drag = null;
+      onDrop(payload);
+    });
   }
 
   render();
   return { el: root, refresh: render };
+}
+
+// Rename a clip (small local helper — there is no dedicated model fn, so we
+// reuse the clip update via a param-free patch through changeClipGenerator's
+// sibling). We do it inline to avoid touching the model: find + immutably set.
+function patchClipName(show, layerId, clipId, name) {
+  const layers = (show.composition?.layers || []).map((l) => {
+    if (l.id !== layerId) return l;
+    return { ...l, clips: (l.clips || []).map((c) => c.id === clipId ? { ...c, name } : c) };
+  });
+  return { ...show, composition: { ...show.composition, layers } };
 }

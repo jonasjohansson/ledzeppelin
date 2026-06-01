@@ -39,7 +39,7 @@
 #preview { position: absolute; inset: 0; }
 
 #editor {
-  flex: 0 0 320px;
+  flex: 0 0 360px;
   max-height: 100vh;
   overflow-y: auto;
   background: #111;
@@ -177,6 +177,41 @@ button:hover { background: #262626; }
   background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
   border-radius: 3px; padding: 2px 4px; font: 11px system-ui; width: 100%; box-sizing: border-box;
 }
+
+/* --- Single-layer composer (deck + draggable Sources/Effects rail) --- */
+.cmp2-panel { margin-bottom: 18px; }
+.composer-body { display: flex; gap: 10px; align-items: flex-start; }
+.composer-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.composer-rail {
+  flex: 0 0 116px; display: flex; flex-direction: column; gap: 3px;
+  border-left: 1px solid #222; padding-left: 8px;
+}
+.composer-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #8ab; margin-top: 2px; }
+.composer-label-fx { color: #cb9; margin-top: 8px; }
+
+.lib-list { display: flex; flex-direction: column; gap: 3px; }
+.lib-item {
+  font-size: 11px; color: #ddd; background: #161616; border: 1px solid #2a2a2a;
+  border-radius: 4px; padding: 4px 7px; cursor: grab; user-select: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lib-item:hover { background: #1e1e1e; border-color: #3a3a3a; }
+.lib-item:active { cursor: grabbing; }
+.lib-source { border-left: 2px solid #6ad; }
+.lib-effect { border-left: 2px solid #db8; }
+
+/* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
+.drop-hover {
+  border-color: #6ad !important;
+  box-shadow: 0 0 0 1px #6ad, 0 0 10px rgba(102,170,221,.45) !important;
+  background: #15212a !important;
+}
+.composer-drop {
+  grid-column: 1 / -1; text-align: center; font-size: 11px; color: #777;
+  border: 1px dashed #333; border-radius: 5px; padding: 8px; margin-top: 4px;
+}
+.clip-fxcount { font-size: 9px; color: #db8; margin-top: 1px; }
+.clip-src { grid-column: 1 / -1; font-size: 11px; color: #9ad; }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
 .clip-editor {
