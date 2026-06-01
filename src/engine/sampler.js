@@ -4,7 +4,6 @@ const SAMPLE_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uCanvas;
 uniform sampler2D uMap;
-uniform int uCount;
 void main(){
   int i = int(gl_FragCoord.x);
   ivec2 t = ivec2(i, 0);
@@ -21,15 +20,17 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, n, 1);
   const prog = program(gl, SAMPLE_FS);
+  const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
+  const locMap = gl.getUniformLocation(prog, 'uMap');
   const out = new Uint8Array(n * 4);
   return { n, sample(canvasTex) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, n, 1);
     gl.useProgram(prog);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, canvasTex);
-    gl.uniform1i(gl.getUniformLocation(prog, 'uCanvas'), 0);
+    gl.uniform1i(locCanvas, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, map);
-    gl.uniform1i(gl.getUniformLocation(prog, 'uMap'), 1);
+    gl.uniform1i(locMap, 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.readPixels(0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
