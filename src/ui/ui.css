@@ -94,3 +94,64 @@ button:hover { background: #262626; }
   background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
   border-radius: 3px; padding: 3px 5px; font: 12px system-ui; width: 100%; box-sizing: border-box;
 }
+
+/* Layer name as an inline editable field in the header. */
+.ly-nameedit {
+  flex: 1 1 auto; min-width: 0; margin-right: 6px;
+  background: #0d0d0d; color: #9ad; font-weight: 600; font-size: 12px;
+  border: 1px solid transparent; border-radius: 3px; padding: 2px 5px;
+  font-family: system-ui; box-sizing: border-box;
+}
+.ly-nameedit:hover { border-color: #2a2a2a; }
+.ly-nameedit:focus { border-color: #9ad; outline: none; background: #111; }
+
+/* FX section labels: clip FX vs layer FX colour-coded to read the param split. */
+.ly-fxlabel { grid-column: 1 / -1; }
+.ly-fxlabel-clip { color: #cb9; }
+.ly-fxlabel-layer { color: #9bd; }
+.ly-fx-clip { border-color: #3a3320; }
+.ly-fx-layer { border-color: #20303a; }
+
+/* --- Clip deck (Resolume-style) --- */
+.clip-deck {
+  grid-column: 1 / -1;
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px;
+}
+.clip-cell {
+  position: relative; flex: 0 0 auto; width: 96px;
+  background: #141414; border: 1px solid #2a2a2a; border-radius: 5px;
+  padding: 6px 6px 4px; cursor: pointer; user-select: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.clip-cell:hover { background: #1a1a1a; border-color: #3a3a3a; }
+.clip-name { font-size: 11px; color: #ddd; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-gen { font-size: 10px; color: #888; margin-top: 1px; }
+.clip-active {
+  border-color: #6ad; background: #15212a;
+  box-shadow: 0 0 0 1px #6ad, 0 0 8px rgba(102,170,221,.4);
+}
+.clip-active .clip-name { color: #cfe7ff; }
+.clip-badge {
+  position: absolute; top: 4px; right: 6px; font-size: 9px; color: #6ad;
+  text-shadow: 0 0 4px rgba(102,170,221,.8);
+}
+.clip-aff { display: flex; gap: 3px; margin-top: 5px; }
+.clip-aff button { padding: 0 5px; line-height: 1.5; min-width: 20px; font-size: 10px; }
+.clip-aff button:disabled { opacity: .35; cursor: default; }
+.clip-add { display: flex; flex-direction: column; gap: 4px; cursor: default; border-style: dashed; }
+.clip-add:hover { background: #141414; }
+.clip-add select {
+  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 2px 4px; font: 11px system-ui; width: 100%; box-sizing: border-box;
+}
+
+/* Active-clip editor: the panel below the deck that edits the lit clip. */
+.clip-editor {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px;
+  border: 1px solid #2a2a2a; border-radius: 5px; padding: 8px;
+  margin: 4px 0 2px; background: #101418;
+}
+.clip-editor-head {
+  grid-column: 1 / -1; font-size: 11px; color: #6ad; font-weight: 600;
+  margin-bottom: 2px;
+}
