@@ -45,7 +45,16 @@ export function importKagora(preset) {
   }
 
   const stripType = (s) => typeById.get(s.typeId);
-  const stripPixelCount = (s) => stripType(s)?.pixelCount ?? 0;
+  const stripPixelCount = (s) => {
+    const t = stripType(s);
+    if (!t) {
+      // Missing stripType → 0-pixel fixture. Surface the data loss instead of
+      // silently dropping pixels; still produce the fixture (don't throw).
+      console.warn(`importKagora: strip "${s.id}" has missing stripType (typeId="${s.typeId}"); producing 0-pixel fixture`);
+      return 0;
+    }
+    return t.pixelCount ?? 0;
+  };
   const stripColorOrder = (s) => stripType(s)?.colorOrder ?? DEFAULT_COLOR_ORDER;
 
   // Chain heads: strips whose incoming edge comes directly from a controller.
@@ -54,7 +63,7 @@ export function importKagora(preset) {
   const chainHeads = [];
   for (const s of strips) {
     const e = incomingByStrip.get(s.id);
-    if (e && instById.get(e.from.instId)?.kind === 'controller') {
+    if (e?.from && instById.get(e.from?.instId)?.kind === 'controller') {
       chainHeads.push({ stripId: s.id, controllerId: e.from.instId, port: e.from.id });
     }
   }
@@ -77,7 +86,17 @@ export function importKagora(preset) {
     headsByDevice.get(h.controllerId).push(h);
   }
   for (const [controllerId, heads] of headsByDevice) {
-    heads.sort((a, b) => String(a.port).localeCompare(String(b.port)));
+    // Order by the NUMERIC trailing index of the port id (e.g. data-out-2 before
+    // data-out-10). Parse defensively: fall back to string compare if no number.
+    const portIndex = (p) => {
+      const m = String(p ?? '').match(/(\d+)\s*$/);
+      return m ? Number(m[1]) : null;
+    };
+    heads.sort((a, b) => {
+      const ia = portIndex(a.port), ib = portIndex(b.port);
+      if (ia === null || ib === null) return String(a.port).localeCompare(String(b.port));
+      return ia - ib;
+    });
     let cursor = 0;
     for (const head of heads) {
       let cur = head.stripId;

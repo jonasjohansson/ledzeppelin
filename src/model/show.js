@@ -34,11 +34,3 @@ export function validate(show) {
 
   return { ok: errors.length === 0, errors };
 }
-
-export function deviceByteRange(show, deviceId) {
-  const fs = show.fixtures.filter((f) => f.output.deviceId === deviceId);
-  if (!fs.length) return null;
-  const start = Math.min(...fs.map((f) => f.output.pixelOffset));
-  const end = Math.max(...fs.map((f) => f.output.pixelOffset + f.output.pixelCount));
-  return { byteStart: start * 3, byteEnd: end * 3 };
-}

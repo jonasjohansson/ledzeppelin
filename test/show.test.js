@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, deviceByteRange } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate } from '../src/model/show.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -27,13 +27,4 @@ test('non-zero starting pixel offset fails contiguity validation', () => {
   const r = validate(s);
   assert.equal(r.ok, false);
   assert.match(r.errors.join(), /must start at 0 and be contiguous/);
-});
-
-test('deviceByteRange spans all fixtures on a device', () => {
-  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: 'x' });
-  s = addFixture(s, { id: 'a', name:'a', pixelCount:300, colorOrder:'GRB',
-    output:{deviceId:'c1',pixelOffset:0,pixelCount:300}, input:{points:[[0,0],[0,1]],samples:300} });
-  s = addFixture(s, { id: 'b', name:'b', pixelCount:240, colorOrder:'GRB',
-    output:{deviceId:'c1',pixelOffset:300,pixelCount:240}, input:{points:[[0,0],[0,1]],samples:240} });
-  assert.deepEqual(deviceByteRange(s, 'c1'), { byteStart: 0, byteEnd: 540*3 });
 });
