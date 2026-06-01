@@ -23,7 +23,14 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
   const out = new Uint8Array(n * 4);
-  return { n, sample(canvasTex) {
+  return { n,
+    dispose() {
+      gl.deleteTexture(map);
+      gl.deleteTexture(target.tex);
+      gl.deleteFramebuffer(target.fbo);
+      gl.deleteProgram(prog);
+    },
+    sample(canvasTex) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, n, 1);
     gl.useProgram(prog);

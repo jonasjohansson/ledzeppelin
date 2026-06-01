@@ -5,6 +5,14 @@ import { deviceByteRange } from './show.js';
 // Fixtures are ordered by output.pixelOffset ascending so the sampler's RGBA
 // readback order matches the daemon's per-device byte layout. Single-device
 // correct (M2 target); multi-device byte layout is an M4 concern.
+//
+// INVARIANT: the flat sampler buffer is dense and 0-based — readback pixel `i`
+// equals daemon pixel `i`. This only holds when, per device, each fixture's
+// [pixelOffset, pixelOffset+pixelCount) ranges start at 0 and are contiguous
+// (no gaps/overlaps). route[].byteStart comes from deviceByteRange() which
+// likewise assumes a device's fixtures start at offset 0. A nonzero start or a
+// gap would mis-route every pixel by that amount. validate() in show.js enforces
+// this; multi-device global-base handling is deferred to M4.
 export function buildPipelineInputs(show) {
   const fixtureOrder = [...show.fixtures].sort(
     (a, b) => a.output.pixelOffset - b.output.pixelOffset

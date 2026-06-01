@@ -33,7 +33,7 @@ export function createPreview(canvasEl, opts = {}) {
         let r = 30, g = 30, b = 30;
         if (rgba) {
           const idx = (span.start + i) * 4;
-          if (idx + 2 < rgba.length) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
+          if (idx + 2 <= rgba.length - 1) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
         }
         ctx.beginPath();
         ctx.arc(x, y, dotR, 0, Math.PI * 2);

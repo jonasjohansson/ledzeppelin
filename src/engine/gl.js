@@ -20,9 +20,15 @@ void main(){ vec2 p = P[gl_VertexID]; uv = p*0.5+0.5; gl_Position = vec4(p,0.,1.
 
 export function program(gl, fragSrc) {
   const p = gl.createProgram();
-  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, VERT));
-  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fragSrc));
+  const vs = compile(gl, gl.VERTEX_SHADER, VERT);
+  const fs = compile(gl, gl.FRAGMENT_SHADER, fragSrc);
+  gl.attachShader(p, vs);
+  gl.attachShader(p, fs);
   gl.linkProgram(p);
+  // Flag shaders for deletion: once the program is linked it retains them, so
+  // they're freed when the program is deleted. Prevents leaking shader objects.
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
   if (!gl.getProgramParameter(p, gl.LINK_STATUS))
     throw new Error(gl.getProgramInfoLog(p));
   return p;

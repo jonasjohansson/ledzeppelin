@@ -1,5 +1,5 @@
 import { getGL, program, makeTarget, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { connectBridge } from './bridge.js';
@@ -29,7 +29,25 @@ function defaultShow() {
   return show;
 }
 
-let show = loadShow() ?? defaultShow();
+// Load persisted show, but fall back to the default if it's missing, structurally
+// bad, or fails validation — otherwise buildPipelineInputs/samplePoints could throw at init.
+function initialShow() {
+  const loaded = loadShow();
+  if (!loaded) return defaultShow();
+  try {
+    const v = validate(loaded);
+    if (!v.ok) {
+      console.warn('Loaded show failed validation, using default:', v.errors.join(' · '));
+      return defaultShow();
+    }
+    return loaded;
+  } catch (e) {
+    console.warn('Loaded show is invalid, using default:', e.message);
+    return defaultShow();
+  }
+}
+
+let show = initialShow();
 
 // --- Pipeline (rebuildable on every show edit) ---
 const canvasTarget = makeTarget(gl, W, H);
@@ -39,6 +57,7 @@ let sampler = null, bridge = null, lastRGBA = null;
 function rebuild(next) {
   show = next;
   const { sampleUVs, route } = buildPipelineInputs(show);
+  sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
   if (bridge?.close) bridge.close();
   bridge = connectBridge(route);

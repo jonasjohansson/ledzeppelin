@@ -19,6 +19,16 @@ test('fixture referencing unknown device fails', () => {
   assert.match(r.errors.join(), /unknown device/);
 });
 
+test('non-zero starting pixel offset fails contiguity validation', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: 'x' });
+  s = addFixture(s, { id: 't1', name: 'T1', pixelCount: 150, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 150, pixelCount: 150 },
+    input: { points: [[0,0],[1,1]], samples: 150 } });
+  const r = validate(s);
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join(), /must start at 0 and be contiguous/);
+});
+
 test('deviceByteRange spans all fixtures on a device', () => {
   let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: 'x' });
   s = addFixture(s, { id: 'a', name:'a', pixelCount:300, colorOrder:'GRB',

@@ -14,6 +14,24 @@ export function validate(show) {
     if (f.output?.pixelCount !== f.pixelCount) errors.push(`fixture ${f.id}: output pixelCount mismatch`);
     if ((f.input?.points?.length ?? 0) < 2) errors.push(`fixture ${f.id}: input needs ≥2 points`);
   }
+
+  // Per-device pixel ranges must start at 0 and be contiguous (no gaps/overlaps),
+  // since the flat sampler buffer is dense 0-based (see pipeline.js INVARIANT).
+  for (const d of show.devices) {
+    const fs = show.fixtures
+      .filter((f) => f.output?.deviceId === d.id)
+      .sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
+    if (!fs.length) continue;
+    let expected = 0;
+    for (const f of fs) {
+      if ((f.output?.pixelOffset ?? 0) !== expected) {
+        errors.push(`device ${d.id}: fixture pixel offsets must start at 0 and be contiguous`);
+        break;
+      }
+      expected += f.output?.pixelCount ?? 0;
+    }
+  }
+
   return { ok: errors.length === 0, errors };
 }
 
