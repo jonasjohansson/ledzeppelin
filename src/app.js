@@ -153,19 +153,89 @@ const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
 });
-const editor = document.getElementById('editor');
-editor?.append(compositionPanel.el);
-editor?.append(importPanel.el);
-editor?.append(layerPanel.el);
-editor?.append(panel.el);
+// --- Two-tab workspace routing -------------------------------------------
+// Panels are CONSTRUCTED ONCE and mounted into per-tab containers; switching
+// tabs/modes only toggles container visibility + interactivity (never
+// destroys/recreates panels, so panel state + .refresh() keep working).
+//
+//   Composition tab → Composition (canvas res) + Layers panels.
+//   Output tab      → Input/Output segmented toggle + Import + Fixtures panels.
+//                     The #preview fixture overlay is shown here (hidden in
+//                     Composition for a clean composite view); drag placement is
+//                     gated to Output+Input mode.
+const editorComposition = document.getElementById('editor-composition');
+const editorOutputPanels = document.getElementById('editor-output-panels');
+editorComposition?.append(compositionPanel.el);
+editorComposition?.append(layerPanel.el);
+editorOutputPanels?.append(importPanel.el);
+editorOutputPanels?.append(panel.el);
 
+let dragHandle = null;
 if (previewCanvas) {
-  enableDragPlacement(previewCanvas, {
+  dragHandle = enableDragPlacement(previewCanvas, {
     getShow: () => show,
     onEdit: (next) => { show = next; preview?.draw(show, lastRGBA); }, // live, no rebuild churn
     onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); },
+    enabled: false, // gated by view state below; default tab is Composition
   });
 }
+
+// Runtime UI view state (NOT persisted in the show JSON). The render loop and
+// sampler/output run regardless of which tab is shown — applyView only toggles
+// DOM visibility, the preview overlay, and drag interactivity.
+const view = { activeTab: 'composition', outputMode: 'input' };
+const tabsEl = document.getElementById('tabs');
+const editorCompositionWrap = document.getElementById('editor-composition');
+const editorOutputWrap = document.getElementById('editor-output');
+const outputModeEl = document.getElementById('output-mode');
+const outputModeHint = document.getElementById('output-mode-hint');
+
+function applyView() {
+  const onOutput = view.activeTab === 'output';
+
+  // Tab buttons.
+  tabsEl?.querySelectorAll('.tab').forEach((b) => {
+    b.classList.toggle('tab-active', b.dataset.tab === view.activeTab);
+  });
+
+  // Editor panel containers (show/hide, not recreate).
+  if (editorCompositionWrap) editorCompositionWrap.hidden = onOutput;
+  if (editorOutputWrap) editorOutputWrap.hidden = !onOutput;
+
+  // Fixture overlay: visible on Output, hidden on Composition (clean composite).
+  // Hiding the canvas does NOT stop the render loop or the sampler — preview.draw
+  // still runs each frame; the canvas is merely not displayed.
+  if (previewCanvas) previewCanvas.style.display = onOutput ? '' : 'none';
+
+  // Output mode segmented toggle.
+  outputModeEl?.querySelectorAll('.seg-btn').forEach((b) => {
+    b.classList.toggle('seg-active', b.dataset.mode === view.outputMode);
+  });
+  if (outputModeHint) {
+    outputModeHint.textContent = !onOutput ? '' :
+      view.outputMode === 'input'
+        ? 'Input — drag fixture endpoints on the overlay to set where they sample the canvas.'
+        : 'Output — assign devices, offsets and IPs. Drag placement is locked.';
+  }
+
+  // Drag placement is ON only in Output tab + Input mode.
+  dragHandle?.setEnabled(onOutput && view.outputMode === 'input');
+}
+
+tabsEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.tab');
+  if (!b) return;
+  view.activeTab = b.dataset.tab;
+  applyView();
+});
+outputModeEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.seg-btn');
+  if (!b) return;
+  view.outputMode = b.dataset.mode;
+  applyView();
+});
+
+applyView();
 
 // Compositor is ready immediately (programs compile lazily on first render).
 rebuild(show);

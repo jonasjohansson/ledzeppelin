@@ -68,6 +68,9 @@ export function createPreview(canvasEl, opts = {}) {
 export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opts = {}) {
   const hitR = opts.hitRadius ?? 12;
   let dragging = null; // { fxId, end: 'first' | 'last' }
+  // Gate: drag editing is only active when enabled (Output tab → Input mode).
+  // Starts enabled to preserve prior always-on behavior unless the caller toggles.
+  let enabled = opts.enabled ?? true;
 
   const toNorm = (ev) => {
     const r = canvasEl.getBoundingClientRect();
@@ -93,6 +96,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
   }
 
   canvasEl.addEventListener('pointerdown', (ev) => {
+    if (!enabled) return;
     const hit = hitTest(ev);
     if (!hit) return;
     dragging = hit;
@@ -101,7 +105,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
   });
 
   canvasEl.addEventListener('pointermove', (ev) => {
-    if (!dragging) return;
+    if (!enabled || !dragging) return;
     const [u, v] = toNorm(ev);
     const next = structuredClone(getShow());
     const f = next.fixtures.find((x) => x.id === dragging.fxId);
@@ -120,4 +124,14 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
   }
   canvasEl.addEventListener('pointerup', end);
   canvasEl.addEventListener('pointercancel', end);
+
+  // Handle: lets the caller gate drag editing on view state (tab + mode).
+  // Disabling mid-drag drops any in-progress drag so it can't commit later.
+  return {
+    setEnabled(v) {
+      enabled = !!v;
+      if (!enabled) dragging = null;
+    },
+    isEnabled() { return enabled; },
+  };
 }

@@ -7,12 +7,26 @@ canvas{display:block}#hud{position:fixed;top:8px;left:8px;opacity:.8;z-index:10}
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
 <div id="hud">booting…</div>
+<div id="tabs" class="tabs">
+  <button id="tab-composition" class="tab tab-active" data-tab="composition">Composition</button>
+  <button id="tab-output" class="tab" data-tab="output">Output</button>
+</div>
 <div id="layout">
   <div id="stagewrap">
     <canvas id="stage"></canvas>
     <canvas id="preview" width="1280" height="720"></canvas>
   </div>
-  <aside id="editor"></aside>
+  <aside id="editor">
+    <div id="editor-composition"></div>
+    <div id="editor-output" hidden>
+      <div id="output-mode" class="seg" role="tablist">
+        <button id="seg-input" class="seg-btn seg-active" data-mode="input">Input</button>
+        <button id="seg-output" class="seg-btn" data-mode="output">Output</button>
+      </div>
+      <div id="output-mode-hint" class="seg-hint"></div>
+      <div id="editor-output-panels"></div>
+    </div>
+  </aside>
 </div>
 <script type="module" src="./src/app.js"></script></body>
 </html>
