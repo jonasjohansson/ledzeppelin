@@ -17,7 +17,7 @@ export async function serveStatic(root, req, res) {
     const s = await stat(filePath);
     if (s.isDirectory()) filePath = join(filePath, 'index.html');
     res.writeHead(200, { 'content-type': contentType(filePath) });
-    createReadStream(filePath).pipe(res);
+    createReadStream(filePath).on('error', () => res.destroy()).pipe(res);
     return true;
   } catch { return false; }
 }
