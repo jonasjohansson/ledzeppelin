@@ -1,4 +1,5 @@
 import { emptyShow } from './show.js';
+import { normalizeComposition } from './layers.js';
 
 // Import a Kagora preset into a ledzeppelin show.
 //
@@ -178,5 +179,8 @@ export function importKagora(preset) {
       };
     });
 
-  return show;
+  // Guarantee a new-shape (clip schema) composition. The import only sets
+  // devices/fixtures; normalizeComposition just ensures canvas + an (empty)
+  // clip-shape layers array so downstream code never sees the old shape.
+  return normalizeComposition(show);
 }

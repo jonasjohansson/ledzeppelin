@@ -8,7 +8,7 @@ import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
-import { prefixedDefaults } from './model/layers.js';
+import { prefixedDefaults, normalizeComposition, makeClip } from './model/layers.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -30,12 +30,15 @@ function defaultShow() {
     output: { deviceId: 'c1', pixelOffset: 150, pixelCount: 150 },
     input: { points: [[0.05, 0.70], [0.95, 0.70]], samples: 150 },
   });
-  // One working composition layer so the first run shows the line. Params come
-  // from the manifest defaults (prefixed) so they stay in sync — with default
-  // speed=1/amp=0.45 the line self-animates in-shader via uT.
+  // One working composition layer (NEW clip schema) so the first run shows the
+  // line. The single active clip carries the line generator + its prefixed
+  // manifest defaults; with default speed=1/amp=0.45 the line self-animates
+  // in-shader via uT. Layer-level effects/params start empty.
+  const clip = { ...makeClip('line', 'clip 1', 'c1'), params: prefixedDefaults('line') };
   show.composition.layers = [
-    { id: 'l1', generator: 'line', effects: [], blend: 'add', opacity: 1,
-      params: prefixedDefaults('line') },
+    { id: 'l1', name: 'layer 1', blend: 'add', opacity: 1,
+      clips: [clip], activeClipId: clip.id,
+      effects: [], params: {}, transitionMs: 500 },
   ];
   return show;
 }
@@ -51,7 +54,9 @@ function initialShow() {
       console.warn('Loaded show failed validation, using default:', v.errors.join(' · '));
       return defaultShow();
     }
-    return loaded;
+    // Upgrade persisted OLD-shape compositions to the clip schema on load
+    // (idempotent — new-shape shows pass through unchanged).
+    return normalizeComposition(loaded);
   } catch (e) {
     console.warn('Loaded show is invalid, using default:', e.message);
     return defaultShow();

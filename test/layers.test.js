@@ -1,89 +1,309 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  makeLayer, addLayer, removeLayer, moveLayer, patchLayer, setLayerParam,
-  changeGenerator, addEffect, removeEffect, moveEffect, prefixedDefaults,
+  prefixedDefaults, normalizeComposition,
+  makeClip, addClip, removeClip, moveClip, setActiveClip,
+  changeClipGenerator, setClipParam,
+  addClipEffect, removeClipEffect, moveClipEffect,
+  makeLayer, addLayer, removeLayer, moveLayer, patchLayer,
+  setLayerParam, addLayerEffect, removeLayerEffect, moveLayerEffect,
 } from '../src/model/layers.js';
 
+// --- prefixedDefaults (unchanged) ---
 test('prefixedDefaults namespaces keys with the entry name', () => {
   assert.deepEqual(prefixedDefaults('line'),
     { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90, 'line.speed': 1, 'line.amp': 0.45 });
 });
 
-test('makeLayer seeds prefixed generator params and defaults', () => {
+// --- migration: normalizeComposition ---
+function oldShow() {
+  return {
+    version: 1, devices: [], fixtures: [],
+    composition: {
+      canvas: { w: 1280, h: 720 },
+      layers: [
+        { id: 'l1', generator: 'line', effects: ['displace'], blend: 'add', opacity: 1,
+          params: { 'line.pos': 0.9, 'displace.amt': 0.3 } },
+      ],
+    },
+  };
+}
+
+test('normalizeComposition upgrades an OLD-shape layer to a one-clip layer', () => {
+  const out = normalizeComposition(oldShow());
+  const layer = out.composition.layers[0];
+  // layer-level shape
+  assert.equal(layer.id, 'l1');
+  assert.equal(layer.blend, 'add');
+  assert.equal(layer.opacity, 1);
+  assert.deepEqual(layer.effects, []);          // layer effects empty
+  assert.deepEqual(layer.params, {});           // layer params empty
+  assert.equal(layer.transitionMs, 500);        // default crossfade
+  assert.equal(typeof layer.name, 'string');
+  assert.ok(!('generator' in layer));           // old keys removed from layer
+  // clip carries the old generator/params/effects
+  assert.equal(layer.clips.length, 1);
+  const clip = layer.clips[0];
+  assert.equal(clip.generator, 'line');
+  assert.deepEqual(clip.effects, ['displace']);
+  assert.equal(clip.params['line.pos'], 0.9);
+  assert.equal(clip.params['displace.amt'], 0.3);
+  assert.equal(layer.activeClipId, clip.id);
+});
+
+test('normalizeComposition is idempotent (twice == once)', () => {
+  const once = normalizeComposition(oldShow());
+  const twice = normalizeComposition(once);
+  assert.deepEqual(twice, once);
+});
+
+test('normalizeComposition ensures canvas + fills clip-layer defaults', () => {
+  const show = {
+    version: 1, devices: [], fixtures: [],
+    composition: { layers: [{ id: 'l1', clips: [{ id: 'c1', generator: 'line' }] }] },
+  };
+  const out = normalizeComposition(show);
+  assert.deepEqual(out.composition.canvas, { w: 1280, h: 720 });
+  const layer = out.composition.layers[0];
+  assert.equal(layer.activeClipId, 'c1');       // first clip
+  assert.deepEqual(layer.effects, []);
+  assert.deepEqual(layer.params, {});
+  assert.equal(layer.transitionMs, 500);
+  assert.equal(typeof layer.name, 'string');
+  // clip gets default params/effects/name filled
+  assert.deepEqual(out.composition.layers[0].clips[0].effects, []);
+  assert.deepEqual(out.composition.layers[0].clips[0].params, {});
+});
+
+test('normalizeComposition is safe on an empty composition', () => {
+  const out = normalizeComposition({ composition: { layers: [] } });
+  assert.deepEqual(out.composition.layers, []);
+  assert.deepEqual(out.composition.canvas, { w: 1280, h: 720 });
+});
+
+test('normalizeComposition does not mutate the input', () => {
+  const inp = oldShow();
+  const snapshot = structuredClone(inp);
+  normalizeComposition(inp);
+  assert.deepEqual(inp, snapshot);
+});
+
+// --- helper to get a fresh normalized show with one layer ---
+function freshShow() {
+  return normalizeComposition({ composition: { canvas: { w: 1280, h: 720 }, layers: [] } });
+}
+
+// --- makeClip ---
+test('makeClip seeds prefixed generator params, empty effects', () => {
+  const c = makeClip('line');
+  assert.equal(c.generator, 'line');
+  assert.deepEqual(c.effects, []);
+  assert.equal(c.params['line.pos'], 0.5);
+  assert.equal(typeof c.id, 'string');
+  assert.equal(typeof c.name, 'string');
+});
+
+// --- addLayer creates a one-clip active layer of the new shape ---
+test('addLayer creates a one-clip active new-shape layer', () => {
+  const show = freshShow();
+  const next = addLayer(show);
+  assert.equal(show.composition.layers.length, 0);   // immutable
+  assert.equal(next.composition.layers.length, 1);
+  const layer = next.composition.layers[0];
+  assert.equal(layer.blend, 'add');
+  assert.equal(layer.opacity, 1);
+  assert.equal(layer.transitionMs, 500);
+  assert.deepEqual(layer.effects, []);
+  assert.deepEqual(layer.params, {});
+  assert.equal(layer.clips.length, 1);
+  assert.equal(layer.activeClipId, layer.clips[0].id);
+  assert.equal(layer.clips[0].generator, 'line');
+});
+
+// --- addClip / removeClip / setActiveClip ---
+test('addClip appends; becomes active if none was active', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  const layer = show.composition.layers[0];
+  assert.equal(layer.clips.length, 2);
+  assert.equal(layer.clips[1].generator, 'gradient');
+  // first clip stays active (there was an active clip already)
+  assert.equal(layer.activeClipId, layer.clips[0].id);
+});
+
+test('addClip becomes active when layer had no active clip', () => {
+  let show = addLayer(freshShow());
+  let lid = show.composition.layers[0].id;
+  // force no active clip
+  show = setActiveClip(show, lid, null);
+  show = addClip(show, lid, 'gradient');
+  const layer = show.composition.layers[0];
+  assert.equal(layer.activeClipId, layer.clips[layer.clips.length - 1].id);
+});
+
+test('removeClip reassigns activeClipId when removing the active clip', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  const activeId = show.composition.layers[0].activeClipId;
+  show = removeClip(show, lid, activeId);
+  const layer = show.composition.layers[0];
+  assert.equal(layer.clips.length, 1);
+  assert.equal(layer.activeClipId, layer.clips[0].id);  // reassigned to survivor
+  assert.notEqual(layer.activeClipId, activeId);
+});
+
+test('removeClip on last clip → activeClipId null, no crash', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const onlyId = show.composition.layers[0].clips[0].id;
+  show = removeClip(show, lid, onlyId);
+  const layer = show.composition.layers[0];
+  assert.deepEqual(layer.clips, []);
+  assert.equal(layer.activeClipId, null);
+});
+
+test('setActiveClip sets the target', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  const target = show.composition.layers[0].clips[1].id;
+  show = setActiveClip(show, lid, target);
+  assert.equal(show.composition.layers[0].activeClipId, target);
+});
+
+test('moveClip reorders within the deck, bounds-safe', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  show = addClip(show, lid, 'solid');
+  const ids = show.composition.layers[0].clips.map((c) => c.id);
+  const moved = moveClip(show, lid, ids[0], +1);
+  assert.deepEqual(moved.composition.layers[0].clips.map((c) => c.id),
+    [ids[1], ids[0], ids[2]]);
+  // out-of-range → unchanged reference
+  assert.equal(moveClip(show, lid, ids[0], -1), show);
+});
+
+// --- changeClipGenerator ---
+test('changeClipGenerator resets generator params, keeps clip effect params', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  show = setClipParam(show, lid, cid, 'displace.amt', 0.7);
+  show = changeClipGenerator(show, lid, cid, 'gradient');
+  const clip = show.composition.layers[0].clips[0];
+  assert.equal(clip.generator, 'gradient');
+  assert.equal(clip.params['gradient.angle'], 0);     // new gen default seeded
+  assert.equal(clip.params['line.pos'], undefined);   // old gen params dropped
+  assert.equal(clip.params['displace.amt'], 0.7);     // clip effect params kept
+});
+
+// --- clip effect chain ---
+test('addClipEffect seeds defaults; removeClipEffect drops orphan params', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  assert.deepEqual(show.composition.layers[0].clips[0].effects, ['displace']);
+  assert.equal(show.composition.layers[0].clips[0].params['displace.amt'], 0.2);
+  show = removeClipEffect(show, lid, cid, 0);
+  assert.deepEqual(show.composition.layers[0].clips[0].effects, []);
+  assert.equal(show.composition.layers[0].clips[0].params['displace.amt'], undefined);
+});
+
+test('removeClipEffect keeps params when a duplicate effect remains', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  show = addClipEffect(show, lid, cid, 'displace');
+  show = removeClipEffect(show, lid, cid, 0);
+  assert.deepEqual(show.composition.layers[0].clips[0].effects, ['displace']);
+  assert.equal(show.composition.layers[0].clips[0].params['displace.amt'], 0.2);
+});
+
+test('moveClipEffect reorders the clip chain, bounds-safe', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  show = addClipEffect(show, lid, cid, 'repeat');
+  const moved = moveClipEffect(show, lid, cid, 0, +1);
+  assert.deepEqual(moved.composition.layers[0].clips[0].effects, ['repeat', 'displace']);
+  assert.equal(moveClipEffect(show, lid, cid, 0, -1), show);  // clamp → unchanged
+});
+
+// --- layer-level effects, independent of clip params ---
+test('layer effect helpers operate on layer.effects/layer.params', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addLayerEffect(show, lid, 'displace');
+  assert.deepEqual(show.composition.layers[0].effects, ['displace']);
+  assert.equal(show.composition.layers[0].params['displace.amt'], 0.2);
+  show = setLayerParam(show, lid, 'displace.amt', 0.4);
+  assert.equal(show.composition.layers[0].params['displace.amt'], 0.4);
+  show = removeLayerEffect(show, lid, 0);
+  assert.deepEqual(show.composition.layers[0].effects, []);
+  assert.equal(show.composition.layers[0].params['displace.amt'], undefined);
+});
+
+test('layer displace and clip displace keep separate values (no collision)', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  show = setClipParam(show, lid, cid, 'displace.amt', 0.9);
+  show = addLayerEffect(show, lid, 'displace');
+  show = setLayerParam(show, lid, 'displace.amt', 0.1);
+  assert.equal(show.composition.layers[0].clips[0].params['displace.amt'], 0.9);
+  assert.equal(show.composition.layers[0].params['displace.amt'], 0.1);
+});
+
+test('moveLayerEffect reorders the layer chain, bounds-safe', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  show = addLayerEffect(show, lid, 'displace');
+  show = addLayerEffect(show, lid, 'repeat');
+  const moved = moveLayerEffect(show, lid, 0, +1);
+  assert.deepEqual(moved.composition.layers[0].effects, ['repeat', 'displace']);
+  assert.equal(moveLayerEffect(show, lid, 0, -1), show);
+});
+
+// --- layer lifecycle: remove / move / patch ---
+test('removeLayer / moveLayer are immutable and clamp', () => {
+  let show = addLayer(addLayer(addLayer(freshShow())));
+  const ids = show.composition.layers.map((l) => l.id);
+  const rm = removeLayer(show, ids[1]);
+  assert.deepEqual(rm.composition.layers.map((l) => l.id), [ids[0], ids[2]]);
+  assert.equal(removeLayer(show, 'nope'), show);             // unknown → unchanged
+  const mv = moveLayer(show, ids[0], +1);
+  assert.deepEqual(mv.composition.layers.map((l) => l.id), [ids[1], ids[0], ids[2]]);
+  assert.equal(moveLayer(show, ids[0], -1), show);           // clamp → unchanged
+  assert.equal(show.composition.layers.length, 3);           // original untouched
+});
+
+test('patchLayer patches blend/opacity/name/transitionMs immutably', () => {
+  let show = addLayer(freshShow());
+  const lid = show.composition.layers[0].id;
+  const p = patchLayer(show, lid, { opacity: 0.5, transitionMs: 250, name: 'foo' });
+  assert.equal(p.composition.layers[0].opacity, 0.5);
+  assert.equal(p.composition.layers[0].transitionMs, 250);
+  assert.equal(p.composition.layers[0].name, 'foo');
+  assert.equal(show.composition.layers[0].opacity, 1);       // original untouched
+});
+
+test('makeLayer builds a one-clip active new-shape layer', () => {
   const l = makeLayer('l1');
   assert.equal(l.id, 'l1');
-  assert.equal(l.generator, 'line');
   assert.equal(l.blend, 'add');
   assert.equal(l.opacity, 1);
+  assert.equal(l.transitionMs, 500);
   assert.deepEqual(l.effects, []);
-  assert.equal(l.params['line.pos'], 0.5);
-});
-
-test('addLayer appends immutably with a unique id', () => {
-  const a = [];
-  const b = addLayer(a);
-  assert.equal(a.length, 0);            // original untouched
-  assert.equal(b.length, 1);
-  const c = addLayer(b);
-  assert.notEqual(b[0].id, c[1].id);
-});
-
-test('removeLayer / moveLayer are immutable and clamp', () => {
-  const ls = [makeLayer('a'), makeLayer('b'), makeLayer('c')];
-  assert.deepEqual(removeLayer(ls, 1).map((l) => l.id), ['a', 'c']);
-  assert.equal(removeLayer(ls, 9), ls);                       // out of range → unchanged
-  assert.deepEqual(moveLayer(ls, 0, +1).map((l) => l.id), ['b', 'a', 'c']);
-  assert.equal(moveLayer(ls, 0, -1), ls);                     // clamp → unchanged
-  assert.equal(ls.map((l) => l.id).join(''), 'abc');          // original untouched
-});
-
-test('patchLayer / setLayerParam mutate only the target immutably', () => {
-  const ls = [makeLayer('a'), makeLayer('b')];
-  const p = patchLayer(ls, 1, { opacity: 0.5 });
-  assert.equal(p[1].opacity, 0.5);
-  assert.equal(p[0], ls[0]);            // untouched layer is reused by reference
-  assert.equal(ls[1].opacity, 1);       // original untouched
-  const sp = setLayerParam(ls, 0, 'line.pos', 0.9);
-  assert.equal(sp[0].params['line.pos'], 0.9);
-  assert.equal(ls[0].params['line.pos'], 0.5);
-});
-
-test('changeGenerator resets generator params but keeps effect params', () => {
-  let ls = [makeLayer('a')];
-  ls = addEffect(ls, 0, 'displace');
-  ls = setLayerParam(ls, 0, 'displace.amt', 0.7);
-  const next = changeGenerator(ls, 0, 'gradient');
-  assert.equal(next[0].generator, 'gradient');
-  assert.equal(next[0].params['gradient.angle'], 0);          // new gen default seeded
-  assert.equal(next[0].params['line.pos'], undefined);        // old gen params dropped
-  assert.equal(next[0].params['displace.amt'], 0.7);          // effect params kept
-});
-
-test('addEffect appends and seeds defaults; removeEffect drops orphan params', () => {
-  let ls = [makeLayer('a')];
-  ls = addEffect(ls, 0, 'displace');
-  assert.deepEqual(ls[0].effects, ['displace']);
-  assert.equal(ls[0].params['displace.amt'], 0.2);
-  const rm = removeEffect(ls, 0, 0);
-  assert.deepEqual(rm[0].effects, []);
-  assert.equal(rm[0].params['displace.amt'], undefined);
-});
-
-test('removeEffect keeps params when a duplicate effect remains', () => {
-  let ls = [makeLayer('a')];
-  ls = addEffect(ls, 0, 'displace');
-  ls = addEffect(ls, 0, 'displace');
-  const rm = removeEffect(ls, 0, 0);
-  assert.deepEqual(rm[0].effects, ['displace']);
-  assert.equal(rm[0].params['displace.amt'], 0.2);            // still used → kept
-});
-
-test('moveEffect reorders the chain immutably and clamps', () => {
-  let ls = [makeLayer('a')];
-  ls = addEffect(ls, 0, 'displace');
-  ls = addEffect(ls, 0, 'repeat');
-  const mv = moveEffect(ls, 0, 0, +1);
-  assert.deepEqual(mv[0].effects, ['repeat', 'displace']);
-  assert.equal(moveEffect(ls, 0, 0, -1), ls);                 // clamp → unchanged
+  assert.deepEqual(l.params, {});
+  assert.equal(l.clips.length, 1);
+  assert.equal(l.activeClipId, l.clips[0].id);
+  assert.equal(l.clips[0].generator, 'line');
 });
