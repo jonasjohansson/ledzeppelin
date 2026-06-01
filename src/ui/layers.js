@@ -19,7 +19,7 @@
 // kept for app.js compatibility).
 
 import {
-  generatorNames, effectNames, getEntry,
+  generatorNames, effectNames, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
   addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
@@ -210,7 +210,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         onclick: () => commit(removeLayerEffect(show(), id, fx)) }),
     );
     block.append(el('div', { className: 'ly-fxhead' }, [
-      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${name}` }), btns,
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }), btns,
     ]));
 
     if (entry) {
@@ -269,7 +269,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       });
       cell.append(
         el('div', { className: 'clip-name', textContent: clip.name || clip.id }),
-        el('div', { className: 'clip-gen', textContent: clip.generator || '—' }),
+        el('div', { className: 'clip-gen', textContent: labelOf(clip.generator) || '—' }),
       );
       const fxCount = (clip.effects || []).length;
       if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
@@ -317,12 +317,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     box.append(el('div', { className: 'clip-editor-head' }, [
       el('span', { textContent: 'selected:' }), nameInput,
     ]));
-    box.append(el('div', { className: 'clip-src', textContent: `source: ${clip.generator || '—'}` }));
 
-    // Source params (auto-generated from the manifest).
+    // Source params (auto-generated from the manifest), shown directly — no
+    // "source: X" / "X params" meta (the slot already shows the source).
     const gen = getEntry(clip.generator);
     if (gen && gen.params.length) {
-      box.append(el('div', { className: 'fx-pts', textContent: `${gen.name} params` }));
       for (const p of gen.params) {
         const key = gen.name + '.' + p.key;
         box.append(paramControl(p, clip.params?.[key],
@@ -376,7 +375,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         onclick: () => commit(removeClipEffect(show(), id, clip.id, fx)) }),
     );
     block.append(el('div', { className: 'ly-fxhead' }, [
-      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${name}` }), btns,
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }), btns,
     ]));
 
     if (entry) {
@@ -403,7 +402,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const list = el('div', { className: 'lib-list' });
     for (const name of names) {
       const item = el('div', {
-        className: 'lib-item lib-' + kind, textContent: name, draggable: true,
+        className: 'lib-item lib-' + kind, textContent: labelOf(name), draggable: true,
         title: kind === 'source' ? 'drag onto a clip' : 'drag onto a clip or the drop zone',
       });
       item.addEventListener('dragstart', (e) => {

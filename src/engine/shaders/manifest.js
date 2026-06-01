@@ -150,6 +150,16 @@ export const REGISTRY = {
   },
 };
 
+// Display labels (Resolume-style). The registry `name` stays the stable key
+// used by params/routing; this is purely what the UI shows.
+const LABELS = {
+  line: 'Lines', gradient: 'Gradient', solid: 'Solid Color',
+  displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
+  segmenter: 'Segmenter', hue: 'Hue',
+};
+export const labelOf = (name) =>
+  LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
+
 // Look up a generator or effect entry by name.
 export function getEntry(name) { return REGISTRY[name] || null; }
 

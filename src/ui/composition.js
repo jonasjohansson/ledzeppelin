@@ -9,10 +9,9 @@
 //                  compositor). The canvas resolution does NOT affect
 //                  fixtures/pipeline/routing/sampler.
 //
-// Presets fill the width/height fields; Apply commits via setSize. "Custom" just
-// lets the two fields be edited freely (no preset highlighted).
+// Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { CANVAS_PRESETS, clampCanvasSize } from '../model/layers.js';
+import { clampCanvasSize } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -48,22 +47,6 @@ export function createCompositionPanel({ getShow, setSize }) {
     draft = currentCanvas();
 
     root.append(el('div', { className: 'fx-title', textContent: 'Composition' }));
-
-    // --- Aspect presets ---
-    const presetRow = el('div', { className: 'cmp-presets' });
-    for (const p of CANVAS_PRESETS) {
-      presetRow.append(el('button', {
-        className: 'cmp-preset', textContent: p.label,
-        title: `${p.w}×${p.h}`,
-        onclick: () => { draft = clampCanvasSize(p.w, p.h); render(); },
-      }));
-    }
-    presetRow.append(el('button', {
-      className: 'cmp-preset', textContent: 'Custom',
-      title: 'edit width/height freely',
-      onclick: () => { wInput.focus(); },
-    }));
-    root.append(presetRow);
 
     // --- Width / height fields (reflect the draft) ---
     const mkNum = (value, onInput) => {

@@ -243,7 +243,7 @@ button:hover { background: #262626; }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
 .clip-editor {
-  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px;
+  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 6px 8px;
   border: 1px solid #2a2a2a; border-radius: 5px; padding: 8px;
   margin: 4px 0 2px; background: #101418;
 }
