@@ -28,6 +28,39 @@ import { defaultParams, generatorNames } from '../engine/shaders/manifest.js';
 const TRANSITION_MS = 500;
 const DEFAULT_CANVAS = { w: 1280, h: 720 };
 
+// --- canvas resolution -------------------------------------------------------
+
+// Bounds for the composition canvas (source render + on-screen stage). The
+// canvas resolution affects ONLY source render detail/aspect — it does NOT
+// touch fixtures/pipeline/routing/sampler (which work in normalized 0–1 space).
+export const CANVAS_MIN = 16;
+export const CANVAS_MAX = 4096;
+
+// Clamp a width/height pair to integer pixels within [CANVAS_MIN, CANVAS_MAX].
+// Non-finite / non-numeric inputs fall back to the bound minimum. Pure.
+export function clampCanvasSize(w, h) {
+  const clamp1 = (v) => {
+    const n = Math.round(Number(v));
+    if (!Number.isFinite(n)) return CANVAS_MIN;
+    return Math.min(CANVAS_MAX, Math.max(CANVAS_MIN, n));
+  };
+  return { w: clamp1(w), h: clamp1(h) };
+}
+
+// Aspect-ratio presets for the composition panel. Each `set` is a clamped size.
+export const CANVAS_PRESETS = [
+  { label: '16:9', w: 1280, h: 720 },
+  { label: '1:1', w: 1024, h: 1024 },
+  { label: '4:3', w: 1024, h: 768 },
+];
+
+// Return a new show with composition.canvas set to the clamped size (immutable).
+export function setCanvasSize(show, w, h) {
+  const canvas = clampCanvasSize(w, h);
+  const comp = show.composition || {};
+  return { ...show, composition: { ...comp, canvas } };
+}
+
 // Prefix a flat { key: value } default map with the entry name → { 'name.key': value }.
 export function prefixedDefaults(name) {
   const out = {};

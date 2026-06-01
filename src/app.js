@@ -8,12 +8,14 @@ import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
-import { prefixedDefaults, normalizeComposition, makeClip } from './model/layers.js';
+import { createCompositionPanel } from './ui/composition.js';
+import {
+  prefixedDefaults, normalizeComposition, makeClip,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize,
+} from './model/layers.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
-const W = 1280, H = 720;
-canvas.width = W; canvas.height = H;
 const gl = getGL(canvas);
 
 // --- Default show: one device, two fixtures (single-device M2 target). ---
@@ -65,10 +67,20 @@ function initialShow() {
 
 let show = initialShow();
 
+// --- Canvas resolution (composition.canvas drives source render + stage) ---
+// The canvas resolution affects ONLY the source render targets + on-screen
+// stage. Fixtures sample NORMALIZED 0–1 UVs into an n×1 sampler buffer, so the
+// sampler/pipeline/routing are INDEPENDENT of canvas resolution.
+{
+  const c = clampCanvasSize(show.composition?.canvas?.w ?? 1280, show.composition?.canvas?.h ?? 720);
+  canvas.width = c.w; canvas.height = c.h;
+}
+
 // --- Pipeline (rebuildable on every show edit) ---
-// The compositor is created once; it caches programs by name and reads the
-// current show's layers each frame, so show edits don't require recreating it.
-const compositor = makeCompositor(gl, W, H);
+// The compositor's internal targets are sized to the canvas. It caches programs
+// by name and reads the current show's layers each frame, so layer/clip edits
+// don't require recreating it — only a RESOLUTION change does (see setCanvasSize).
+let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
 
 // On-screen blit so the composited output is visible on the real framebuffer.
@@ -98,6 +110,23 @@ function setComposition(next) {
   saveShow(show);
 }
 
+// Resolution-change path. Updates composition.canvas (clamped, immutable),
+// persists, resizes the stage canvas, and RECREATES the compositor so all its
+// internal targets are re-sized to the new resolution (simplest correct
+// approach; resolution changes are rare and transition state resetting is fine).
+// The sampler is INDEPENDENT of canvas resolution (it samples normalized UVs
+// into an n×1 buffer), so it is NOT rebuilt here.
+function setCanvasSize(w, h) {
+  const next = setCanvasSizeModel(show, w, h); // clamps + immutably updates canvas
+  show = next;
+  saveShow(show);
+  const c = show.composition.canvas;
+  canvas.width = c.w; canvas.height = c.h;
+  compositor.dispose();
+  compositor = makeCompositor(gl, c.w, c.h);
+  lastRGBA = null;
+}
+
 // --- Preview overlay + editor panel wiring ---
 const previewCanvas = document.getElementById('preview');
 const preview = previewCanvas ? createPreview(previewCanvas) : null;
@@ -118,7 +147,14 @@ const importPanel = createImportPanel({
   applyShow: (next) => rebuild(next),
   onApplied: () => { panel.refresh(); layerPanel.refresh(); },
 });
+// Composition (canvas resolution) is composition-global, so it sits at the top
+// of the editor, above Import/Layers/Fixtures.
+const compositionPanel = createCompositionPanel({
+  getShow: () => show,
+  setSize: (w, h) => setCanvasSize(w, h),
+});
 const editor = document.getElementById('editor');
+editor?.append(compositionPanel.el);
 editor?.append(importPanel.el);
 editor?.append(layerPanel.el);
 editor?.append(panel.el);
@@ -150,7 +186,7 @@ function loop(ts) {
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, W, H);
+    gl.viewport(0, 0, canvas.width, canvas.height);
     gl.disable(gl.BLEND);
     gl.useProgram(screenProg);
     gl.activeTexture(gl.TEXTURE0);

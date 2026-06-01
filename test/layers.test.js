@@ -7,6 +7,7 @@ import {
   addClipEffect, removeClipEffect, moveClipEffect,
   makeLayer, addLayer, removeLayer, moveLayer, patchLayer,
   setLayerParam, addLayerEffect, removeLayerEffect, moveLayerEffect,
+  clampCanvasSize, setCanvasSize, CANVAS_MIN, CANVAS_MAX, CANVAS_PRESETS,
 } from '../src/model/layers.js';
 
 // --- prefixedDefaults (unchanged) ---
@@ -313,4 +314,34 @@ test('makeLayer builds a one-clip active new-shape layer', () => {
   assert.equal(l.clips.length, 1);
   assert.equal(l.activeClipId, l.clips[0].id);
   assert.equal(l.clips[0].generator, 'line');
+});
+
+// --- canvas resolution (Task 2) ---
+test('clampCanvasSize rounds to integers and clamps to bounds', () => {
+  assert.deepEqual(clampCanvasSize(1920.4, 1080.6), { w: 1920, h: 1081 });
+  assert.deepEqual(clampCanvasSize(0, 0), { w: CANVAS_MIN, h: CANVAS_MIN });
+  assert.deepEqual(clampCanvasSize(99999, 99999), { w: CANVAS_MAX, h: CANVAS_MAX });
+  assert.deepEqual(clampCanvasSize(-5, 8), { w: CANVAS_MIN, h: CANVAS_MIN });
+});
+
+test('clampCanvasSize falls back to min on non-numeric input', () => {
+  assert.deepEqual(clampCanvasSize('abc', NaN), { w: CANVAS_MIN, h: CANVAS_MIN });
+  // Non-finite (Infinity/undefined) → fall back to the bound minimum.
+  assert.deepEqual(clampCanvasSize(undefined, Infinity), { w: CANVAS_MIN, h: CANVAS_MIN });
+});
+
+test('setCanvasSize immutably updates composition.canvas (clamped)', () => {
+  const show = normalizeComposition({});
+  const next = setCanvasSize(show, 1024, 768);
+  assert.deepEqual(next.composition.canvas, { w: 1024, h: 768 });
+  assert.deepEqual(show.composition.canvas, { w: 1280, h: 720 }); // original untouched
+  // Clamps out-of-range values.
+  assert.deepEqual(setCanvasSize(show, 5, 99999).composition.canvas,
+    { w: CANVAS_MIN, h: CANVAS_MAX });
+});
+
+test('CANVAS_PRESETS are all within bounds and integers', () => {
+  for (const p of CANVAS_PRESETS) {
+    assert.deepEqual(clampCanvasSize(p.w, p.h), { w: p.w, h: p.h });
+  }
 });

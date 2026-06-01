@@ -48,6 +48,17 @@ button:hover { background: #262626; }
 .fx-add { align-self: flex-start; }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
 
+/* --- Composition (canvas resolution) panel --- */
+.cmp-panel { margin-bottom: 18px; }
+.cmp-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.cmp-preset { padding: 3px 8px; }
+.cmp-grid { grid-template-columns: 1fr 1fr; margin-top: 4px; }
+.cmp-readout {
+  font-size: 11px; color: #cd9; font-variant-numeric: tabular-nums;
+  margin: 2px 0; letter-spacing: .02em;
+}
+.cmp-apply { color: #9d9; border-color: #224a22; align-self: flex-start; }
+
 /* --- Kagora import / assign-IP panel --- */
 .imp-panel { margin-bottom: 18px; }
 .imp-banner { white-space: pre-wrap; margin-top: 4px; }
