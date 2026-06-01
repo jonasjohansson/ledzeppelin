@@ -47,3 +47,27 @@ button:hover { background: #262626; }
 .fx-del { grid-column: 1 / -1; margin-top: 4px; color: #f88; border-color: #4a2222; }
 .fx-add { align-self: flex-start; }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
+
+/* --- Layer-stack panel --- */
+.ly-panel { margin-bottom: 18px; }
+.ly-hint { font-size: 10px; color: #777; margin: -2px 0 4px; }
+.ly-card { display: block; }
+.ly-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.ly-name { font-weight: 600; color: #9ad; font-size: 12px; }
+.ly-btns { display: flex; gap: 3px; }
+.ly-btns button { padding: 1px 6px; line-height: 1.4; min-width: 22px; }
+.ly-btns button:disabled { opacity: .35; cursor: default; }
+
+.ly-param .ly-pkey { display: flex; justify-content: space-between; }
+.ly-readout { color: #cd9; font-variant-numeric: tabular-nums; }
+.ly-param input[type=range] { width: 100%; accent-color: #9ad; }
+
+.ly-fx { border: 1px solid #242424; border-radius: 4px; padding: 6px; margin: 4px 0; background: #121212; }
+.ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.ly-fxname { color: #cba; font-size: 11px; }
+.ly-rmfx { color: #f88; border-color: #4a2222; }
+.ly-addfx { margin-top: 4px; }
+.ly-addfx select {
+  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 3px 5px; font: 12px system-ui; width: 100%; box-sizing: border-box;
+}

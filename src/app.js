@@ -6,6 +6,7 @@ import { makeCompositor } from './engine/compositor.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { createLayerPanel } from './ui/layers.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -79,6 +80,15 @@ function rebuild(next) {
   lastRGBA = null;
 }
 
+// Composition-only edit path (layers/effects/params): the compositor reads
+// show.composition.layers every frame, so we only need to swap in the new show
+// and persist it — NO sampler/route/bridge rebuild (that's expensive and only
+// fixture/device GEOMETRY changes require it).
+function setComposition(next) {
+  show = next;
+  saveShow(show);
+}
+
 // --- Preview overlay + editor panel wiring ---
 const previewCanvas = document.getElementById('preview');
 const preview = previewCanvas ? createPreview(previewCanvas) : null;
@@ -87,7 +97,13 @@ const panel = createFixturePanel({
   getShow: () => show,
   setShow: (next) => rebuild(next),
 });
-document.getElementById('editor')?.append(panel.el);
+const layerPanel = createLayerPanel({
+  getShow: () => show,
+  setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
+});
+const editor = document.getElementById('editor');
+editor?.append(layerPanel.el);
+editor?.append(panel.el);
 
 if (previewCanvas) {
   enableDragPlacement(previewCanvas, {
