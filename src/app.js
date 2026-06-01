@@ -154,7 +154,11 @@ function loop(ts) {
     drawFullscreen(gl);
   }
   frames++;
-  if (ts - last > 500) { hud.textContent = `${(frames * 1000 / (ts - last)).toFixed(0)} fps`; frames = 0; last = ts; }
+  if (ts - last > 500) {
+    const fps = (frames * 1000 / (ts - last)).toFixed(0);
+    hud.textContent = `${fps} fps · ${bridge?.connected?.() ? 'output live' : 'output offline (no daemon)'}`;
+    frames = 0; last = ts;
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
