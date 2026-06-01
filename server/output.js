@@ -2,6 +2,7 @@ import dgram from 'node:dgram';
 import { buildPackets } from './ddp.js';
 import { toDeviceOrder } from './colororder.js';
 const sock = dgram.createSocket('udp4');
+sock.on('error', (err) => console.error('[ddp] socket error', err.message));
 let seq = 0;
 // devices: [{ ip, port=4048, colorOrder, byteStart, byteEnd }]
 export function sendFrame(rgb, devices) {
