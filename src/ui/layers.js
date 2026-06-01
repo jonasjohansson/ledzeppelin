@@ -24,6 +24,7 @@ import {
 import {
   addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, patchLayer,
+  addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
 } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
@@ -144,7 +145,62 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
 
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
     if (active) col.append(selectedClipEditor(id, active));
+
+    col.append(compositionEffects(layer, id));
     return col;
+  }
+
+  // Composition-level effect chain: effects applied to the WHOLE composition
+  // (the single layer's output), AFTER the active clip + its own effects. Use
+  // these for global colour-over-time, segmenting, etc. Drop an effect on the
+  // zone, or reorder/remove with the per-block controls.
+  function compositionEffects(layer, id) {
+    const box = el('div', { className: 'comp-fx' });
+    box.append(el('div', { className: 'composer-label composer-label-fx',
+      textContent: 'COMPOSITION FX' }));
+    box.append(el('div', { className: 'ly-hint', textContent: 'applied to the whole composition' }));
+
+    const fxs = layer.effects || [];
+    for (let fx = 0; fx < fxs.length; fx++) {
+      box.append(layerEffectBlock(id, fx, fxs));
+    }
+    const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
+    makeDropTarget(dropZone, (payload) => {
+      if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
+    });
+    box.append(dropZone);
+    return box;
+  }
+
+  // One composition (layer) effect block — params write layer.params via
+  // setLayerParam (a distinct namespace from clip effect params).
+  function layerEffectBlock(id, fx, effects) {
+    const name = effects[fx];
+    const entry = getEntry(name);
+    const layer = firstLayer();
+    const block = el('div', { className: 'ly-fx ly-fx-layer' });
+
+    const btns = el('div', { className: 'ly-btns' });
+    btns.append(
+      el('button', { textContent: '▲', title: 'effect earlier', disabled: fx === 0,
+        onclick: () => commit(moveLayerEffect(show(), id, fx, -1)) }),
+      el('button', { textContent: '▼', title: 'effect later', disabled: fx === effects.length - 1,
+        onclick: () => commit(moveLayerEffect(show(), id, fx, +1)) }),
+      el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
+        onclick: () => commit(removeLayerEffect(show(), id, fx)) }),
+    );
+    block.append(el('div', { className: 'ly-fxhead' }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${name}` }), btns,
+    ]));
+
+    if (entry) {
+      for (const p of entry.params) {
+        const key = entry.name + '.' + p.key;
+        block.append(paramControl(p, layer?.params?.[key],
+          (v) => commitLive(setLayerParam(show(), id, key, v))));
+      }
+    }
+    return block;
   }
 
   // The clip deck. Each cell: click = trigger; accepts a dragged SOURCE (replace

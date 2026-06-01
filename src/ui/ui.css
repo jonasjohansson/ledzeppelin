@@ -211,6 +211,7 @@ button:hover { background: #262626; }
   border: 1px dashed #333; border-radius: 5px; padding: 8px; margin-top: 4px;
 }
 .clip-fxcount { font-size: 9px; color: #db8; margin-top: 1px; }
+.comp-fx { margin-top: 10px; border-top: 1px solid #222; padding-top: 6px; }
 .clip-src { grid-column: 1 / -1; font-size: 11px; color: #9ad; }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
