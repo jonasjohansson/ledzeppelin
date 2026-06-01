@@ -12,10 +12,15 @@ in vec2 uv; out vec4 frag;
 uniform float pos;
 uniform float width;
 uniform float angle;
+uniform float uT;
+uniform float speed;
+uniform float amp;
 void main(){
   float a = radians(angle);
   float coord = uv.x*cos(a) + uv.y*sin(a);
-  float d = abs(coord - pos);
+  // pos is the BASE position; the line sweeps around it. speed=0 ⇒ static.
+  float sweptPos = pos + amp * sin(uT * speed);
+  float d = abs(coord - sweptPos);
   float v = smoothstep(width, 0.0, d);
   frag = vec4(vec3(v), 1.0);
 }`;
@@ -54,6 +59,8 @@ export const REGISTRY = {
       { key: 'pos', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'width', type: 'float', min: 0, max: 0.5, default: 0.08 },
       { key: 'angle', type: 'float', min: 0, max: 360, default: 90 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.45 },
     ],
   },
   gradient: {

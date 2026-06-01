@@ -83,6 +83,11 @@ export function changeGenerator(layers, index, generator) {
   return patchLayer(layers, index, { generator, params });
 }
 
+// Effect params are namespaced by effect NAME, not chain position — two
+// instances of the same effect (e.g. two `displace`) SHARE their params and
+// their UI sliders are coupled. Independent per-instance params would require
+// index-based namespacing (e.g. `displace#1.amt`); deferred.
+//
 // Add an effect to a layer's chain and seed its default params (prefixed).
 export function addEffect(layers, index, name) {
   if (index < 0 || index >= layers.length) return layers;

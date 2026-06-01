@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { REGISTRY, defaultParams, generatorNames, effectNames } from '../src/engine/shaders/manifest.js';
 
 test('defaultParams(line) returns the expected defaults', () => {
-  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90 });
+  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.45 });
 });
 
 test('defaultParams of an unknown name is empty', () => {

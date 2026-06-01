@@ -7,6 +7,7 @@ import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
+import { prefixedDefaults } from './model/layers.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -28,10 +29,12 @@ function defaultShow() {
     output: { deviceId: 'c1', pixelOffset: 150, pixelCount: 150 },
     input: { points: [[0.05, 0.70], [0.95, 0.70]], samples: 150 },
   });
-  // One working composition layer so the first run shows the line.
+  // One working composition layer so the first run shows the line. Params come
+  // from the manifest defaults (prefixed) so they stay in sync — with default
+  // speed=1/amp=0.45 the line self-animates in-shader via uT.
   show.composition.layers = [
     { id: 'l1', generator: 'line', effects: [], blend: 'add', opacity: 1,
-      params: { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90 } },
+      params: prefixedDefaults('line') },
   ];
   return show;
 }
@@ -121,14 +124,8 @@ function loop(ts) {
   if (!t0) t0 = ts;
   const t = (ts - t0) / 1000;
   if (sampler) {
-    // Drive line.pos from time so the preview is clearly alive (the generator's
-    // own params stay otherwise static; this keeps equivalent motion to before).
-    const l0 = show.composition?.layers?.[0];
-    if (l0 && l0.generator === 'line' && l0.params) {
-      l0.params['line.pos'] = 0.5 + 0.45 * Math.sin(t);
-    }
-
-    // Composite all layers into compositor.tex.
+    // Composite all layers into compositor.tex. (The line generator self-animates
+    // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     compositor.render(show.composition?.layers || [], t);
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
