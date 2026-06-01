@@ -1,7 +1,8 @@
-import { getGL, program, makeTarget, drawFullscreen } from './engine/gl.js';
+import { getGL, program, drawFullscreen } from './engine/gl.js';
 import { emptyShow, addDevice, addFixture, validate } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
+import { makeCompositor } from './engine/compositor.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
@@ -26,6 +27,11 @@ function defaultShow() {
     output: { deviceId: 'c1', pixelOffset: 150, pixelCount: 150 },
     input: { points: [[0.05, 0.70], [0.95, 0.70]], samples: 150 },
   });
+  // One working composition layer so the first run shows the line.
+  show.composition.layers = [
+    { id: 'l1', generator: 'line', effects: [], blend: 'add', opacity: 1,
+      params: { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90 } },
+  ];
   return show;
 }
 
@@ -50,9 +56,18 @@ function initialShow() {
 let show = initialShow();
 
 // --- Pipeline (rebuildable on every show edit) ---
-const canvasTarget = makeTarget(gl, W, H);
-let prog = null, uPos = null, uWidth = null, uAngle = null;
+// The compositor is created once; it caches programs by name and reads the
+// current show's layers each frame, so show edits don't require recreating it.
+const compositor = makeCompositor(gl, W, H);
 let sampler = null, bridge = null, lastRGBA = null;
+
+// On-screen blit so the composited output is visible on the real framebuffer.
+const SCREEN_FS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+void main(){ frag = vec4(texture(uTex, uv).rgb, 1.0); }`;
+const screenProg = program(gl, SCREEN_FS);
+const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
 function rebuild(next) {
   show = next;
@@ -82,42 +97,37 @@ if (previewCanvas) {
   });
 }
 
-// --- Line generator ---
-fetch('./src/engine/shaders/generators/line.glsl').then((r) => r.text()).then((src) => {
-  prog = program(gl, src);
-  uPos = gl.getUniformLocation(prog, 'pos');
-  uWidth = gl.getUniformLocation(prog, 'width');
-  uAngle = gl.getUniformLocation(prog, 'angle');
-  rebuild(show);
-});
+// Compositor is ready immediately (programs compile lazily on first render).
+rebuild(show);
 
 let frames = 0, last = 0, t0 = 0;
 function loop(ts) {
   if (!t0) t0 = ts;
   const t = (ts - t0) / 1000;
-  if (prog && sampler) {
-    const pos = 0.5 + 0.45 * Math.sin(t);
-    // Render into the canvas target FBO.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, canvasTarget.fbo);
-    gl.viewport(0, 0, W, H);
-    gl.useProgram(prog);
-    gl.uniform1f(uPos, pos);
-    gl.uniform1f(uWidth, 0.08);
-    gl.uniform1f(uAngle, 0);
-    drawFullscreen(gl);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  if (sampler) {
+    // Drive line.pos from time so the preview is clearly alive (the generator's
+    // own params stay otherwise static; this keeps equivalent motion to before).
+    const l0 = show.composition?.layers?.[0];
+    if (l0 && l0.generator === 'line' && l0.params) {
+      l0.params['line.pos'] = 0.5 + 0.45 * Math.sin(t);
+    }
+
+    // Composite all layers into compositor.tex.
+    compositor.render(show.composition?.layers || [], t);
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
-    lastRGBA = sampler.sample(canvasTarget.tex);
+    lastRGBA = sampler.sample(compositor.tex);
     bridge?.send(lastRGBA);
     preview?.draw(show, lastRGBA);
 
-    // Draw to the real screen so there's something visible.
+    // Draw composited output to the real screen so there's something visible.
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, W, H);
-    gl.useProgram(prog);
-    gl.uniform1f(uPos, pos);
-    gl.uniform1f(uWidth, 0.08);
-    gl.uniform1f(uAngle, 0);
+    gl.disable(gl.BLEND);
+    gl.useProgram(screenProg);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, compositor.tex);
+    gl.uniform1i(uScreenTex, 0);
     drawFullscreen(gl);
   }
   frames++;
