@@ -7,6 +7,7 @@ import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
+import { createImportPanel } from './ui/import.js';
 import { prefixedDefaults } from './model/layers.js';
 
 const canvas = document.getElementById('stage');
@@ -104,7 +105,16 @@ const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
 });
+// Kagora import → assign-IP → apply. The imported show is a GEOMETRY change, so
+// applyShow routes through rebuild() (same path as fixture edits); onApplied
+// re-renders the fixtures + layers panels against the new show.
+const importPanel = createImportPanel({
+  getShow: () => show,
+  applyShow: (next) => rebuild(next),
+  onApplied: () => { panel.refresh(); layerPanel.refresh(); },
+});
 const editor = document.getElementById('editor');
+editor?.append(importPanel.el);
 editor?.append(layerPanel.el);
 editor?.append(panel.el);
 
