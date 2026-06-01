@@ -41,8 +41,14 @@ editor (right panel) lets you:
 - **Fixtures** — add/edit controllers (with IP + color order) and fixtures
   (pixel count, output offset, canvas placement). Drag fixture endpoints on the
   preview to reposition what they sample.
-- **Layers** — stack generator→effect layers with blend modes and opacity;
-  every shader param gets an auto-generated slider.
+- **Composition** — set the canvas resolution / aspect (16:9, 1:1, 4:3, custom).
+  Fixtures sample normalized space, so resolution changes source detail, never
+  pixel addressing.
+- **Layers** (Resolume-style) — each layer holds a **deck of clips**; a clip is a
+  source (generator) with its own params and effects. Click a clip to trigger it;
+  switching clips **crossfades** over the layer's transition time. Effects live
+  per-clip *and* per-layer; stack layers with blend modes + opacity. Every shader
+  param gets an auto-generated slider.
 - **Import from Kagora** — load a Kagora preset `.json`, assign controller IPs
   (with sequential auto-fill), and run the whole installation.
 
