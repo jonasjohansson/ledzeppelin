@@ -36,11 +36,12 @@ npm start
 ```
 
 On first run a default show renders a moving line across two demo fixtures. The
-editor (right panel) lets you:
+editor (right panel) is split into **two tabs**, mirroring the input/output
+split — *what you render* vs. *where it goes*:
 
-- **Fixtures** — add/edit controllers (with IP + color order) and fixtures
-  (pixel count, output offset, canvas placement). Drag fixture endpoints on the
-  preview to reposition what they sample.
+**Composition tab** — the creative side, shown over a clean composite (no
+fixture overlay):
+
 - **Composition** — set the canvas resolution / aspect (16:9, 1:1, 4:3, custom).
   Fixtures sample normalized space, so resolution changes source detail, never
   pixel addressing.
@@ -49,14 +50,24 @@ editor (right panel) lets you:
   switching clips **crossfades** over the layer's transition time. Effects live
   per-clip *and* per-layer; stack layers with blend modes + opacity. Every shader
   param gets an auto-generated slider.
+
+**Output tab** — the wiring side, with the fixture overlay drawn on the preview.
+An **Input / Output** toggle splits the two halves of a fixture's routing:
+
+- **Input** — where each fixture *samples* the canvas. Drag fixture endpoints on
+  the overlay to reposition what they sample.
+- **Output** — each fixture's *DDP target*: device, pixel offset, color order,
+  and per-controller IP. Drag placement is locked in this mode.
 - **Import from Kagora** — load a Kagora preset `.json`, assign controller IPs
   (with sequential auto-fill), and run the whole installation.
 
-The show autosaves to `localStorage`; use the Save/Load buttons for files.
+Switching tabs only toggles visibility — the render loop, sampler, and output
+keep running regardless of which tab is shown. The show autosaves to
+`localStorage`; use the Save/Load buttons for files.
 
 ### Pointing at real hardware
 
-Set each controller's **IP** in the Fixtures panel (or via Kagora import +
+Set each controller's **IP** under the Output tab (or via Kagora import +
 assign-IPs). Controllers must run WLED with DDP enabled (it listens on UDP
 4048). Color order for WS2815 is **GRB**. The daemon unicasts to each
 controller independently — one IP per DigQuad.
