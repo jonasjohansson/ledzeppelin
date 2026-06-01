@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "name": "kagora-sample",
+  "types": [
+    {
+      "kind": "stripType",
+      "id": "st-ws2815-30-10m",
+      "name": "WS2815 10m",
+      "pixelCount": 300,
+      "length_m": 10,
+      "colorOrder": "GRB",
+      "chipId": "ws2815",
+      "ports": [
+        { "id": "data-in", "name": "Data in", "dir": "in", "signal": "data" },
+        { "id": "data-out", "name": "Data out", "dir": "out", "signal": "data" }
+      ]
+    },
+    {
+      "kind": "stripType",
+      "id": "st-ws2815-30-8m",
+      "name": "WS2815 8m",
+      "pixelCount": 240,
+      "length_m": 8,
+      "colorOrder": "GRB",
+      "chipId": "ws2815",
+      "ports": [
+        { "id": "data-in", "name": "Data in", "dir": "in", "signal": "data" },
+        { "id": "data-out", "name": "Data out", "dir": "out", "signal": "data" }
+      ]
+    },
+    {
+      "kind": "controllerType",
+      "id": "ct-digquad",
+      "name": "DigQuad",
+      "modelId": "digquad",
+      "outputs": [
+        { "id": "o1", "budget": 1000 },
+        { "id": "o2", "budget": 1000 }
+      ],
+      "ports": [
+        { "id": "data-out-1", "name": "Data out", "dir": "out", "signal": "datapower", "outputId": "o1" },
+        { "id": "data-out-2", "name": "Data out", "dir": "out", "signal": "datapower", "outputId": "o2" },
+        { "id": "net-in", "name": "Network in", "dir": "in", "signal": "net" }
+      ]
+    }
+  ],
+  "instances": [
+    {
+      "kind": "controller",
+      "id": "brainA",
+      "name": "DigQuad (A)",
+      "typeId": "ct-digquad",
+      "pos": { "x": 0, "y": 0 },
+      "ports": [
+        { "id": "data-out-1", "dir": "out", "signal": "datapower", "outputId": "o1" },
+        { "id": "data-out-2", "dir": "out", "signal": "datapower", "outputId": "o2" }
+      ]
+    },
+    {
+      "kind": "controller",
+      "id": "brainB",
+      "name": "DigQuad (B)",
+      "typeId": "ct-digquad",
+      "pos": { "x": 1000, "y": 0 },
+      "ports": [
+        { "id": "data-out-1", "dir": "out", "signal": "datapower", "outputId": "o1" }
+      ]
+    },
+    {
+      "kind": "strip",
+      "id": "sA-1",
+      "typeId": "st-ws2815-30-10m",
+      "points": [
+        { "x": 0, "y": 0 },
+        { "x": 100, "y": 0 }
+      ]
+    },
+    {
+      "kind": "strip",
+      "id": "sA-2",
+      "typeId": "st-ws2815-30-8m",
+      "points": [
+        { "x": 100, "y": 0 },
+        { "x": 200, "y": 0 }
+      ]
+    },
+    {
+      "kind": "strip",
+      "id": "sB-1",
+      "typeId": "st-ws2815-30-10m",
+      "points": [
+        { "x": 0, "y": 100 },
+        { "x": 0, "y": 200 }
+      ]
+    },
+    {
+      "kind": "psu",
+      "id": "psuA",
+      "typeId": "pt-rsp750",
+      "pos": { "x": 0, "y": 500 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_a1",
+      "from": { "id": "data-out-1", "dir": "out", "signal": "datapower", "instId": "brainA", "outputId": "o1" },
+      "to": { "id": "data-in", "dir": "in", "signal": "datapower", "instId": "sA-1" },
+      "channel": "signal",
+      "signalType": "datapower"
+    },
+    {
+      "id": "edge_a2",
+      "from": { "id": "data-out", "dir": "out", "signal": "datapower", "instId": "sA-1" },
+      "to": { "id": "data-in", "dir": "in", "signal": "datapower", "instId": "sA-2" },
+      "channel": "signal",
+      "signalType": "datapower"
+    },
+    {
+      "id": "edge_b1",
+      "from": { "id": "data-out-1", "dir": "out", "signal": "datapower", "instId": "brainB", "outputId": "o1" },
+      "to": { "id": "data-in", "dir": "in", "signal": "datapower", "instId": "sB-1" },
+      "channel": "signal",
+      "signalType": "datapower"
+    },
+    {
+      "id": "edge_pwrA",
+      "from": { "id": "power-out", "dir": "out", "signal": "power", "instId": "psuA" },
+      "to": { "id": "power-in", "dir": "in", "signal": "power", "instId": "brainA" },
+      "channel": "power",
+      "signalType": "power"
+    }
+  ]
+}
