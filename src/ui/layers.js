@@ -100,7 +100,7 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
@@ -126,45 +126,48 @@ export function createLayerPanel({ getShow, setShow, onChange, transport }) {
   const show = () => getShow();
   const firstLayer = () => getShow().composition?.layers?.[0] || null;
 
-  function render() {
-    root.textContent = '';
-    root.append(el('div', { className: 'fx-title', textContent: 'Composition' }));
+  // Mount points (Resolume-style shell). When provided, the panel renders its
+  // three regions into separate containers: the DECK (clip-slot strip +
+  // transport), the INSPECTOR (selected-clip source/transform/opacity/effects +
+  // composition FX), and the LIBRARY (Sources/Effects). When omitted it falls
+  // back to a single self-contained tree in `root` (legacy single-column).
+  const deckEl = mounts?.deck || root;
+  const inspectorEl = mounts?.inspector || root;
+  const libraryEl = mounts?.library || root;
 
+  function render() {
     const layer = firstLayer();
-    if (!layer) {
-      root.append(el('div', { className: 'ly-hint', textContent: 'no composition layer' }));
-      return;
+    // Clear each distinct container once.
+    const seen = new Set();
+    for (const c of [deckEl, inspectorEl, libraryEl]) {
+      if (!seen.has(c)) { c.textContent = ''; seen.add(c); }
     }
 
-    const body = el('div', { className: 'composer-body' });
-    body.append(composerMain(layer));
-    body.append(composerRail());
-    root.append(body);
-  }
-
-  // --- left column: deck + selected-clip editor ------------------------------
-  function composerMain(layer) {
-    const col = el('div', { className: 'composer-main' });
+    if (!layer) {
+      deckEl.append(el('div', { className: 'ly-hint', textContent: 'no composition layer' }));
+      return;
+    }
     const id = layer.id;
 
-    const head = el('div', { className: 'composer-deckhead' }, [
+    // --- DECK region: transport + clip-slot strip + crossfade ----------------
+    const deckHead = el('div', { className: 'composer-deckhead' }, [
       el('div', { className: 'composer-label', textContent: 'TIMELINE' }),
     ]);
-    if (transport) head.append(transportBar());
-    col.append(head);
-    col.append(el('div', { className: 'ly-hint',
+    if (transport) deckHead.append(transportBar());
+    deckEl.append(deckHead);
+    deckEl.append(el('div', { className: 'ly-hint',
       textContent: 'click to trigger · drag a source onto a slot · ▶ plays through slots' }));
-    col.append(clipDeck(layer, id));
-
-    // Crossfade time between clips (the transition the deck triggers).
-    col.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
+    deckEl.append(clipDeck(layer, id));
+    deckEl.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
       (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) }))));
 
+    // --- INSPECTOR region: selected clip + composition FX --------------------
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
-    if (active) col.append(selectedClipEditor(id, active));
+    if (active) inspectorEl.append(selectedClipEditor(id, active));
+    inspectorEl.append(compositionEffects(layer, id));
 
-    col.append(compositionEffects(layer, id));
-    return col;
+    // --- LIBRARY region: draggable Sources + Effects -------------------------
+    libraryEl.append(composerRail());
   }
 
   // Composition-level effect chain: effects applied to the WHOLE composition

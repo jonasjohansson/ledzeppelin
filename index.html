@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>ledzeppelin</title>
 <link rel="icon" href="data:,">
 <style>html,body{margin:0;background:#0a0a0a;color:#eee;font:13px system-ui}
-canvas{display:block}#hud{position:fixed;top:8px;left:8px;opacity:.8;z-index:10}</style>
+canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index:10;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #000}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
 <div id="hud">booting…</div>
@@ -12,20 +12,32 @@ canvas{display:block}#hud{position:fixed;top:8px;left:8px;opacity:.8;z-index:10}
   <button id="tab-output" class="tab" data-tab="output">Output</button>
 </div>
 <div id="layout">
-  <div id="stagewrap">
-    <canvas id="stage"></canvas>
-    <canvas id="preview" width="1280" height="720"></canvas>
-  </div>
-  <aside id="editor">
-    <div id="editor-composition"></div>
-    <div id="editor-output" hidden>
-      <div id="output-mode" class="seg" role="tablist">
-        <button id="seg-input" class="seg-btn seg-active" data-mode="input">Input</button>
-        <button id="seg-output" class="seg-btn" data-mode="output">Output</button>
-      </div>
-      <div id="output-mode-hint" class="seg-hint"></div>
-      <div id="editor-output-panels"></div>
+  <!-- LEFT: clip-slot deck (top) + canvas monitor (fills) -->
+  <div id="left">
+    <section id="deckbar" class="panel"></section>
+    <div id="stagewrap">
+      <canvas id="stage"></canvas>
+      <canvas id="preview" width="1280" height="720"></canvas>
     </div>
+  </div>
+
+  <!-- COMPOSITION view: inspector column + library column -->
+  <aside id="inspector-col" class="panel">
+    <div id="comp-settings"></div>
+    <div id="inspector"></div>
+  </aside>
+  <aside id="library-col" class="panel">
+    <div id="library"></div>
+  </aside>
+
+  <!-- OUTPUT view: Input/Output toggle + import + fixtures -->
+  <aside id="output-view" class="panel" hidden>
+    <div id="output-mode" class="seg" role="tablist">
+      <button id="seg-input" class="seg-btn seg-active" data-mode="input">Input</button>
+      <button id="seg-output" class="seg-btn" data-mode="output">Output</button>
+    </div>
+    <div id="output-mode-hint" class="seg-hint"></div>
+    <div id="editor-output-panels"></div>
   </aside>
 </div>
 <script type="module" src="./src/app.js"></script></body>

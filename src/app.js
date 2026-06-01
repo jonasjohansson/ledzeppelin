@@ -148,10 +148,17 @@ const transport = {
   toggle() { this.playing = !this.playing; if (this.playing) this.startTs = lastTs; },
 };
 
+// The composer renders into the Resolume-style shell's three regions: the DECK
+// strip above the canvas, the INSPECTOR column, and the LIBRARY column.
 const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
+  mounts: {
+    deck: document.getElementById('deckbar'),
+    inspector: document.getElementById('inspector'),
+    library: document.getElementById('library'),
+  },
 });
 // Kagora import → assign-IP → apply. The imported show is a GEOMETRY change, so
 // applyShow routes through rebuild() (same path as fixture edits); onApplied
@@ -167,20 +174,21 @@ const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
 });
-// --- Two-tab workspace routing -------------------------------------------
-// Panels are CONSTRUCTED ONCE and mounted into per-tab containers; switching
-// tabs/modes only toggles container visibility + interactivity (never
+// --- Resolume-style shell routing ----------------------------------------
+// Panels are CONSTRUCTED ONCE and mounted into fixed regions; switching
+// tabs/modes only toggles region visibility + interactivity (never
 // destroys/recreates panels, so panel state + .refresh() keep working).
 //
-//   Composition tab → Composition (canvas res) + Layers panels.
-//   Output tab      → Input/Output segmented toggle + Import + Fixtures panels.
-//                     The #preview fixture overlay is shown here (hidden in
-//                     Composition for a clean composite view); drag placement is
-//                     gated to Output+Input mode.
-const editorComposition = document.getElementById('editor-composition');
+//   Composition tab → DECK strip (clip slots + transport) over the canvas,
+//                     INSPECTOR column (canvas settings + selected clip +
+//                     composition FX), LIBRARY column (Sources/Effects).
+//   Output tab      → Input/Output segmented toggle + Import + Fixtures.
+//                     The #preview fixture overlay shows here (hidden in
+//                     Composition for a clean composite); drag is gated to
+//                     Output+Input mode.
+const compSettings = document.getElementById('comp-settings');
 const editorOutputPanels = document.getElementById('editor-output-panels');
-editorComposition?.append(compositionPanel.el);
-editorComposition?.append(layerPanel.el);
+compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
 editorOutputPanels?.append(importPanel.el);
 editorOutputPanels?.append(panel.el);
 
@@ -199,8 +207,10 @@ if (previewCanvas) {
 // DOM visibility, the preview overlay, and drag interactivity.
 const view = { activeTab: 'composition', outputMode: 'input' };
 const tabsEl = document.getElementById('tabs');
-const editorCompositionWrap = document.getElementById('editor-composition');
-const editorOutputWrap = document.getElementById('editor-output');
+const deckbarEl = document.getElementById('deckbar');
+const inspectorColEl = document.getElementById('inspector-col');
+const libraryColEl = document.getElementById('library-col');
+const outputViewEl = document.getElementById('output-view');
 const outputModeEl = document.getElementById('output-mode');
 const outputModeHint = document.getElementById('output-mode-hint');
 
@@ -212,9 +222,12 @@ function applyView() {
     b.classList.toggle('tab-active', b.dataset.tab === view.activeTab);
   });
 
-  // Editor panel containers (show/hide, not recreate).
-  if (editorCompositionWrap) editorCompositionWrap.hidden = onOutput;
-  if (editorOutputWrap) editorOutputWrap.hidden = !onOutput;
+  // Region visibility (show/hide, not recreate). Composition → deck strip +
+  // inspector + library; Output → the output editor.
+  if (deckbarEl) deckbarEl.hidden = onOutput;
+  if (inspectorColEl) inspectorColEl.hidden = onOutput;
+  if (libraryColEl) libraryColEl.hidden = onOutput;
+  if (outputViewEl) outputViewEl.hidden = !onOutput;
 
   // Fixture overlay: visible on Output, hidden on Composition (clean composite).
   // Hiding the canvas does NOT stop the render loop or the sampler — preview.draw
