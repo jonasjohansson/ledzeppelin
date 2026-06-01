@@ -1,39 +1,53 @@
 import { samplePoints } from './sampling.js';
-import { deviceByteRange } from './show.js';
 
 // Pure: derive the flat sampler UVs + daemon route from a show.
-// Fixtures are ordered by output.pixelOffset ascending so the sampler's RGBA
-// readback order matches the daemon's per-device byte layout. Single-device
-// correct (M2 target); multi-device byte layout is an M4 concern.
 //
-// INVARIANT: the flat sampler buffer is dense and 0-based — readback pixel `i`
-// equals daemon pixel `i`. This only holds when, per device, each fixture's
-// [pixelOffset, pixelOffset+pixelCount) ranges start at 0 and are contiguous
-// (no gaps/overlaps). route[].byteStart comes from deviceByteRange() which
-// likewise assumes a device's fixtures start at offset 0. A nonzero start or a
-// gap would mis-route every pixel by that amount. validate() in show.js enforces
-// this; multi-device global-base handling is deferred to M4.
+// The bridge sends ONE flat RGB buffer = the concatenation of every fixture's
+// sampled pixels. The daemon slices each device's bytes via byteStart/byteEnd.
+// Fixture pixel offsets (output.pixelOffset) are DEVICE-LOCAL: they reset to 0
+// per controller. So byteStart CANNOT come from the local offset — two devices
+// would both start at 0 and read overlapping slices. Instead we assign each
+// device a GLOBAL base into the flat buffer by walking devices in array order
+// and maintaining a running global pixel cursor.
+//
+// Layout: device order (show.devices) → within each device, fixtures ordered by
+// output.pixelOffset ascending → append samplePoints(input.points, input.samples).
+// validate() enforces per-device contiguity-from-0, so within a device the local
+// offsets are 0..total; the GLOBAL base is what we add on top.
+//
+// The per-device DDP offset stays 0-based and is handled by buildPackets in
+// server/output.js: each device's slice is sent starting at DDP offset 0,
+// regardless of byteStart. server/output.js needs no change.
 export function buildPipelineInputs(show) {
-  const fixtureOrder = [...show.fixtures].sort(
-    (a, b) => a.output.pixelOffset - b.output.pixelOffset
-  );
-
   const uvs = [];
   const spans = [];
-  let offset = 0;
-  for (const f of fixtureOrder) {
-    const pts = samplePoints(f.input.points, f.input.samples);
-    spans.push({ id: f.id, start: offset, count: pts.length });
-    for (const [u, v] of pts) { uvs.push(u, v); }
-    offset += pts.length;
-  }
+  const fixtureOrder = [];
+  const route = [];
+  let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
-  const route = show.devices
-    .map((d) => {
-      const r = deviceByteRange(show, d.id);
-      return r ? { ip: d.ip, port: d.port ?? 4048, colorOrder: d.colorOrder, ...r } : null;
-    })
-    .filter(Boolean);
+  for (const d of show.devices) {
+    const fs = show.fixtures
+      .filter((f) => f.output?.deviceId === d.id)
+      .sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
+    if (!fs.length) continue;
+
+    const globalBase = cursor;
+    for (const f of fs) {
+      const pts = samplePoints(f.input.points, f.input.samples);
+      spans.push({ id: f.id, start: cursor, count: pts.length });
+      fixtureOrder.push(f);
+      for (const [u, v] of pts) { uvs.push(u, v); }
+      cursor += pts.length;
+    }
+
+    route.push({
+      ip: d.ip,
+      port: d.port ?? 4048,
+      colorOrder: d.colorOrder,
+      byteStart: globalBase * 3,
+      byteEnd: cursor * 3,
+    });
+  }
 
   return { sampleUVs: new Float32Array(uvs), route, fixtureOrder, spans };
 }
