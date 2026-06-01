@@ -1,0 +1,49 @@
+#layout { display: flex; gap: 12px; align-items: flex-start; padding: 8px; box-sizing: border-box; }
+
+#stagewrap { position: relative; flex: 1 1 auto; min-width: 0; }
+#stagewrap canvas { width: 100%; height: auto; border: 1px solid #1c1c1c; }
+/* Preview overlay sits on top of the WebGL stage; it is the drag surface. */
+#preview { position: absolute; inset: 0; }
+
+#editor {
+  flex: 0 0 320px;
+  max-height: 100vh;
+  overflow-y: auto;
+  background: #111;
+  border: 1px solid #1c1c1c;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.fx-panel { display: flex; flex-direction: column; gap: 6px; }
+.fx-title { font-size: 14px; font-weight: 600; color: #eee; }
+.fx-section { margin-top: 10px; font-weight: 600; color: #9ad; border-bottom: 1px solid #222; padding-bottom: 2px; }
+
+.fx-ok { color: #6c6; font-size: 11px; }
+.fx-err { color: #f66; font-size: 11px; white-space: pre-wrap; }
+
+.fx-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  background: #161616;
+  border: 1px solid #242424;
+  border-radius: 5px;
+  padding: 8px;
+}
+.fx-pts { grid-column: 1 / -1; font-size: 11px; color: #888; margin-top: 4px; }
+
+.fx-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #aaa; }
+.fx-field input, .fx-field select {
+  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 3px 5px; font: 12px system-ui; width: 100%; box-sizing: border-box;
+}
+
+button {
+  background: #1d1d1d; color: #ddd; border: 1px solid #333;
+  border-radius: 4px; padding: 4px 8px; cursor: pointer; font: 12px system-ui;
+}
+button:hover { background: #262626; }
+.fx-del { grid-column: 1 / -1; margin-top: 4px; color: #f88; border-color: #4a2222; }
+.fx-add { align-self: flex-start; }
+.fx-io { display: flex; gap: 6px; margin-top: 12px; }

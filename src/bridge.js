@@ -8,6 +8,7 @@ export function connectBridge(route) {
       const n = rgba.length / 4; const rgb = new Uint8Array(n * 3);
       for (let i = 0; i < n; i++) { rgb[i*3]=rgba[i*4]; rgb[i*3+1]=rgba[i*4+1]; rgb[i*3+2]=rgba[i*4+2]; }
       ws.send(rgb);
-    }
+    },
+    close() { try { ws.close(); } catch { /* already closing */ } },
   };
 }
