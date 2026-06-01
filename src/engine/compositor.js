@@ -32,6 +32,28 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float opacity;
 void main(){ vec4 c=texture(uTex, uv); frag=vec4(c.rgb*opacity, c.a*opacity); }`;
 
+// Per-clip transform + opacity. Maps each output texel back through the inverse
+// transform (translate uOffset, uniform uScale, rotate uRot around centre) to
+// find the source texel; texels outside [0,1] are transparent. uAspect (w/h)
+// keeps rotation/scale square on non-square canvases. Identity (offset 0, scale
+// 1, rot 0, opacity 1) reproduces a plain blit exactly — no regression.
+const TRANSFORM_FS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float opacity;
+uniform vec2 uOffset; uniform float uScale; uniform float uRot; uniform float uAspect;
+void main(){
+  vec2 p = uv - 0.5 - uOffset;
+  p.x *= uAspect;
+  float c = cos(-uRot), s = sin(-uRot);
+  p = mat2(c, -s, s, c) * p;
+  p /= max(uScale, 1e-4);
+  p.x /= uAspect;
+  vec2 suv = p + 0.5;
+  if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) { frag = vec4(0.0); return; }
+  vec4 col = texture(uTex, suv);
+  frag = vec4(col.rgb * opacity, col.a * opacity);
+}`;
+
 // Crossfade two textures: mix(from, to, t).
 const XFADE_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
@@ -139,10 +161,31 @@ export function makeCompositor(gl, w, h) {
       runEntry(fx, clip.params, other, cur.tex, timeSec);
       const tmp = cur; cur = other; other = tmp;
     }
-    // Copy cur → hold via the blit program (opacity 1). hold is never part of the
-    // clip ping-pong, so no feedback loop.
-    blitInto(cur.tex, hold, 1);
+    // Place cur → hold applying the clip's transform + opacity. hold is never
+    // part of the clip ping-pong, so no feedback loop. During a crossfade each
+    // clip is transformed independently before the two holds are mixed.
+    transformBlit(cur.tex, hold, clip.transform, clip.opacity);
     return true;
+  }
+
+  // Draw srcTex into dst applying a per-clip transform (translate/scale/rotate)
+  // and opacity. Identity transform + opacity 1 == a plain blit.
+  function transformBlit(srcTex, dst, transform, opacity) {
+    const t = transform || {};
+    const prog = getProgram('__xform', TRANSFORM_FS);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.disable(gl.BLEND);
+    gl.useProgram(prog.prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, srcTex);
+    const uTex = loc(prog, 'uTex'); if (uTex !== null) gl.uniform1i(uTex, 0);
+    const uOp = loc(prog, 'opacity'); if (uOp !== null) gl.uniform1f(uOp, opacity == null ? 1 : Number(opacity));
+    const uOff = loc(prog, 'uOffset'); if (uOff !== null) gl.uniform2f(uOff, Number(t.x) || 0, Number(t.y) || 0);
+    const uSc = loc(prog, 'uScale'); if (uSc !== null) gl.uniform1f(uSc, t.scale == null ? 1 : Number(t.scale));
+    const uRot = loc(prog, 'uRot'); if (uRot !== null) gl.uniform1f(uRot, (Number(t.rotation) || 0) * Math.PI / 180);
+    const uAsp = loc(prog, 'uAspect'); if (uAsp !== null) gl.uniform1f(uAsp, h > 0 ? w / h : 1);
+    drawFullscreen(gl);
   }
 
   // Draw srcTex into dst (no blending) with the given opacity, using the blit prog.

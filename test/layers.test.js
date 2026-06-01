@@ -4,6 +4,7 @@ import {
   prefixedDefaults, normalizeComposition,
   makeClip, addClip, removeClip, moveClip, setActiveClip,
   changeClipGenerator, setClipParam,
+  setClipTransform, setClipOpacity, setClipDuration, playheadClip,
   addClipEffect, removeClipEffect, moveClipEffect,
   makeLayer, addLayer, removeLayer, moveLayer, patchLayer,
   setLayerParam, addLayerEffect, removeLayerEffect, moveLayerEffect,
@@ -344,4 +345,65 @@ test('CANVAS_PRESETS are all within bounds and integers', () => {
   for (const p of CANVAS_PRESETS) {
     assert.deepEqual(clampCanvasSize(p.w, p.h), { w: p.w, h: p.h });
   }
+});
+
+// --- per-clip transform / opacity / duration (timeline slot fields) ---
+test('makeClip seeds transform, opacity, and durationMs defaults', () => {
+  const c = makeClip('line', 'clip 1', 'c1');
+  assert.deepEqual(c.transform, { x: 0, y: 0, scale: 1, rotation: 0 });
+  assert.equal(c.opacity, 1);
+  assert.equal(c.durationMs, 4000);
+});
+
+test('normalizeComposition fills transform/opacity/duration on new-shape clips', () => {
+  const show = {
+    version: 1, devices: [], fixtures: [],
+    composition: { canvas: { w: 1280, h: 720 }, layers: [
+      { id: 'l1', clips: [{ id: 'c1', generator: 'line', params: {}, effects: [] }],
+        activeClipId: 'c1' },
+    ] },
+  };
+  const clip = normalizeComposition(show).composition.layers[0].clips[0];
+  assert.deepEqual(clip.transform, { x: 0, y: 0, scale: 1, rotation: 0 });
+  assert.equal(clip.opacity, 1);
+  assert.equal(clip.durationMs, 4000);
+});
+
+test('setClipTransform merges fields; setClipOpacity clamps; setClipDuration floors', () => {
+  let show = { composition: { layers: [{ id: 'l1', clips: [makeClip('line', 'c', 'c1')], activeClipId: 'c1' }] } };
+  show = setClipTransform(show, 'l1', 'c1', { x: 0.25, rotation: 90 });
+  assert.deepEqual(show.composition.layers[0].clips[0].transform, { x: 0.25, y: 0, scale: 1, rotation: 90 });
+  show = setClipOpacity(show, 'l1', 'c1', 1.7);
+  assert.equal(show.composition.layers[0].clips[0].opacity, 1);
+  show = setClipOpacity(show, 'l1', 'c1', -0.3);
+  assert.equal(show.composition.layers[0].clips[0].opacity, 0);
+  show = setClipDuration(show, 'l1', 'c1', 2500.6);
+  assert.equal(show.composition.layers[0].clips[0].durationMs, 2501);
+});
+
+test('playheadClip walks clips by duration, wrapping when looped', () => {
+  const clips = [
+    { id: 'a', durationMs: 1000 },
+    { id: 'b', durationMs: 2000 },
+    { id: 'c', durationMs: 1000 },
+  ];
+  assert.equal(playheadClip(clips, 0).index, 0);
+  assert.equal(playheadClip(clips, 999).index, 0);
+  assert.equal(playheadClip(clips, 1000).index, 1);
+  assert.equal(playheadClip(clips, 2999).index, 1);
+  assert.equal(playheadClip(clips, 3000).index, 2);
+  // total = 4000 → wraps
+  assert.equal(playheadClip(clips, 4000).index, 0);
+  assert.equal(playheadClip(clips, 5000).index, 1);
+  assert.equal(playheadClip(clips, 4000).intoMs, 0);
+});
+
+test('playheadClip clamps to last clip when not looping', () => {
+  const clips = [{ id: 'a', durationMs: 1000 }, { id: 'b', durationMs: 1000 }];
+  assert.equal(playheadClip(clips, 5000, false).index, 1);
+  assert.equal(playheadClip(clips, 500, false).index, 0);
+});
+
+test('playheadClip returns null for an empty deck', () => {
+  assert.equal(playheadClip([], 100), null);
 });

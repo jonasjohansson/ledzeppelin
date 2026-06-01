@@ -28,6 +28,24 @@ import { defaultParams, generatorNames } from '../engine/shaders/manifest.js';
 const TRANSITION_MS = 500;
 const DEFAULT_CANVAS = { w: 1280, h: 720 };
 
+// Per-clip transform + playback defaults (a clip = a timeline slot).
+// transform: x/y in canvas fractions (0 = centred), scale (1 = fit), rotation°.
+// opacity 0..1. durationMs is how long the transport holds this slot.
+const DEFAULT_TRANSFORM = { x: 0, y: 0, scale: 1, rotation: 0 };
+const DEFAULT_OPACITY = 1;
+const DEFAULT_DURATION_MS = 4000;
+
+// Normalize a transform object to all four numeric fields.
+function normTransform(t) {
+  const s = t && typeof t === 'object' ? t : {};
+  return {
+    x: Number(s.x) || 0,
+    y: Number(s.y) || 0,
+    scale: s.scale == null ? 1 : Number(s.scale),
+    rotation: Number(s.rotation) || 0,
+  };
+}
+
 // --- canvas resolution -------------------------------------------------------
 
 // Bounds for the composition canvas (source render + on-screen stage). The
@@ -107,6 +125,9 @@ export function normalizeComposition(show) {
         generator: c.generator,
         params: c.params ? { ...c.params } : {},
         effects: Array.isArray(c.effects) ? [...c.effects] : [],
+        transform: normTransform(c.transform),
+        opacity: c.opacity == null ? DEFAULT_OPACITY : Number(c.opacity),
+        durationMs: c.durationMs == null ? DEFAULT_DURATION_MS : Number(c.durationMs),
       }));
       // Repair a dangling activeClipId (points at a clip that no longer exists)
       // by falling back to the first clip, so downstream always has a valid target.
@@ -134,6 +155,9 @@ export function normalizeComposition(show) {
       generator: layer.generator,
       params: layer.params ? { ...layer.params } : {},
       effects: Array.isArray(layer.effects) ? [...layer.effects] : [],
+      transform: { ...DEFAULT_TRANSFORM },
+      opacity: DEFAULT_OPACITY,
+      durationMs: DEFAULT_DURATION_MS,
     };
     return {
       id: layer.id ?? 'l' + (i + 1),
@@ -203,7 +227,11 @@ function dropParams(params, removed, remaining) {
 
 // A fresh clip for `generator`, with seeded prefixed params and no effects.
 export function makeClip(generator, name = 'clip', id = 'c1') {
-  return { id, name, generator, params: prefixedDefaults(generator), effects: [] };
+  return {
+    id, name, generator, params: prefixedDefaults(generator), effects: [],
+    transform: { ...DEFAULT_TRANSFORM }, opacity: DEFAULT_OPACITY,
+    durationMs: DEFAULT_DURATION_MS,
+  };
 }
 
 // Append a clip (new generator) to a layer. If the layer had no active clip,
@@ -271,6 +299,53 @@ export function changeClipGenerator(show, layerId, clipId, generator) {
 export function setClipParam(show, layerId, clipId, key, value) {
   return updateClip(show, layerId, clipId, (clip) =>
     ({ ...clip, params: { ...clip.params, [key]: value } }));
+}
+
+// Patch a clip's transform (merges; missing fields keep their current value).
+export function setClipTransform(show, layerId, clipId, patch) {
+  return updateClip(show, layerId, clipId, (clip) =>
+    ({ ...clip, transform: normTransform({ ...clip.transform, ...patch }) }));
+}
+
+// Set a clip's opacity (clamped 0..1).
+export function setClipOpacity(show, layerId, clipId, value) {
+  const v = Math.max(0, Math.min(1, Number(value)));
+  return updateClip(show, layerId, clipId, (clip) => ({ ...clip, opacity: v }));
+}
+
+// Set a clip's transport hold duration (ms, floored at 0).
+export function setClipDuration(show, layerId, clipId, ms) {
+  const v = Math.max(0, Math.round(Number(ms) || 0));
+  return updateClip(show, layerId, clipId, (clip) => ({ ...clip, durationMs: v }));
+}
+
+// --- transport (the clip deck played as a timeline) --------------------------
+
+// Pure playhead resolver: which clip is active at `elapsedMs` when the deck is
+// played left→right, each clip held for its durationMs. With loop, time wraps
+// over the total; without loop it clamps to the last clip. Returns
+// { clip, index, intoMs } or null if there are no clips. A clip with
+// durationMs ≤ 0 is given a 1ms floor so the playhead can never stall on it.
+export function playheadClip(clips, elapsedMs, loop = true) {
+  const list = Array.isArray(clips) ? clips : [];
+  if (!list.length) return null;
+  const dur = list.map((c) => Math.max(1, Number(c.durationMs) || 0));
+  const total = dur.reduce((a, b) => a + b, 0);
+  let t = Number(elapsedMs) || 0;
+  if (t < 0) t = 0;
+  if (loop) {
+    t = t % total;
+  } else if (t >= total) {
+    const i = list.length - 1;
+    return { clip: list[i], index: i, intoMs: dur[i] };
+  }
+  let acc = 0;
+  for (let i = 0; i < list.length; i++) {
+    if (t < acc + dur[i]) return { clip: list[i], index: i, intoMs: t - acc };
+    acc += dur[i];
+  }
+  const i = list.length - 1;
+  return { clip: list[i], index: i, intoMs: dur[i] };
 }
 
 // Append a clip effect and seed its default params (prefixed).

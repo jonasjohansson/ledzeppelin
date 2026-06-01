@@ -11,7 +11,7 @@ import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
 
 const canvas = document.getElementById('stage');
@@ -135,9 +135,23 @@ const panel = createFixturePanel({
   getShow: () => show,
   setShow: (next) => rebuild(next),
 });
+// Timeline transport: plays the clip deck left→right, holding each clip for its
+// durationMs, looping. It only drives RENDERING (derives the active clip per
+// frame); the persisted show is untouched, so editing and playback don't fight.
+// startTs/lastTs are in requestAnimationFrame timestamp units (ms).
+let lastTs = 0;
+const transport = {
+  playing: false, loop: true, startTs: 0,
+  isPlaying() { return this.playing; },
+  getLoop() { return this.loop; },
+  setLoop(b) { this.loop = !!b; },
+  toggle() { this.playing = !this.playing; if (this.playing) this.startTs = lastTs; },
+};
+
 const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
+  transport,
 });
 // Kagora import → assign-IP → apply. The imported show is a GEOMETRY change, so
 // applyShow routes through rebuild() (same path as fixture edits); onApplied
@@ -243,11 +257,24 @@ rebuild(show);
 let frames = 0, last = 0, t0 = 0;
 function loop(ts) {
   if (!t0) t0 = ts;
+  lastTs = ts;
   const t = (ts - t0) / 1000;
   if (sampler) {
+    // When the transport is playing, derive the active clip from the playhead and
+    // render a shallow-cloned layer with that activeClipId (the compositor's
+    // crossfade picks up the change). Otherwise render the show's layers as-is.
+    let renderLayers = show.composition?.layers || [];
+    if (transport.playing && renderLayers.length) {
+      const base = renderLayers[0];
+      const ph = playheadClip(base.clips || [], ts - transport.startTs, transport.loop);
+      if (ph) {
+        renderLayers = [{ ...base, activeClipId: ph.clip.id }, ...renderLayers.slice(1)];
+        layerPanel.setPlayhead(ph.index);
+      }
+    }
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
-    compositor.render(show.composition?.layers || [], t);
+    compositor.render(renderLayers, t);
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);

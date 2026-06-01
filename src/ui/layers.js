@@ -25,6 +25,7 @@ import {
   addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, patchLayer,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
+  setClipTransform, setClipOpacity, setClipDuration,
 } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
@@ -95,8 +96,20 @@ function paramControl(p, value, onInput) {
 // dragend. dataTransfer still carries the payload for completeness.
 let drag = null; // { kind: 'source' | 'effect', name }
 
-export function createLayerPanel({ getShow, setShow, onChange }) {
+// transport (optional): { isPlaying(), toggle(), getLoop(), setLoop(bool) } —
+// drives the play-through of the clip deck as a timeline. The panel renders a
+// play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
+// highlight as the playhead advances (cheap class toggle, no re-render).
+export function createLayerPanel({ getShow, setShow, onChange, transport }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
+  let deckCells = [];        // clip cells by deck index (for the playhead highlight)
+  let playheadIndex = -1;
+
+  function setPlayhead(i) {
+    if (i === playheadIndex) return;
+    playheadIndex = i;
+    deckCells.forEach((cell, idx) => cell.classList.toggle('clip-playhead', idx === i));
+  }
 
   // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).
   function commit(nextShow) {
@@ -134,9 +147,13 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
     const col = el('div', { className: 'composer-main' });
     const id = layer.id;
 
-    col.append(el('div', { className: 'composer-label', textContent: 'CLIPS' }));
+    const head = el('div', { className: 'composer-deckhead' }, [
+      el('div', { className: 'composer-label', textContent: 'TIMELINE' }),
+    ]);
+    if (transport) head.append(transportBar());
+    col.append(head);
     col.append(el('div', { className: 'ly-hint',
-      textContent: 'click to trigger · drag a source onto a clip to fill it' }));
+      textContent: 'click to trigger · drag a source onto a slot · ▶ plays through slots' }));
     col.append(clipDeck(layer, id));
 
     // Crossfade time between clips (the transition the deck triggers).
@@ -203,11 +220,28 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
     return block;
   }
 
+  // Play/stop + loop bar. Toggling re-renders so the label flips and (on stop)
+  // the playhead highlight clears.
+  function transportBar() {
+    const bar = el('div', { className: 'transport' });
+    const playing = transport.isPlaying();
+    bar.append(el('button', {
+      className: 'transport-play' + (playing ? ' is-playing' : ''),
+      textContent: playing ? '■ stop' : '▶ play',
+      onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
+    }));
+    const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop() });
+    loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
+    bar.append(el('label', { className: 'transport-loop' }, [loopCb, el('span', { textContent: 'loop' })]));
+    return bar;
+  }
+
   // The clip deck. Each cell: click = trigger; accepts a dragged SOURCE (replace
   // + trigger) or EFFECT (append to that clip). The "+" cell accepts a SOURCE to
   // create a new clip, with a generator <select> as a no-drag fallback.
   function clipDeck(layer, id) {
     const deck = el('div', { className: 'clip-deck' });
+    deckCells = [];
     const clips = layer.clips || [];
     for (let ci = 0; ci < clips.length; ci++) {
       const clip = clips[ci];
@@ -247,6 +281,8 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
       );
       cell.append(aff);
       if (isActive) cell.append(el('span', { className: 'clip-badge', textContent: '●' }));
+      if (ci === playheadIndex) cell.classList.add('clip-playhead');
+      deckCells.push(cell);
       deck.append(cell);
     }
 
@@ -290,6 +326,22 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
           (v) => commitLive(setClipParam(show(), id, clip.id, key, v))));
       }
     }
+
+    // Transform + opacity + slot duration (a clip is a timeline slot).
+    const t = clip.transform || {};
+    box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
+    box.append(sliderField('x', t.x ?? 0, -1, 1,
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { x: v }))));
+    box.append(sliderField('y', t.y ?? 0, -1, 1,
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { y: v }))));
+    box.append(sliderField('scale', t.scale ?? 1, 0, 3,
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { scale: v }))));
+    box.append(sliderField('rotation', t.rotation ?? 0, -180, 180,
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { rotation: v }))));
+    box.append(sliderField('opacity', clip.opacity ?? 1, 0, 1,
+      (v) => commitLive(setClipOpacity(show(), id, clip.id, v))));
+    box.append(sliderField('duration (s)', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
+      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000)))));
 
     // Effect chain.
     box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'EFFECTS' }));
@@ -382,7 +434,7 @@ export function createLayerPanel({ getShow, setShow, onChange }) {
   }
 
   render();
-  return { el: root, refresh: render };
+  return { el: root, refresh: render, setPlayhead };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
