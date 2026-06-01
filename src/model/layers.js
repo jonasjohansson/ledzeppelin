@@ -75,7 +75,10 @@ export function normalizeComposition(show) {
         params: c.params ? { ...c.params } : {},
         effects: Array.isArray(c.effects) ? [...c.effects] : [],
       }));
-      const activeClipId = layer.activeClipId != null
+      // Repair a dangling activeClipId (points at a clip that no longer exists)
+      // by falling back to the first clip, so downstream always has a valid target.
+      const clipIds = new Set(clips.map((c) => c.id));
+      const activeClipId = clipIds.has(layer.activeClipId)
         ? layer.activeClipId
         : (clips[0]?.id ?? null);
       return {

@@ -81,6 +81,13 @@ test('normalizeComposition is safe on an empty composition', () => {
   assert.deepEqual(out.composition.canvas, { w: 1280, h: 720 });
 });
 
+test('normalizeComposition repairs a dangling activeClipId', () => {
+  const out = normalizeComposition({ composition: { layers: [
+    { id: 'l1', clips: [{ id: 'k1', generator: 'line' }], activeClipId: 'gone' },
+  ] } });
+  assert.equal(out.composition.layers[0].activeClipId, 'k1');
+});
+
 test('normalizeComposition does not mutate the input', () => {
   const inp = oldShow();
   const snapshot = structuredClone(inp);
