@@ -1,0 +1,7 @@
+{
+  "name": "ledzeppelin",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": { "start": "node server/index.js", "test": "node --test" },
+  "dependencies": { "ws": "^8.18.0" }
+}
