@@ -174,6 +174,7 @@ const layerPanel = createLayerPanel({
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
+    inspectorLayer: document.getElementById('insp-layer'),
     inspectorComposition: document.getElementById('insp-compfx'),
     library: document.getElementById('library'),
   },
@@ -367,16 +368,18 @@ document.addEventListener('keydown', (e) => {
 
 // Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.
 const inspTabsEl = document.getElementById('insp-tabs');
-const inspClipEl = document.getElementById('insp-clip');
-const inspCompEl = document.getElementById('insp-composition');
+const inspPanes = {
+  clip: document.getElementById('insp-clip'),
+  layer: document.getElementById('insp-layer'),
+  composition: document.getElementById('insp-composition'),
+};
 inspTabsEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
   if (!b) return;
   const which = b.dataset.itab;
   inspTabsEl.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.itab === which));
-  if (inspClipEl) inspClipEl.hidden = which !== 'clip';
-  if (inspCompEl) inspCompEl.hidden = which !== 'composition';
+  for (const [k, pane] of Object.entries(inspPanes)) if (pane) pane.hidden = k !== which;
 });
 
 applyView();

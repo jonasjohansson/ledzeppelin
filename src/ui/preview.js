@@ -16,9 +16,9 @@ export function createPreview(canvasEl, opts = {}) {
 
   function draw(show, rgba, selectedId = null) {
     const W = canvasEl.width, Hh = canvasEl.height;
+    // Transparent overlay: the live composite (WebGL stage) shows THROUGH, so in
+    // Output you see the canvas content and can place fixtures over it.
     ctx.clearRect(0, 0, W, Hh);
-    ctx.fillStyle = '#0a0a0a';
-    ctx.fillRect(0, 0, W, Hh);
     if (!show || !show.fixtures?.length) return;
 
     const { fixtureOrder, spans } = buildPipelineInputs(show);

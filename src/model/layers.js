@@ -299,6 +299,18 @@ export function changeClipGenerator(show, layerId, clipId, generator) {
   });
 }
 
+// Merge a batch of (namespaced) params into a clip (e.g. loading a preset).
+export function mergeClipParams(show, layerId, clipId, patch) {
+  return updateClip(show, layerId, clipId, (clip) =>
+    ({ ...clip, params: { ...clip.params, ...patch } }));
+}
+
+// Merge a batch of params into a layer (composition FX presets).
+export function mergeLayerParams(show, layerId, patch) {
+  return updateLayer(show, layerId, (layer) =>
+    ({ ...layer, params: { ...layer.params, ...patch } }));
+}
+
 // Set (or clear, when spec is null) a per-parameter animation on a clip. The
 // anim is keyed by the same namespaced param key as clip.params.
 export function setClipAnim(show, layerId, clipId, key, spec) {

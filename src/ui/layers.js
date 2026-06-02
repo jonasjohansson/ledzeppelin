@@ -27,8 +27,10 @@ import {
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
   setClipAnim, setLayerAnim, patchLayer,
+  mergeClipParams, mergeLayerParams,
 } from '../model/layers.js';
 import { DIRECTIONS, makeAnim, animatedValue } from '../model/anim.js';
+import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
@@ -202,6 +204,39 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   const show = () => getShow();
   const firstLayer = () => getShow().composition?.layers?.[0] || null;
+  // Live clip lookup (presets read CURRENT params, not the captured render-time clip).
+  const liveClip = (cid) => (firstLayer()?.clips || []).find((c) => c.id === cid) || null;
+
+  // Preset row for a source/effect TYPE: a load dropdown + save/delete buttons.
+  //   getParams(): the current param subset to save · applyParams(p): load it.
+  function presetControl(kind, name, getParams, applyParams) {
+    const names = listPresets(kind, name);
+    const sel = selectInput(
+      [{ value: '', label: names.length ? 'load preset…' : '(no presets)' }, ...names.map((n) => ({ value: n, label: n }))],
+      '', (pn) => { if (pn) { const p = loadPreset(kind, name, pn); if (p) applyParams(p); } },
+    );
+    const saveBtn = el('button', {
+      className: 'preset-save', textContent: '＋ save', title: 'save current as a preset',
+      onclick: () => { const pn = window.prompt(`Save ${name} preset as:`); if (pn) { savePreset(kind, name, pn.trim(), getParams()); render(); } },
+    });
+    const delBtn = el('button', {
+      className: 'preset-del ly-rmfx', textContent: '🗑', title: 'delete a preset',
+      onclick: () => {
+        const cur = listPresets(kind, name);
+        if (!cur.length) return;
+        const pn = window.prompt(`Delete which ${name} preset?\n${cur.join(', ')}`);
+        if (pn && cur.includes(pn.trim())) { deletePreset(kind, name, pn.trim()); render(); }
+      },
+    });
+    return el('div', { className: 'preset-ctrl' }, [sel, saveBtn, delBtn]);
+  }
+
+  // The param subset of `params` whose keys are prefixed by `name + '.'`.
+  const paramsForPrefix = (params, name) => {
+    const out = {}; const pfx = name + '.';
+    for (const k of Object.keys(params || {})) if (k.startsWith(pfx)) out[k] = params[k];
+    return out;
+  };
 
   // Mount points (Resolume-style shell). The panel renders its regions into
   // separate containers: DECK (clip-slot strip + transport), the CLIP inspector
@@ -211,6 +246,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // single self-contained tree in `root`.
   const deckEl = mounts?.deck || root;
   const clipEl = mounts?.inspectorClip || root;
+  const layerEl = mounts?.inspectorLayer || root;
   const compEl = mounts?.inspectorComposition || root;
   const libraryEl = mounts?.library || root;
 
@@ -218,7 +254,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const layer = firstLayer();
     // Clear each distinct container once.
     const seen = new Set();
-    for (const c of [deckEl, clipEl, compEl, libraryEl]) {
+    for (const c of [deckEl, clipEl, layerEl, compEl, libraryEl]) {
       if (!seen.has(c)) { c.textContent = ''; seen.add(c); }
     }
 
@@ -247,6 +283,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
     if (active) clipEl.append(selectedClipEditor(id, active));
     else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clip selected' }));
+
+    // --- LAYER inspector: layer settings -------------------------------------
+    layerEl.append(layerSettings(layer, id));
 
     // --- COMPOSITION inspector: composition FX -------------------------------
     compEl.append(compositionEffects(layer, id));
@@ -307,6 +346,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onAnim: (spec) => commit(setLayerAnim(show(), id, key, spec)),
         }));
       }
+      block.append(presetControl('effect', entry.name,
+        () => paramsForPrefix(firstLayer()?.params, entry.name),
+        (p) => commit(mergeLayerParams(show(), id, p))));
     }
     return block;
   }
@@ -415,6 +457,22 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return deck;
   }
 
+  // Layer inspector tab: name · opacity · blend · crossfade (layer-level props).
+  function layerSettings(layer, id) {
+    const box = el('div', { className: 'clip-editor' });
+    const name = el('input', { className: 'ly-nameedit', value: layer.name ?? 'Layer 1', title: 'layer name' });
+    name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
+    box.append(el('div', { className: 'clip-editor-head' }, [name]));
+    box.append(el('div', { className: 'fx-pts', textContent: 'blend' }));
+    box.append(field('mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
+      (x) => commit(patchLayer(show(), id, { blend: x })))));
+    box.append(sliderField('opacity', layer.opacity ?? 1, 0, 1,
+      (v) => commitLive(patchLayer(show(), id, { opacity: v })), 1));
+    box.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
+      (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
+    return box;
+  }
+
   // Resolume-style layer control block: a vertical opacity fader (the "V"),
   // clear/eject + blend controls, and the layer name bar at the bottom.
   function layerHead(layer, id) {
@@ -465,9 +523,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
     nameInput.addEventListener('change',
       () => commit(patchClipName(show(), id, clip.id, nameInput.value)));
-    box.append(el('div', { className: 'clip-editor-head' }, [
-      el('span', { textContent: 'selected:' }), nameInput,
-    ]));
+    box.append(el('div', { className: 'clip-editor-head' }, [nameInput]));
 
     // Source params (auto-generated from the manifest), shown directly — no
     // "source: X" / "X params" meta (the slot already shows the source).
@@ -495,6 +551,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
         }));
       }
+    }
+    if (gen && gen.params.length) {
+      box.append(presetControl('source', gen.name,
+        () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
+        (p) => commit(mergeClipParams(show(), id, clip.id, p))));
     }
 
     // Transform + opacity (the clip's placement on the canvas).
@@ -553,6 +614,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
         }));
       }
+      block.append(presetControl('effect', entry.name,
+        () => paramsForPrefix(liveClip(clip.id)?.params, entry.name),
+        (p) => commit(mergeClipParams(show(), id, clip.id, p))));
     }
     return block;
   }

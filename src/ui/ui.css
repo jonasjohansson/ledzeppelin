@@ -85,15 +85,14 @@ html,body{ background:var(--bg); color:var(--text); }
 /* Full-bleed canvas background: fixed behind everything, centred + letterboxed
    to the composition aspect. The UI panels float over it (matte-style). */
 #stagewrap {
-  position: fixed; left: 0; right: 0; top: 40px; bottom: 0;
+  position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  z-index: 0; background: #000; pointer-events: none;
+  z-index: 0; background: #000; pointer-events: none; overflow: hidden;
 }
 #stageinner { position: relative; line-height: 0; pointer-events: auto; }
-#stageinner canvas#stage {
-  display: block; width: auto; height: auto;
-  max-width: 96vw; max-height: calc(100vh - 56px); border: 1px solid #1c1c1c;
-}
+/* Full-bleed: the composite fills the window width (TouchDesigner-style),
+   centred vertically; aspect preserved, vertical overflow cropped. */
+#stageinner canvas#stage { display: block; width: 100vw; height: auto; }
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
 
@@ -215,6 +214,15 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   width: 42px; background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
   border-radius: 3px; padding: 1px 3px; font: 10px var(--mono); box-sizing: border-box;
 }
+
+/* Preset row: load dropdown + save/delete (sources & effects). */
+.preset-ctrl { display: flex; align-items: center; gap: 4px; margin: 5px 0 2px; }
+.preset-ctrl select {
+  flex: 1 1 auto; min-width: 0; background: #0d0d0d; color: var(--text);
+  border: 1px solid var(--line-2); border-radius: 3px; padding: 2px 4px; font: 11px var(--mono);
+}
+.preset-save { flex: 0 0 auto; padding: 2px 7px; font-size: 10px; color: var(--green); border-color: rgba(93,209,163,.45); }
+.preset-del { flex: 0 0 auto; padding: 2px 6px; font-size: 10px; }
 
 /* Compact single-row param: name left · value · slider fills (Resolume-style). */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; }

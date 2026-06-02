@@ -96,12 +96,6 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
       },
     }));
 
-    // --- Crossfade (composition-global; lives on the single layer) ---
-    const layer = getShow().composition?.layers?.[0];
-    if (layer && setShow) {
-      root.append(sliderRow('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
-        (v) => setShow(patchLayer(getShow(), layer.id, { transitionMs: Math.round(v) }))));
-    }
   }
 
   render();
