@@ -1,4 +1,5 @@
 import { validate } from '../model/show.js';
+import { setFixtureTransform, transformFromPoints } from '../model/fixture-transform.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
@@ -25,6 +26,14 @@ const el = (tag, props = {}, kids = []) => {
 const numInput = (value, onInput, step = 'any') => {
   const i = el('input', { type: 'number', value: String(value ?? 0), step });
   i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
+  return i;
+};
+
+// Commits on `change` (blur / Enter) rather than every keystroke — used for the
+// transform fields whose onInput re-renders the panel (so typing isn't cut off).
+const numInputCommit = (value, onCommit, step = '1') => {
+  const i = el('input', { type: 'number', value: String(value ?? 0), step });
+  i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
   return i;
 };
 
@@ -114,7 +123,7 @@ export function createFixturePanel({ getShow, setShow }) {
     const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
     for (let i = 0; i < show.fixtures.length; i++) {
       const f = show.fixtures[i];
-      const pts = f.input.points;
+      const tf = f.input.transform || transformFromPoints(f.input.points, show.composition?.canvas);
       const upd = (mutate) => {
         const next = structuredClone(show);
         mutate(next.fixtures[i]);
@@ -133,11 +142,12 @@ export function createFixturePanel({ getShow, setShow }) {
           f.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
         field('pixelOffset', numInput(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }), '1')),
         field('samples', numInput(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }), '1')),
-        el('div', { className: 'fx-pts', textContent: 'endpoints (0..1)' }),
-        field('x1', numInput(pts[0][0], (x) => upd((nf) => { nf.input.points[0][0] = x; }))),
-        field('y1', numInput(pts[0][1], (x) => upd((nf) => { nf.input.points[0][1] = x; }))),
-        field('x2', numInput(pts[pts.length - 1][0], (x) => upd((nf) => { nf.input.points[nf.input.points.length - 1][0] = x; }))),
-        field('y2', numInput(pts[pts.length - 1][1], (x) => upd((nf) => { nf.input.points[nf.input.points.length - 1][1] = x; }))),
+        el('div', { className: 'fx-pts', textContent: 'transform (px) — drag on the canvas to move' }),
+        field('x', numInputCommit(Math.round(tf.x), (v) => commit(setFixtureTransform(show, f.id, { x: v })))),
+        field('y', numInputCommit(Math.round(tf.y), (v) => commit(setFixtureTransform(show, f.id, { y: v })))),
+        field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
+        field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
+        field('rotation°', numInputCommit(Math.round(tf.rotation), (v) => commit(setFixtureTransform(show, f.id, { rotation: v })))),
       ]);
       card.append(el('button', {
         className: 'fx-del', textContent: 'delete fixture',

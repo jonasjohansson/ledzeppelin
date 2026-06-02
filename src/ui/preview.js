@@ -1,5 +1,6 @@
 import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
+import { setFixtureTransform } from '../model/fixture-transform.js';
 
 // Virtual-fixture preview: draws each fixture's resampled points onto a 2D
 // overlay canvas, colored by the latest sampled RGB. Hardware-free dev view.
@@ -41,20 +42,33 @@ export function createPreview(canvasEl, opts = {}) {
         ctx.fill();
       }
 
-      // Endpoint handles (for drag editing) + optional label.
+      // Fixture footprint: a rotated rectangle (w×h) with a CENTRE handle. The
+      // whole fixture is repositioned by dragging the centre (see
+      // enableDragPlacement); width/height/rotation are set numerically.
       const eps = f.input.points;
-      for (const [u, v] of [eps[0], eps[eps.length - 1]]) {
-        ctx.beginPath();
-        ctx.arc(u * W, v * Hh, dotR + 3, 0, Math.PI * 2);
-        ctx.strokeStyle = '#4af';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
+      const ax = eps[0][0] * W, ay = eps[0][1] * Hh;
+      const bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      const perpX = -dy / len, perpY = dx / len; // unit perpendicular
+      const cv = show.composition?.canvas || { w: W, h: Hh };
+      const halfThick = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
+      ctx.beginPath();
+      ctx.moveTo(ax + perpX * halfThick, ay + perpY * halfThick);
+      ctx.lineTo(bx + perpX * halfThick, by + perpY * halfThick);
+      ctx.lineTo(bx - perpX * halfThick, by - perpY * halfThick);
+      ctx.lineTo(ax - perpX * halfThick, ay - perpY * halfThick);
+      ctx.closePath();
+      ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 1.5; ctx.stroke();
+
+      const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(92,200,255,.25)'; ctx.fill();
+      ctx.strokeStyle = '#5cc8ff'; ctx.stroke();
       if (showLabels) {
-        const [u, v] = eps[0];
-        ctx.fillStyle = '#9ad';
-        ctx.font = '11px system-ui';
-        ctx.fillText(f.name || f.id, u * W + 8, v * Hh - 8);
+        ctx.fillStyle = '#8fd6e8';
+        ctx.font = '11px ui-monospace, Menlo, monospace';
+        ctx.fillText(f.name || f.id, cx + 8, cy - 8);
       }
     }
   }
@@ -62,14 +76,14 @@ export function createPreview(canvasEl, opts = {}) {
   return { draw };
 }
 
-// Drag-placement: hit-test fixture endpoints on the preview canvas and let the
-// user drag them to edit input.points live (normalized 0..1). On every drag
-// move it mutates the show and calls onEdit(nextShow); on release onCommit.
+// Drag-placement: hit-test a fixture's CENTRE handle on the preview canvas and
+// let the user drag to reposition the whole fixture (its pixel-space transform
+// x/y). On every move it derives a new show via setFixtureTransform and calls
+// onEdit(nextShow); on release onCommit. Width/height/rotation are numeric.
 export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opts = {}) {
-  const hitR = opts.hitRadius ?? 12;
-  let dragging = null; // { fxId, end: 'first' | 'last' }
+  const hitR = opts.hitRadius ?? 14;
+  let dragging = null; // { fxId }
   // Gate: drag editing is only active when enabled (Output tab → Input mode).
-  // Starts enabled to preserve prior always-on behavior unless the caller toggles.
   let enabled = opts.enabled ?? true;
 
   const toNorm = (ev) => {
@@ -80,17 +94,21 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
     ];
   };
 
+  const centreOf = (f) => {
+    const pts = f.input.points;
+    return [
+      (pts[0][0] + pts[pts.length - 1][0]) / 2,
+      (pts[0][1] + pts[pts.length - 1][1]) / 2,
+    ];
+  };
+
   function hitTest(ev) {
     const show = getShow();
     const r = canvasEl.getBoundingClientRect();
     const px = ev.clientX - r.left, py = ev.clientY - r.top;
     for (const f of show.fixtures ?? []) {
-      const pts = f.input.points;
-      const ends = [['first', pts[0]], ['last', pts[pts.length - 1]]];
-      for (const [end, [u, v]] of ends) {
-        const dx = u * r.width - px, dy = v * r.height - py;
-        if (Math.hypot(dx, dy) <= hitR) return { fxId: f.id, end };
-      }
+      const [u, v] = centreOf(f);
+      if (Math.hypot(u * r.width - px, v * r.height - py) <= hitR) return { fxId: f.id };
     }
     return null;
   }
@@ -107,12 +125,12 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
   canvasEl.addEventListener('pointermove', (ev) => {
     if (!enabled || !dragging) return;
     const [u, v] = toNorm(ev);
-    const next = structuredClone(getShow());
-    const f = next.fixtures.find((x) => x.id === dragging.fxId);
-    if (!f) { dragging = null; return; }
-    const pts = f.input.points;
-    const i = dragging.end === 'first' ? 0 : pts.length - 1;
-    pts[i] = [Math.max(0, Math.min(1, u)), Math.max(0, Math.min(1, v))];
+    const show = getShow();
+    const cv = show.composition?.canvas || { w: 1280, h: 720 };
+    const next = setFixtureTransform(show, dragging.fxId, {
+      x: Math.max(0, Math.min(1, u)) * cv.w,
+      y: Math.max(0, Math.min(1, v)) * cv.h,
+    });
     onEdit?.(next);
   });
 

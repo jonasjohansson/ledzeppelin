@@ -13,6 +13,7 @@ import {
   prefixedDefaults, normalizeComposition, makeClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
+import { syncShowFixtures } from './model/fixture-transform.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -65,7 +66,9 @@ function initialShow() {
   }
 }
 
-let show = initialShow();
+// Sync fixture geometry on load: ensure every fixture has a pixel-space
+// transform + freshly-derived normalized points for the current canvas.
+let show = syncShowFixtures(initialShow());
 
 // --- Canvas resolution (composition.canvas drives source render + stage) ---
 // The canvas resolution affects ONLY the source render targets + on-screen
@@ -92,7 +95,9 @@ const screenProg = program(gl, SCREEN_FS);
 const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
 function rebuild(next) {
-  show = next;
+  // Geometry path: ensure fixtures' derived sample points are in sync with their
+  // pixel-space transforms + the current canvas before building the sampler.
+  show = syncShowFixtures(next);
   const { sampleUVs, route } = buildPipelineInputs(show);
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
@@ -111,20 +116,20 @@ function setComposition(next) {
 }
 
 // Resolution-change path. Updates composition.canvas (clamped, immutable),
-// persists, resizes the stage canvas, and RECREATES the compositor so all its
-// internal targets are re-sized to the new resolution (simplest correct
-// approach; resolution changes are rare and transition state resetting is fine).
-// The sampler is INDEPENDENT of canvas resolution (it samples normalized UVs
-// into an n×1 buffer), so it is NOT rebuilt here.
+// resizes the stage canvas, and RECREATES the compositor so all its internal
+// targets are re-sized. Because fixtures are now defined in PIXEL space, their
+// derived normalized sample points DO depend on the canvas — so we re-sync the
+// fixtures and rebuild the sampler/route here (via rebuild()). The fixtures
+// panel is refreshed so its px fields read against the new canvas.
 function setCanvasSize(w, h) {
   const next = setCanvasSizeModel(show, w, h); // clamps + immutably updates canvas
-  show = next;
-  saveShow(show);
-  const c = show.composition.canvas;
+  const c = next.composition.canvas;
   canvas.width = c.w; canvas.height = c.h;
   compositor.dispose();
   compositor = makeCompositor(gl, c.w, c.h);
-  lastRGBA = null;
+  rebuild(next);          // syncs fixtures to the new canvas + rebuilds sampler
+  saveShow(show);
+  panel.refresh();
 }
 
 // --- Preview overlay + editor panel wiring ---
@@ -243,7 +248,7 @@ function applyView() {
   if (outputModeHint) {
     outputModeHint.textContent = !onOutput ? '' :
       view.outputMode === 'input'
-        ? 'Input — drag fixture endpoints on the overlay to set where they sample the canvas.'
+        ? 'Input — drag a fixture on the overlay to move it; set width/height/rotation (px) numerically.'
         : 'Output — assign devices, offsets and IPs. Drag placement is locked.';
   }
 
