@@ -354,11 +354,11 @@ tabsEl?.addEventListener('click', (ev) => {
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
-// 'h' (or Tab) toggles all GUI off to view the canvas full-screen.
+// 'h' toggles all GUI off to view the canvas full-screen. (Tab is intentionally
+// NOT bound — it's too easy to hit and would hide the UI unexpectedly.)
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'h' && e.key !== 'H' && e.key !== 'Tab') return;
+  if (e.key !== 'h' && e.key !== 'H') return;
   if (typingIn(e.target)) return;
-  e.preventDefault();
   document.body.classList.toggle('gui-hidden');
 });
 

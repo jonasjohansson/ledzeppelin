@@ -29,6 +29,7 @@ html,body{ background:var(--bg); color:var(--text); }
 .tabs {
   display: flex; gap: 4px;
   padding: 8px 8px 0; box-sizing: border-box;
+  position: relative; z-index: 2; /* above the full-bleed canvas so tabs stay clickable */
 }
 .tab {
   background: var(--surface); color: var(--muted); border: 1px solid var(--field-border);
