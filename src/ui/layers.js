@@ -59,7 +59,7 @@ const fmt = (v) => {
 };
 
 // A range slider with a live numeric readout, writing back on every input.
-const sliderField = (label, value, min, max, onInput) => {
+const sliderField = (label, value, min, max, onInput, defaultValue) => {
   const step = (max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1;
   const out = el('span', { className: 'ly-readout', textContent: fmt(value) });
   const range = el('input', {
@@ -71,10 +71,20 @@ const sliderField = (label, value, min, max, onInput) => {
     out.textContent = fmt(v);
     onInput(v);
   });
+  // Right-click resets to the default value.
+  if (defaultValue != null) {
+    range.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      range.value = String(defaultValue);
+      out.textContent = fmt(defaultValue);
+      onInput(defaultValue);
+    });
+  }
   // Single row: name left, value, slider fills the rest (Resolume-style, compact).
-  return el('label', { className: 'fx-field ly-param ly-row' }, [
+  const row = el('label', { className: 'fx-field ly-param ly-row' + (defaultValue != null ? ' resettable' : '') }, [
     el('span', { className: 'ly-plabel', textContent: label }), out, range,
   ]);
+  return row;
 };
 
 // Build a control for one manifest param.
@@ -105,7 +115,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   const animated = !!anim;
   const shown = animated ? anim.from : (value == null ? (p.default ?? min) : value);
   const wrap = el('div', { className: 'anim-param' });
-  const row = sliderField(p.key, shown, min, max, onValue);
+  const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min);
   if (animated) {
     const r = row.querySelector('input[type=range]');
     if (r) r.dataset.animkey = key;
@@ -475,7 +485,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // this section "Transport").
     box.append(el('div', { className: 'fx-pts', textContent: 'transport' }));
     box.append(sliderField('duration (s)', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
-      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000)))));
+      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
     if (gen && gen.params.length) {
       for (const p of gen.params) {
         const key = gen.name + '.' + p.key;
@@ -491,15 +501,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const t = clip.transform || {};
     box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
     box.append(sliderField('x', t.x ?? 0, -1, 1,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { x: v }))));
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { x: v })), 0));
     box.append(sliderField('y', t.y ?? 0, -1, 1,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { y: v }))));
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { y: v })), 0));
     box.append(sliderField('scale', t.scale ?? 1, 0, 3,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { scale: v }))));
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { scale: v })), 1));
     box.append(sliderField('rotation', t.rotation ?? 0, -180, 180,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { rotation: v }))));
+      (v) => commitLive(setClipTransform(show(), id, clip.id, { rotation: v })), 0));
     box.append(sliderField('opacity', clip.opacity ?? 1, 0, 1,
-      (v) => commitLive(setClipOpacity(show(), id, clip.id, v))));
+      (v) => commitLive(setClipOpacity(show(), id, clip.id, v)), 1));
 
     // Effect chain.
     box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'EFFECTS' }));

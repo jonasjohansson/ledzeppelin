@@ -259,7 +259,6 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .lh-op { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .lh-op-val { font-size: 9px; color: var(--readout); font-variant-numeric: tabular-nums; }
 .lh-op-range {
-  -webkit-appearance: slider-vertical; appearance: slider-vertical;
   writing-mode: vertical-lr; direction: rtl;
   width: 12px; height: 64px; accent-color: var(--green);
 }

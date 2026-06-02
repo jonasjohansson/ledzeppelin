@@ -153,7 +153,7 @@ const panel = createFixturePanel({
 // frame); the persisted show is untouched, so editing and playback don't fight.
 // startTs/lastTs are in requestAnimationFrame timestamp units (ms).
 let lastTs = 0, t0 = 0;
-let pulseTrigSec = -1e6; // seconds of the last ⚡ trigger (huge-negative = never)
+let pulseTrigSecs = []; // seconds of recent ⚡ triggers (up to 8 stack as beams)
 const nowSec = () => (lastTs - t0) / 1000;
 const transport = {
   playing: false, loop: true, startTs: 0,
@@ -161,7 +161,7 @@ const transport = {
   getLoop() { return this.loop; },
   setLoop(b) { this.loop = !!b; },
   toggle() { this.playing = !this.playing; if (this.playing) this.startTs = lastTs; },
-  fire() { pulseTrigSec = nowSec(); }, // ⚡ trigger for Pulse-style sources
+  fire() { pulseTrigSecs.push(nowSec()); if (pulseTrigSecs.length > 8) pulseTrigSecs = pulseTrigSecs.slice(-8); },
 };
 
 // The composer renders into the Resolume-style shell's three regions: the DECK
@@ -420,7 +420,7 @@ function loop(ts) {
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
-    compositor.render(renderLayers, t, { trigSec: pulseTrigSec });
+    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs });
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);

@@ -136,12 +136,18 @@ export function makeCompositor(gl, w, h) {
     const uT = loc(c, 'uT');
     if (uT !== null) gl.uniform1f(uT, timeSec);
 
-    // uTrig — seconds since the last trigger (from frameEnv.trigSec); huge before
-    // the first trigger so triggerable sources (Pulse) stay idle until fired.
-    const uTrig = loc(c, 'uTrig');
-    if (uTrig !== null) {
-      const trig = frameEnv.trigSec;
-      gl.uniform1f(uTrig, trig == null ? 1e6 : (timeSec - trig));
+    // uTrigs[] — seconds since each recent trigger (from frameEnv.trigSecs),
+    // huge (1e6) before a trigger so triggerable sources (Pulse) stay idle. The
+    // most recent up-to-8 triggers stack as independent beams.
+    const uTrigs = loc(c, 'uTrigs[0]');
+    if (uTrigs !== null) {
+      const arr = new Float32Array(8).fill(1e6);
+      const trigs = frameEnv.trigSecs || [];
+      const n = Math.min(trigs.length, 8);
+      for (let i = 0; i < n; i++) arr[i] = timeSec - trigs[trigs.length - n + i];
+      gl.uniform1fv(uTrigs, arr);
+      const cnt = loc(c, 'uTrigCount');
+      if (cnt !== null) gl.uniform1i(cnt, n);
     }
 
     if (srcTex != null) {

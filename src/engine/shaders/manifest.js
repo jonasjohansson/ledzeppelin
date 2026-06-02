@@ -63,24 +63,30 @@ void main(){
 // (uTrig = seconds since the last trigger), or enable autoFire to loop on uT.
 const PULSE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform float uT; uniform float uTrig;
+uniform float uT; uniform float uTrigs[8]; uniform int uTrigCount;
 uniform float speed; uniform float headWidth; uniform float trailLength;
 uniform float trailSoftness; uniform float autoFire;
+// One pulse's brightness at this texel given its head progress (0..1+).
+float pulseAt(float prog){
+  float d = prog - uv.x;                 // distance behind the leading edge
+  if (d < 0.0 || prog > 1.0 + trailLength) return 0.0;
+  if (d < headWidth) return 1.0;         // solid head band
+  float td = (d - headWidth) / max(1e-4, trailLength);
+  return (td <= 1.0) ? pow(1.0 - td, mix(1.0, 4.0, trailSoftness)) : 0.0; // decaying trail
+}
 void main(){
   float sp = max(0.0001, speed);
-  // Head position 0..1+. autoFire loops on uT; otherwise advance from the last
-  // trigger. uTrig is huge before the first trigger → the pulse sits off-canvas.
-  float prog = (autoFire > 0.5) ? fract(uT * sp) : uTrig * sp;
-  float d = prog - uv.x;            // distance behind the leading edge
   float v = 0.0;
-  if (d >= 0.0) {
-    if (d < headWidth) v = 1.0;     // solid head band
-    else {
-      float td = (d - headWidth) / max(1e-4, trailLength);
-      if (td <= 1.0) v = pow(1.0 - td, mix(1.0, 4.0, trailSoftness)); // decaying trail
+  if (autoFire > 0.5) {
+    v = pulseAt(fract(uT * sp));
+  } else {
+    // Each trigger is an independent beam; they STACK (take the brightest).
+    // uTrigs[i] = seconds since trigger i (huge until fired).
+    for (int i = 0; i < 8; i++) {
+      if (i >= uTrigCount) break;
+      v = max(v, pulseAt(uTrigs[i] * sp));
     }
   }
-  if (autoFire < 0.5 && prog > 1.0 + trailLength) v = 0.0; // spent → dark
   frag = vec4(vec3(v), 1.0);
 }`;
 
