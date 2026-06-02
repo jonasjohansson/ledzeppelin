@@ -14,17 +14,26 @@ export function createPreview(canvasEl, opts = {}) {
   const dotR = opts.dotRadius ?? 4;
   const showLabels = opts.labels ?? true;
 
-  function draw(show, rgba, selectedId = null) {
+  const isSelected = (sel, id) => sel && (sel.has ? sel.has(id) : sel === id);
+
+  function draw(show, rgba, selectedIds = null, snapGrid = 0) {
     const W = canvasEl.width, Hh = canvasEl.height;
     // Transparent overlay: the live composite (WebGL stage) shows THROUGH, so in
     // Output you see the canvas content and can place fixtures over it.
     ctx.clearRect(0, 0, W, Hh);
+    // Snap grid (Output snap mode).
+    if (snapGrid > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,.09)'; ctx.lineWidth = 1;
+      for (let x = 0; x <= W; x += snapGrid) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, Hh); ctx.stroke(); }
+      for (let y = 0; y <= Hh; y += snapGrid) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
+    }
     if (!show || !show.fixtures?.length) return;
 
     const { fixtureOrder, spans } = buildPipelineInputs(show);
 
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
+      if (f.hidden) continue; // visibility toggle: skip the overlay for hidden fixtures
       const span = spans[fi];
       const pts = samplePoints(f.input.points, f.input.samples);
 
@@ -58,7 +67,7 @@ export function createPreview(canvasEl, opts = {}) {
       ctx.lineTo(bx - perpX * halfThick, by - perpY * halfThick);
       ctx.lineTo(ax - perpX * halfThick, ay - perpY * halfThick);
       ctx.closePath();
-      const selected = f.id === selectedId;
+      const selected = isSelected(selectedIds, f.id);
       const stroke = selected ? '#e8b27f' : '#5cc8ff';
       ctx.strokeStyle = stroke; ctx.lineWidth = selected ? 2.5 : 1.5; ctx.stroke();
 
@@ -68,9 +77,15 @@ export function createPreview(canvasEl, opts = {}) {
       ctx.fillStyle = selected ? 'rgba(232,178,127,.3)' : 'rgba(92,200,255,.25)'; ctx.fill();
       ctx.strokeStyle = stroke; ctx.stroke();
       if (showLabels) {
-        ctx.fillStyle = '#8fd6e8';
+        const label = f.name || f.id;
         ctx.font = '11px ui-monospace, Menlo, monospace';
-        ctx.fillText(f.name || f.id, cx + 8, cy - 8);
+        const tw = ctx.measureText(label).width;
+        let lx = Math.max(3, Math.min(W - tw - 3, cx - tw / 2)); // centred on the bar, clamped
+        let ly = Math.max(12, Math.min(Hh - 4, cy - 10));
+        ctx.fillStyle = 'rgba(0,0,0,.55)';
+        ctx.fillRect(lx - 3, ly - 11, tw + 6, 15);
+        ctx.fillStyle = selected ? '#e8b27f' : '#8fd6e8';
+        ctx.fillText(label, lx, ly);
       }
     }
   }
@@ -82,9 +97,9 @@ export function createPreview(canvasEl, opts = {}) {
 // let the user drag to reposition the whole fixture (its pixel-space transform
 // x/y). On every move it derives a new show via setFixtureTransform and calls
 // onEdit(nextShow); on release onCommit. Width/height/rotation are numeric.
-export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect }, opts = {}) {
-  const hitR = opts.hitRadius ?? 14;
-  let dragging = null; // { fxId }
+export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected }, opts = {}) {
+  const hitR = opts.hitRadius ?? 18;
+  let dragState = null; // { items:[{id,x0,y0}], px0, py0, cv }
   // Gate: drag editing is only active when enabled (Output tab → Input mode).
   let enabled = opts.enabled ?? true;
 
@@ -96,50 +111,71 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     ];
   };
 
-  const centreOf = (f) => {
-    const pts = f.input.points;
-    return [
-      (pts[0][0] + pts[pts.length - 1][0]) / 2,
-      (pts[0][1] + pts[pts.length - 1][1]) / 2,
-    ];
+  // Distance (px) from point P to segment A–B.
+  const segDist = (px, py, ax, ay, bx, by) => {
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
   };
 
+  // Hit-test: clicking ANYWHERE on the fixture bar selects it (point-to-segment
+  // distance, not just the centre handle). Iterate reversed so the topmost wins.
   function hitTest(ev) {
     const show = getShow();
     const r = canvasEl.getBoundingClientRect();
     const px = ev.clientX - r.left, py = ev.clientY - r.top;
-    for (const f of show.fixtures ?? []) {
-      const [u, v] = centreOf(f);
-      if (Math.hypot(u * r.width - px, v * r.height - py) <= hitR) return { fxId: f.id };
+    const fixtures = show.fixtures ?? [];
+    for (let i = fixtures.length - 1; i >= 0; i--) {
+      const pts = fixtures[i].input.points;
+      const ax = pts[0][0] * r.width, ay = pts[0][1] * r.height;
+      const bx = pts[pts.length - 1][0] * r.width, by = pts[pts.length - 1][1] * r.height;
+      if (segDist(px, py, ax, ay, bx, by) <= hitR) return { fxId: fixtures[i].id };
     }
     return null;
   }
 
+  const canvasPx = (ev, cv) => {
+    const r = canvasEl.getBoundingClientRect();
+    return [(ev.clientX - r.left) / r.width * cv.w, (ev.clientY - r.top) / r.height * cv.h];
+  };
+
   canvasEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     const hit = hitTest(ev);
+    onSelect?.(hit ? hit.fxId : null, ev); // updates selection (shift = add); null clears
     if (!hit) return;
-    dragging = hit;
-    onSelect?.(hit.fxId);
+    // Capture the group to drag together: the whole selection if the clicked
+    // fixture is part of a multi-selection, else just it.
+    const show = getShow();
+    const cv = show.composition?.canvas || { w: 1280, h: 720 };
+    const sel = getSelected?.();
+    const ids = (sel?.has?.(hit.fxId) && sel.size > 1) ? [...sel] : [hit.fxId];
+    const items = ids
+      .map((id) => { const tf = show.fixtures.find((x) => x.id === id)?.input?.transform; return tf ? { id, x0: tf.x, y0: tf.y } : null; })
+      .filter(Boolean);
+    const [px0, py0] = canvasPx(ev, cv);
+    dragState = { items, px0, py0, cv };
     canvasEl.setPointerCapture(ev.pointerId);
     ev.preventDefault();
   });
 
   canvasEl.addEventListener('pointermove', (ev) => {
-    if (!enabled || !dragging) return;
-    const [u, v] = toNorm(ev);
-    const show = getShow();
-    const cv = show.composition?.canvas || { w: 1280, h: 720 };
-    const next = setFixtureTransform(show, dragging.fxId, {
-      x: Math.max(0, Math.min(1, u)) * cv.w,
-      y: Math.max(0, Math.min(1, v)) * cv.h,
-    });
+    if (!enabled || !dragState) return;
+    const [pxNow, pyNow] = canvasPx(ev, dragState.cv);
+    const dx = pxNow - dragState.px0, dy = pyNow - dragState.py0;
+    let next = getShow();
+    for (const it of dragState.items) {
+      let nx = it.x0 + dx, ny = it.y0 + dy;
+      if (opts.snap) { const s = opts.snap(nx, ny); nx = s[0]; ny = s[1]; }
+      next = setFixtureTransform(next, it.id, { x: nx, y: ny });
+    }
     onEdit?.(next);
   });
 
   function end(ev) {
-    if (!dragging) return;
-    dragging = null;
+    if (!dragState) return;
+    dragState = null;
     try { canvasEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
     onCommit?.(getShow());
   }
@@ -151,7 +187,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   return {
     setEnabled(v) {
       enabled = !!v;
-      if (!enabled) dragging = null;
+      if (!enabled) dragState = null;
     },
     isEnabled() { return enabled; },
   };

@@ -72,7 +72,12 @@ html,body{ background:var(--bg); color:var(--text); }
 .seg-hint { font-size: 10px; color: var(--muted); margin: 0 0 10px; line-height: 1.4; }
 
 /* --- Output mapping: fixture list --- */
-#add-fixture { margin: 6px 0 10px; color: var(--green); border-color: rgba(93,209,163,.5); }
+.output-tools { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+#add-fixture { color: var(--green); border-color: rgba(93,209,163,.5); }
+.snap-toggle { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.snap-toggle input { width: auto; accent-color: var(--accent); }
+.output-eye { padding: 0 6px; line-height: 1.4; font-size: 11px; color: var(--cyan); }
+.output-eye.off { color: var(--faint); }
 .output-row {
   display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; font-size: 12px;

@@ -217,16 +217,38 @@ compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop t
 fixturesPanels?.append(importPanel.el);
 fixturesPanels?.append(panel.el);
 
-// Output selection: which fixture is selected for editing (canvas + list).
-let selectedFixtureId = null;
+// Output selection: a SET of selected fixtures (multi-select), and snap-to-grid.
+let selectedFixtureIds = new Set();
+const SNAP_GRID = 20;
+let snapEnabled = false;
+const snapPoint = (x, y) => snapEnabled
+  ? [Math.round(x / SNAP_GRID) * SNAP_GRID, Math.round(y / SNAP_GRID) * SNAP_GRID]
+  : [x, y];
+const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0);
+
+// Update the selection from a click. shift = toggle; clicking an already-selected
+// fixture keeps the group (so it can be dragged); a new one selects just it.
+function selectFixture(fxId, ev) {
+  if (ev && ev.shiftKey) {
+    if (fxId == null) return;
+    if (selectedFixtureIds.has(fxId)) selectedFixtureIds.delete(fxId); else selectedFixtureIds.add(fxId);
+  } else if (fxId == null) {
+    selectedFixtureIds.clear();
+  } else if (!selectedFixtureIds.has(fxId)) {
+    selectedFixtureIds = new Set([fxId]);
+  }
+  renderOutput(); redrawOverlay();
+}
 
 let dragHandle = null;
 if (previewCanvas) {
   dragHandle = enableDragPlacement(previewCanvas, {
     getShow: () => show,
-    onSelect: (fxId) => { selectedFixtureId = fxId; renderOutput(); preview?.draw(show, lastRGBA, selectedFixtureId); },
-    onEdit: (next) => { show = next; preview?.draw(show, lastRGBA, selectedFixtureId); }, // live, no rebuild churn
+    getSelected: () => selectedFixtureIds,
+    onSelect: (fxId, ev) => selectFixture(fxId, ev),
+    onEdit: (next) => { show = next; redrawOverlay(); },         // live, no rebuild churn
     onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
+    snap: snapPoint,
     enabled: false, // gated by view state below; default tab is Composition
   });
 }
@@ -234,6 +256,8 @@ if (previewCanvas) {
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
 const addFixtureBtn = document.getElementById('add-fixture');
+const snapToggle = document.getElementById('snap-cb');
+snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 
 function addFixtureCentered() {
@@ -252,7 +276,7 @@ function addFixtureCentered() {
     output: { deviceId: devId, pixelOffset: off, pixelCount: px },
     input: { transform: { x: c.w / 2, y: c.h / 2, w: c.w * 0.6, h: 8, rotation: 0 }, samples: px },
   });
-  selectedFixtureId = id;
+  selectedFixtureIds = new Set([id]);
   rebuild(next); panel.refresh(); renderOutput();
 }
 addFixtureBtn?.addEventListener('click', addFixtureCentered);
@@ -268,40 +292,52 @@ function renderOutput() {
   if (!outputListEl) return;
   outputListEl.textContent = '';
   const fixtures = show.fixtures || [];
-  if (selectedFixtureId && !fixtures.some((f) => f.id === selectedFixtureId)) selectedFixtureId = null;
+  for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
 
   for (const f of fixtures) {
-    const row = oel('div', { className: 'output-row' + (f.id === selectedFixtureId ? ' selected' : '') });
+    const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     const name = oel('span', { textContent: f.name || f.id });
     const dev = oel('span', { className: 'output-dev', textContent: f.output?.deviceId || '—' });
+    const eye = oel('button', {
+      className: 'output-eye' + (f.hidden ? ' off' : ''), textContent: f.hidden ? '◌' : '●',
+      title: f.hidden ? 'show fixture' : 'hide fixture',
+    });
+    eye.onclick = (e) => {
+      e.stopPropagation();
+      const n = structuredClone(show); const ff = n.fixtures.find((x) => x.id === f.id);
+      ff.hidden = !ff.hidden; show = n; saveShow(n); renderOutput(); redrawOverlay();
+    };
     const del = oel('button', { textContent: '✕', className: 'ly-rmfx', title: 'remove fixture' });
     del.onclick = (e) => {
       e.stopPropagation();
       const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
-      if (selectedFixtureId === f.id) selectedFixtureId = null;
-      rebuild(n); panel.refresh(); renderOutput();
+      selectedFixtureIds.delete(f.id); rebuild(n); panel.refresh(); renderOutput();
     };
-    row.onclick = () => { selectedFixtureId = f.id; renderOutput(); preview?.draw(show, lastRGBA, selectedFixtureId); };
-    row.append(name, dev, del);
+    row.onclick = (e) => selectFixture(f.id, e);
+    row.append(name, dev, eye, del);
     outputListEl.append(row);
   }
 
-  // Transform editor for the selected fixture (position/size/rotation, px).
-  const sel = fixtures.find((f) => f.id === selectedFixtureId);
+  // Multiple selected → group hint (drag moves them together). Exactly one →
+  // its position editor. Size lives in the Fixtures tab (kept out of Output).
+  if (selectedFixtureIds.size > 1) {
+    outputListEl.append(oel('div', { className: 'output-edit' }, [
+      oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
+    ]));
+    return;
+  }
+  const sel = fixtures.find((f) => selectedFixtureIds.has(f.id));
   if (sel) {
     const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
     const setT = (patch) => {
       const next = setFixtureTransform(show, sel.id, patch);
-      saveShow(next); rebuild(next); panel.refresh(); renderOutput();
-      preview?.draw(show, lastRGBA, selectedFixtureId);
+      saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
     };
     outputListEl.append(oel('div', { className: 'output-edit' }, [
       oel('div', { className: 'fx-pts', textContent: `${sel.name || sel.id} — position (px)` }),
       oel('div', { className: 'output-grid' }, [
         txField('x', tf.x, (v) => setT({ x: v })),
         txField('y', tf.y, (v) => setT({ y: v })),
-        txField('width', tf.w, (v) => setT({ w: v })),
-        txField('height', tf.h, (v) => setT({ h: v })),
         txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
       ]),
     ]));
@@ -370,9 +406,9 @@ document.addEventListener('keydown', (e) => {
   if (typingIn(t)) return;
   if (view.activeTab === 'composition') {
     layerPanel.deleteActiveClip(); e.preventDefault();
-  } else if (selectedFixtureId) {
-    const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== selectedFixtureId);
-    selectedFixtureId = null; rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
+  } else if (selectedFixtureIds.size) {
+    const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
+    selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
   }
 });
 
@@ -438,7 +474,7 @@ function loop(ts) {
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);
     bridge?.send(lastRGBA);
-    preview?.draw(show, lastRGBA, selectedFixtureId);
+    preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
