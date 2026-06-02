@@ -1,29 +1,45 @@
+/* ── Design tokens (matte-inspired: monospace, lifted panels, vibrant hues) ── */
+:root{
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg:#0e0f12; --panel:#16181d; --panel-2:#1c1f26; --hover:#242833;
+  --line:rgba(255,255,255,.10); --line-2:rgba(255,255,255,.20);
+  --text:#f2f3f5; --muted:#9aa3ad; --faint:#6f7783;
+  --accent:#5cc8ff;            /* primary (selected / focus)  */
+  --accent-soft:#15212a;
+  --green:#5dd1a3;             /* play / active clip          */
+  --amber:#e8b27f;             /* effects                     */
+  --cyan:#8fd6e8;              /* sources                     */
+  --readout:#cfe08a;           /* numeric readouts            */
+  --danger:#ff6b6b;
+}
+html,body{ background:var(--bg); color:var(--text); }
+
 /* --- Top-level workspace tabs (Composition | Output) --- */
 .tabs {
   display: flex; gap: 4px;
   padding: 8px 8px 0; box-sizing: border-box;
 }
 .tab {
-  background: #141414; color: #aaa; border: 1px solid #1c1c1c;
+  background: #141414; color: var(--muted); border: 1px solid #1c1c1c;
   border-bottom: none; border-radius: 6px 6px 0 0;
-  padding: 6px 16px; font: 13px system-ui; cursor: pointer;
+  padding: 6px 16px; font: 13px var(--mono); cursor: pointer;
 }
-.tab:hover { background: #1a1a1a; color: #ddd; }
+.tab:hover { background: #1a1a1a; color: var(--text); }
 .tab-active {
   background: #15212a; color: #cfe7ff; border-color: #2a3a44;
-  box-shadow: inset 0 -2px 0 #6ad;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
 .subtabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .subtab {
   flex: 1 1 0; background: #141414; color: #9aa; border: 1px solid #242424;
-  border-radius: 5px; padding: 6px 0; font: 12px system-ui; cursor: pointer;
+  border-radius: 5px; padding: 6px 0; font: 12px var(--mono); cursor: pointer;
 }
-.subtab:hover { background: #1a1a1a; color: #ddd; }
+.subtab:hover { background: #1a1a1a; color: var(--text); }
 .subtab-active {
   background: #15212a; color: #cfe7ff; border-color: #2a3a44;
-  box-shadow: inset 0 -2px 0 #6ad;
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* --- Output Input/Output segmented toggle --- */
@@ -32,16 +48,16 @@
   border: 1px solid #2a2a2a; border-radius: 5px; overflow: hidden;
 }
 .seg-btn {
-  background: #121212; color: #aaa; border: none; border-radius: 0;
-  padding: 5px 16px; font: 12px system-ui; cursor: pointer;
+  background: #121212; color: var(--muted); border: none; border-radius: 0;
+  padding: 5px 16px; font: 12px var(--mono); cursor: pointer;
 }
 .seg-btn + .seg-btn { border-left: 1px solid #2a2a2a; }
-.seg-btn:hover { background: #1a1a1a; color: #ddd; }
+.seg-btn:hover { background: #1a1a1a; color: var(--text); }
 .seg-active {
   background: #15212a; color: #cfe7ff;
-  box-shadow: inset 0 0 0 1px #6ad;
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
-.seg-hint { font-size: 10px; color: #888; margin: 0 0 10px; line-height: 1.4; }
+.seg-hint { font-size: 10px; color: var(--muted); margin: 0 0 10px; line-height: 1.4; }
 
 /* Resolume-style shell: clip-slot deck + canvas monitor on the left, inspector
    and library columns on the right (output editor replaces them on the Output
@@ -58,9 +74,9 @@
 
 /* Shared right-side / deck panel chrome. */
 .panel {
-  background: #111;
-  border: 1px solid #1c1c1c;
-  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   padding: 10px;
   box-sizing: border-box;
 }
@@ -74,11 +90,11 @@
 #library .composer-rail { flex: 1 1 auto; border-left: none; padding-left: 0; gap: 4px; }
 
 .fx-panel { display: flex; flex-direction: column; gap: 6px; }
-.fx-title { font-size: 14px; font-weight: 600; color: #eee; }
-.fx-section { margin-top: 10px; font-weight: 600; color: #9ad; border-bottom: 1px solid #222; padding-bottom: 2px; }
+.fx-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.fx-section { margin-top: 10px; font-weight: 600; color: var(--accent); border-bottom: 1px solid #222; padding-bottom: 2px; }
 
-.fx-ok { color: #6c6; font-size: 11px; }
-.fx-err { color: #f66; font-size: 11px; white-space: pre-wrap; }
+.fx-ok { color: var(--green); font-size: 11px; }
+.fx-err { color: var(--danger); font-size: 11px; white-space: pre-wrap; }
 
 .fx-card {
   display: grid;
@@ -89,20 +105,20 @@
   border-radius: 5px;
   padding: 8px;
 }
-.fx-pts { grid-column: 1 / -1; font-size: 11px; color: #888; margin-top: 4px; }
+.fx-pts { grid-column: 1 / -1; font-size: 11px; color: var(--muted); margin-top: 4px; }
 
-.fx-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: #aaa; }
+.fx-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
 .fx-field input, .fx-field select {
-  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
-  border-radius: 3px; padding: 3px 5px; font: 12px system-ui; width: 100%; box-sizing: border-box;
+  background: #0d0d0d; color: var(--text); border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); width: 100%; box-sizing: border-box;
 }
 
 button {
-  background: #1d1d1d; color: #ddd; border: 1px solid #333;
-  border-radius: 4px; padding: 4px 8px; cursor: pointer; font: 12px system-ui;
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 5px; padding: 4px 8px; cursor: pointer; font: 12px var(--mono);
 }
-button:hover { background: #262626; }
-.fx-del { grid-column: 1 / -1; margin-top: 4px; color: #f88; border-color: #4a2222; }
+button:hover { background: var(--hover); border-color: var(--accent); }
+.fx-del { grid-column: 1 / -1; margin-top: 4px; color: var(--danger); border-color: rgba(255,107,107,.4); }
 .fx-add { align-self: flex-start; }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
 
@@ -112,56 +128,56 @@ button:hover { background: #262626; }
 .cmp-preset { padding: 3px 8px; }
 .cmp-grid { grid-template-columns: 1fr 1fr; margin-top: 4px; }
 .cmp-readout {
-  font-size: 11px; color: #cd9; font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--readout); font-variant-numeric: tabular-nums;
   margin: 2px 0; letter-spacing: .02em;
 }
-.cmp-apply { color: #9d9; border-color: #224a22; align-self: flex-start; }
+.cmp-apply { color: var(--green); border-color: #224a22; align-self: flex-start; }
 
 /* --- Kagora import / assign-IP panel --- */
 .imp-panel { margin-bottom: 18px; }
 .imp-banner { white-space: pre-wrap; margin-top: 4px; }
 .imp-autofill { display: flex; gap: 6px; margin: 4px 0; }
 .imp-base {
-  flex: 1 1 auto; background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
-  border-radius: 3px; padding: 3px 5px; font: 12px system-ui; box-sizing: border-box;
+  flex: 1 1 auto; background: #0d0d0d; color: var(--text); border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); box-sizing: border-box;
 }
 .imp-row { grid-template-columns: 2fr 1fr; }
-.imp-apply { color: #9d9; border-color: #224a22; }
-.imp-cancel { color: #f88; border-color: #4a2222; }
+.imp-apply { color: var(--green); border-color: #224a22; }
+.imp-cancel { color: var(--danger); border-color: rgba(255,107,107,.4); }
 
 /* --- Layer-stack panel --- */
 .ly-panel { margin-bottom: 18px; }
-.ly-hint { font-size: 10px; color: #777; margin: -2px 0 4px; }
+.ly-hint { font-size: 10px; color: var(--faint); margin: -2px 0 4px; }
 .ly-card { display: block; }
 .ly-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.ly-name { font-weight: 600; color: #9ad; font-size: 12px; }
+.ly-name { font-weight: 600; color: var(--accent); font-size: 12px; }
 .ly-btns { display: flex; gap: 3px; }
 .ly-btns button { padding: 1px 6px; line-height: 1.4; min-width: 22px; }
 .ly-btns button:disabled { opacity: .35; cursor: default; }
 
 .ly-param .ly-pkey { display: flex; justify-content: space-between; }
-.ly-readout { color: #cd9; font-variant-numeric: tabular-nums; }
-.ly-param input[type=range] { width: 100%; accent-color: #9ad; }
+.ly-readout { color: var(--readout); font-variant-numeric: tabular-nums; }
+.ly-param input[type=range] { width: 100%; accent-color: var(--accent); }
 
 .ly-fx { border: 1px solid #242424; border-radius: 4px; padding: 6px; margin: 4px 0; background: #121212; }
 .ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-.ly-fxname { color: #cba; font-size: 11px; }
-.ly-rmfx { color: #f88; border-color: #4a2222; }
+.ly-fxname { color: var(--amber); font-size: 11px; }
+.ly-rmfx { color: var(--danger); border-color: rgba(255,107,107,.4); }
 .ly-addfx { margin-top: 4px; }
 .ly-addfx select {
-  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
-  border-radius: 3px; padding: 3px 5px; font: 12px system-ui; width: 100%; box-sizing: border-box;
+  background: #0d0d0d; color: var(--text); border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); width: 100%; box-sizing: border-box;
 }
 
 /* Layer name as an inline editable field in the header. */
 .ly-nameedit {
   flex: 1 1 auto; min-width: 0; margin-right: 6px;
-  background: #0d0d0d; color: #9ad; font-weight: 600; font-size: 12px;
+  background: #0d0d0d; color: var(--accent); font-weight: 600; font-size: 12px;
   border: 1px solid transparent; border-radius: 3px; padding: 2px 5px;
-  font-family: system-ui; box-sizing: border-box;
+  font-family: var(--mono); box-sizing: border-box;
 }
 .ly-nameedit:hover { border-color: #2a2a2a; }
-.ly-nameedit:focus { border-color: #9ad; outline: none; background: #111; }
+.ly-nameedit:focus { border-color: var(--accent); outline: none; background: #111; }
 
 /* FX section labels: clip FX vs layer FX colour-coded to read the param split. */
 .ly-fxlabel { grid-column: 1 / -1; }
@@ -181,17 +197,17 @@ button:hover { background: #262626; }
   padding: 6px 6px 4px; cursor: pointer; user-select: none;
   transition: border-color .12s, box-shadow .12s, background .12s;
 }
-.clip-cell:hover { background: #1a1a1a; border-color: #3a3a3a; }
-.clip-name { font-size: 11px; color: #ddd; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clip-gen { font-size: 10px; color: #888; margin-top: 1px; }
+.clip-cell:hover { background: var(--hover); border-color: var(--line-2); }
+.clip-name { font-size: 11px; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-gen { font-size: 10px; color: var(--cyan); margin-top: 1px; opacity: .85; }
 .clip-active {
-  border-color: #6ad; background: #15212a;
-  box-shadow: 0 0 0 1px #6ad, 0 0 8px rgba(102,170,221,.4);
+  border-color: var(--green); background: rgba(93,209,163,.10);
+  box-shadow: 0 0 0 1px var(--green), 0 0 10px rgba(93,209,163,.4);
 }
-.clip-active .clip-name { color: #cfe7ff; }
+.clip-active .clip-name { color: #d8ffec; }
 .clip-badge {
-  position: absolute; top: 4px; right: 6px; font-size: 9px; color: #6ad;
-  text-shadow: 0 0 4px rgba(102,170,221,.8);
+  position: absolute; top: 4px; right: 6px; font-size: 9px; color: var(--green);
+  text-shadow: 0 0 4px rgba(93,209,163,.8);
 }
 .clip-aff { display: flex; gap: 3px; margin-top: 5px; }
 .clip-aff button { padding: 0 5px; line-height: 1.5; min-width: 20px; font-size: 10px; }
@@ -199,8 +215,8 @@ button:hover { background: #262626; }
 .clip-add { display: flex; flex-direction: column; gap: 4px; cursor: default; border-style: dashed; }
 .clip-add:hover { background: #141414; }
 .clip-add select {
-  background: #0d0d0d; color: #eee; border: 1px solid #2a2a2a;
-  border-radius: 3px; padding: 2px 4px; font: 11px system-ui; width: 100%; box-sizing: border-box;
+  background: #0d0d0d; color: var(--text); border: 1px solid #2a2a2a;
+  border-radius: 3px; padding: 2px 4px; font: 11px var(--mono); width: 100%; box-sizing: border-box;
 }
 
 /* --- Single-layer composer (deck + draggable Sources/Effects rail) --- */
@@ -211,28 +227,28 @@ button:hover { background: #262626; }
   flex: 0 0 116px; display: flex; flex-direction: column; gap: 3px;
   border-left: 1px solid #222; padding-left: 8px;
 }
-.composer-label { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #8ab; margin-top: 2px; }
-.composer-label-fx { color: #cb9; margin-top: 8px; }
+.composer-label { font-size: 10px; font-weight: 700; letter-spacing: .1em; color: var(--cyan); margin-top: 2px; }
+.composer-label-fx { color: var(--amber); margin-top: 8px; }
 
 .lib-list { display: flex; flex-direction: column; gap: 3px; }
 .lib-item {
-  font-size: 11px; color: #ddd; background: #161616; border: 1px solid #2a2a2a;
-  border-radius: 4px; padding: 4px 7px; cursor: grab; user-select: none;
+  font-size: 11px; color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 5px; padding: 5px 8px; cursor: grab; user-select: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.lib-item:hover { background: #1e1e1e; border-color: #3a3a3a; }
+.lib-item:hover { background: var(--hover); border-color: var(--line-2); }
 .lib-item:active { cursor: grabbing; }
-.lib-source { border-left: 2px solid #6ad; }
-.lib-effect { border-left: 2px solid #db8; }
+.lib-source { border-left: 3px solid var(--cyan); }
+.lib-effect { border-left: 3px solid var(--amber); }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {
-  border-color: #6ad !important;
-  box-shadow: 0 0 0 1px #6ad, 0 0 10px rgba(102,170,221,.45) !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent), 0 0 10px rgba(102,170,221,.45) !important;
   background: #15212a !important;
 }
 .composer-drop {
-  grid-column: 1 / -1; text-align: center; font-size: 11px; color: #777;
+  grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--faint);
   border: 1px dashed #333; border-radius: 5px; padding: 8px; margin-top: 4px;
 }
 .clip-fxcount { font-size: 9px; color: #db8; margin-top: 1px; }
@@ -241,17 +257,17 @@ button:hover { background: #262626; }
 /* Transport bar (play-through of the clip timeline). */
 .composer-deckhead { display: flex; align-items: center; justify-content: space-between; }
 .transport { display: flex; align-items: center; gap: 8px; }
-.transport-play { padding: 2px 10px; font-size: 11px; color: #9d9; border-color: #2a4a2a; }
-.transport-play.is-playing { color: #f99; border-color: #4a2a2a; background: #1a1212; }
-.transport-loop { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #999; }
-.transport-loop input { width: auto; }
+.transport-play { padding: 2px 12px; font-size: 11px; font-weight: 600; color: var(--green); border-color: rgba(93,209,163,.5); }
+.transport-play.is-playing { color: var(--danger); border-color: rgba(255,107,107,.5); background: rgba(255,107,107,.08); }
+.transport-loop { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--muted); }
+.transport-loop input { width: auto; accent-color: var(--accent); }
 
 /* Playhead highlight: the slot the transport is currently on. */
 .clip-playhead {
-  box-shadow: 0 0 0 1px #cd9, 0 0 8px rgba(204,221,153,.5);
-  border-color: #cd9 !important;
+  box-shadow: 0 0 0 1px var(--amber), 0 0 8px rgba(232,178,127,.5);
+  border-color: var(--amber) !important;
 }
-.clip-src { grid-column: 1 / -1; font-size: 11px; color: #9ad; }
+.clip-src { grid-column: 1 / -1; font-size: 11px; color: var(--accent); }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
 .clip-editor {
@@ -260,6 +276,6 @@ button:hover { background: #262626; }
   margin: 4px 0 2px; background: #101418;
 }
 .clip-editor-head {
-  grid-column: 1 / -1; font-size: 11px; color: #6ad; font-weight: 600;
+  grid-column: 1 / -1; font-size: 11px; color: var(--accent); font-weight: 600;
   margin-bottom: 2px;
 }
