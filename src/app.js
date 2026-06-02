@@ -13,7 +13,7 @@ import {
   prefixedDefaults, normalizeComposition, makeClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
-import { syncShowFixtures } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints } from './model/fixture-transform.js';
 import { resolveParams } from './model/anim.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 
@@ -213,19 +213,24 @@ compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop t
 fixturesPanels?.append(importPanel.el);
 fixturesPanels?.append(panel.el);
 
+// Output selection: which fixture is selected for editing (canvas + list).
+let selectedFixtureId = null;
+
 let dragHandle = null;
 if (previewCanvas) {
   dragHandle = enableDragPlacement(previewCanvas, {
     getShow: () => show,
-    onEdit: (next) => { show = next; preview?.draw(show, lastRGBA); }, // live, no rebuild churn
-    onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutputList(); },
+    onSelect: (fxId) => { selectedFixtureId = fxId; renderOutput(); preview?.draw(show, lastRGBA, selectedFixtureId); },
+    onEdit: (next) => { show = next; preview?.draw(show, lastRGBA, selectedFixtureId); }, // live, no rebuild churn
+    onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
     enabled: false, // gated by view state below; default tab is Composition
   });
 }
 
-// --- Output mapping panel: add fixtures onto the canvas, list/remove them ----
+// --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
 const addFixtureBtn = document.getElementById('add-fixture');
+const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 
 function addFixtureCentered() {
   const next = structuredClone(show);
@@ -243,29 +248,62 @@ function addFixtureCentered() {
     output: { deviceId: devId, pixelOffset: off, pixelCount: px },
     input: { transform: { x: c.w / 2, y: c.h / 2, w: c.w * 0.6, h: 8, rotation: 0 }, samples: px },
   });
-  rebuild(next); panel.refresh(); renderOutputList();
+  selectedFixtureId = id;
+  rebuild(next); panel.refresh(); renderOutput();
 }
 addFixtureBtn?.addEventListener('click', addFixtureCentered);
 
-function renderOutputList() {
+// A px number field (commits on change) for the selected fixture's transform.
+function txField(label, value, onCommit) {
+  const i = oel('input', { type: 'number', step: '1', value: String(Math.round(value)) });
+  i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
+  return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
+}
+
+function renderOutput() {
   if (!outputListEl) return;
   outputListEl.textContent = '';
-  for (const f of show.fixtures || []) {
-    const row = document.createElement('div');
-    row.className = 'output-row';
-    const name = document.createElement('span'); name.textContent = f.name || f.id;
-    const dev = document.createElement('span'); dev.className = 'output-dev';
-    dev.textContent = f.output?.deviceId || '—';
-    const del = document.createElement('button'); del.textContent = '✕'; del.className = 'ly-rmfx';
-    del.title = 'remove fixture';
-    del.onclick = () => {
+  const fixtures = show.fixtures || [];
+  if (selectedFixtureId && !fixtures.some((f) => f.id === selectedFixtureId)) selectedFixtureId = null;
+
+  for (const f of fixtures) {
+    const row = oel('div', { className: 'output-row' + (f.id === selectedFixtureId ? ' selected' : '') });
+    const name = oel('span', { textContent: f.name || f.id });
+    const dev = oel('span', { className: 'output-dev', textContent: f.output?.deviceId || '—' });
+    const del = oel('button', { textContent: '✕', className: 'ly-rmfx', title: 'remove fixture' });
+    del.onclick = (e) => {
+      e.stopPropagation();
       const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
-      rebuild(n); panel.refresh(); renderOutputList();
+      if (selectedFixtureId === f.id) selectedFixtureId = null;
+      rebuild(n); panel.refresh(); renderOutput();
     };
+    row.onclick = () => { selectedFixtureId = f.id; renderOutput(); preview?.draw(show, lastRGBA, selectedFixtureId); };
     row.append(name, dev, del);
     outputListEl.append(row);
   }
+
+  // Transform editor for the selected fixture (position/size/rotation, px).
+  const sel = fixtures.find((f) => f.id === selectedFixtureId);
+  if (sel) {
+    const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
+    const setT = (patch) => {
+      const next = setFixtureTransform(show, sel.id, patch);
+      saveShow(next); rebuild(next); panel.refresh(); renderOutput();
+      preview?.draw(show, lastRGBA, selectedFixtureId);
+    };
+    outputListEl.append(oel('div', { className: 'output-edit' }, [
+      oel('div', { className: 'fx-pts', textContent: `${sel.name || sel.id} — position (px)` }),
+      oel('div', { className: 'output-grid' }, [
+        txField('x', tf.x, (v) => setT({ x: v })),
+        txField('y', tf.y, (v) => setT({ y: v })),
+        txField('width', tf.w, (v) => setT({ w: v })),
+        txField('height', tf.h, (v) => setT({ h: v })),
+        txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
+      ]),
+    ]));
+  }
 }
+const renderOutputList = renderOutput; // back-compat alias
 
 // Runtime UI view state (NOT persisted). applyView only toggles DOM visibility,
 // the preview overlay, and drag interactivity — the render/sampler/output run
@@ -370,7 +408,7 @@ function loop(ts) {
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);
     bridge?.send(lastRGBA);
-    preview?.draw(show, lastRGBA);
+    preview?.draw(show, lastRGBA, selectedFixtureId);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

@@ -469,6 +469,20 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Source params (auto-generated from the manifest), shown directly — no
     // "source: X" / "X params" meta (the slot already shows the source).
     const gen = getEntry(clip.generator);
+
+    // Triggerable sources (Pulse) get a prominent Trigger button here.
+    if (gen?.triggerable && transport?.fire) {
+      box.append(el('button', {
+        className: 'clip-trigger', textContent: '⚡ Trigger',
+        title: 'fire the pulse', onclick: () => transport.fire(),
+      }));
+    }
+
+    // Transport: how long the timeline transport holds this slot (Resolume names
+    // this section "Transport").
+    box.append(el('div', { className: 'fx-pts', textContent: 'transport' }));
+    box.append(sliderField('duration (s)', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
+      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000)))));
     if (gen && gen.params.length) {
       for (const p of gen.params) {
         const key = gen.name + '.' + p.key;
@@ -480,7 +494,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }
     }
 
-    // Transform + opacity + slot duration (a clip is a timeline slot).
+    // Transform + opacity (the clip's placement on the canvas).
     const t = clip.transform || {};
     box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
     box.append(sliderField('x', t.x ?? 0, -1, 1,
@@ -493,8 +507,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       (v) => commitLive(setClipTransform(show(), id, clip.id, { rotation: v }))));
     box.append(sliderField('opacity', clip.opacity ?? 1, 0, 1,
       (v) => commitLive(setClipOpacity(show(), id, clip.id, v))));
-    box.append(sliderField('duration (s)', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
-      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000)))));
 
     // Effect chain.
     box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'EFFECTS' }));

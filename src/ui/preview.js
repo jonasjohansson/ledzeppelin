@@ -14,7 +14,7 @@ export function createPreview(canvasEl, opts = {}) {
   const dotR = opts.dotRadius ?? 4;
   const showLabels = opts.labels ?? true;
 
-  function draw(show, rgba) {
+  function draw(show, rgba, selectedId = null) {
     const W = canvasEl.width, Hh = canvasEl.height;
     ctx.clearRect(0, 0, W, Hh);
     ctx.fillStyle = '#0a0a0a';
@@ -58,13 +58,15 @@ export function createPreview(canvasEl, opts = {}) {
       ctx.lineTo(bx - perpX * halfThick, by - perpY * halfThick);
       ctx.lineTo(ax - perpX * halfThick, ay - perpY * halfThick);
       ctx.closePath();
-      ctx.strokeStyle = '#5cc8ff'; ctx.lineWidth = 1.5; ctx.stroke();
+      const selected = f.id === selectedId;
+      const stroke = selected ? '#e8b27f' : '#5cc8ff';
+      ctx.strokeStyle = stroke; ctx.lineWidth = selected ? 2.5 : 1.5; ctx.stroke();
 
       const cx = (ax + bx) / 2, cy = (ay + by) / 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, dotR + 3, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(92,200,255,.25)'; ctx.fill();
-      ctx.strokeStyle = '#5cc8ff'; ctx.stroke();
+      ctx.arc(cx, cy, dotR + (selected ? 5 : 3), 0, Math.PI * 2);
+      ctx.fillStyle = selected ? 'rgba(232,178,127,.3)' : 'rgba(92,200,255,.25)'; ctx.fill();
+      ctx.strokeStyle = stroke; ctx.stroke();
       if (showLabels) {
         ctx.fillStyle = '#8fd6e8';
         ctx.font = '11px ui-monospace, Menlo, monospace';
@@ -80,7 +82,7 @@ export function createPreview(canvasEl, opts = {}) {
 // let the user drag to reposition the whole fixture (its pixel-space transform
 // x/y). On every move it derives a new show via setFixtureTransform and calls
 // onEdit(nextShow); on release onCommit. Width/height/rotation are numeric.
-export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opts = {}) {
+export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect }, opts = {}) {
   const hitR = opts.hitRadius ?? 14;
   let dragging = null; // { fxId }
   // Gate: drag editing is only active when enabled (Output tab → Input mode).
@@ -118,6 +120,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit }, opt
     const hit = hitTest(ev);
     if (!hit) return;
     dragging = hit;
+    onSelect?.(hit.fxId);
     canvasEl.setPointerCapture(ev.pointerId);
     ev.preventDefault();
   });

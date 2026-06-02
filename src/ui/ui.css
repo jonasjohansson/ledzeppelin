@@ -69,9 +69,18 @@ html,body{ background:var(--bg); color:var(--text); }
   display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; font-size: 12px;
 }
+.output-row { cursor: pointer; }
 .output-row span:first-child { flex: 1 1 auto; color: var(--text); }
 .output-dev { color: var(--cyan); font-size: 10px; }
 .output-row .ly-rmfx { padding: 0 6px; line-height: 1.5; }
+.output-row:hover { border-color: var(--line-2); }
+.output-row.selected { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+.output-edit { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.output-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+.output-grid .fx-field input {
+  background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); width: 100%; box-sizing: border-box;
+}
 
 /* Resolume-style shell: clip-slot deck + canvas monitor on the left, inspector
    and library columns on the right (output editor replaces them on the Output
@@ -327,8 +336,6 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 }
 .lib-item:hover { background: var(--hover); border-color: var(--line-2); }
 .lib-item:active { cursor: grabbing; }
-.lib-source { border-left: 3px solid var(--cyan); }
-.lib-effect { border-left: 3px solid var(--amber); }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {
@@ -371,3 +378,9 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   grid-column: 1 / -1; font-size: 11px; color: var(--accent); font-weight: 600;
   margin-bottom: 2px;
 }
+.clip-trigger {
+  grid-column: 1 / -1; width: 100%; margin: 2px 0 4px; font-weight: 600;
+  color: var(--amber); border-color: rgba(232,178,127,.5);
+}
+.clip-trigger:hover { background: rgba(232,178,127,.14); border-color: var(--amber); }
+.clip-trigger:active { background: rgba(232,178,127,.3); }

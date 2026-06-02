@@ -179,7 +179,7 @@ export const REGISTRY = {
     ],
   },
   pulse: {
-    name: 'pulse', type: 'generator', src: PULSE,
+    name: 'pulse', type: 'generator', src: PULSE, triggerable: true,
     params: [
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'headWidth', type: 'float', min: 0, max: 0.3, default: 0.04 },

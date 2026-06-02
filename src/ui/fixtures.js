@@ -123,12 +123,13 @@ export function createFixturePanel({ getShow, setShow }) {
     const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
     for (let i = 0; i < show.fixtures.length; i++) {
       const f = show.fixtures[i];
-      const tf = f.input.transform || transformFromPoints(f.input.points, show.composition?.canvas);
       const upd = (mutate) => {
         const next = structuredClone(show);
         mutate(next.fixtures[i]);
         commit(next);
       };
+      // The Fixtures tab is DESIGN + routing only — the fixture's canvas
+      // placement (position/size/rotation) lives in the Output mapping tab.
       const card = el('div', { className: 'fx-card' }, [
         field('id', textInput(f.id, (x) => upd((nf) => { nf.id = x; }))),
         field('name', textInput(f.name, (x) => upd((nf) => { nf.name = x; }))),
@@ -142,12 +143,6 @@ export function createFixturePanel({ getShow, setShow }) {
           f.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
         field('pixelOffset', numInput(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }), '1')),
         field('samples', numInput(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }), '1')),
-        el('div', { className: 'fx-pts', textContent: 'transform (px) — drag on the canvas to move' }),
-        field('x', numInputCommit(Math.round(tf.x), (v) => commit(setFixtureTransform(show, f.id, { x: v })))),
-        field('y', numInputCommit(Math.round(tf.y), (v) => commit(setFixtureTransform(show, f.id, { y: v })))),
-        field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
-        field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
-        field('rotation°', numInputCommit(Math.round(tf.rotation), (v) => commit(setFixtureTransform(show, f.id, { rotation: v })))),
       ]);
       card.append(el('button', {
         className: 'fx-del', textContent: 'delete fixture',
