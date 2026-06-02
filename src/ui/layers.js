@@ -23,7 +23,7 @@ import {
 } from '../engine/shaders/manifest.js';
 import {
   addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
-  setClipParam, addClipEffect, removeClipEffect, moveClipEffect, patchLayer,
+  setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
 } from '../model/layers.js';
@@ -126,20 +126,22 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   const show = () => getShow();
   const firstLayer = () => getShow().composition?.layers?.[0] || null;
 
-  // Mount points (Resolume-style shell). When provided, the panel renders its
-  // three regions into separate containers: the DECK (clip-slot strip +
-  // transport), the INSPECTOR (selected-clip source/transform/opacity/effects +
-  // composition FX), and the LIBRARY (Sources/Effects). When omitted it falls
-  // back to a single self-contained tree in `root` (legacy single-column).
+  // Mount points (Resolume-style shell). The panel renders its regions into
+  // separate containers: DECK (clip-slot strip + transport), the CLIP inspector
+  // (selected-clip source/transform/opacity/effects), the COMPOSITION inspector
+  // (composition FX — sits under the general settings in the Composition tab),
+  // and the LIBRARY (Sources/Effects). When omitted, everything falls back to a
+  // single self-contained tree in `root`.
   const deckEl = mounts?.deck || root;
-  const inspectorEl = mounts?.inspector || root;
+  const clipEl = mounts?.inspectorClip || root;
+  const compEl = mounts?.inspectorComposition || root;
   const libraryEl = mounts?.library || root;
 
   function render() {
     const layer = firstLayer();
     // Clear each distinct container once.
     const seen = new Set();
-    for (const c of [deckEl, inspectorEl, libraryEl]) {
+    for (const c of [deckEl, clipEl, compEl, libraryEl]) {
       if (!seen.has(c)) { c.textContent = ''; seen.add(c); }
     }
 
@@ -149,7 +151,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
     const id = layer.id;
 
-    // --- DECK region: transport + clip-slot strip + crossfade ----------------
+    // --- DECK region: transport + clip-slot strip ----------------------------
     const deckHead = el('div', { className: 'composer-deckhead' }, [
       el('div', { className: 'composer-label', textContent: 'TIMELINE' }),
     ]);
@@ -158,13 +160,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     deckEl.append(el('div', { className: 'ly-hint',
       textContent: 'click to trigger · drag a source onto a slot · ▶ plays through slots' }));
     deckEl.append(clipDeck(layer, id));
-    deckEl.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
-      (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) }))));
 
-    // --- INSPECTOR region: selected clip + composition FX --------------------
+    // --- CLIP inspector: selected clip ---------------------------------------
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
-    if (active) inspectorEl.append(selectedClipEditor(id, active));
-    inspectorEl.append(compositionEffects(layer, id));
+    if (active) clipEl.append(selectedClipEditor(id, active));
+    else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clip selected' }));
+
+    // --- COMPOSITION inspector: composition FX -------------------------------
+    compEl.append(compositionEffects(layer, id));
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());

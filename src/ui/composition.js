@@ -11,7 +11,7 @@
 //
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { clampCanvasSize } from '../model/layers.js';
+import { clampCanvasSize, patchLayer } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -23,6 +23,17 @@ const el = (tag, props = {}, kids = []) => {
 const field = (label, control) =>
   el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
 
+// A range slider with a live readout (writes back on every input, no re-render).
+const sliderRow = (label, value, min, max, onInput) => {
+  const out = el('span', { className: 'ly-readout', textContent: String(Math.round(value)) });
+  const range = el('input', {
+    type: 'range', min: String(min), max: String(max), step: '1', value: String(value ?? 0),
+  });
+  range.addEventListener('input', () => { out.textContent = range.value; onInput(Number(range.value)); });
+  const head = el('span', { className: 'ly-pkey' }, [el('span', { textContent: label }), out]);
+  return el('label', { className: 'fx-field ly-param' }, [head, range]);
+};
+
 // gcd-based aspect string (e.g. 1280×720 → "16:9"). Falls back to "—" on 0.
 function aspectLabel(w, h) {
   if (!(w > 0) || !(h > 0)) return '—';
@@ -31,8 +42,10 @@ function aspectLabel(w, h) {
   return `${Math.round(w) / d}:${Math.round(h) / d}`;
 }
 
-// createCompositionPanel({ getShow, setSize })
-export function createCompositionPanel({ getShow, setSize }) {
+// createCompositionPanel({ getShow, setSize, setShow })
+//   setShow(s): composition-only persist (no rebuild) — used for the crossfade,
+//   which is a composition-global setting living on the single layer.
+export function createCompositionPanel({ getShow, setSize, setShow }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
 
   // Working draft of the fields (not yet applied). Seeded from the show.
@@ -81,6 +94,13 @@ export function createCompositionPanel({ getShow, setSize }) {
         render();
       },
     }));
+
+    // --- Crossfade (composition-global; lives on the single layer) ---
+    const layer = getShow().composition?.layers?.[0];
+    if (layer && setShow) {
+      root.append(sliderRow('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
+        (v) => setShow(patchLayer(getShow(), layer.id, { transitionMs: Math.round(v) }))));
+    }
   }
 
   render();

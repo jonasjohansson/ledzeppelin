@@ -156,7 +156,8 @@ const layerPanel = createLayerPanel({
   transport,
   mounts: {
     deck: document.getElementById('deckbar'),
-    inspector: document.getElementById('inspector'),
+    inspectorClip: document.getElementById('insp-clip'),
+    inspectorComposition: document.getElementById('insp-compfx'),
     library: document.getElementById('library'),
   },
 });
@@ -173,6 +174,7 @@ const importPanel = createImportPanel({
 const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
+  setShow: (next) => setComposition(next), // crossfade: composition-only persist
 });
 // --- Resolume-style shell routing ----------------------------------------
 // Panels are CONSTRUCTED ONCE and mounted into fixed regions; switching
@@ -260,6 +262,20 @@ outputModeEl?.addEventListener('click', (ev) => {
   if (!b) return;
   view.outputMode = b.dataset.mode;
   applyView();
+});
+
+// Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.
+const inspTabsEl = document.getElementById('insp-tabs');
+const inspClipEl = document.getElementById('insp-clip');
+const inspCompEl = document.getElementById('insp-composition');
+inspTabsEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.subtab');
+  if (!b) return;
+  const which = b.dataset.itab;
+  inspTabsEl.querySelectorAll('.subtab').forEach((x) =>
+    x.classList.toggle('subtab-active', x.dataset.itab === which));
+  if (inspClipEl) inspClipEl.hidden = which !== 'clip';
+  if (inspCompEl) inspCompEl.hidden = which !== 'composition';
 });
 
 applyView();

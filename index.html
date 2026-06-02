@@ -21,10 +21,17 @@ canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index
     </div>
   </div>
 
-  <!-- COMPOSITION view: inspector column + library column -->
+  <!-- COMPOSITION view: inspector column (Clip | Composition sub-tabs) + library -->
   <aside id="inspector-col" class="panel">
-    <div id="comp-settings"></div>
-    <div id="inspector"></div>
+    <div id="insp-tabs" class="subtabs">
+      <button class="subtab subtab-active" data-itab="clip">Clip</button>
+      <button class="subtab" data-itab="composition">Composition</button>
+    </div>
+    <div id="insp-clip"></div>
+    <div id="insp-composition" hidden>
+      <div id="comp-settings"></div>
+      <div id="insp-compfx"></div>
+    </div>
   </aside>
   <aside id="library-col" class="panel">
     <div id="library"></div>

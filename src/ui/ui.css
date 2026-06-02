@@ -14,6 +14,18 @@
   box-shadow: inset 0 -2px 0 #6ad;
 }
 
+/* --- Inspector sub-tabs (Clip | Composition) --- */
+.subtabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.subtab {
+  flex: 1 1 0; background: #141414; color: #9aa; border: 1px solid #242424;
+  border-radius: 5px; padding: 6px 0; font: 12px system-ui; cursor: pointer;
+}
+.subtab:hover { background: #1a1a1a; color: #ddd; }
+.subtab-active {
+  background: #15212a; color: #cfe7ff; border-color: #2a3a44;
+  box-shadow: inset 0 -2px 0 #6ad;
+}
+
 /* --- Output Input/Output segmented toggle --- */
 .seg {
   display: inline-flex; gap: 0; margin-bottom: 6px;
