@@ -23,7 +23,7 @@
 //
 // Param keys are namespaced `'<name>.<key>'` (e.g. 'line.pos', 'displace.amt').
 
-import { defaultParams, generatorNames } from '../engine/shaders/manifest.js';
+import { defaultParams, generatorNames, labelOf } from '../engine/shaders/manifest.js';
 
 const TRANSITION_MS = 500;
 const DEFAULT_CANVAS = { w: 1280, h: 720 };
@@ -226,9 +226,10 @@ function dropParams(params, removed, remaining) {
 // --- clips -------------------------------------------------------------------
 
 // A fresh clip for `generator`, with seeded prefixed params and no effects.
-export function makeClip(generator, name = 'clip', id = 'c1') {
+export function makeClip(generator, name, id = 'c1') {
   return {
-    id, name, generator, params: prefixedDefaults(generator), effects: [],
+    id, name: name ?? labelOf(generator), generator,
+    params: prefixedDefaults(generator), effects: [],
     transform: { ...DEFAULT_TRANSFORM }, opacity: DEFAULT_OPACITY,
     durationMs: DEFAULT_DURATION_MS,
   };
@@ -239,8 +240,7 @@ export function makeClip(generator, name = 'clip', id = 'c1') {
 export function addClip(show, layerId, generator) {
   return updateLayer(show, layerId, (layer) => {
     const id = uniqueId('c', allClipIds(show.composition.layers));
-    const n = (layer.clips?.length || 0) + 1;
-    const clip = makeClip(generator, 'clip ' + n, id);
+    const clip = makeClip(generator, undefined, id); // named after its source (labelOf)
     const clips = [...(layer.clips || []), clip];
     const activeClipId = layer.activeClipId == null ? id : layer.activeClipId;
     return { ...layer, clips, activeClipId };
@@ -291,7 +291,11 @@ export function changeClipGenerator(show, layerId, clipId, generator) {
     for (const k of Object.keys(clip.params || {})) {
       if (effectSet.has(k.split('.')[0])) kept[k] = clip.params[k];
     }
-    return { ...clip, generator, params: { ...kept, ...prefixedDefaults(generator) } };
+    // Rename to the new source unless the user gave the clip a custom name (i.e.
+    // it still carries the previous source's auto-name, or a legacy "clip N").
+    const autoNamed = !clip.name || clip.name === labelOf(clip.generator) || /^clip\s*\d+$/i.test(clip.name);
+    const name = autoNamed ? labelOf(generator) : clip.name;
+    return { ...clip, generator, name, params: { ...kept, ...prefixedDefaults(generator) } };
   });
 }
 
@@ -405,7 +409,7 @@ export function moveClipEffect(show, layerId, clipId, fxIndex, delta) {
 // effects, add/opacity 1, default crossfade.
 export function makeLayer(id, clipId = 'c1') {
   const generator = generatorNames()[0] || 'line';
-  const clip = makeClip(generator, 'clip 1', clipId);
+  const clip = makeClip(generator, undefined, clipId);
   return {
     id,
     name: 'layer',

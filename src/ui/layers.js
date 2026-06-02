@@ -352,10 +352,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           commit(addClipEffect(show(), id, clip.id, payload.name));
         }
       });
-      cell.append(
-        el('div', { className: 'clip-name', textContent: clip.name || clip.id }),
-        el('div', { className: 'clip-gen', textContent: labelOf(clip.generator) || '—' }),
-      );
+      cell.append(el('div', { className: 'clip-name', textContent: clip.name || clip.id }));
+      // Show the source as a sub-label only when the name differs from it
+      // (i.e. a custom-named clip) — otherwise it's redundant.
+      const genLabel = labelOf(clip.generator);
+      if (genLabel && genLabel !== (clip.name || '')) {
+        cell.append(el('div', { className: 'clip-gen', textContent: genLabel }));
+      }
       const fxCount = (clip.effects || []).length;
       if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
       const aff = el('div', { className: 'clip-aff' });
@@ -391,29 +394,43 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return deck;
   }
 
-  // Resolume-style layer header: name · opacity · blend, on the left of the row.
+  // Resolume-style layer control block: a vertical opacity fader (the "V"),
+  // clear/eject + blend controls, and the layer name bar at the bottom.
   function layerHead(layer, id) {
+    const pct = (v) => Math.round((v ?? 1) * 100) + '%';
     const head = el('div', { className: 'layer-head-box' });
-    const name = el('input', {
-      className: 'ly-nameedit', value: layer.name ?? 'layer', title: 'layer name',
-    });
-    name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
-    head.append(name);
+    const body = el('div', { className: 'lh-body' });
 
-    const opWrap = el('div', { className: 'layer-op' });
-    const opOut = el('span', { className: 'ly-readout', textContent: fmt(layer.opacity ?? 1) });
+    // Vertical opacity fader.
+    const opCol = el('div', { className: 'lh-op' });
+    const opOut = el('span', { className: 'lh-op-val', textContent: pct(layer.opacity ?? 1) });
     const opRange = el('input', {
       type: 'range', min: '0', max: '1', step: '0.001', value: String(layer.opacity ?? 1),
+      className: 'lh-op-range', title: 'layer opacity',
     });
     opRange.addEventListener('input', () => {
-      opOut.textContent = fmt(Number(opRange.value));
+      opOut.textContent = pct(Number(opRange.value));
       commitLive(patchLayer(show(), id, { opacity: Number(opRange.value) }));
     });
-    opWrap.append(el('span', { className: 'layer-op-label', textContent: 'opacity' }), opOut, opRange);
-    head.append(opWrap);
+    opCol.append(opOut, opRange);
+    body.append(opCol);
 
-    head.append(selectInput(BLEND_MODES, layer.blend ?? 'add',
+    // Clear (eject active clip) + blend mode.
+    const ctrls = el('div', { className: 'lh-ctrls' });
+    ctrls.append(el('button', {
+      className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
+      onclick: () => commit(setActiveClip(show(), id, null)),
+    }));
+    ctrls.append(el('span', { className: 'lh-blend-label', textContent: 'blend' }));
+    ctrls.append(selectInput(BLEND_MODES, layer.blend ?? 'add',
       (x) => commit(patchLayer(show(), id, { blend: x }))));
+    body.append(ctrls);
+    head.append(body);
+
+    // Layer name bar (Resolume highlights the active layer's name bar).
+    const name = el('input', { className: 'lh-name', value: layer.name ?? 'Layer 1', title: 'layer name' });
+    name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
+    head.append(name);
     return head;
   }
 

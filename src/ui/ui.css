@@ -222,25 +222,38 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .ly-fx-clip { border-color: #3a3320; }
 .ly-fx-layer { border-color: #20303a; }
 
-/* --- Layer row (header + slot grid), Resolume-style --- */
+/* --- Layer row (control block + horizontal slot row), Resolume-style --- */
 .deck-layer { display: flex; align-items: stretch; gap: 8px; margin: 4px 0 6px; }
 .layer-head-box {
-  flex: 0 0 130px; display: flex; flex-direction: column; gap: 5px; justify-content: center;
+  flex: 0 0 132px; display: flex; flex-direction: column; gap: 6px;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px;
 }
-.layer-op { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 6px; }
-.layer-op-label { font-size: 9px; color: var(--muted); letter-spacing: .04em; }
-.layer-op .ly-readout { grid-column: 2; justify-self: end; font-size: 10px; }
-.layer-op input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
-.layer-head-box select {
+.lh-body { display: flex; gap: 10px; flex: 1 1 auto; }
+.lh-op { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.lh-op-val { font-size: 9px; color: var(--readout); font-variant-numeric: tabular-nums; }
+.lh-op-range {
+  -webkit-appearance: slider-vertical; appearance: slider-vertical;
+  writing-mode: vertical-lr; direction: rtl;
+  width: 12px; height: 64px; accent-color: var(--green);
+}
+.lh-ctrls { display: flex; flex-direction: column; gap: 5px; flex: 1 1 auto; }
+.lh-clear { align-self: flex-start; color: var(--danger); border-color: rgba(255,107,107,.4); padding: 0 7px; line-height: 1.6; }
+.lh-blend-label { font-size: 9px; color: var(--muted); letter-spacing: .06em; margin-top: 2px; }
+.lh-ctrls select {
   background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
   border-radius: 3px; padding: 2px 4px; font: 11px var(--mono); width: 100%; box-sizing: border-box;
 }
+.lh-name {
+  background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 11px;
+  text-align: center; border: 1px solid var(--line); border-radius: 4px; padding: 4px;
+  font-family: var(--mono); box-sizing: border-box; width: 100%;
+}
+.lh-name:focus { outline: none; border-color: var(--accent); }
 
-/* --- Clip deck (Resolume-style) --- */
+/* --- Clip slot row (single horizontal row, scrolls — like Resolume columns) --- */
 .clip-deck {
-  flex: 1 1 auto;
-  display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-content: flex-start;
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-wrap: nowrap; gap: 6px; margin: 0; overflow-x: auto; padding-bottom: 2px;
 }
 /* Empty placeholder slot: dashed drop target, dimmer than a filled clip. */
 .clip-empty {

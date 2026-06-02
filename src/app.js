@@ -38,7 +38,7 @@ function defaultShow() {
   // line. The single active clip carries the line generator + its prefixed
   // manifest defaults; with default speed=1/amp=0.45 the line self-animates
   // in-shader via uT. Layer-level effects/params start empty.
-  const clip = { ...makeClip('line', 'clip 1', 'c1'), params: prefixedDefaults('line') };
+  const clip = { ...makeClip('line', undefined, 'c1'), params: prefixedDefaults('line') };
   show.composition.layers = [
     { id: 'l1', name: 'layer 1', blend: 'add', opacity: 1,
       clips: [clip], activeClipId: clip.id,
