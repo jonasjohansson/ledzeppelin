@@ -197,79 +197,111 @@ const compositionPanel = createCompositionPanel({
 //                     The #preview fixture overlay shows here (hidden in
 //                     Composition for a clean composite); drag is gated to
 //                     Output+Input mode.
+// Three top tabs:
+//   Composition → deck strip + inspector + library (the composing view).
+//   Output      → the MAPPING view: canvas with the fixture overlay; add +
+//                 drag fixtures to position them.
+//   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
-const editorOutputPanels = document.getElementById('editor-output-panels');
+const fixturesPanels = document.getElementById('fixtures-panels');
 compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
-editorOutputPanels?.append(importPanel.el);
-editorOutputPanels?.append(panel.el);
+fixturesPanels?.append(importPanel.el);
+fixturesPanels?.append(panel.el);
 
 let dragHandle = null;
 if (previewCanvas) {
   dragHandle = enableDragPlacement(previewCanvas, {
     getShow: () => show,
     onEdit: (next) => { show = next; preview?.draw(show, lastRGBA); }, // live, no rebuild churn
-    onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); },
+    onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutputList(); },
     enabled: false, // gated by view state below; default tab is Composition
   });
 }
 
-// Runtime UI view state (NOT persisted in the show JSON). The render loop and
-// sampler/output run regardless of which tab is shown — applyView only toggles
-// DOM visibility, the preview overlay, and drag interactivity.
-const view = { activeTab: 'composition', outputMode: 'input' };
+// --- Output mapping panel: add fixtures onto the canvas, list/remove them ----
+const outputListEl = document.getElementById('output-list');
+const addFixtureBtn = document.getElementById('add-fixture');
+
+function addFixtureCentered() {
+  const next = structuredClone(show);
+  const id = `f${next.fixtures.length + 1}`;
+  const devId = next.devices[0]?.id ?? '';
+  // Offset must be contiguous-from-0 PER DEVICE (validate()): take the running
+  // end of the chosen device's fixtures.
+  const off = next.fixtures
+    .filter((x) => x.output?.deviceId === devId)
+    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
+  const px = 150;
+  const c = next.composition?.canvas || { w: 1280, h: 720 };
+  next.fixtures.push({
+    id, name: id, pixelCount: px, colorOrder: 'GRB',
+    output: { deviceId: devId, pixelOffset: off, pixelCount: px },
+    input: { transform: { x: c.w / 2, y: c.h / 2, w: c.w * 0.6, h: 8, rotation: 0 }, samples: px },
+  });
+  rebuild(next); panel.refresh(); renderOutputList();
+}
+addFixtureBtn?.addEventListener('click', addFixtureCentered);
+
+function renderOutputList() {
+  if (!outputListEl) return;
+  outputListEl.textContent = '';
+  for (const f of show.fixtures || []) {
+    const row = document.createElement('div');
+    row.className = 'output-row';
+    const name = document.createElement('span'); name.textContent = f.name || f.id;
+    const dev = document.createElement('span'); dev.className = 'output-dev';
+    dev.textContent = f.output?.deviceId || '—';
+    const del = document.createElement('button'); del.textContent = '✕'; del.className = 'ly-rmfx';
+    del.title = 'remove fixture';
+    del.onclick = () => {
+      const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
+      rebuild(n); panel.refresh(); renderOutputList();
+    };
+    row.append(name, dev, del);
+    outputListEl.append(row);
+  }
+}
+
+// Runtime UI view state (NOT persisted). applyView only toggles DOM visibility,
+// the preview overlay, and drag interactivity — the render/sampler/output run
+// regardless of which tab is shown.
+const view = { activeTab: 'composition' };
 const tabsEl = document.getElementById('tabs');
 const deckbarEl = document.getElementById('deckbar');
 const inspectorColEl = document.getElementById('inspector-col');
 const libraryColEl = document.getElementById('library-col');
 const outputViewEl = document.getElementById('output-view');
-const outputModeEl = document.getElementById('output-mode');
-const outputModeHint = document.getElementById('output-mode-hint');
+const fixturesViewEl = document.getElementById('fixtures-view');
 
 function applyView() {
-  const onOutput = view.activeTab === 'output';
+  const tab = view.activeTab;
+  const onComposition = tab === 'composition';
+  const onOutput = tab === 'output';
+  const onFixtures = tab === 'fixtures';
 
-  // Tab buttons.
   tabsEl?.querySelectorAll('.tab').forEach((b) => {
-    b.classList.toggle('tab-active', b.dataset.tab === view.activeTab);
+    b.classList.toggle('tab-active', b.dataset.tab === tab);
   });
 
-  // Region visibility (show/hide, not recreate). Composition → deck strip +
-  // inspector + library; Output → the output editor.
-  if (deckbarEl) deckbarEl.hidden = onOutput;
-  if (inspectorColEl) inspectorColEl.hidden = onOutput;
-  if (libraryColEl) libraryColEl.hidden = onOutput;
+  if (deckbarEl) deckbarEl.hidden = !onComposition;
+  if (inspectorColEl) inspectorColEl.hidden = !onComposition;
+  if (libraryColEl) libraryColEl.hidden = !onComposition;
   if (outputViewEl) outputViewEl.hidden = !onOutput;
+  if (fixturesViewEl) fixturesViewEl.hidden = !onFixtures;
 
-  // Fixture overlay: visible on Output, hidden on Composition (clean composite).
-  // Hiding the canvas does NOT stop the render loop or the sampler — preview.draw
-  // still runs each frame; the canvas is merely not displayed.
-  if (previewCanvas) previewCanvas.style.display = onOutput ? '' : 'none';
-
-  // Output mode segmented toggle.
-  outputModeEl?.querySelectorAll('.seg-btn').forEach((b) => {
-    b.classList.toggle('seg-active', b.dataset.mode === view.outputMode);
-  });
-  if (outputModeHint) {
-    outputModeHint.textContent = !onOutput ? '' :
-      view.outputMode === 'input'
-        ? 'Input — drag a fixture on the overlay to move it; set width/height/rotation (px) numerically.'
-        : 'Output — assign devices, offsets and IPs. Drag placement is locked.';
-  }
-
-  // Drag placement is ON only in Output tab + Input mode.
-  dragHandle?.setEnabled(onOutput && view.outputMode === 'input');
+  // Fixture overlay shows on Output + Fixtures (so you see/position fixtures),
+  // hidden on Composition for a clean composite. Drag is enabled wherever the
+  // overlay shows.
+  const overlay = onOutput || onFixtures;
+  if (previewCanvas) previewCanvas.style.display = overlay ? '' : 'none';
+  dragHandle?.setEnabled(overlay);
+  if (overlay) renderOutputList();
 }
 
 tabsEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.tab');
   if (!b) return;
   view.activeTab = b.dataset.tab;
-  applyView();
-});
-outputModeEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.seg-btn');
-  if (!b) return;
-  view.outputMode = b.dataset.mode;
   applyView();
 });
 

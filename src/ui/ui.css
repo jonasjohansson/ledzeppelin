@@ -59,6 +59,16 @@ html,body{ background:var(--bg); color:var(--text); }
 }
 .seg-hint { font-size: 10px; color: var(--muted); margin: 0 0 10px; line-height: 1.4; }
 
+/* --- Output mapping: fixture list --- */
+#add-fixture { margin: 6px 0 10px; color: var(--green); border-color: rgba(93,209,163,.5); }
+.output-row {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; font-size: 12px;
+}
+.output-row span:first-child { flex: 1 1 auto; color: var(--text); }
+.output-dev { color: var(--cyan); font-size: 10px; }
+.output-row .ly-rmfx { padding: 0 6px; line-height: 1.5; }
+
 /* Resolume-style shell: clip-slot deck + canvas monitor on the left, inspector
    and library columns on the right (output editor replaces them on the Output
    tab). */

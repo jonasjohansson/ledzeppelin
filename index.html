@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>ledzeppelin</title>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <style>html,body{margin:0;background:#0a0a0a;color:#eee;font:13px system-ui}
 canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index:10;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #000}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
@@ -10,9 +10,10 @@ canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index
 <div id="tabs" class="tabs">
   <button id="tab-composition" class="tab tab-active" data-tab="composition">Composition</button>
   <button id="tab-output" class="tab" data-tab="output">Output</button>
+  <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
 </div>
 <div id="layout">
-  <!-- LEFT: clip-slot deck (top) + canvas monitor (fills) -->
+  <!-- LEFT: clip-slot deck (Composition only) + canvas monitor / mapping view -->
   <div id="left">
     <section id="deckbar" class="panel"></section>
     <div id="stagewrap">
@@ -37,14 +38,17 @@ canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index
     <div id="library"></div>
   </aside>
 
-  <!-- OUTPUT view: Input/Output toggle + import + fixtures -->
+  <!-- OUTPUT view: the mapping panel (add + position fixtures on the canvas) -->
   <aside id="output-view" class="panel" hidden>
-    <div id="output-mode" class="seg" role="tablist">
-      <button id="seg-input" class="seg-btn seg-active" data-mode="input">Input</button>
-      <button id="seg-output" class="seg-btn" data-mode="output">Output</button>
-    </div>
-    <div id="output-mode-hint" class="seg-hint"></div>
-    <div id="editor-output-panels"></div>
+    <div class="fx-title">Output mapping</div>
+    <div class="seg-hint">Drag a fixture on the canvas to position it. Set size/rotation per fixture in the Fixtures tab.</div>
+    <button id="add-fixture" class="fx-add">+ add fixture</button>
+    <div id="output-list"></div>
+  </aside>
+
+  <!-- FIXTURES view: design fixtures + devices + import -->
+  <aside id="fixtures-view" class="panel" hidden>
+    <div id="fixtures-panels"></div>
   </aside>
 </div>
 <script type="module" src="./src/app.js"></script></body>
