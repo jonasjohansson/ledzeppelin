@@ -352,12 +352,22 @@ tabsEl?.addEventListener('click', (ev) => {
   applyView();
 });
 
+const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+// 'h' (or Tab) toggles all GUI off to view the canvas full-screen.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'h' && e.key !== 'H' && e.key !== 'Tab') return;
+  if (typingIn(e.target)) return;
+  e.preventDefault();
+  document.body.classList.toggle('gui-hidden');
+});
+
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   const t = e.target;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (typingIn(t)) return;
   if (view.activeTab === 'composition') {
     layerPanel.deleteActiveClip(); e.preventDefault();
   } else if (selectedFixtureId) {

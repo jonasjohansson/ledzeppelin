@@ -27,7 +27,7 @@ import {
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
   setClipAnim, setLayerAnim, patchLayer,
-  mergeClipParams, mergeLayerParams,
+  mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
 import { DIRECTIONS, makeAnim, animatedValue } from '../model/anim.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
@@ -207,28 +207,26 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // Live clip lookup (presets read CURRENT params, not the captured render-time clip).
   const liveClip = (cid) => (firstLayer()?.clips || []).find((c) => c.id === cid) || null;
 
-  // Preset row for a source/effect TYPE: a load dropdown + save/delete buttons.
-  //   getParams(): the current param subset to save · applyParams(p): load it.
-  function presetControl(kind, name, getParams, applyParams) {
+  // Compact preset widget for a source/effect TYPE — a small load dropdown +
+  // save + reset, meant to sit in a header corner.
+  //   getParams(): current params to save · applyParams(p): load · onReset(): defaults
+  function presetWidget(kind, name, getParams, applyParams, onReset) {
     const names = listPresets(kind, name);
-    const sel = selectInput(
-      [{ value: '', label: names.length ? 'load preset…' : '(no presets)' }, ...names.map((n) => ({ value: n, label: n }))],
-      '', (pn) => { if (pn) { const p = loadPreset(kind, name, pn); if (p) applyParams(p); } },
-    );
-    const saveBtn = el('button', {
-      className: 'preset-save', textContent: '＋ save', title: 'save current as a preset',
-      onclick: () => { const pn = window.prompt(`Save ${name} preset as:`); if (pn) { savePreset(kind, name, pn.trim(), getParams()); render(); } },
+    const sel = el('select', { className: 'preset-mini', title: 'load / delete preset' });
+    sel.append(el('option', { value: '', textContent: 'preset' }));
+    for (const n of names) sel.append(el('option', { value: n, textContent: n }));
+    sel.addEventListener('change', () => {
+      if (sel.value) { const p = loadPreset(kind, name, sel.value); if (p) applyParams(p); }
     });
-    const delBtn = el('button', {
-      className: 'preset-del ly-rmfx', textContent: '🗑', title: 'delete a preset',
-      onclick: () => {
-        const cur = listPresets(kind, name);
-        if (!cur.length) return;
-        const pn = window.prompt(`Delete which ${name} preset?\n${cur.join(', ')}`);
-        if (pn && cur.includes(pn.trim())) { deletePreset(kind, name, pn.trim()); render(); }
-      },
+    const save = el('button', {
+      className: 'preset-mini-btn', textContent: '＋', title: 'save current as a preset',
+      onclick: () => { const pn = window.prompt(`Save ${name} preset as:`); if (pn && pn.trim()) { savePreset(kind, name, pn.trim(), getParams()); render(); } },
     });
-    return el('div', { className: 'preset-ctrl' }, [sel, saveBtn, delBtn]);
+    const reset = el('button', {
+      className: 'preset-mini-btn', textContent: '↺', title: 'reset to defaults',
+      onclick: () => onReset?.(),
+    });
+    return el('div', { className: 'preset-widget' }, [sel, save, reset]);
   }
 
   // The param subset of `params` whose keys are prefixed by `name + '.'`.
@@ -333,9 +331,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
         onclick: () => commit(removeLayerEffect(show(), id, fx)) }),
     );
-    block.append(el('div', { className: 'ly-fxhead' }, [
-      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }), btns,
-    ]));
+    const head = el('div', { className: 'ly-fxhead' }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
+    ]);
+    if (entry && entry.params.length) {
+      head.append(presetWidget('effect', entry.name,
+        () => paramsForPrefix(firstLayer()?.params, entry.name),
+        (p) => commit(mergeLayerParams(show(), id, p)),
+        () => commit(mergeLayerParams(show(), id, prefixedDefaults(entry.name)))));
+    }
+    head.append(btns);
+    block.append(head);
 
     if (entry) {
       for (const p of entry.params) {
@@ -346,9 +352,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onAnim: (spec) => commit(setLayerAnim(show(), id, key, spec)),
         }));
       }
-      block.append(presetControl('effect', entry.name,
-        () => paramsForPrefix(firstLayer()?.params, entry.name),
-        (p) => commit(mergeLayerParams(show(), id, p))));
     }
     return block;
   }
@@ -523,11 +526,21 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
     nameInput.addEventListener('change',
       () => commit(patchClipName(show(), id, clip.id, nameInput.value)));
-    box.append(el('div', { className: 'clip-editor-head' }, [nameInput]));
 
     // Source params (auto-generated from the manifest), shown directly — no
     // "source: X" / "X params" meta (the slot already shows the source).
     const gen = getEntry(clip.generator);
+
+    // Header: clip name + a compact SOURCE preset widget (presets · save · reset)
+    // in the corner. Reset re-applies the generator's manifest defaults.
+    const head = el('div', { className: 'clip-editor-head' }, [nameInput]);
+    if (gen && gen.params.length) {
+      head.append(presetWidget('source', gen.name,
+        () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
+        (p) => commit(mergeClipParams(show(), id, clip.id, p)),
+        () => commit(changeClipGenerator(show(), id, clip.id, clip.generator))));
+    }
+    box.append(head);
 
     // Triggerable sources (Pulse) get a prominent Trigger button here.
     if (gen?.triggerable && transport?.fire) {
@@ -552,12 +565,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         }));
       }
     }
-    if (gen && gen.params.length) {
-      box.append(presetControl('source', gen.name,
-        () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
-        (p) => commit(mergeClipParams(show(), id, clip.id, p))));
-    }
-
     // Transform + opacity (the clip's placement on the canvas).
     const t = clip.transform || {};
     box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
@@ -601,9 +608,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
         onclick: () => commit(removeClipEffect(show(), id, clip.id, fx)) }),
     );
-    block.append(el('div', { className: 'ly-fxhead' }, [
-      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }), btns,
-    ]));
+    const head = el('div', { className: 'ly-fxhead' }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
+    ]);
+    if (entry && entry.params.length) {
+      head.append(presetWidget('effect', entry.name,
+        () => paramsForPrefix(liveClip(clip.id)?.params, entry.name),
+        (p) => commit(mergeClipParams(show(), id, clip.id, p)),
+        () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(entry.name)))));
+    }
+    head.append(btns);
+    block.append(head);
 
     if (entry) {
       for (const p of entry.params) {
@@ -614,9 +629,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
         }));
       }
-      block.append(presetControl('effect', entry.name,
-        () => paramsForPrefix(liveClip(clip.id)?.params, entry.name),
-        (p) => commit(mergeClipParams(show(), id, clip.id, p))));
     }
     return block;
   }

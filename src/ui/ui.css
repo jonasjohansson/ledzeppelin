@@ -83,7 +83,7 @@ html,body{ background:var(--bg); color:var(--text); }
 .output-row:hover { border-color: var(--line-2); }
 .output-row.selected { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
 .output-edit { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
-.output-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+.output-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; }
 .output-grid .fx-field input {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
   border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); width: 100%; box-sizing: border-box;
@@ -128,6 +128,8 @@ html,body{ background:var(--bg); color:var(--text); }
 #output-view   { flex: 0 0 360px; max-height: calc(100vh - 52px); overflow-y: auto; }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
+/* 'h' / Tab hides all GUI to view the canvas full-screen. */
+body.gui-hidden #layout, body.gui-hidden #tabs { display: none; }
 
 /* Library column hosts the Sources/Effects rail full-width (no side border). */
 #library .composer-rail { flex: 1 1 auto; border-left: none; padding-left: 0; gap: 4px; }
@@ -141,7 +143,7 @@ html,body{ background:var(--bg); color:var(--text); }
 
 .fx-card {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 4px 8px;
   background: var(--surface-2);
   border: 1px solid var(--border-2);
@@ -169,7 +171,7 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .cmp-panel { margin-bottom: 18px; }
 .cmp-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .cmp-preset { padding: 3px 8px; }
-.cmp-grid { grid-template-columns: 1fr 1fr; margin-top: 4px; }
+.cmp-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 4px; }
 .cmp-readout {
   font-size: 11px; color: var(--readout); font-variant-numeric: tabular-nums;
   margin: 2px 0; letter-spacing: .02em;
@@ -222,14 +224,13 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   border-radius: 3px; padding: 1px 3px; font: 10px var(--mono); box-sizing: border-box;
 }
 
-/* Preset row: load dropdown + save/delete (sources & effects). */
-.preset-ctrl { display: flex; align-items: center; gap: 4px; margin: 5px 0 2px; }
-.preset-ctrl select {
-  flex: 1 1 auto; min-width: 0; background: var(--field-bg); color: var(--text);
-  border: 1px solid var(--line-2); border-radius: 3px; padding: 2px 4px; font: 11px var(--mono);
+/* Compact preset widget (presets dropdown · save · reset) for a header corner. */
+.preset-widget { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+.preset-mini {
+  background: var(--field-bg); color: var(--muted); border: 1px solid var(--field-border);
+  border-radius: 4px; padding: 1px 3px; font: 10px var(--mono); max-width: 78px;
 }
-.preset-save { flex: 0 0 auto; padding: 2px 7px; font-size: 10px; color: var(--green); border-color: rgba(93,209,163,.45); }
-.preset-del { flex: 0 0 auto; padding: 2px 6px; font-size: 10px; }
+.preset-mini-btn { padding: 0 5px; line-height: 1.5; font-size: 11px; min-width: 0; }
 
 /* Compact single-row param: name left · value · slider fills (Resolume-style). */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; }
@@ -398,14 +399,16 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
 .clip-editor {
-  grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 6px 8px;
+  grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px 8px;
   border: 1px solid var(--field-border); border-radius: 5px; padding: 8px;
   margin: 4px 0 2px; background: var(--surface);
 }
 .clip-editor-head {
   grid-column: 1 / -1; font-size: 11px; color: var(--accent); font-weight: 600;
-  margin-bottom: 2px;
+  margin-bottom: 2px; display: flex; align-items: center; gap: 6px;
 }
+.clip-editor-head .ly-nameedit { flex: 1 1 auto; min-width: 0; }
+.ly-fxhead .preset-widget { margin-left: auto; }
 .clip-trigger {
   grid-column: 1 / -1; width: 100%; margin: 2px 0 4px; font-weight: 600;
   color: var(--amber); border-color: rgba(232,178,127,.5);
