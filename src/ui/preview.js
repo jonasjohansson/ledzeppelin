@@ -178,7 +178,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     let next = getShow();
     for (const it of dragState.items) {
       let nx = it.x0 + dx, ny = it.y0 + dy;
-      if (snap) { const s = snap(nx, ny, draggedIds); nx = s[0]; ny = s[1]; }
+      if (snap) { const s = snap(nx, ny, it.id, draggedIds); nx = s[0]; ny = s[1]; }
       next = setFixtureTransform(next, it.id, { x: nx, y: ny });
     }
     onEdit?.(next);

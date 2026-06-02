@@ -225,26 +225,35 @@ const SNAP_DIST = 10;   // px tolerance for aligning to another fixture / centre
 let snapEnabled = false;
 let snapGuides = [];    // alignment guide lines to draw during a snapped drag
 
-// Snap a proposed (x,y) for the fixture(s) `draggedIds`: align to OTHER
-// fixtures' centres or the canvas centre (records guides); fall back to the grid
-// on any axis that didn't align.
-function snapPoint(x, y, draggedIds) {
+// Snap a proposed CENTRE (x,y) for fixture `fid`: align its left/centre/right
+// EDGES (and top/centre/bottom) to other fixtures' edges/centres and the canvas
+// edges/centre — so fixtures sit neatly next to each other. Records guide lines;
+// falls back to the grid on any axis that didn't snap.
+function snapPoint(x, y, fid, excludeIds) {
   snapGuides = [];
   if (!snapEnabled) return [x, y];
-  const ex = new Set(draggedIds || []);
+  const ex = new Set(excludeIds || []);
   const cv = show.composition?.canvas || { w: 1280, h: 720 };
-  const xs = [cv.w / 2], ys = [cv.h / 2];
+  const me = show.fixtures.find((f) => f.id === fid)?.input?.transform || { w: 0, h: 0 };
+  const hw = (me.w || 0) / 2, hh = (me.h || 0) / 2;
+  // Target edge/centre lines on each axis (canvas + every other fixture).
+  const xT = [0, cv.w / 2, cv.w], yT = [0, cv.h / 2, cv.h];
   for (const f of show.fixtures || []) {
     if (ex.has(f.id)) continue;
-    const tf = f.input?.transform; if (tf) { xs.push(tf.x); ys.push(tf.y); }
+    const t = f.input?.transform; if (!t) continue;
+    xT.push(t.x - t.w / 2, t.x, t.x + t.w / 2);
+    yT.push(t.y - t.h / 2, t.y, t.y + t.h / 2);
   }
-  let sx = x, sy = y, bdx = SNAP_DIST, bdy = SNAP_DIST, snappedX = false, snappedY = false;
-  for (const tx of xs) { const d = Math.abs(x - tx); if (d < bdx) { bdx = d; sx = tx; snappedX = true; } }
-  for (const ty of ys) { const d = Math.abs(y - ty); if (d < bdy) { bdy = d; sy = ty; snappedY = true; } }
-  if (!snappedX) sx = Math.round(x / SNAP_GRID) * SNAP_GRID;
-  if (!snappedY) sy = Math.round(y / SNAP_GRID) * SNAP_GRID;
-  if (snappedX) snapGuides.push({ axis: 'x', v: sx });
-  if (snappedY) snapGuides.push({ axis: 'y', v: sy });
+  // The dragged fixture's own left/centre/right (and top/centre/bottom) offsets.
+  let sx = x, sy = y, bestX = SNAP_DIST, bestY = SNAP_DIST, gx = null, gy = null;
+  for (const off of [-hw, 0, hw]) for (const tx of xT) {
+    const d = Math.abs((x + off) - tx); if (d < bestX) { bestX = d; sx = tx - off; gx = tx; }
+  }
+  for (const off of [-hh, 0, hh]) for (const ty of yT) {
+    const d = Math.abs((y + off) - ty); if (d < bestY) { bestY = d; sy = ty - off; gy = ty; }
+  }
+  if (gx !== null) snapGuides.push({ axis: 'x', v: gx }); else sx = Math.round(x / SNAP_GRID) * SNAP_GRID;
+  if (gy !== null) snapGuides.push({ axis: 'y', v: gy }); else sy = Math.round(y / SNAP_GRID) * SNAP_GRID;
   return [sx, sy];
 }
 const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);

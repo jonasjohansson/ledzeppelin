@@ -183,6 +183,22 @@ uniform sampler2D uTex; uniform float level;
 void main(){ vec4 c=texture(uTex,uv); float l=dot(c.rgb,vec3(0.299,0.587,0.114));
   frag=vec4(vec3(step(level,l)), c.a); }`;
 
+// Color — one effect bundling the common level setters (gamma → brightness →
+// contrast → saturation), so you don't stack four separate effects.
+const COLOR = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+uniform float brightness; uniform float contrast; uniform float saturation; uniform float gamma;
+void main(){
+  vec4 src = texture(uTex, uv);
+  vec3 c = pow(clamp(src.rgb, 0.0, 1.0), vec3(1.0 / max(0.01, gamma)));
+  c = c * brightness;
+  c = (c - 0.5) * contrast + 0.5;
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  c = mix(vec3(l), c, saturation);
+  frag = vec4(clamp(c, 0.0, 1.0), src.a);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -266,6 +282,15 @@ export const REGISTRY = {
       { key: 'speed', type: 'float', min: 0, max: 2, default: 0 },
     ],
   },
+  color: {
+    name: 'color', type: 'effect', src: COLOR,
+    params: [
+      { key: 'brightness', type: 'float', min: 0, max: 3, default: 1 },
+      { key: 'contrast', type: 'float', min: 0, max: 3, default: 1 },
+      { key: 'saturation', type: 'float', min: 0, max: 3, default: 1 },
+      { key: 'gamma', type: 'float', min: 0.1, max: 3, default: 1 },
+    ],
+  },
   brightness: {
     name: 'brightness', type: 'effect', src: BRIGHTNESS,
     params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
@@ -307,7 +332,7 @@ const LABELS = {
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', hue: 'Hue',
-  brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation',
+  color: 'Color', brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation',
   gamma: 'Gamma', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
 };
 export const labelOf = (name) =>
