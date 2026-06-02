@@ -402,6 +402,8 @@ input[type=checkbox]:checked::after {
 }
 .lib-item:hover { background: var(--hover); border-color: var(--line-2); }
 .lib-item:active { cursor: grabbing; }
+.lib-video { color: var(--green); border-style: dashed; justify-content: center; cursor: pointer; margin-top: 3px; }
+.lib-video:hover { border-color: var(--green); background: rgba(93,209,163,.08); }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {

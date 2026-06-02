@@ -22,7 +22,7 @@ import {
   generatorNames, effectNames, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
-  addClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
+  addClip, addVideoClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
@@ -669,9 +669,33 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const rail = el('div', { className: 'composer-rail' });
     rail.append(el('div', { className: 'composer-label', textContent: 'SOURCES' }));
     rail.append(libList('source', generatorNames()));
+    rail.append(videoAddItem());
     rail.append(el('div', { className: 'composer-label composer-label-fx', textContent: 'EFFECTS' }));
     rail.append(libList('effect', effectNames()));
     return rail;
+  }
+
+  // "+ Video…" — pick a video file and add it as a new clip.
+  function videoAddItem() {
+    const item = el('div', { className: 'lib-item lib-video', title: 'add a video file as a clip' }, [
+      el('span', { className: 'lib-label', textContent: '+ Video…' }),
+    ]);
+    item.addEventListener('click', () => {
+      const inp = el('input', { type: 'file', accept: 'video/*' });
+      inp.addEventListener('change', () => {
+        const f = inp.files && inp.files[0];
+        const l = firstLayer();
+        if (!f || !l) return;
+        const name = f.name.replace(/\.[^.]+$/, '');
+        const next = addVideoClip(show(), l.id, name, URL.createObjectURL(f));
+        const layer = next.composition.layers.find((x) => x.id === l.id);
+        selectedClipId = layer.clips[layer.clips.length - 1].id;
+        onClipSelect?.();
+        commit(next);
+      });
+      inp.click();
+    });
+    return item;
   }
 
   function libList(kind, names) {

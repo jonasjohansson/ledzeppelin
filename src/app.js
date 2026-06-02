@@ -463,6 +463,46 @@ inspTabsEl?.addEventListener('click', (ev) => {
 
 applyView();
 
+// --- Video clips: a <video> element + GL texture per video clip (runtime only;
+// the show stores only the object URL). syncVideos() reconciles the map with the
+// show each frame; uploadVideos() pushes the current frame into each texture.
+const videoMap = new Map(); // clipId → { url, el, tex }
+function syncVideos() {
+  const clips = [];
+  for (const L of show.composition?.layers || []) for (const c of L.clips || []) {
+    if (c.generator === 'video' && c.videoUrl) clips.push(c);
+  }
+  const live = new Set(clips.map((c) => c.id));
+  for (const [id, v] of videoMap) {
+    if (!live.has(id)) { try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
+  }
+  for (const c of clips) {
+    const existing = videoMap.get(c.id);
+    if (existing && existing.url === c.videoUrl) continue;
+    if (existing) { try { existing.el.pause(); } catch { /* ignore */ } gl.deleteTexture(existing.tex); }
+    const el = document.createElement('video');
+    el.src = c.videoUrl; el.loop = true; el.muted = true; el.playsInline = true; el.autoplay = true;
+    el.play().catch(() => { /* will play on first user gesture */ });
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    videoMap.set(c.id, { url: c.videoUrl, el, tex });
+  }
+}
+function uploadVideos() {
+  for (const v of videoMap.values()) {
+    if (v.el.readyState >= 2 && v.el.videoWidth) {
+      gl.bindTexture(gl.TEXTURE_2D, v.tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v.el); } catch { /* not ready */ }
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    }
+  }
+}
+const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
+
 // Compositor is ready immediately (programs compile lazily on first render).
 rebuild(show);
 
@@ -471,6 +511,7 @@ function loop(ts) {
   if (!t0) t0 = ts;
   lastTs = ts;
   const t = (ts - t0) / 1000;
+  syncVideos(); uploadVideos();
   if (sampler) {
     // When the transport is playing, derive the active clip from the playhead and
     // render a shallow-cloned layer with that activeClipId (the compositor's
@@ -502,7 +543,7 @@ function loop(ts) {
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
-    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs });
+    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs, videoTex });
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);

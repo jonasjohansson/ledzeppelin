@@ -329,7 +329,7 @@ export const REGISTRY = {
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Solid Color',
-  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse',
+  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', hue: 'Hue',
   color: 'Color', brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation',

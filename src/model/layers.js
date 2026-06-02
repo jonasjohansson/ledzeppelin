@@ -247,6 +247,19 @@ export function addClip(show, layerId, generator) {
   });
 }
 
+// Append a VIDEO clip (generator 'video' + a videoUrl). The video element +
+// GL texture are managed at runtime (app.js) keyed by clip id; the show only
+// stores the url/name.
+export function addVideoClip(show, layerId, name, url) {
+  return updateLayer(show, layerId, (layer) => {
+    const id = uniqueId('c', allClipIds(show.composition.layers));
+    const clip = { ...makeClip('video', name || 'Video', id), videoUrl: url };
+    const clips = [...(layer.clips || []), clip];
+    const activeClipId = layer.activeClipId == null ? id : layer.activeClipId;
+    return { ...layer, clips, activeClipId };
+  });
+}
+
 // Remove a clip. If it was active, reassign activeClipId to a surviving clip
 // (or null if none remain). Safe to call on the last clip.
 export function removeClip(show, layerId, clipId) {

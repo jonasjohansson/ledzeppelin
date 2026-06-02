@@ -167,11 +167,19 @@ export function makeCompositor(gl, w, h) {
   // Returns true if anything was drawn, false if the clip is unrenderable.
   function renderClipInto(clip, hold, timeSec) {
     if (!clip || !clip.generator) return false;
-    const gen = getEntry(clip.generator);
-    if (!gen || gen.type !== 'generator') return false;
 
     let cur = clipA, other = clipB;
-    runEntry(gen, clip.params, cur, null, timeSec);
+    if (clip.generator === 'video') {
+      // Video clip: blit the runtime-uploaded video frame (from frameEnv) as the
+      // base, instead of running a generator shader.
+      const vtex = frameEnv.videoTex ? frameEnv.videoTex(clip) : null;
+      if (!vtex) return false;
+      blitInto(vtex, cur, 1);
+    } else {
+      const gen = getEntry(clip.generator);
+      if (!gen || gen.type !== 'generator') return false;
+      runEntry(gen, clip.params, cur, null, timeSec);
+    }
     for (const name of (clip.effects || [])) {
       const fx = getEntry(name);
       if (!fx || fx.type !== 'effect') continue;
