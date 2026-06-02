@@ -113,16 +113,16 @@ void main(){ float g=step(0.5, fract(uT*rate)); frag=texture(uTex, uv)*g; }`;
 const SEGMENTER = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex;
-uniform float count;       // number of segments (N)
+uniform float count;       // how many segments to split the canvas into (N)
 uniform float index;       // first visible segment (0-based)
-uniform float span;        // how many consecutive segments are visible
+uniform float endIndex;    // last visible segment (inclusive)
 uniform float horizontal;  // 0 = columns (split x), 1 = rows (split y)
 void main(){
   float n = max(1.0, floor(count + 0.5));
   float perp = (horizontal < 0.5) ? uv.x : uv.y;
   float seg = floor(clamp(perp, 0.0, 0.999999) * n);
-  float lo = floor(index + 0.5);
-  float hi = lo + max(1.0, floor(span + 0.5)) - 1.0;
+  float a = floor(index + 0.5), b = floor(endIndex + 0.5);
+  float lo = min(a, b), hi = max(a, b);
   if (seg < lo || seg > hi) { frag = vec4(0.0); return; }
   frag = texture(uTex, uv);
 }`;
@@ -215,9 +215,9 @@ export const REGISTRY = {
   segmenter: {
     name: 'segmenter', type: 'effect', src: SEGMENTER,
     params: [
-      { key: 'count', type: 'float', min: 1, max: 16, default: 4 },
-      { key: 'index', type: 'float', min: 0, max: 15, default: 0 },
-      { key: 'span', type: 'float', min: 1, max: 16, default: 1 },
+      { key: 'count', type: 'float', min: 1, max: 32, default: 4, step: 1 },
+      { key: 'index', type: 'float', min: 0, max: 31, default: 0, step: 1 },
+      { key: 'endIndex', type: 'float', min: 0, max: 31, default: 0, step: 1 },
       { key: 'horizontal', type: 'bool', default: false },
     ],
   },

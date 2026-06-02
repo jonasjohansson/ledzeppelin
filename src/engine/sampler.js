@@ -8,7 +8,9 @@ void main(){
   int i = int(gl_FragCoord.x);
   ivec2 t = ivec2(i, 0);
   vec2 suv = texelFetch(uMap, t, 0).rg;
-  frag = texture(uCanvas, suv);
+  // Flip v: the GL texture's v=0 is the BOTTOM row, but fixture points (and the
+  // preview/stage) treat v=0 as the TOP — so sample the matching-display row.
+  frag = texture(uCanvas, vec2(suv.x, 1.0 - suv.y));
 }`;
 
 export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {

@@ -61,8 +61,8 @@ const fmt = (v) => {
 };
 
 // A range slider with a live numeric readout, writing back on every input.
-const sliderField = (label, value, min, max, onInput, defaultValue) => {
-  const step = (max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1;
+const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride) => {
+  const step = stepOverride ?? ((max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1);
   const out = el('span', { className: 'ly-readout', textContent: fmt(value) });
   const range = el('input', {
     type: 'range', min: String(min), max: String(max),
@@ -99,11 +99,14 @@ function paramControl(p, value, onInput) {
   if (p.type === 'bool') {
     const i = el('input', { type: 'checkbox', checked: !!value });
     i.addEventListener('change', () => onInput(i.checked));
-    return field(p.key, i);
+    // Inline row: label left, checkbox right (matches the slider params).
+    return el('label', { className: 'fx-field bool-row' }, [
+      el('span', { className: 'ly-plabel', textContent: p.key }), i,
+    ]);
   }
   const min = p.min ?? 0, max = p.max ?? 1;
   const v = value == null ? (p.default ?? min) : value;
-  return sliderField(p.key, v, min, max, onInput);
+  return sliderField(p.key, v, min, max, onInput, p.default ?? min, p.step);
 }
 
 // A numeric param that can be BASIC (static slider) or TIMELINE (animated). The
@@ -117,7 +120,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   const animated = !!anim;
   const shown = animated ? anim.from : (value == null ? (p.default ?? min) : value);
   const wrap = el('div', { className: 'anim-param' });
-  const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min);
+  const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min, p.step);
   if (animated) {
     const r = row.querySelector('input[type=range]');
     if (r) r.dataset.animkey = key;
@@ -300,14 +303,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const id = layer.id;
 
     // --- DECK region: transport + a layer row (header + clip-slot grid) -------
-    const deckHead = el('div', { className: 'composer-deckhead' }, [
-      el('div', { className: 'composer-label', textContent: 'TIMELINE' }),
-    ]);
-    if (transport) deckHead.append(transportBar());
-    deckEl.append(deckHead);
-    deckEl.append(el('div', { className: 'ly-hint',
-      textContent: 'click a slot to trigger · drag a source onto an empty slot · ▶ plays through slots' }));
-    // A Resolume-style layer row: a header (name · opacity · blend) on the left,
+    if (transport) deckEl.append(el('div', { className: 'composer-deckhead' }, [transportBar()]));
+    // A Resolume-style layer row: a header (name · opacity) on the left,
     // then the slot grid (filled clips + empty placeholder slots).
     deckEl.append(el('div', { className: 'deck-layer' }, [
       layerHead(layer, id),
