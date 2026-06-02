@@ -15,10 +15,14 @@ import {
 } from './model/layers.js';
 import { syncShowFixtures } from './model/fixture-transform.js';
 import { resolveParams } from './model/anim.js';
+import { renderSourceThumbnails } from './engine/thumbs.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
 const gl = getGL(canvas);
+
+// Bake a small thumbnail (data URL) per source generator for the library + slots.
+const thumbnails = renderSourceThumbnails(gl);
 
 // --- Default show: one device, two fixtures (single-device M2 target). ---
 function defaultShow() {
@@ -163,6 +167,7 @@ const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
+  thumbnails,
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),

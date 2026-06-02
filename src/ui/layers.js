@@ -146,7 +146,7 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {} }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
@@ -336,12 +336,20 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const isActive = clip.id === layer.activeClipId;
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : ''),
-        title: isActive ? 'active — click another clip to trigger' : 'click to trigger',
+        title: isActive ? 'active — drag to reorder' : 'click to trigger · drag to reorder',
+        draggable: true,
       });
       cell.addEventListener('click', (e) => {
         if (e.target.closest('.clip-aff')) return;
         if (!isActive) commit(setActiveClip(show(), id, clip.id));
       });
+      // Drag this clip to reorder it (drop on another clip / empty slot).
+      cell.addEventListener('dragstart', (e) => {
+        drag = { kind: 'clip', clipId: clip.id };
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'clip:' + clip.id);
+      });
+      cell.addEventListener('dragend', () => { drag = null; });
       makeDropTarget(cell, (payload) => {
         if (payload.kind === 'source') {
           // Replace the source AND trigger so the result is immediately visible.
@@ -350,11 +358,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           commit(next);
         } else if (payload.kind === 'effect') {
           commit(addClipEffect(show(), id, clip.id, payload.name));
+        } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
+          // Reorder: move the dragged clip to this clip's position.
+          const cur = (firstLayer()?.clips || []);
+          const from = cur.findIndex((c) => c.id === payload.clipId);
+          const to = cur.findIndex((c) => c.id === clip.id);
+          if (from >= 0 && to >= 0) commit(moveClip(show(), id, payload.clipId, to - from));
         }
       });
+      // Thumbnail (source preview).
+      const thumb = thumbnails[clip.generator];
+      if (thumb) cell.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       cell.append(el('div', { className: 'clip-name', textContent: clip.name || clip.id }));
-      // Show the source as a sub-label only when the name differs from it
-      // (i.e. a custom-named clip) — otherwise it's redundant.
+      // Show the source as a sub-label only when the name differs from it.
       const genLabel = labelOf(clip.generator);
       if (genLabel && genLabel !== (clip.name || '')) {
         cell.append(el('div', { className: 'clip-gen', textContent: genLabel }));
@@ -363,10 +379,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
       const aff = el('div', { className: 'clip-aff' });
       aff.append(
-        el('button', { textContent: '◀', title: 'move clip earlier', disabled: ci === 0,
-          onclick: () => commit(moveClip(show(), id, clip.id, -1)) }),
-        el('button', { textContent: '▶', title: 'move clip later', disabled: ci === clips.length - 1,
-          onclick: () => commit(moveClip(show(), id, clip.id, +1)) }),
         el('button', { textContent: '✕', title: 'remove clip', className: 'ly-rmfx',
           onclick: () => commit(removeClip(show(), id, clip.id)) }),
       );
@@ -388,6 +400,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       ]);
       makeDropTarget(slot, (payload) => {
         if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
+        else if (payload.kind === 'clip') {
+          // Move the dragged clip to the end of the deck.
+          const cur = firstLayer()?.clips || [];
+          const from = cur.findIndex((c) => c.id === payload.clipId);
+          if (from >= 0) commit(moveClip(show(), id, payload.clipId, (cur.length - 1) - from));
+        }
       });
       deck.append(slot);
     }
@@ -538,9 +556,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const list = el('div', { className: 'lib-list' });
     for (const name of names) {
       const item = el('div', {
-        className: 'lib-item lib-' + kind, textContent: labelOf(name), draggable: true,
+        className: 'lib-item lib-' + kind, draggable: true,
         title: kind === 'source' ? 'drag onto a clip' : 'drag onto a clip or the drop zone',
       });
+      // Sources show a rendered thumbnail; effects keep just the label.
+      const thumb = kind === 'source' ? thumbnails[name] : null;
+      if (thumb) item.append(el('img', { className: 'lib-thumb', src: thumb, alt: '', draggable: false }));
+      item.append(el('span', { className: 'lib-label', textContent: labelOf(name) }));
       item.addEventListener('dragstart', (e) => {
         drag = { kind, name };
         e.dataTransfer.effectAllowed = 'copy';
