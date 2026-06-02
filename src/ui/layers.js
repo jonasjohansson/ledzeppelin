@@ -26,7 +26,9 @@ import {
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
+  setClipAnim, setLayerAnim,
 } from '../model/layers.js';
+import { DIRECTIONS, makeAnim, animatedValue } from '../model/anim.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -90,6 +92,48 @@ function paramControl(p, value, onInput) {
   return sliderField(p.key, v, min, max, onInput);
 }
 
+// A numeric param that can be BASIC (static slider) or TIMELINE (animated). The
+// "T" toggle flips modes; in Timeline mode the slider is tagged data-animkey so
+// the render loop can move it live, and a compact controls row appears
+// (direction · in · out · duration). Bool/colour params aren't animatable.
+//   onValue(v): set the static value · onAnim(spec|null): set/clear the animation
+function animatableParam({ key, p, value, anim, onValue, onAnim }) {
+  if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
+  const min = p.min ?? 0, max = p.max ?? 1;
+  const animated = !!anim;
+  const shown = animated ? anim.from : (value == null ? (p.default ?? min) : value);
+  const wrap = el('div', { className: 'anim-param' });
+  const row = sliderField(p.key, shown, min, max, onValue);
+  if (animated) {
+    const r = row.querySelector('input[type=range]');
+    if (r) r.dataset.animkey = key;
+    row.classList.add('is-animated');
+  }
+  row.append(el('button', {
+    className: 'anim-toggle' + (animated ? ' on' : ''), textContent: 'T',
+    title: animated ? 'animated (Timeline) — click for Basic' : 'animate (Timeline)',
+    onclick: (e) => { e.preventDefault(); onAnim(animated ? null : makeAnim(shown, max, 4000, 'forward')); },
+  }));
+  wrap.append(row);
+  if (animated) wrap.append(animControls(anim, onAnim));
+  return wrap;
+}
+
+// Compact Timeline controls: direction · in · out · duration(s).
+function animControls(anim, onAnim) {
+  const mini = (label, val, commit) => {
+    const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
+    i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
+    return el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
+  };
+  return el('div', { className: 'anim-ctrls' }, [
+    selectInput(DIRECTIONS, anim.direction, (d) => onAnim({ ...anim, direction: d })),
+    mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
+    mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
+    mini('s', anim.durationMs / 1000, (v) => onAnim({ ...anim, durationMs: Math.max(0, Math.round(v * 1000)) })),
+  ]);
+}
+
 // Module-level drag payload. HTML5 dataTransfer.getData isn't readable during
 // `dragover` (only on `drop`), but we need the kind there to decide whether a
 // target accepts the drag — so we stash it here on dragstart and clear on
@@ -109,6 +153,27 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (i === playheadIndex) return;
     playheadIndex = i;
     deckCells.forEach((cell, idx) => cell.classList.toggle('clip-playhead', idx === i));
+  }
+
+  // Move animated sliders to their live value at time t (selected clip + the
+  // composition FX). Cheap: only touches sliders tagged data-animkey.
+  function applyLive(container, anim, t) {
+    if (!anim || !container) return;
+    for (const k of Object.keys(anim)) {
+      const r = container.querySelector(`input[data-animkey="${k}"]`);
+      if (!r) continue;
+      const v = animatedValue(anim[k], t);
+      r.value = String(v);
+      const out = r.closest('.ly-param')?.querySelector('.ly-readout');
+      if (out) out.textContent = fmt(v);
+    }
+  }
+  function updateLive(t) {
+    const layer = firstLayer();
+    if (!layer) return;
+    const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
+    applyLive(mounts?.inspectorClip || root, active?.anim, t);
+    applyLive(mounts?.inspectorComposition || root, layer.anim, t);
   }
 
   // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).
@@ -219,8 +284,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (entry) {
       for (const p of entry.params) {
         const key = entry.name + '.' + p.key;
-        block.append(paramControl(p, layer?.params?.[key],
-          (v) => commitLive(setLayerParam(show(), id, key, v))));
+        block.append(animatableParam({
+          key, p, value: layer?.params?.[key], anim: layer?.anim?.[key],
+          onValue: (v) => commitLive(setLayerParam(show(), id, key, v)),
+          onAnim: (spec) => commit(setLayerAnim(show(), id, key, spec)),
+        }));
       }
     }
     return block;
@@ -334,8 +402,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (gen && gen.params.length) {
       for (const p of gen.params) {
         const key = gen.name + '.' + p.key;
-        box.append(paramControl(p, clip.params?.[key],
-          (v) => commitLive(setClipParam(show(), id, clip.id, key, v))));
+        box.append(animatableParam({
+          key, p, value: clip.params?.[key], anim: clip.anim?.[key],
+          onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
+          onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+        }));
       }
     }
 
@@ -391,8 +462,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (entry) {
       for (const p of entry.params) {
         const key = entry.name + '.' + p.key;
-        block.append(paramControl(p, clip.params?.[key],
-          (v) => commitLive(setClipParam(show(), id, clip.id, key, v))));
+        block.append(animatableParam({
+          key, p, value: clip.params?.[key], anim: clip.anim?.[key],
+          onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
+          onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+        }));
       }
     }
     return block;
@@ -446,7 +520,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   }
 
   render();
-  return { el: root, refresh: render, setPlayhead };
+  return { el: root, refresh: render, setPlayhead, updateLive };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we

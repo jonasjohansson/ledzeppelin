@@ -159,6 +159,26 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .ly-readout { color: var(--readout); font-variant-numeric: tabular-nums; }
 .ly-param input[type=range] { width: 100%; accent-color: var(--accent); }
 
+/* Per-parameter animation (Basic / Timeline). */
+.anim-param { display: flex; flex-direction: column; gap: 3px; }
+.anim-toggle {
+  flex: 0 0 auto; padding: 0 6px; min-width: 20px; line-height: 1.6; font-size: 10px;
+  color: var(--faint); border-color: var(--line);
+}
+.anim-toggle.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.is-animated input[type=range] { accent-color: var(--green); }
+.anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; }
+.anim-ctrls select {
+  flex: 0 0 auto; background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 3px; padding: 2px 4px; font: 10px var(--mono);
+}
+.anim-mini { display: flex; align-items: center; gap: 3px; font-size: 9px; color: var(--faint); }
+.anim-mini span { white-space: nowrap; }
+.anim-num {
+  width: 42px; background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 3px; padding: 1px 3px; font: 10px var(--mono); box-sizing: border-box;
+}
+
 /* Compact single-row param: name left · value · slider fills (Resolume-style). */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; }
 .ly-plabel { flex: 0 0 74px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

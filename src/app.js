@@ -14,6 +14,7 @@ import {
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
 import { syncShowFixtures } from './model/fixture-transform.js';
+import { resolveParams } from './model/anim.js';
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -309,6 +310,21 @@ function loop(ts) {
         layerPanel.setPlayhead(ph.index);
       }
     }
+    // Per-parameter animations run on a free-running clock (independent of the
+    // clip transport): resolve each layer's + clip's animated params to plain
+    // numbers at time t before compositing. resolveParams is a no-op (same ref)
+    // when nothing is animated, so this is cheap in the common case.
+    renderLayers = renderLayers.map((L) => {
+      const lp = resolveParams(L.params, L.anim, t);
+      let clips = L.clips;
+      if (clips && clips.some((c) => c.anim && Object.keys(c.anim).length)) {
+        clips = clips.map((c) => (c.anim && Object.keys(c.anim).length)
+          ? { ...c, params: resolveParams(c.params, c.anim, t) } : c);
+      }
+      return (lp === L.params && clips === L.clips) ? L : { ...L, params: lp, clips };
+    });
+    // Move the inspector's animated sliders live (selected clip + composition).
+    layerPanel.updateLive?.(t);
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.

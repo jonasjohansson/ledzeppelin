@@ -295,6 +295,25 @@ export function changeClipGenerator(show, layerId, clipId, generator) {
   });
 }
 
+// Set (or clear, when spec is null) a per-parameter animation on a clip. The
+// anim is keyed by the same namespaced param key as clip.params.
+export function setClipAnim(show, layerId, clipId, key, spec) {
+  return updateClip(show, layerId, clipId, (clip) => {
+    const anim = { ...(clip.anim || {}) };
+    if (spec) anim[key] = spec; else delete anim[key];
+    return { ...clip, anim };
+  });
+}
+
+// Set (or clear) a per-parameter animation on a layer (composition FX params).
+export function setLayerAnim(show, layerId, key, spec) {
+  return updateLayer(show, layerId, (layer) => {
+    const anim = { ...(layer.anim || {}) };
+    if (spec) anim[key] = spec; else delete anim[key];
+    return { ...layer, anim };
+  });
+}
+
 // Set a single (namespaced) param key on a clip.
 export function setClipParam(show, layerId, clipId, key, value) {
   return updateClip(show, layerId, clipId, (clip) =>
