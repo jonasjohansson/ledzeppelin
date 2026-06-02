@@ -29,7 +29,8 @@ import {
   setClipAnim, setLayerAnim, patchLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
-import { DIRECTIONS, makeAnim, animatedValue } from '../model/anim.js';
+import { DIRECTIONS, makeAnim, makeAudioAnim, animatedValue } from '../model/anim.js';
+import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
@@ -126,9 +127,11 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
     if (r) r.dataset.animkey = key;
     row.classList.add('is-animated');
   }
+  const isAudio = anim?.mode === 'audio';
   row.append(el('button', {
-    className: 'anim-toggle' + (animated ? ' on' : ''), textContent: 'T',
-    title: animated ? 'animated (Timeline) — click for Basic' : 'animate (Timeline)',
+    className: 'anim-toggle' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
+    textContent: isAudio ? 'A' : 'T',
+    title: animated ? 'animated — click for Basic (use the dropdown for Timeline/Audio)' : 'animate this parameter',
     onclick: (e) => { e.preventDefault(); onAnim(animated ? null : makeAnim(shown, max, 4000, 'forward')); },
   }));
   wrap.append(row);
@@ -136,19 +139,37 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   return wrap;
 }
 
-// Compact Timeline controls: direction · in · out · duration(s).
+// Controls for an animated param: a Timeline/Audio mode selector + the fields
+// for that mode (direction·in·out·s, or band·in·out·gain).
 function animControls(anim, onAnim) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
     i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
     return el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
   };
-  return el('div', { className: 'anim-ctrls' }, [
-    selectInput(DIRECTIONS, anim.direction, (d) => onAnim({ ...anim, direction: d })),
-    mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
-    mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
-    mini('s', anim.durationMs / 1000, (v) => onAnim({ ...anim, durationMs: Math.max(0, Math.round(v * 1000)) })),
-  ]);
+  const isAudio = anim.mode === 'audio';
+  const modeSel = selectInput(
+    [{ value: 'timeline', label: 'Timeline' }, { value: 'audio', label: 'Audio' }],
+    isAudio ? 'audio' : 'timeline',
+    (m) => {
+      if (m === 'audio') { enableAudio(); onAnim(makeAudioAnim(anim.from, anim.to, 'level', 1)); }
+      else onAnim(makeAnim(anim.from, anim.to, 4000, 'forward'));
+    },
+  );
+  const kids = [modeSel];
+  if (isAudio) {
+    kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
+      (bnd) => onAnim({ ...anim, band: bnd })));
+    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
+    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
+    kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
+  } else {
+    kids.push(selectInput(DIRECTIONS, anim.direction, (d) => onAnim({ ...anim, direction: d })));
+    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
+    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
+    kids.push(mini('s', anim.durationMs / 1000, (v) => onAnim({ ...anim, durationMs: Math.max(0, Math.round(v * 1000)) })));
+  }
+  return el('div', { className: 'anim-ctrls' }, kids);
 }
 
 // Module-level drag payload. HTML5 dataTransfer.getData isn't readable during
@@ -175,23 +196,23 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Move animated sliders to their live value at time t (selected clip + the
   // composition FX). Cheap: only touches sliders tagged data-animkey.
-  function applyLive(container, anim, t) {
+  function applyLive(container, anim, t, bands) {
     if (!anim || !container) return;
     for (const k of Object.keys(anim)) {
       const r = container.querySelector(`input[data-animkey="${k}"]`);
       if (!r) continue;
-      const v = animatedValue(anim[k], t);
+      const v = animatedValue(anim[k], t, bands);
       r.value = String(v);
       const out = r.closest('.ly-param')?.querySelector('.ly-readout');
       if (out) out.textContent = fmt(v);
     }
   }
-  function updateLive(t) {
+  function updateLive(t, bands) {
     const layer = firstLayer();
     if (!layer) return;
     const sel = (layer.clips || []).find((c) => c.id === selectedClipId);
-    applyLive(mounts?.inspectorClip || root, sel?.anim, t);
-    applyLive(mounts?.inspectorComposition || root, layer.anim, t);
+    applyLive(mounts?.inspectorClip || root, sel?.anim, t, bands);
+    applyLive(mounts?.inspectorComposition || root, layer.anim, t, bands);
   }
 
   // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).

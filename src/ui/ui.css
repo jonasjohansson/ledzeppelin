@@ -231,6 +231,8 @@ input[type=checkbox]:checked::after {
   color: var(--faint); border-color: var(--line);
 }
 .anim-toggle.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.anim-toggle.audio { color: var(--green); border-color: var(--green); background: rgba(93,209,163,.12); }
+.is-audio input[type=range] { accent-color: var(--green); }
 .is-animated input[type=range] { accent-color: var(--green); }
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; }
 .anim-ctrls select {

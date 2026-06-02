@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { animPhase, animatedValue, resolveParams, makeAnim } from '../src/model/anim.js';
+import { animPhase, animatedValue, resolveParams, makeAnim, makeAudioAnim } from '../src/model/anim.js';
 
 test('animPhase forward wraps 0..1 over the duration', () => {
   assert.equal(animPhase(0, 4000, 'forward'), 0);
@@ -43,4 +43,19 @@ test('resolveParams returns the same reference when there are no animations', ()
   const params = { a: 1 };
   assert.equal(resolveParams(params, undefined, 0), params);
   assert.equal(resolveParams(params, {}, 0), params);
+});
+
+test('audio anim maps a band (×gain, clamped) onto from..to', () => {
+  const spec = makeAudioAnim(0, 10, 'bass', 2);
+  assert.equal(animatedValue(spec, 0, { bass: 0 }), 0);
+  assert.equal(animatedValue(spec, 0, { bass: 0.25 }), 5);   // 0.25*2 = 0.5 → 5
+  assert.equal(animatedValue(spec, 0, { bass: 0.9 }), 10);   // 1.8 clamps to 1 → 10
+  assert.equal(animatedValue(spec, 0, {}), 0);               // missing band → 0
+});
+
+test('resolveParams handles audio specs', () => {
+  const params = { 'hue.shift': 0 };
+  const anim = { 'hue.shift': makeAudioAnim(0, 1, 'level', 1) };
+  const out = resolveParams(params, anim, 0, { level: 0.4 });
+  assert.ok(Math.abs(out['hue.shift'] - 0.4) < 1e-9);
 });
