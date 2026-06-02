@@ -82,29 +82,43 @@ html,body{ background:var(--bg); color:var(--text); }
   border-radius: 3px; padding: 3px 5px; font: 12px var(--mono); width: 100%; box-sizing: border-box;
 }
 
-/* Resolume-style shell: clip-slot deck + canvas monitor on the left, inspector
-   and library columns on the right (output editor replaces them on the Output
-   tab). */
-#layout { display: flex; gap: 10px; align-items: flex-start; padding: 8px; box-sizing: border-box; }
-
-#left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-#deckbar { flex: 0 0 auto; }
-
-#stagewrap { position: relative; width: 100%; }
-#stagewrap canvas#stage { width: 100%; height: auto; border: 1px solid #1c1c1c; display: block; }
-/* Preview overlay sits exactly over the WebGL stage; it is the drag surface. */
+/* Full-bleed canvas background: fixed behind everything, centred + letterboxed
+   to the composition aspect. The UI panels float over it (matte-style). */
+#stagewrap {
+  position: fixed; left: 0; right: 0; top: 40px; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 0; background: #000; pointer-events: none;
+}
+#stageinner { position: relative; line-height: 0; pointer-events: auto; }
+#stageinner canvas#stage {
+  display: block; width: auto; height: auto;
+  max-width: 96vw; max-height: calc(100vh - 56px); border: 1px solid #1c1c1c;
+}
+/* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-/* Shared right-side / deck panel chrome. */
+/* The panels overlay the canvas: the container passes clicks through to the
+   canvas, the panels themselves capture them. */
+#layout {
+  position: relative; z-index: 1; display: flex; gap: 10px;
+  align-items: flex-start; padding: 8px; box-sizing: border-box;
+  min-height: calc(100vh - 40px); pointer-events: none;
+}
+#left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+#deckbar { flex: 0 0 auto; }
+#deckbar, #inspector-col, #library-col, #output-view, #fixtures-view { pointer-events: auto; }
+
+/* Shared floating glass panel chrome. */
 .panel {
-  background: var(--panel);
+  background: rgba(20, 22, 27, .82);
+  backdrop-filter: blur(13px); -webkit-backdrop-filter: blur(13px);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   box-sizing: border-box;
 }
 #inspector-col { flex: 0 0 300px; max-height: calc(100vh - 52px); overflow-y: auto; }
-#library-col   { flex: 0 0 150px; max-height: calc(100vh - 52px); overflow-y: auto; }
+#library-col   { flex: 0 0 186px; max-height: calc(100vh - 52px); overflow-y: auto; }
 #output-view   { flex: 0 0 360px; max-height: calc(100vh - 52px); overflow-y: auto; }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }

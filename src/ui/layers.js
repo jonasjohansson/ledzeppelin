@@ -339,8 +339,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         title: isActive ? 'active — drag to reorder' : 'click to trigger · drag to reorder',
         draggable: true,
       });
-      cell.addEventListener('click', (e) => {
-        if (e.target.closest('.clip-aff')) return;
+      cell.addEventListener('click', () => {
         if (!isActive) commit(setActiveClip(show(), id, clip.id));
       });
       // Drag this clip to reorder it (drop on another clip / empty slot).
@@ -377,12 +376,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }
       const fxCount = (clip.effects || []).length;
       if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
-      const aff = el('div', { className: 'clip-aff' });
-      aff.append(
-        el('button', { textContent: '✕', title: 'remove clip', className: 'ly-rmfx',
-          onclick: () => commit(removeClip(show(), id, clip.id)) }),
-      );
-      cell.append(aff);
       if (isActive) cell.append(el('span', { className: 'clip-badge', textContent: '●' }));
       if (ci === playheadIndex) cell.classList.add('clip-playhead');
       deckCells.push(cell);
@@ -605,8 +598,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
   }
 
+  // Delete the active clip (bound to the Delete key by app.js).
+  function deleteActiveClip() {
+    const l = firstLayer();
+    if (l?.activeClipId) commit(removeClip(show(), l.id, l.activeClipId));
+  }
+
   render();
-  return { el: root, refresh: render, setPlayhead, updateLive };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we

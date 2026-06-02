@@ -130,6 +130,7 @@ function setCanvasSize(w, h) {
   const next = setCanvasSizeModel(show, w, h); // clamps + immutably updates canvas
   const c = next.composition.canvas;
   canvas.width = c.w; canvas.height = c.h;
+  if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
   compositor.dispose();
   compositor = makeCompositor(gl, c.w, c.h);
   rebuild(next);          // syncs fixtures to the new canvas + rebuilds sampler
@@ -139,6 +140,8 @@ function setCanvasSize(w, h) {
 
 // --- Preview overlay + editor panel wiring ---
 const previewCanvas = document.getElementById('preview');
+// Match the overlay's internal resolution to the stage so it doesn't distort.
+if (previewCanvas) { previewCanvas.width = canvas.width; previewCanvas.height = canvas.height; }
 const preview = previewCanvas ? createPreview(previewCanvas) : null;
 
 const panel = createFixturePanel({
@@ -346,6 +349,20 @@ tabsEl?.addEventListener('click', (ev) => {
   if (!b) return;
   view.activeTab = b.dataset.tab;
   applyView();
+});
+
+// Delete key removes the current selection: the active clip on Composition, or
+// the selected fixture on Output/Fixtures. Ignored while typing in a field.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (view.activeTab === 'composition') {
+    layerPanel.deleteActiveClip(); e.preventDefault();
+  } else if (selectedFixtureId) {
+    const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== selectedFixtureId);
+    selectedFixtureId = null; rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
+  }
 });
 
 // Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.

@@ -12,14 +12,18 @@ canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index
   <button id="tab-output" class="tab" data-tab="output">Output</button>
   <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
 </div>
+<!-- Full-bleed canvas background (matte-style): the composite is centred and
+     letterboxed to the composition aspect; the UI panels float over it. -->
+<div id="stagewrap">
+  <div id="stageinner">
+    <canvas id="stage"></canvas>
+    <canvas id="preview" width="1280" height="720"></canvas>
+  </div>
+</div>
 <div id="layout">
-  <!-- LEFT: clip-slot deck (Composition only) + canvas monitor / mapping view -->
+  <!-- LEFT: clip-slot deck (Composition only); spacer otherwise -->
   <div id="left">
     <section id="deckbar" class="panel"></section>
-    <div id="stagewrap">
-      <canvas id="stage"></canvas>
-      <canvas id="preview" width="1280" height="720"></canvas>
-    </div>
   </div>
 
   <!-- COMPOSITION view: inspector column (Clip | Composition sub-tabs) + library -->
