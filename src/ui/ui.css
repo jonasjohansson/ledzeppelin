@@ -169,6 +169,20 @@ button {
   border-radius: 5px; padding: 4px 8px; cursor: pointer; font: 12px var(--mono);
 }
 button:hover { background: var(--hover); border-color: var(--accent); }
+
+/* Custom checkbox to match the dark theme. */
+input[type=checkbox] {
+  appearance: none; -webkit-appearance: none; margin: 0;
+  width: 14px; height: 14px; flex: 0 0 auto; vertical-align: middle;
+  border: 1px solid var(--line-2); border-radius: 3px; background: var(--field-bg);
+  cursor: pointer; position: relative;
+}
+input[type=checkbox]:hover { border-color: var(--accent); }
+input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px;
+  border: solid #06121b; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
 .fx-del { grid-column: 1 / -1; margin-top: 4px; color: var(--danger); border-color: rgba(255,107,107,.4); }
 .fx-add { align-self: flex-start; }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
@@ -328,40 +342,37 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .clip-empty-plus { font-size: 18px; color: var(--faint); line-height: 1; }
 .clip-empty:hover .clip-empty-plus { color: var(--accent); }
 
-/* Clip slot thumbnail: the rendered source fills the slot; text sits on top. */
-.clip-cell { overflow: hidden; min-height: 78px; }
-.clip-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; opacity: .5; }
-.clip-cell .clip-name, .clip-cell .clip-gen, .clip-cell .clip-fxcount,
-.clip-cell .clip-aff, .clip-cell .clip-badge { position: relative; z-index: 1; }
-.clip-cell .clip-name { text-shadow: 0 1px 3px rgba(0,0,0,.9); }
-.clip-active .clip-thumb { opacity: .72; }
+/* Clip slot: thumbnail on top, a label bar UNDERNEATH (Resolume-style). */
+.clip-thumbwrap { position: relative; height: 48px; width: 100%; background: #000; }
+.clip-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.clip-label-bar {
+  padding: 4px 7px; font-size: 11px; font-weight: 600; color: var(--text);
+  background: var(--surface-2); border-top: 1px solid var(--line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.clip-fxcount {
+  position: absolute; top: 3px; right: 4px; font-size: 9px; color: var(--amber);
+  background: rgba(0,0,0,.6); padding: 0 4px; border-radius: 3px;
+}
+/* ACTIVE = playing (green label bar) · SELECTED = inspector target (accent ring) */
+.clip-active .clip-label-bar { background: var(--green); color: #06140d; }
+.clip-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 
 /* Library item: thumbnail + label (sources), label-only (effects). */
 .lib-item { display: flex; align-items: center; gap: 7px; }
 .lib-thumb { width: 30px; height: 19px; flex: 0 0 auto; object-fit: cover; border-radius: 3px; border: 1px solid var(--line); }
 .lib-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clip-cell {
-  position: relative; flex: 0 0 auto; width: 96px;
-  background: var(--surface); border: 1px solid var(--field-border); border-radius: 5px;
-  padding: 6px 6px 4px; cursor: pointer; user-select: none;
-  transition: border-color .12s, box-shadow .12s, background .12s;
+  position: relative; flex: 0 0 auto; width: 104px;
+  background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px;
+  overflow: hidden; cursor: pointer; user-select: none; display: flex; flex-direction: column;
+  transition: border-color .12s, box-shadow .12s;
 }
-.clip-cell:hover { background: var(--hover); border-color: var(--line-2); }
-.clip-name { font-size: 11px; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.clip-gen { font-size: 10px; color: var(--cyan); margin-top: 1px; opacity: .85; }
-.clip-active {
-  border-color: var(--green); background: rgba(93,209,163,.10);
-  box-shadow: 0 0 0 1px var(--green), 0 0 10px rgba(93,209,163,.4);
+.clip-cell:hover { border-color: var(--line-2); }
+.clip-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; cursor: default; border-style: dashed;
 }
-.clip-active .clip-name { color: #d8ffec; }
-.clip-badge {
-  position: absolute; top: 4px; right: 6px; font-size: 9px; color: var(--green);
-  text-shadow: 0 0 4px rgba(93,209,163,.8);
-}
-.clip-aff { display: flex; gap: 3px; margin-top: 5px; }
-.clip-aff button { padding: 0 5px; line-height: 1.5; min-width: 20px; font-size: 10px; }
-.clip-aff button:disabled { opacity: .35; cursor: default; }
-.clip-add { display: flex; flex-direction: column; gap: 4px; cursor: default; border-style: dashed; }
 .clip-add:hover { background: var(--surface); }
 .clip-add select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
@@ -398,7 +409,6 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--faint);
   border: 1px dashed var(--field-border); border-radius: 5px; padding: 8px; margin-top: 4px;
 }
-.clip-fxcount { font-size: 9px; color: var(--amber); margin-top: 1px; }
 .comp-fx { margin-top: 10px; border-top: 1px solid var(--border-2); padding-top: 6px; }
 
 /* Transport bar (play-through of the clip timeline). */
@@ -417,7 +427,6 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   box-shadow: 0 0 0 1px var(--amber), 0 0 8px rgba(232,178,127,.5);
   border-color: var(--amber) !important;
 }
-.clip-src { grid-column: 1 / -1; font-size: 11px; color: var(--accent); }
 
 /* Active-clip editor: the panel below the deck that edits the lit clip. */
 .clip-editor {

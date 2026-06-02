@@ -16,7 +16,7 @@ export function createPreview(canvasEl, opts = {}) {
 
   const isSelected = (sel, id) => sel && (sel.has ? sel.has(id) : sel === id);
 
-  function draw(show, rgba, selectedIds = null, snapGrid = 0) {
+  function draw(show, rgba, selectedIds = null, snapGrid = 0, guides = null) {
     const W = canvasEl.width, Hh = canvasEl.height;
     // Transparent overlay: the live composite (WebGL stage) shows THROUGH, so in
     // Output you see the canvas content and can place fixtures over it.
@@ -26,6 +26,16 @@ export function createPreview(canvasEl, opts = {}) {
       ctx.strokeStyle = 'rgba(255,255,255,.09)'; ctx.lineWidth = 1;
       for (let x = 0; x <= W; x += snapGrid) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, Hh); ctx.stroke(); }
       for (let y = 0; y <= Hh; y += snapGrid) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
+    }
+    // Alignment guides (snapping to other fixtures / canvas centre).
+    if (guides && guides.length) {
+      ctx.strokeStyle = 'rgba(232,178,127,.85)'; ctx.lineWidth = 1;
+      for (const g of guides) {
+        ctx.beginPath();
+        if (g.axis === 'x') { ctx.moveTo(g.v + 0.5, 0); ctx.lineTo(g.v + 0.5, Hh); }
+        else { ctx.moveTo(0, g.v + 0.5); ctx.lineTo(W, g.v + 0.5); }
+        ctx.stroke();
+      }
     }
     if (!show || !show.fixtures?.length) return;
 
@@ -97,7 +107,7 @@ export function createPreview(canvasEl, opts = {}) {
 // let the user drag to reposition the whole fixture (its pixel-space transform
 // x/y). On every move it derives a new show via setFixtureTransform and calls
 // onEdit(nextShow); on release onCommit. Width/height/rotation are numeric.
-export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected }, opts = {}) {
+export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap }, opts = {}) {
   const hitR = opts.hitRadius ?? 18;
   let dragState = null; // { items:[{id,x0,y0}], px0, py0, cv }
   // Gate: drag editing is only active when enabled (Output tab → Input mode).
@@ -164,10 +174,11 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     if (!enabled || !dragState) return;
     const [pxNow, pyNow] = canvasPx(ev, dragState.cv);
     const dx = pxNow - dragState.px0, dy = pyNow - dragState.py0;
+    const draggedIds = dragState.items.map((it) => it.id);
     let next = getShow();
     for (const it of dragState.items) {
       let nx = it.x0 + dx, ny = it.y0 + dy;
-      if (opts.snap) { const s = opts.snap(nx, ny); nx = s[0]; ny = s[1]; }
+      if (snap) { const s = snap(nx, ny, draggedIds); nx = s[0]; ny = s[1]; }
       next = setFixtureTransform(next, it.id, { x: nx, y: ny });
     }
     onEdit?.(next);

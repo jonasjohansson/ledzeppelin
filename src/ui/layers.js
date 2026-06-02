@@ -158,10 +158,11 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {} }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
+  let selectedClipId = null; // inspector target — SELECT (click) is decoupled from ACTIVE (trigger)
 
   function setPlayhead(i) {
     if (i === playheadIndex) return;
@@ -185,8 +186,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function updateLive(t) {
     const layer = firstLayer();
     if (!layer) return;
-    const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
-    applyLive(mounts?.inspectorClip || root, active?.anim, t);
+    const sel = (layer.clips || []).find((c) => c.id === selectedClipId);
+    applyLive(mounts?.inspectorClip || root, sel?.anim, t);
     applyLive(mounts?.inspectorComposition || root, layer.anim, t);
   }
 
@@ -313,9 +314,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       clipDeck(layer, id),
     ]));
 
-    // --- CLIP inspector: selected clip ---------------------------------------
-    const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
-    if (active) clipEl.append(selectedClipEditor(id, active));
+    // --- CLIP inspector: the SELECTED clip (defaults to the active one) -------
+    const clips = layer.clips || [];
+    if (!clips.some((c) => c.id === selectedClipId)) selectedClipId = layer.activeClipId;
+    const selClip = clips.find((c) => c.id === selectedClipId);
+    if (selClip) clipEl.append(selectedClipEditor(id, selClip));
     else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clip selected' }));
 
     // --- LAYER inspector: layer settings -------------------------------------
@@ -426,14 +429,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     for (let ci = 0; ci < clips.length; ci++) {
       const clip = clips[ci];
       const isActive = clip.id === layer.activeClipId;
+      const isSelected = clip.id === selectedClipId;
       const cell = el('div', {
-        className: 'clip-cell' + (isActive ? ' clip-active' : ''),
-        title: isActive ? 'active — drag to reorder' : 'click to trigger · drag to reorder',
+        className: 'clip-cell' + (isActive ? ' clip-active' : '') + (isSelected ? ' clip-selected' : ''),
+        title: 'click to select · double-click to trigger · drag to reorder',
         draggable: true,
       });
-      cell.addEventListener('click', () => {
-        if (!isActive) commit(setActiveClip(show(), id, clip.id));
-      });
+      // Click = SELECT (edit in inspector) without activating; double-click = trigger.
+      // Selecting also focuses the Clip inspector tab (onClipSelect).
+      const selectThis = () => { selectedClipId = clip.id; onClipSelect?.(); };
+      cell.addEventListener('click', () => { selectThis(); render(); });
+      cell.addEventListener('dblclick', () => { selectThis(); commit(setActiveClip(show(), id, clip.id)); });
       // Drag this clip to reorder it (drop on another clip / empty slot).
       cell.addEventListener('dragstart', (e) => {
         drag = { kind: 'clip', clipId: clip.id };
@@ -443,10 +449,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       cell.addEventListener('dragend', () => { drag = null; });
       makeDropTarget(cell, (payload) => {
         if (payload.kind === 'source') {
-          // Replace the source AND trigger so the result is immediately visible.
-          let next = changeClipGenerator(show(), id, clip.id, payload.name);
-          next = setActiveClip(next, id, clip.id);
-          commit(next);
+          // Replace the source AND select it (no auto-trigger).
+          selectThis();
+          commit(changeClipGenerator(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'effect') {
           commit(addClipEffect(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
@@ -457,18 +462,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           if (from >= 0 && to >= 0) commit(moveClip(show(), id, payload.clipId, to - from));
         }
       });
-      // Thumbnail (source preview).
+      // Thumbnail (top) + a label bar UNDERNEATH (Resolume-style).
+      const thumbWrap = el('div', { className: 'clip-thumbwrap' });
       const thumb = thumbnails[clip.generator];
-      if (thumb) cell.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
-      cell.append(el('div', { className: 'clip-name', textContent: clip.name || clip.id }));
-      // Show the source as a sub-label only when the name differs from it.
-      const genLabel = labelOf(clip.generator);
-      if (genLabel && genLabel !== (clip.name || '')) {
-        cell.append(el('div', { className: 'clip-gen', textContent: genLabel }));
-      }
+      if (thumb) thumbWrap.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       const fxCount = (clip.effects || []).length;
-      if (fxCount) cell.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
-      if (isActive) cell.append(el('span', { className: 'clip-badge', textContent: '●' }));
+      if (fxCount) thumbWrap.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
+      cell.append(thumbWrap);
+      cell.append(el('div', { className: 'clip-label-bar', textContent: clip.name || clip.id }));
       if (ci === playheadIndex) cell.classList.add('clip-playhead');
       deckCells.push(cell);
       deck.append(cell);
@@ -503,9 +504,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const name = el('input', { className: 'ly-nameedit', value: layer.name ?? 'Layer 1', title: 'layer name' });
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
     box.append(el('div', { className: 'clip-editor-head' }, [name]));
-    box.append(el('div', { className: 'fx-pts', textContent: 'blend' }));
-    box.append(field('mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
-      (x) => commit(patchLayer(show(), id, { blend: x })))));
     box.append(sliderField('opacity', layer.opacity ?? 1, 0, 1,
       (v) => commitLive(patchLayer(show(), id, { opacity: v })), 1));
     box.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
@@ -534,15 +532,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     opCol.append(opOut, opRange);
     body.append(opCol);
 
-    // Clear (eject active clip) + blend mode.
+    // Clear (eject active clip).
     const ctrls = el('div', { className: 'lh-ctrls' });
     ctrls.append(el('button', {
       className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
       onclick: () => commit(setActiveClip(show(), id, null)),
     }));
-    ctrls.append(el('span', { className: 'lh-blend-label', textContent: 'blend' }));
-    ctrls.append(selectInput(BLEND_MODES, layer.blend ?? 'add',
-      (x) => commit(patchLayer(show(), id, { blend: x }))));
     body.append(ctrls);
     head.append(body);
 
@@ -723,10 +718,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
   }
 
-  // Delete the active clip (bound to the Delete key by app.js).
+  // Delete the selected clip (bound to the Delete key by app.js).
   function deleteActiveClip() {
     const l = firstLayer();
-    if (l?.activeClipId) commit(removeClip(show(), l.id, l.activeClipId));
+    const target = selectedClipId || l?.activeClipId;
+    if (l && target) commit(removeClip(show(), l.id, target));
   }
 
   render();

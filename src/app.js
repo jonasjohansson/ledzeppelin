@@ -171,6 +171,7 @@ const layerPanel = createLayerPanel({
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
   thumbnails,
+  onClipSelect: () => setInspectorTab('clip'), // clicking a clip focuses the Clip inspector
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -217,14 +218,36 @@ compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop t
 fixturesPanels?.append(importPanel.el);
 fixturesPanels?.append(panel.el);
 
-// Output selection: a SET of selected fixtures (multi-select), and snap-to-grid.
+// Output selection: a SET of selected fixtures (multi-select), and snapping.
 let selectedFixtureIds = new Set();
 const SNAP_GRID = 20;
+const SNAP_DIST = 10;   // px tolerance for aligning to another fixture / centre
 let snapEnabled = false;
-const snapPoint = (x, y) => snapEnabled
-  ? [Math.round(x / SNAP_GRID) * SNAP_GRID, Math.round(y / SNAP_GRID) * SNAP_GRID]
-  : [x, y];
-const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0);
+let snapGuides = [];    // alignment guide lines to draw during a snapped drag
+
+// Snap a proposed (x,y) for the fixture(s) `draggedIds`: align to OTHER
+// fixtures' centres or the canvas centre (records guides); fall back to the grid
+// on any axis that didn't align.
+function snapPoint(x, y, draggedIds) {
+  snapGuides = [];
+  if (!snapEnabled) return [x, y];
+  const ex = new Set(draggedIds || []);
+  const cv = show.composition?.canvas || { w: 1280, h: 720 };
+  const xs = [cv.w / 2], ys = [cv.h / 2];
+  for (const f of show.fixtures || []) {
+    if (ex.has(f.id)) continue;
+    const tf = f.input?.transform; if (tf) { xs.push(tf.x); ys.push(tf.y); }
+  }
+  let sx = x, sy = y, bdx = SNAP_DIST, bdy = SNAP_DIST, snappedX = false, snappedY = false;
+  for (const tx of xs) { const d = Math.abs(x - tx); if (d < bdx) { bdx = d; sx = tx; snappedX = true; } }
+  for (const ty of ys) { const d = Math.abs(y - ty); if (d < bdy) { bdy = d; sy = ty; snappedY = true; } }
+  if (!snappedX) sx = Math.round(x / SNAP_GRID) * SNAP_GRID;
+  if (!snappedY) sy = Math.round(y / SNAP_GRID) * SNAP_GRID;
+  if (snappedX) snapGuides.push({ axis: 'x', v: sx });
+  if (snappedY) snapGuides.push({ axis: 'y', v: sy });
+  return [sx, sy];
+}
+const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);
 
 // Update the selection from a click. shift = toggle; clicking an already-selected
 // fixture keeps the group (so it can be dragged); a new one selects just it.
@@ -247,7 +270,7 @@ if (previewCanvas) {
     getSelected: () => selectedFixtureIds,
     onSelect: (fxId, ev) => selectFixture(fxId, ev),
     onEdit: (next) => { show = next; redrawOverlay(); },         // live, no rebuild churn
-    onCommit: (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
+    onCommit: (next) => { snapGuides = []; saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
     snap: snapPoint,
     enabled: false, // gated by view state below; default tab is Composition
   });
@@ -419,13 +442,14 @@ const inspPanes = {
   layer: document.getElementById('insp-layer'),
   composition: document.getElementById('insp-composition'),
 };
-inspTabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.subtab');
-  if (!b) return;
-  const which = b.dataset.itab;
-  inspTabsEl.querySelectorAll('.subtab').forEach((x) =>
+function setInspectorTab(which) {
+  inspTabsEl?.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.itab === which));
   for (const [k, pane] of Object.entries(inspPanes)) if (pane) pane.hidden = k !== which;
+}
+inspTabsEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.subtab');
+  if (b) setInspectorTab(b.dataset.itab);
 });
 
 applyView();
@@ -474,7 +498,7 @@ function loop(ts) {
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     lastRGBA = sampler.sample(compositor.tex);
     bridge?.send(lastRGBA);
-    preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0);
+    preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
