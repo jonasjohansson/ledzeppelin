@@ -222,11 +222,33 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .ly-fx-clip { border-color: #3a3320; }
 .ly-fx-layer { border-color: #20303a; }
 
+/* --- Layer row (header + slot grid), Resolume-style --- */
+.deck-layer { display: flex; align-items: stretch; gap: 8px; margin: 4px 0 6px; }
+.layer-head-box {
+  flex: 0 0 130px; display: flex; flex-direction: column; gap: 5px; justify-content: center;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 7px;
+}
+.layer-op { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 6px; }
+.layer-op-label { font-size: 9px; color: var(--muted); letter-spacing: .04em; }
+.layer-op .ly-readout { grid-column: 2; justify-self: end; font-size: 10px; }
+.layer-op input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.layer-head-box select {
+  background: #0d0d0d; color: var(--text); border: 1px solid var(--line-2);
+  border-radius: 3px; padding: 2px 4px; font: 11px var(--mono); width: 100%; box-sizing: border-box;
+}
+
 /* --- Clip deck (Resolume-style) --- */
 .clip-deck {
-  grid-column: 1 / -1;
-  display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px;
+  flex: 1 1 auto;
+  display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-content: flex-start;
 }
+/* Empty placeholder slot: dashed, dimmer than a filled clip. */
+.clip-empty {
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  border-style: dashed; border-color: var(--line); background: #101216; cursor: pointer; opacity: .8;
+}
+.clip-empty:hover { opacity: 1; border-color: var(--accent); }
+.clip-empty .clip-gen { color: var(--faint); }
 .clip-cell {
   position: relative; flex: 0 0 auto; width: 96px;
   background: #141414; border: 1px solid #2a2a2a; border-radius: 5px;

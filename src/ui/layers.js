@@ -26,9 +26,11 @@ import {
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
-  setClipAnim, setLayerAnim,
+  setClipAnim, setLayerAnim, patchLayer,
 } from '../model/layers.js';
 import { DIRECTIONS, makeAnim, animatedValue } from '../model/anim.js';
+
+const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -216,15 +218,20 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
     const id = layer.id;
 
-    // --- DECK region: transport + clip-slot strip ----------------------------
+    // --- DECK region: transport + a layer row (header + clip-slot grid) -------
     const deckHead = el('div', { className: 'composer-deckhead' }, [
       el('div', { className: 'composer-label', textContent: 'TIMELINE' }),
     ]);
     if (transport) deckHead.append(transportBar());
     deckEl.append(deckHead);
     deckEl.append(el('div', { className: 'ly-hint',
-      textContent: 'click to trigger · drag a source onto a slot · ▶ plays through slots' }));
-    deckEl.append(clipDeck(layer, id));
+      textContent: 'click a slot to trigger · drag a source onto an empty slot · ▶ plays through slots' }));
+    // A Resolume-style layer row: a header (name · opacity · blend) on the left,
+    // then the slot grid (filled clips + empty placeholder slots).
+    deckEl.append(el('div', { className: 'deck-layer' }, [
+      layerHead(layer, id),
+      clipDeck(layer, id),
+    ]));
 
     // --- CLIP inspector: selected clip ---------------------------------------
     const active = (layer.clips || []).find((c) => c.id === layer.activeClipId);
@@ -367,19 +374,59 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       deck.append(cell);
     }
 
-    // Add-clip cell: a drop target for sources + a <select> fallback.
-    const addCell = el('div', { className: 'clip-cell clip-add' }, [
-      el('div', { className: 'clip-name', textContent: '+ add clip' }),
-      el('div', { className: 'clip-gen', textContent: 'drop a source' }),
-      selectInput([{ value: '', label: 'or pick…' }, ...generatorNames()], '', (x) => {
-        if (x) commit(addClip(show(), id, x));
-      }),
-    ]);
-    makeDropTarget(addCell, (payload) => {
-      if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
-    });
-    deck.append(addCell);
+    // Empty placeholder slots (Resolume-style): pad the row so there are always
+    // a few empty slots after the clips. Drop a source on one (or click it) to
+    // add a clip there. The first empty cell carries a generator <select> as a
+    // no-drag fallback.
+    const MIN_SLOTS = 8;
+    const emptyCount = Math.max(2, MIN_SLOTS - clips.length);
+    for (let e = 0; e < emptyCount; e++) {
+      const slot = el('div', { className: 'clip-cell clip-empty', title: 'empty slot — drop a source here' });
+      if (e === 0) {
+        slot.append(
+          el('div', { className: 'clip-gen', textContent: 'drop a source' }),
+          selectInput([{ value: '', label: 'or pick…' }, ...generatorNames()], '', (x) => {
+            if (x) commit(addClip(show(), id, x));
+          }),
+        );
+      } else {
+        slot.addEventListener('click', (ev) => {
+          if (ev.target.closest('select')) return;
+          commit(addClip(show(), id, generatorNames()[0] || 'line'));
+        });
+      }
+      makeDropTarget(slot, (payload) => {
+        if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
+      });
+      deck.append(slot);
+    }
     return deck;
+  }
+
+  // Resolume-style layer header: name · opacity · blend, on the left of the row.
+  function layerHead(layer, id) {
+    const head = el('div', { className: 'layer-head-box' });
+    const name = el('input', {
+      className: 'ly-nameedit', value: layer.name ?? 'layer', title: 'layer name',
+    });
+    name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
+    head.append(name);
+
+    const opWrap = el('div', { className: 'layer-op' });
+    const opOut = el('span', { className: 'ly-readout', textContent: fmt(layer.opacity ?? 1) });
+    const opRange = el('input', {
+      type: 'range', min: '0', max: '1', step: '0.001', value: String(layer.opacity ?? 1),
+    });
+    opRange.addEventListener('input', () => {
+      opOut.textContent = fmt(Number(opRange.value));
+      commitLive(patchLayer(show(), id, { opacity: Number(opRange.value) }));
+    });
+    opWrap.append(el('span', { className: 'layer-op-label', textContent: 'opacity' }), opOut, opRange);
+    head.append(opWrap);
+
+    head.append(selectInput(BLEND_MODES, layer.blend ?? 'add',
+      (x) => commit(patchLayer(show(), id, { blend: x }))));
+    return head;
   }
 
   // Editor for the layer's active clip: rename, source params, and its effect
