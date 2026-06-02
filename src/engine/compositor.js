@@ -88,6 +88,9 @@ export function makeCompositor(gl, w, h) {
   //   layerId → { displayed:<clipId>, transition:{ fromClipId, toClipId, startT }|null }
   const layerState = new Map();
 
+  // Per-frame env (e.g. { trigSec } for triggerable sources). Set in render().
+  let frameEnv = {};
+
   // Lazily-compiled programs, keyed by registry name (+ reserved blit/xfade keys).
   // Each cached entry: { prog, uniforms: Map<string, WebGLUniformLocation|null> }.
   const cache = new Map();
@@ -132,6 +135,14 @@ export function makeCompositor(gl, w, h) {
     // uT (seconds) — always try; only set if the shader declares it.
     const uT = loc(c, 'uT');
     if (uT !== null) gl.uniform1f(uT, timeSec);
+
+    // uTrig — seconds since the last trigger (from frameEnv.trigSec); huge before
+    // the first trigger so triggerable sources (Pulse) stay idle until fired.
+    const uTrig = loc(c, 'uTrig');
+    if (uTrig !== null) {
+      const trig = frameEnv.trigSec;
+      gl.uniform1f(uTrig, trig == null ? 1e6 : (timeSec - trig));
+    }
 
     if (srcTex != null) {
       const uTex = loc(c, 'uTex');
@@ -265,8 +276,9 @@ export function makeCompositor(gl, w, h) {
     return { fromClip, toClip, progress };
   }
 
-  function render(layers, timeSec) {
+  function render(layers, timeSec, env) {
     const list = layers || [];
+    frameEnv = env || {};
 
     // Drop runtime state for layers that no longer exist (avoid unbounded growth).
     if (layerState.size) {

@@ -159,6 +159,12 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .ly-readout { color: var(--readout); font-variant-numeric: tabular-nums; }
 .ly-param input[type=range] { width: 100%; accent-color: var(--accent); }
 
+/* Compact single-row param: name left · value · slider fills (Resolume-style). */
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; }
+.ly-plabel { flex: 0 0 74px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-row .ly-readout { flex: 0 0 auto; min-width: 38px; text-align: right; }
+.ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
+
 .ly-fx { border: 1px solid #242424; border-radius: 4px; padding: 6px; margin: 4px 0; background: #121212; }
 .ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .ly-fxname { color: var(--amber); font-size: 11px; }
@@ -261,6 +267,9 @@ button:hover { background: var(--hover); border-color: var(--accent); }
 .transport-play.is-playing { color: var(--danger); border-color: rgba(255,107,107,.5); background: rgba(255,107,107,.08); }
 .transport-loop { display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--muted); }
 .transport-loop input { width: auto; accent-color: var(--accent); }
+.transport-fire { padding: 2px 10px; font-size: 11px; font-weight: 600; color: var(--amber); border-color: rgba(232,178,127,.5); }
+.transport-fire:hover { background: rgba(232,178,127,.12); border-color: var(--amber); }
+.transport-fire:active { background: rgba(232,178,127,.28); }
 
 /* Playhead highlight: the slot the transport is currently on. */
 .clip-playhead {

@@ -30,8 +30,9 @@ const sliderRow = (label, value, min, max, onInput) => {
     type: 'range', min: String(min), max: String(max), step: '1', value: String(value ?? 0),
   });
   range.addEventListener('input', () => { out.textContent = range.value; onInput(Number(range.value)); });
-  const head = el('span', { className: 'ly-pkey' }, [el('span', { textContent: label }), out]);
-  return el('label', { className: 'fx-field ly-param' }, [head, range]);
+  return el('label', { className: 'fx-field ly-param ly-row' }, [
+    el('span', { className: 'ly-plabel', textContent: label }), out, range,
+  ]);
 };
 
 // gcd-based aspect string (e.g. 1280×720 → "16:9"). Falls back to "—" on 0.

@@ -35,6 +35,55 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform float level;
 void main(){ frag=vec4(vec3(level),1.0); }`;
 
+// Checkered test source — set resolution in cols × rows (after Resolume's
+// Checkered). Alternating black/white cells; the go-to pattern for verifying the
+// fixture mapping over the installation.
+const CHECKERS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float cols; uniform float rows;
+void main(){
+  float c = floor(uv.x * max(1.0, cols)) + floor(uv.y * max(1.0, rows));
+  frag = vec4(vec3(mod(c, 2.0)), 1.0);
+}`;
+
+// Grid test source — cols × rows cells outlined by lines of `thickness`. Useful
+// for aligning fixtures to a known canvas grid.
+const GRID = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float cols; uniform float rows; uniform float thickness;
+void main(){
+  vec2 g = abs(fract(uv * vec2(max(1.0, cols), max(1.0, rows))) - 0.5);
+  float t = 0.5 - clamp(thickness, 0.0, 0.5);
+  float line = step(t, g.x) + step(t, g.y);
+  frag = vec4(vec3(clamp(line, 0.0, 1.0)), 1.0);
+}`;
+
+// Pulse — a triggerable beam (after Resolume's PulseBeam): a head of light that
+// travels across the canvas leaving a decaying trail. Fire it with the ⚡ button
+// (uTrig = seconds since the last trigger), or enable autoFire to loop on uT.
+const PULSE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT; uniform float uTrig;
+uniform float speed; uniform float headWidth; uniform float trailLength;
+uniform float trailSoftness; uniform float autoFire;
+void main(){
+  float sp = max(0.0001, speed);
+  // Head position 0..1+. autoFire loops on uT; otherwise advance from the last
+  // trigger. uTrig is huge before the first trigger → the pulse sits off-canvas.
+  float prog = (autoFire > 0.5) ? fract(uT * sp) : uTrig * sp;
+  float d = prog - uv.x;            // distance behind the leading edge
+  float v = 0.0;
+  if (d >= 0.0) {
+    if (d < headWidth) v = 1.0;     // solid head band
+    else {
+      float td = (d - headWidth) / max(1e-4, trailLength);
+      if (td <= 1.0) v = pow(1.0 - td, mix(1.0, 4.0, trailSoftness)); // decaying trail
+    }
+  }
+  if (autoFire < 0.5 && prog > 1.0 + trailLength) v = 0.0; // spent → dark
+  frag = vec4(vec3(v), 1.0);
+}`;
+
 const DISPLACE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float amt; uniform float uT;
@@ -114,6 +163,31 @@ export const REGISTRY = {
       { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
     ],
   },
+  checkers: {
+    name: 'checkers', type: 'generator', src: CHECKERS,
+    params: [
+      { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
+      { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
+    ],
+  },
+  grid: {
+    name: 'grid', type: 'generator', src: GRID,
+    params: [
+      { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
+      { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
+      { key: 'thickness', type: 'float', min: 0, max: 0.5, default: 0.06 },
+    ],
+  },
+  pulse: {
+    name: 'pulse', type: 'generator', src: PULSE,
+    params: [
+      { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'headWidth', type: 'float', min: 0, max: 0.3, default: 0.04 },
+      { key: 'trailLength', type: 'float', min: 0, max: 1, default: 0.3 },
+      { key: 'trailSoftness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'autoFire', type: 'bool', default: false },
+    ],
+  },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -154,6 +228,7 @@ export const REGISTRY = {
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Solid Color',
+  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', hue: 'Hue',
 };

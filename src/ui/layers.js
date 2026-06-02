@@ -67,10 +67,10 @@ const sliderField = (label, value, min, max, onInput) => {
     out.textContent = fmt(v);
     onInput(v);
   });
-  const head = el('span', { className: 'ly-pkey' }, [
-    el('span', { textContent: label }), out,
+  // Single row: name left, value, slider fills the rest (Resolume-style, compact).
+  return el('label', { className: 'fx-field ly-param ly-row' }, [
+    el('span', { className: 'ly-plabel', textContent: label }), out, range,
   ]);
-  return el('label', { className: 'fx-field ly-param' }, [head, range]);
 };
 
 // Build a control for one manifest param.
@@ -239,6 +239,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop() });
     loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
     bar.append(el('label', { className: 'transport-loop' }, [loopCb, el('span', { textContent: 'loop' })]));
+    if (transport.fire) {
+      bar.append(el('button', {
+        className: 'transport-fire', textContent: '⚡ trigger',
+        title: 'fire triggerable sources (Pulse)',
+        onclick: () => transport.fire(),
+      }));
+    }
     return bar;
   }
 
