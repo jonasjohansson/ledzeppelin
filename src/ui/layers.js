@@ -236,6 +236,42 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return out;
   };
 
+  // A single "⋯" options button for an EFFECT: a popover menu with preset load,
+  // save, reset and remove. Replaces the row of arrow/preset/✕ buttons.
+  function fxMenu({ presetName, getParams, applyParams, onReset, onRemove }) {
+    const wrap = el('div', { className: 'fx-menu-wrap' });
+    const menu = el('div', { className: 'fx-menu', hidden: true });
+    const close = () => { menu.hidden = true; };
+    const item = (label, onClick, cls = '') => el('button', {
+      className: 'fx-menu-item ' + cls, textContent: label,
+      onclick: (e) => { e.stopPropagation(); onClick(); },
+    });
+    const names = listPresets('effect', presetName);
+    if (names.length) {
+      menu.append(el('div', { className: 'fx-menu-label', textContent: 'presets' }));
+      for (const n of names) menu.append(item(n, () => { const p = loadPreset('effect', presetName, n); if (p) applyParams(p); close(); }));
+      menu.append(el('div', { className: 'fx-menu-sep' }));
+    }
+    menu.append(item('Save preset…', () => {
+      const pn = window.prompt(`Save ${presetName} preset as:`);
+      if (pn && pn.trim()) { savePreset('effect', presetName, pn.trim(), getParams()); render(); }
+    }));
+    menu.append(item('Reset', () => onReset()));        // commits → re-renders
+    menu.append(item('Remove', () => onRemove(), 'fx-menu-danger'));
+    const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: 'effect options' });
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      if (opening) setTimeout(() => {
+        const off = (ev) => { if (!wrap.contains(ev.target)) { close(); document.removeEventListener('click', off); } };
+        document.addEventListener('click', off);
+      }, 0);
+    };
+    wrap.append(btn, menu);
+    return wrap;
+  }
+
   // Mount points (Resolume-style shell). The panel renders its regions into
   // separate containers: DECK (clip-slot strip + transport), the CLIP inspector
   // (selected-clip source/transform/opacity/effects), the COMPOSITION inspector
@@ -314,33 +350,34 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return box;
   }
 
-  // One composition (layer) effect block — params write layer.params via
-  // setLayerParam (a distinct namespace from clip effect params).
+  // One composition (layer) effect block — drag-reorder + "⋯" menu. Params write
+  // layer.params via setLayerParam (a distinct namespace from clip effects).
   function layerEffectBlock(id, fx, effects) {
     const name = effects[fx];
     const entry = getEntry(name);
     const layer = firstLayer();
     const block = el('div', { className: 'ly-fx ly-fx-layer' });
+    makeDropTarget(block, (payload) => {
+      if (payload.kind === 'fx-layer' && payload.index !== fx) {
+        commit(moveLayerEffect(show(), id, payload.index, fx - payload.index));
+      }
+    });
 
-    const btns = el('div', { className: 'ly-btns' });
-    btns.append(
-      el('button', { textContent: '▲', title: 'effect earlier', disabled: fx === 0,
-        onclick: () => commit(moveLayerEffect(show(), id, fx, -1)) }),
-      el('button', { textContent: '▼', title: 'effect later', disabled: fx === effects.length - 1,
-        onclick: () => commit(moveLayerEffect(show(), id, fx, +1)) }),
-      el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
-        onclick: () => commit(removeLayerEffect(show(), id, fx)) }),
-    );
-    const head = el('div', { className: 'ly-fxhead' }, [
+    const head = el('div', { className: 'ly-fxhead', draggable: true }, [
       el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
     ]);
-    if (entry && entry.params.length) {
-      head.append(presetWidget('effect', entry.name,
-        () => paramsForPrefix(firstLayer()?.params, entry.name),
-        (p) => commit(mergeLayerParams(show(), id, p)),
-        () => commit(mergeLayerParams(show(), id, prefixedDefaults(entry.name)))));
-    }
-    head.append(btns);
+    head.addEventListener('dragstart', (e) => {
+      drag = { kind: 'fx-layer', index: fx };
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx');
+    });
+    head.addEventListener('dragend', () => { drag = null; });
+    head.append(fxMenu({
+      presetName: entry?.name || name,
+      getParams: () => paramsForPrefix(firstLayer()?.params, name),
+      applyParams: (p) => commit(mergeLayerParams(show(), id, p)),
+      onReset: () => commit(mergeLayerParams(show(), id, prefixedDefaults(name))),
+      onRemove: () => commit(removeLayerEffect(show(), id, fx)),
+    }));
     block.append(head);
 
     if (entry) {
@@ -593,31 +630,33 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return box;
   }
 
-  // One clip effect block: header (reorder/remove) + its param controls.
+  // One clip effect block: a drag-to-reorder block with a "⋯" options menu.
   function clipEffectBlock(id, clip, fx, effects) {
     const name = effects[fx];
     const entry = getEntry(name);
     const block = el('div', { className: 'ly-fx ly-fx-clip' });
+    makeDropTarget(block, (payload) => {
+      if (payload.kind === 'fx-clip' && payload.index !== fx) {
+        commit(moveClipEffect(show(), id, clip.id, payload.index, fx - payload.index));
+      }
+    });
 
-    const btns = el('div', { className: 'ly-btns' });
-    btns.append(
-      el('button', { textContent: '▲', title: 'effect earlier', disabled: fx === 0,
-        onclick: () => commit(moveClipEffect(show(), id, clip.id, fx, -1)) }),
-      el('button', { textContent: '▼', title: 'effect later', disabled: fx === effects.length - 1,
-        onclick: () => commit(moveClipEffect(show(), id, clip.id, fx, +1)) }),
-      el('button', { textContent: '✕', title: 'remove effect', className: 'ly-rmfx',
-        onclick: () => commit(removeClipEffect(show(), id, clip.id, fx)) }),
-    );
-    const head = el('div', { className: 'ly-fxhead' }, [
+    // The header is the drag handle (so sliders inside still scrub normally).
+    const head = el('div', { className: 'ly-fxhead', draggable: true }, [
       el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
     ]);
-    if (entry && entry.params.length) {
-      head.append(presetWidget('effect', entry.name,
-        () => paramsForPrefix(liveClip(clip.id)?.params, entry.name),
-        (p) => commit(mergeClipParams(show(), id, clip.id, p)),
-        () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(entry.name)))));
-    }
-    head.append(btns);
+    head.addEventListener('dragstart', (e) => {
+      drag = { kind: 'fx-clip', index: fx };
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx');
+    });
+    head.addEventListener('dragend', () => { drag = null; });
+    head.append(fxMenu({
+      presetName: entry?.name || name,
+      getParams: () => paramsForPrefix(liveClip(clip.id)?.params, name),
+      applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
+      onReset: () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(name))),
+      onRemove: () => commit(removeClipEffect(show(), id, clip.id, fx)),
+    }));
     block.append(head);
 
     if (entry) {
