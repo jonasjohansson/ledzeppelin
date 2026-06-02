@@ -375,26 +375,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
 
     // Empty placeholder slots (Resolume-style): pad the row so there are always
-    // a few empty slots after the clips. Drop a source on one (or click it) to
-    // add a clip there. The first empty cell carries a generator <select> as a
-    // no-drag fallback.
+    // a few empty slots after the clips. They are pure DROP TARGETS — drag a
+    // source from the library onto one to add a clip there.
     const MIN_SLOTS = 8;
     const emptyCount = Math.max(2, MIN_SLOTS - clips.length);
     for (let e = 0; e < emptyCount; e++) {
-      const slot = el('div', { className: 'clip-cell clip-empty', title: 'empty slot — drop a source here' });
-      if (e === 0) {
-        slot.append(
-          el('div', { className: 'clip-gen', textContent: 'drop a source' }),
-          selectInput([{ value: '', label: 'or pick…' }, ...generatorNames()], '', (x) => {
-            if (x) commit(addClip(show(), id, x));
-          }),
-        );
-      } else {
-        slot.addEventListener('click', (ev) => {
-          if (ev.target.closest('select')) return;
-          commit(addClip(show(), id, generatorNames()[0] || 'line'));
-        });
-      }
+      const slot = el('div', { className: 'clip-cell clip-empty', title: 'drag a source here' }, [
+        el('div', { className: 'clip-empty-plus', textContent: '+' }),
+      ]);
       makeDropTarget(slot, (payload) => {
         if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
       });

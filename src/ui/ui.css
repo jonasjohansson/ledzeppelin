@@ -242,13 +242,14 @@ button:hover { background: var(--hover); border-color: var(--accent); }
   flex: 1 1 auto;
   display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-content: flex-start;
 }
-/* Empty placeholder slot: dashed, dimmer than a filled clip. */
+/* Empty placeholder slot: dashed drop target, dimmer than a filled clip. */
 .clip-empty {
-  display: flex; flex-direction: column; justify-content: center; gap: 4px;
-  border-style: dashed; border-color: var(--line); background: #101216; cursor: pointer; opacity: .8;
+  display: flex; align-items: center; justify-content: center;
+  border-style: dashed; border-color: var(--line); background: #101216; opacity: .6;
 }
 .clip-empty:hover { opacity: 1; border-color: var(--accent); }
-.clip-empty .clip-gen { color: var(--faint); }
+.clip-empty-plus { font-size: 18px; color: var(--faint); line-height: 1; }
+.clip-empty:hover .clip-empty-plus { color: var(--accent); }
 .clip-cell {
   position: relative; flex: 0 0 auto; width: 96px;
   background: #141414; border: 1px solid #2a2a2a; border-radius: 5px;
