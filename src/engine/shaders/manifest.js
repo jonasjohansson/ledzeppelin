@@ -145,6 +145,44 @@ void main(){
   frag = vec4(clamp(hueRot(src.rgb, a), 0.0, 1.0), src.a);
 }`;
 
+// --- Colour-adjust effects (a bunch) ---------------------------------------
+const BRIGHTNESS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float amount;
+void main(){ vec4 c=texture(uTex,uv); frag=vec4(clamp(c.rgb*amount,0.0,1.0), c.a); }`;
+
+const CONTRAST = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float amount;
+void main(){ vec4 c=texture(uTex,uv); frag=vec4(clamp((c.rgb-0.5)*amount+0.5,0.0,1.0), c.a); }`;
+
+const SATURATION = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float amount;
+void main(){ vec4 c=texture(uTex,uv); float l=dot(c.rgb,vec3(0.299,0.587,0.114));
+  frag=vec4(clamp(mix(vec3(l),c.rgb,amount),0.0,1.0), c.a); }`;
+
+const GAMMA = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float gamma;
+void main(){ vec4 c=texture(uTex,uv); frag=vec4(pow(clamp(c.rgb,0.0,1.0), vec3(1.0/max(0.01,gamma))), c.a); }`;
+
+const INVERT = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float amount;
+void main(){ vec4 c=texture(uTex,uv); frag=vec4(mix(c.rgb, 1.0-c.rgb, clamp(amount,0.0,1.0)), c.a); }`;
+
+const RGB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float red; uniform float green; uniform float blue;
+void main(){ vec4 c=texture(uTex,uv); frag=vec4(clamp(c.rgb*vec3(red,green,blue),0.0,1.0), c.a); }`;
+
+const THRESHOLD = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float level;
+void main(){ vec4 c=texture(uTex,uv); float l=dot(c.rgb,vec3(0.299,0.587,0.114));
+  frag=vec4(vec3(step(level,l)), c.a); }`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -228,6 +266,38 @@ export const REGISTRY = {
       { key: 'speed', type: 'float', min: 0, max: 2, default: 0 },
     ],
   },
+  brightness: {
+    name: 'brightness', type: 'effect', src: BRIGHTNESS,
+    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
+  },
+  contrast: {
+    name: 'contrast', type: 'effect', src: CONTRAST,
+    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
+  },
+  saturation: {
+    name: 'saturation', type: 'effect', src: SATURATION,
+    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
+  },
+  gamma: {
+    name: 'gamma', type: 'effect', src: GAMMA,
+    params: [{ key: 'gamma', type: 'float', min: 0.1, max: 3, default: 1 }],
+  },
+  invert: {
+    name: 'invert', type: 'effect', src: INVERT,
+    params: [{ key: 'amount', type: 'float', min: 0, max: 1, default: 1 }],
+  },
+  rgb: {
+    name: 'rgb', type: 'effect', src: RGB,
+    params: [
+      { key: 'red', type: 'float', min: 0, max: 2, default: 1 },
+      { key: 'green', type: 'float', min: 0, max: 2, default: 1 },
+      { key: 'blue', type: 'float', min: 0, max: 2, default: 1 },
+    ],
+  },
+  threshold: {
+    name: 'threshold', type: 'effect', src: THRESHOLD,
+    params: [{ key: 'level', type: 'float', min: 0, max: 1, default: 0.5 }],
+  },
 };
 
 // Display labels (Resolume-style). The registry `name` stays the stable key
@@ -237,6 +307,8 @@ const LABELS = {
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', hue: 'Hue',
+  brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation',
+  gamma: 'Gamma', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
