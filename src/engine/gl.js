@@ -1,5 +1,7 @@
 export function getGL(canvas) {
-  const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false });
+  // alpha:true so the on-screen canvas can be transparent where the composite is
+  // empty — letting a CSS checkerboard "canvas paper" show through (see ui.css).
+  const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, alpha: true });
   if (!gl) throw new Error('WebGL2 not available');
   return gl;
 }

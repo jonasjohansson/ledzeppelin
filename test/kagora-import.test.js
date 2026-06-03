@@ -66,3 +66,32 @@ test('devices carry colorOrder from their strips (GRB default)', () => {
   const show = importKagora(preset);
   for (const d of show.devices) assert.equal(d.colorOrder, 'GRB');
 });
+
+test('a daisy-chain run auto-creates a chain (members in data-flow order)', () => {
+  const show = importKagora(preset);
+  // sA-1 → sA-2 daisy-chain on brainA should become one chain, in order.
+  const ch = (show.chains || []).find((c) => c.members.includes('sA-1'));
+  assert.ok(ch, 'expected a chain containing the daisy-chained strips');
+  assert.deepEqual(ch.members, ['sA-1', 'sA-2']);
+  assert.equal(ch.stagger, 0);   // imported off; operator dials it in
+});
+
+test('a bent strip (>2 points) imports as a polyline, keeping every bend', () => {
+  const bent = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 10 }, { x: 10, y: 0 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-1' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(bent);
+  const f = show.fixtures.find((x) => x.id === 's1');
+  assert.equal(f.input.mode, 'polyline');
+  assert.equal(f.input.points.length, 3);          // the bend is preserved, not collapsed to 2
+});

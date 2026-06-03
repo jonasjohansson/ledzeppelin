@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pointsFromTransform, transformFromPoints, syncFixtureGeometry,
-  syncShowFixtures, setFixtureTransform,
+  syncShowFixtures, setFixtureTransform, isPolylineFixture,
+  setFixtureVertex, addFixtureVertex, removeFixtureVertex,
 } from '../src/model/fixture-transform.js';
 
 const CANVAS = { w: 1000, h: 500 };
@@ -61,6 +62,49 @@ test('setFixtureTransform patches one fixture and recomputes its points', () => 
   assert.ok(Math.abs(p[0][0] - 0.5) < 1e-9 && Math.abs(p[1][0] - 0.5) < 1e-9);
   // f2 untouched
   assert.deepEqual(next.fixtures[1].input.points, show.fixtures[1].input.points);
+});
+
+// --- polyline (bendable, multi-segment) fixtures ---
+test('syncFixtureGeometry preserves a polyline (>2 points) instead of collapsing to a bar', () => {
+  const bent = [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]];
+  const f = { id: 'f1', input: { points: bent, samples: 30 } };
+  const out = syncFixtureGeometry(f, CANVAS);
+  assert.equal(out.input.mode, 'polyline');
+  assert.equal(out.input.transform, undefined);          // polyline is canonical — no transform
+  assert.deepEqual(out.input.points, bent);              // all bends kept
+  assert.equal(out.input.samples, 30);
+  assert.ok(isPolylineFixture(out.input));
+});
+
+test('syncFixtureGeometry on a polyline is idempotent', () => {
+  const f = { id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]], samples: 9 } };
+  const once = syncFixtureGeometry(f, CANVAS);
+  const twice = syncFixtureGeometry(once, CANVAS);
+  assert.deepEqual(twice, once);
+});
+
+test('addFixtureVertex turns a bar into a 3-point polyline (a bend)', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { points: [[0.1, 0.5], [0.9, 0.5]], samples: 4 } }] };
+  show = syncShowFixtures(show);                          // f1 starts as a bar
+  const next = addFixtureVertex(show, 'f1', 0, [0.5, 0.1]);
+  const inp = next.fixtures[0].input;
+  assert.equal(inp.mode, 'polyline');
+  assert.equal(inp.points.length, 3);
+  assert.deepEqual(inp.points[1], [0.5, 0.1]);           // inserted mid-vertex
+});
+
+test('setFixtureVertex moves one vertex (clamped to 0..1)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.5], [0.9, 0.5]], samples: 6 } }] };
+  const next = setFixtureVertex(show, 'f1', 1, 0.4, 1.7);
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.4, 1]); // y clamped
+});
+
+test('removeFixtureVertex drops a bend; at two points it reverts to a bar', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]], samples: 6 } }] };
+  const next = removeFixtureVertex(show, 'f1', 1);
+  assert.equal(next.fixtures[0].input.points.length, 2);
+  assert.equal(next.fixtures[0].input.mode, 'bar');
+  assert.ok(next.fixtures[0].input.transform);           // bar transform restored
 });
 
 test('syncShowFixtures recomputes points when the canvas changes', () => {

@@ -1,4 +1,5 @@
 import { samplePoints } from './sampling.js';
+import { chainOffset } from './chains.js';
 
 // Pure: derive the flat sampler UVs + daemon route from a show.
 //
@@ -32,11 +33,20 @@ export function buildPipelineInputs(show) {
     if (!fs.length) continue;
 
     const globalBase = cursor;
+    const segments = [];     // device-local pixel ranges, each with its colorOrder
+    let devLocal = 0;
     for (const f of fs) {
       const pts = samplePoints(f.input.points, f.input.samples);
-      spans.push({ id: f.id, start: cursor, count: pts.length });
+      // Chain stagger: shift this fixture's sample position by its chain offset so
+      // a travelling source cascades across the run (no-op when not chained).
+      const [ox, oy] = chainOffset(show, f.id);
+      spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
       fixtureOrder.push(f);
-      for (const [u, v] of pts) { uvs.push(u, v); }
+      for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
+      // Per-fixture colorOrder (falls back to the device's) for mixed strips on
+      // one controller — the daemon re-orders each segment independently.
+      segments.push({ start: devLocal, count: pts.length, colorOrder: f.colorOrder || d.colorOrder });
+      devLocal += pts.length;
       cursor += pts.length;
     }
 
@@ -46,6 +56,11 @@ export function buildPipelineInputs(show) {
       colorOrder: d.colorOrder,
       byteStart: globalBase * 3,
       byteEnd: cursor * 3,
+      segments,
+      // Output calibration applied daemon-side, BEFORE the LEDs (not the preview):
+      // perceptual gamma + a max-brightness cap. Defaults are no-ops.
+      gamma: d.gamma ?? 1,
+      brightness: d.brightness ?? 1,
     });
   }
 

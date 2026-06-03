@@ -6,7 +6,7 @@
 // look). They don't track a clip's custom params — they identify the source.
 
 import { program, makeTarget, drawFullscreen } from './gl.js';
-import { REGISTRY, defaultParams } from './shaders/manifest.js';
+import { REGISTRY, defaultParams, hexToRgb } from './shaders/manifest.js';
 
 export function renderSourceThumbnails(gl, w = 80, h = 50, timeSec = 0.6) {
   const target = makeTarget(gl, w, h);
@@ -27,7 +27,9 @@ export function renderSourceThumbnails(gl, w = 80, h = 50, timeSec = 0.6) {
     const defs = defaultParams(name);
     for (const p of entry.params) {
       const l = gl.getUniformLocation(prog, p.key);
-      if (l !== null) gl.uniform1f(l, Number(defs[p.key]));
+      if (l === null) continue;
+      if (p.type === 'color') { const [r, g, b] = hexToRgb(defs[p.key]); gl.uniform3f(l, r, g, b); }
+      else gl.uniform1f(l, Number(defs[p.key]));
     }
     const uT = gl.getUniformLocation(prog, 'uT'); if (uT !== null) gl.uniform1f(uT, timeSec);
     const uTrig = gl.getUniformLocation(prog, 'uTrig'); if (uTrig !== null) gl.uniform1f(uTrig, timeSec);

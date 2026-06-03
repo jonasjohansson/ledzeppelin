@@ -25,7 +25,7 @@
 // id (NOT in the show JSON). See transitionProgress() for the timing math.
 
 import { program, makeTarget, drawFullscreen } from './gl.js';
-import { REGISTRY, getEntry, defaultParams } from './shaders/manifest.js';
+import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.js';
 
 const BLIT_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
@@ -91,6 +91,13 @@ export function makeCompositor(gl, w, h) {
   // Per-frame env (e.g. { trigSec } for triggerable sources). Set in render().
   let frameEnv = {};
 
+  // Per-instance integrated phase clocks (NOT persisted). Keyed by
+  // `<instanceKey>:<entryName>` → { phase, lastT }. For shaders that declare a
+  // `uPhase` uniform we feed an accumulated ∫speed·dt rather than uT·speed, so
+  // changing the speed param only alters the rate going forward — it never jumps
+  // the animation to a new point (which looked like a "restart"). See runEntry.
+  const phaseClocks = new Map();
+
   // Lazily-compiled programs, keyed by registry name (+ reserved blit/xfade keys).
   // Each cached entry: { prog, uniforms: Map<string, WebGLUniformLocation|null> }.
   const cache = new Map();
@@ -119,7 +126,7 @@ export function makeCompositor(gl, w, h) {
 
   // Run one entry (generator or effect) into `dst`, reading `srcTex` as uTex if set,
   // resolving its params from `params`.
-  function runEntry(entry, params, dst, srcTex, timeSec) {
+  function runEntry(entry, params, dst, srcTex, timeSec, instanceKey) {
     const c = getProgram(entry.name, entry.src);
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
     gl.viewport(0, 0, w, h);
@@ -130,11 +137,28 @@ export function makeCompositor(gl, w, h) {
       const l = loc(c, p.key);
       if (l === null) continue;
       const v = paramValue(params, entry.name, p.key, defaults[p.key]);
-      gl.uniform1f(l, Number(v));
+      if (p.type === 'color') { const [r, g, b] = hexToRgb(v); gl.uniform3f(l, r, g, b); }
+      else gl.uniform1f(l, Number(v));
     }
     // uT (seconds) — always try; only set if the shader declares it.
     const uT = loc(c, 'uT');
     if (uT !== null) gl.uniform1f(uT, timeSec);
+
+    // uPhase — integrated ∫speed·dt for a phase-continuous sweep (see phaseClocks).
+    // The rate comes from the entry's speed param; speed=0 ⇒ phase frozen.
+    const uPhase = loc(c, 'uPhase');
+    if (uPhase !== null) {
+      const rateKey = entry.phaseParam || 'speed';
+      const rate = Number(paramValue(params, entry.name, rateKey, defaults[rateKey] ?? 0)) || 0;
+      const ck = (instanceKey || entry.name) + ':' + entry.name;
+      let pc = phaseClocks.get(ck);
+      if (!pc) { pc = { phase: 0, lastT: timeSec }; phaseClocks.set(ck, pc); }
+      let dt = timeSec - pc.lastT;
+      if (!(dt > 0) || dt > 1) dt = 0;   // ignore pauses / seeks / backwards jumps
+      pc.phase += dt * rate;
+      pc.lastT = timeSec;
+      gl.uniform1f(uPhase, pc.phase);
+    }
 
     // uTrigs[] — seconds since each recent trigger (from frameEnv.trigSecs),
     // huge (1e6) before a trigger so triggerable sources (Pulse) stay idle. The
@@ -178,14 +202,14 @@ export function makeCompositor(gl, w, h) {
     } else {
       const gen = getEntry(clip.generator);
       if (!gen || gen.type !== 'generator') return false;
-      runEntry(gen, clip.params, cur, null, timeSec);
+      runEntry(gen, clip.params, cur, null, timeSec, clip.id);
     }
-    for (const name of (clip.effects || [])) {
+    (clip.effects || []).forEach((name, i) => {
       const fx = getEntry(name);
-      if (!fx || fx.type !== 'effect') continue;
-      runEntry(fx, clip.params, other, cur.tex, timeSec);
+      if (!fx || fx.type !== 'effect') return;
+      runEntry(fx, clip.params, other, cur.tex, timeSec, clip.id + ':fx' + i);
       const tmp = cur; cur = other; other = tmp;
-    }
+    });
     // Place cur → hold applying the clip's transform + opacity. hold is never
     // part of the clip ping-pong, so no feedback loop. During a crossfade each
     // clip is transformed independently before the two holds are mixed.
@@ -229,12 +253,15 @@ export function makeCompositor(gl, w, h) {
     drawFullscreen(gl);
   }
 
+  // The layer blit emits PREMULTIPLIED colour (rgb already × opacity×alpha), so
+  // blend factors must assume premultiplied source — otherwise opacity is applied
+  // twice. 'alpha' is premultiplied over; 'multiply' respects source coverage.
   function setBlend(mode) {
     gl.enable(gl.BLEND);
     switch (mode) {
       case 'screen':   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); break;
-      case 'multiply': gl.blendFunc(gl.DST_COLOR, gl.ZERO); break;
-      case 'alpha':    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); break;
+      case 'multiply': gl.blendFunc(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA); break;
+      case 'alpha':    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); break; // premultiplied over
       case 'add':
       default:         gl.blendFunc(gl.ONE, gl.ONE); break; // default to add
     }
@@ -293,22 +320,43 @@ export function makeCompositor(gl, w, h) {
   function render(layers, timeSec, env) {
     const list = layers || [];
     frameEnv = env || {};
+    // Master composition fader: scales every layer's contribution. Composited
+    // over black, multiplying each layer's blit opacity fades the whole output.
+    const master = frameEnv.masterOpacity == null ? 1 : Number(frameEnv.masterOpacity);
 
-    // Drop runtime state for layers that no longer exist (avoid unbounded growth).
+    // Drop runtime state for layers/clips that no longer exist (avoid growth).
     if (layerState.size) {
       const live = new Set(list.map((l) => l && l.id));
       for (const id of [...layerState.keys()]) if (!live.has(id)) layerState.delete(id);
     }
+    if (phaseClocks.size) {
+      const liveIds = new Set();
+      for (const l of list) {
+        if (!l) continue;
+        liveIds.add(l.id);
+        for (const cl of (l.clips || [])) if (cl) liveIds.add(cl.id);
+      }
+      for (const k of [...phaseClocks.keys()]) {
+        if (!liveIds.has(k.slice(0, k.indexOf(':')))) phaseClocks.delete(k);
+      }
+    }
 
-    // 1. Clear accumulator to black, no blending.
+    // 1. Clear accumulator to TRANSPARENT black, no blending. Empty/transparent
+    //    regions keep alpha 0 so the on-screen checkerboard backdrop shows through;
+    //    sampled RGB is still 0 there (LEDs off), unchanged from opaque-black.
     gl.bindFramebuffer(gl.FRAMEBUFFER, accum.fbo);
     gl.viewport(0, 0, w, h);
     gl.disable(gl.BLEND);
-    gl.clearColor(0, 0, 0, 1);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
+    // Layer B(ypass)/S(olo): a bypassed layer is skipped; if ANY layer is soloed,
+    // only soloed layers render.
+    const anySolo = list.some((l) => l && l.solo);
     for (const layer of list) {
       if (!layer) continue;
+      if (layer.bypass) continue;
+      if (anySolo && !layer.solo) continue;
 
       const { fromClip, toClip, progress } = resolveTransition(layer, timeSec);
 
@@ -362,11 +410,11 @@ export function makeCompositor(gl, w, h) {
         cur = base;
       } else {
         blitInto(base.tex, cur, 1); // base → layerA
-        for (const name of fx0) {
+        fx0.forEach((name, i) => {
           const fx = getEntry(name);
-          runEntry(fx, layer.params, other, cur.tex, timeSec);
+          runEntry(fx, layer.params, other, cur.tex, timeSec, layer.id + ':fx' + i);
           const tmp = cur; cur = other; other = tmp;
-        }
+        });
       }
 
       // 3. Blit final layer texture onto accumulator with blend + opacity.
@@ -380,7 +428,7 @@ export function makeCompositor(gl, w, h) {
       const uTex = loc(blit, 'uTex');
       if (uTex !== null) gl.uniform1i(uTex, 0);
       const uOp = loc(blit, 'opacity');
-      if (uOp !== null) gl.uniform1f(uOp, layer.opacity == null ? 1 : Number(layer.opacity));
+      if (uOp !== null) gl.uniform1f(uOp, (layer.opacity == null ? 1 : Number(layer.opacity)) * master);
       drawFullscreen(gl);
       gl.disable(gl.BLEND);
     }
@@ -396,9 +444,13 @@ export function makeCompositor(gl, w, h) {
       gl.deleteFramebuffer(t.fbo);
     }
     layerState.clear();
+    phaseClocks.clear();
   }
 
-  return { get tex() { return accum.tex; }, render, dispose };
+  // Reset all integrated phase clocks so speed-driven sweeps restart from 0.
+  function resetPhases() { phaseClocks.clear(); }
+
+  return { get tex() { return accum.tex; }, render, dispose, resetPhases };
 }
 
 // Re-export so callers can introspect available shaders without a second import.

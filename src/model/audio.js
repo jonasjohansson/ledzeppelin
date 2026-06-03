@@ -7,10 +7,16 @@ export const AUDIO_BANDS = ['level', 'bass', 'mid', 'high'];
 
 let ctx = null, analyser = null, data = null, stream = null;
 let enabled = false;
+let globalGain = 1;                 // master multiplier on the input (general config)
 const bands = { level: 0, bass: 0, mid: 0, high: 0 };
 
 export function audioEnabled() { return enabled; }
 export function audioBands() { return bands; }
+export function audioGain() { return globalGain; }
+export function setAudioGain(g) {
+  const v = Number(g);
+  globalGain = Number.isFinite(v) && v >= 0 ? v : 1;
+}
 
 export async function enableAudio() {
   if (enabled) return true;
@@ -41,9 +47,11 @@ export function updateAudio() {
     let s = 0; for (let i = a; i < b; i++) s += data[i];
     return b > a ? s / ((b - a) * 255) : 0;
   };
-  bands.bass = avg(0, Math.floor(n * 0.10));
-  bands.mid = avg(Math.floor(n * 0.10), Math.floor(n * 0.40));
-  bands.high = avg(Math.floor(n * 0.40), n);
-  bands.level = avg(0, n);
+  const g = globalGain;
+  const clamp = (x) => (x > 1 ? 1 : x < 0 ? 0 : x);
+  bands.bass = clamp(avg(0, Math.floor(n * 0.10)) * g);
+  bands.mid = clamp(avg(Math.floor(n * 0.10), Math.floor(n * 0.40)) * g);
+  bands.high = clamp(avg(Math.floor(n * 0.40), n) * g);
+  bands.level = clamp(avg(0, n) * g);
   return bands;
 }

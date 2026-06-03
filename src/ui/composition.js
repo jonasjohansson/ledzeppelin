@@ -11,7 +11,7 @@
 //
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { clampCanvasSize, patchLayer } from '../model/layers.js';
+import { clampCanvasSize, setShowAudioGain } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -60,7 +60,8 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
     root.textContent = '';
     draft = currentCanvas();
 
-    root.append(el('div', { className: 'fx-title', textContent: 'Composition' }));
+    root.append(el('div', { className: 'fx-title', textContent: 'composition' }));
+    // (Master opacity now lives in the top-bar globals, not here.)
 
     // --- Width / height fields (reflect the draft) ---
     const mkNum = (value, onInput) => {
@@ -88,13 +89,33 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
 
     // --- Apply ---
     root.append(el('button', {
-      className: 'fx-add cmp-apply', textContent: 'Apply',
+      className: 'fx-add cmp-apply', textContent: 'apply',
       onclick: () => {
         const c = clampCanvasSize(draft.w, draft.h);
         setSize(c.w, c.h);
         render();
       },
     }));
+
+    // --- Audio input (general config): global gain on the mic before it drives
+    //     Audio-mode params. ×0 mutes, ×1 unity, up to ×8 to boost quiet input. ---
+    const gain = getShow().composition?.audioGain ?? 1;
+    const gOut = el('span', { className: 'ly-readout', textContent: `×${gain.toFixed(2)}` });
+    const gRange = el('input', { type: 'range', min: '0', max: '8', step: '0.05', value: String(gain) });
+    gRange.addEventListener('input', () => {
+      gOut.textContent = `×${Number(gRange.value).toFixed(2)}`;
+      setShow?.(setShowAudioGain(getShow(), Number(gRange.value)));
+    });
+    gRange.addEventListener('contextmenu', (e) => {           // right-click → reset to ×1
+      e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00';
+      setShow?.(setShowAudioGain(getShow(), 1));
+    });
+    root.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
+    root.append(el('div', { className: 'fx-card' }, [
+      el('label', { className: 'fx-field ly-param ly-row resettable' }, [
+        el('span', { className: 'ly-plabel', textContent: 'gain' }), gOut, gRange,
+      ]),
+    ]));
 
   }
 

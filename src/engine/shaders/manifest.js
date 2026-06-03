@@ -12,28 +12,85 @@ in vec2 uv; out vec4 frag;
 uniform float pos;
 uniform float width;
 uniform float angle;
-uniform float uT;
-uniform float speed;
+uniform float uPhase;   // integrated speed·time — continuous across speed changes
 uniform float amp;
 void main(){
   float a = radians(angle);
   float coord = uv.x*cos(a) + uv.y*sin(a);
   // pos is the BASE position; the line sweeps around it. speed=0 ⇒ static.
-  float sweptPos = pos + amp * sin(uT * speed);
+  float sweptPos = pos + amp * sin(uPhase);
   float d = abs(coord - sweptPos);
   float v = smoothstep(width, 0.0, d);
   frag = vec4(vec3(v), 1.0);
 }`;
 
+// Gradient is a COLOUR ramp: two stops (colorA→colorB) along the angled axis.
+// Default black→white reproduces the old grayscale ramp.
 const GRADIENT = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform float angle;
-void main(){ float a=radians(angle); float g=clamp(uv.x*cos(a)+uv.y*sin(a),0.0,1.0); frag=vec4(vec3(g),1.0); }`;
+uniform float angle; uniform vec3 colorA; uniform vec3 colorB;
+void main(){ float a=radians(angle); float g=clamp(uv.x*cos(a)+uv.y*sin(a),0.0,1.0); frag=vec4(mix(colorA,colorB,g),1.0); }`;
 
+// Solid COLOUR × brightness (the go-to wash). Default white × 1 = full white.
 const SOLID = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform float level;
-void main(){ frag=vec4(vec3(level),1.0); }`;
+uniform vec3 color; uniform float level;
+void main(){ frag=vec4(color*level,1.0); }`;
+
+// White balance: a Kelvin colour temperature (warm→cool) × brightness. Tanner
+// Helland's blackbody approximation, in-shader.
+const KELVIN = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float kelvin; uniform float level;
+vec3 k2rgb(float k){
+  float t = clamp(k, 1000.0, 40000.0) / 100.0; float r, g, b;
+  if (t <= 66.0) { r = 1.0; g = clamp((99.4708025861*log(t) - 161.1195681661)/255.0, 0.0, 1.0); }
+  else { r = clamp((329.698727446*pow(t-60.0,-0.1332047592))/255.0, 0.0, 1.0);
+         g = clamp((288.1221695283*pow(t-60.0,-0.0755148492))/255.0, 0.0, 1.0); }
+  if (t >= 66.0) b = 1.0; else if (t <= 19.0) b = 0.0;
+  else b = clamp((138.5177312231*log(t-10.0) - 305.0447927307)/255.0, 0.0, 1.0);
+  return vec3(r, g, b);
+}
+void main(){ frag = vec4(k2rgb(kelvin) * level, 1.0); }`;
+
+// Colorize: map luminance between two colours (low→high). Drop it on any of the
+// grayscale sources (Lines, Pulse, Grid…) to instantly tint the whole look.
+const COLORIZE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform vec3 lowColor; uniform vec3 highColor;
+void main(){ vec4 s = texture(uTex, uv); float l = dot(s.rgb, vec3(0.299,0.587,0.114)); frag = vec4(mix(lowColor, highColor, l), s.a); }`;
+
+// Chase — `count` evenly-spaced heads travelling along the axis, each leaving a
+// decaying tail (the classic running-light). uPhase carries the speed so changes
+// don't jump. Grayscale; drop Colorize on it for a coloured chase.
+const CHASE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float count; uniform float headWidth; uniform float tail;
+uniform float angle; uniform float uPhase;
+void main(){
+  float a = radians(angle);
+  float coord = uv.x*cos(a) + uv.y*sin(a);
+  float n = max(1.0, count);
+  float cell = fract(coord*n - uPhase*n);      // 0 at a head, grows BEHIND it
+  float w = clamp(headWidth, 0.001, 1.0);
+  float v;
+  if (cell < w) v = 1.0;                        // solid head
+  else { float td = (cell - w) / max(1e-4, tail); v = (td <= 1.0) ? (1.0 - td) : 0.0; } // decaying tail
+  frag = vec4(vec3(v), 1.0);
+}`;
+
+// Wave — a smooth sine wash of `count` cycles flowing along the axis. `sharp`
+// tightens the crest from a soft swell to a hard band.
+const WAVE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float count; uniform float angle; uniform float sharp; uniform float uPhase;
+void main(){
+  float a = radians(angle);
+  float coord = uv.x*cos(a) + uv.y*sin(a);
+  float s = sin((coord*count - uPhase) * 6.2831853) * 0.5 + 0.5;  // 0..1
+  s = pow(s, mix(1.0, 5.0, clamp(sharp, 0.0, 1.0)));
+  frag = vec4(vec3(s), 1.0);
+}`;
 
 // Checkered test source — set resolution in cols × rows (after Resolume's
 // Checkered). Alternating black/white cells; the go-to pattern for verifying the
@@ -133,7 +190,7 @@ void main(){
 // sweep without a timeline.
 const HUE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform sampler2D uTex; uniform float shift; uniform float speed; uniform float uT;
+uniform sampler2D uTex; uniform float shift; uniform float uPhase;
 vec3 hueRot(vec3 c, float a){
   const vec3 k = vec3(0.57735026);            // normalize(vec3(1))
   float cs = cos(a), sn = sin(a);
@@ -141,20 +198,16 @@ vec3 hueRot(vec3 c, float a){
 }
 void main(){
   vec4 src = texture(uTex, uv);
-  float a = (shift + uT*speed) * 6.2831853;
+  float a = (shift + uPhase) * 6.2831853;
   frag = vec4(clamp(hueRot(src.rgb, a), 0.0, 1.0), src.a);
 }`;
 
 // --- Colour-adjust effects (a bunch) ---------------------------------------
-const BRIGHTNESS = `#version 300 es
+// Brightness + Contrast in one effect (brightness first, then contrast).
+const BRIGHTCONTRAST = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform sampler2D uTex; uniform float amount;
-void main(){ vec4 c=texture(uTex,uv); frag=vec4(clamp(c.rgb*amount,0.0,1.0), c.a); }`;
-
-const CONTRAST = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform sampler2D uTex; uniform float amount;
-void main(){ vec4 c=texture(uTex,uv); frag=vec4(clamp((c.rgb-0.5)*amount+0.5,0.0,1.0), c.a); }`;
+uniform sampler2D uTex; uniform float brightness; uniform float contrast;
+void main(){ vec4 s=texture(uTex,uv); vec3 c=s.rgb*brightness; c=(c-0.5)*contrast+0.5; frag=vec4(clamp(c,0.0,1.0), s.a); }`;
 
 const SATURATION = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
@@ -208,19 +261,50 @@ export const REGISTRY = {
       { key: 'width', type: 'float', min: 0, max: 0.5, default: 0.08 },
       { key: 'angle', type: 'float', min: 0, max: 360, default: 90 },
       { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
-      { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.45 },
+      // amp + (line half-width) must stay ≤ 0.5 so the swept line never clips the
+      // canvas edge: 0.4 + 0.08 = 0.48 → reaches near the edges, stays inside.
+      { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.4 },
     ],
   },
   gradient: {
     name: 'gradient', type: 'generator', src: GRADIENT,
     params: [
       { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
     ],
   },
   solid: {
     name: 'solid', type: 'generator', src: SOLID,
     params: [
+      { key: 'color', type: 'color', default: '#ffffff' },
       { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  kelvin: {
+    name: 'kelvin', type: 'generator', src: KELVIN,
+    params: [
+      { key: 'kelvin', type: 'float', min: 1800, max: 12000, default: 3200, step: 50 },
+      { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  chase: {
+    name: 'chase', type: 'generator', src: CHASE,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 32, default: 3, step: 1 },
+      { key: 'headWidth', type: 'float', min: 0.01, max: 1, default: 0.15 },
+      { key: 'tail', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+    ],
+  },
+  wave: {
+    name: 'wave', type: 'generator', src: WAVE,
+    params: [
+      { key: 'count', type: 'float', min: 0.5, max: 16, default: 2 },
+      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
+      { key: 'sharp', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
     ],
   },
   checkers: {
@@ -291,13 +375,12 @@ export const REGISTRY = {
       { key: 'gamma', type: 'float', min: 0.1, max: 3, default: 1 },
     ],
   },
-  brightness: {
-    name: 'brightness', type: 'effect', src: BRIGHTNESS,
-    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
-  },
-  contrast: {
-    name: 'contrast', type: 'effect', src: CONTRAST,
-    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
+  brightcontrast: {
+    name: 'brightcontrast', type: 'effect', src: BRIGHTCONTRAST,
+    params: [
+      { key: 'brightness', type: 'float', min: 0, max: 3, default: 1 },
+      { key: 'contrast', type: 'float', min: 0, max: 3, default: 1 },
+    ],
   },
   saturation: {
     name: 'saturation', type: 'effect', src: SATURATION,
@@ -323,16 +406,35 @@ export const REGISTRY = {
     name: 'threshold', type: 'effect', src: THRESHOLD,
     params: [{ key: 'level', type: 'float', min: 0, max: 1, default: 0.5 }],
   },
+  colorize: {
+    name: 'colorize', type: 'effect', src: COLORIZE,
+    params: [
+      { key: 'lowColor', type: 'color', default: '#000000' },
+      { key: 'highColor', type: 'color', default: '#ffffff' },
+    ],
+  },
 };
+
+// Parse a "#rrggbb" (or "#rgb") string to normalized [r,g,b] in 0..1. Used by the
+// compositor to upload `type:'color'` params as vec3 uniforms. Falls back to white.
+export function hexToRgb(hex) {
+  if (typeof hex !== 'string') return [1, 1, 1];
+  let h = hex.replace('#', '').trim();
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const n = parseInt(h, 16);
+  if (h.length !== 6 || Number.isNaN(n)) return [1, 1, 1];
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
 
 // Display labels (Resolume-style). The registry `name` stays the stable key
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
-  line: 'Lines', gradient: 'Gradient', solid: 'Solid Color',
+  line: 'Lines', gradient: 'Gradient', solid: 'Solid Color', kelvin: 'White (Kelvin)',
+  chase: 'Chase', wave: 'Wave',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
-  segmenter: 'Segmenter', hue: 'Hue',
-  color: 'Color', brightness: 'Brightness', contrast: 'Contrast', saturation: 'Saturation',
+  segmenter: 'Segmenter', hue: 'Hue', colorize: 'Colorize',
+  color: 'Color', brightcontrast: 'Brightness/Contrast', saturation: 'Saturation',
   gamma: 'Gamma', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
 };
 export const labelOf = (name) =>

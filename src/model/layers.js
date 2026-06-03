@@ -79,6 +79,20 @@ export function setCanvasSize(show, w, h) {
   return { ...show, composition: { ...comp, canvas } };
 }
 
+// Master composition opacity (0..1) — a final fader scaling the whole output.
+export function setCompositionOpacity(show, opacity) {
+  const comp = show.composition || {};
+  const o = Math.max(0, Math.min(1, Number(opacity)));
+  return { ...show, composition: { ...comp, opacity: Number.isFinite(o) ? o : 1 } };
+}
+
+// Global gain applied to the audio input before it drives Audio-mode params.
+export function setShowAudioGain(show, gain) {
+  const comp = show.composition || {};
+  const g = Math.max(0, Number(gain));
+  return { ...show, composition: { ...comp, audioGain: Number.isFinite(g) ? g : 1 } };
+}
+
 // Prefix a flat { key: value } default map with the entry name → { 'name.key': value }.
 export function prefixedDefaults(name) {
   const out = {};
@@ -128,6 +142,8 @@ export function normalizeComposition(show) {
         transform: normTransform(c.transform),
         opacity: c.opacity == null ? DEFAULT_OPACITY : Number(c.opacity),
         durationMs: c.durationMs == null ? DEFAULT_DURATION_MS : Number(c.durationMs),
+        ...(c.anim ? { anim: { ...c.anim } } : {}),       // preserve per-param animations across reloads
+        ...(c.videoUrl ? { videoUrl: c.videoUrl } : {}),  // keep video clip reference too
       }));
       // Repair a dangling activeClipId (points at a clip that no longer exists)
       // by falling back to the first clip, so downstream always has a valid target.
@@ -137,7 +153,7 @@ export function normalizeComposition(show) {
         : (clips[0]?.id ?? null);
       return {
         id: layer.id ?? 'l' + (i + 1),
-        name: layer.name ?? 'layer ' + (i + 1),
+        name: layer.name ?? 'Layer ' + (i + 1),
         blend: layer.blend ?? 'add',
         opacity: layer.opacity ?? 1,
         clips,
@@ -145,6 +161,8 @@ export function normalizeComposition(show) {
         effects: Array.isArray(layer.effects) ? [...layer.effects] : [],
         params: layer.params ? { ...layer.params } : {},
         transitionMs: layer.transitionMs ?? TRANSITION_MS,
+        ...(layer.anim ? { anim: { ...layer.anim } } : {}),   // preserve layer-FX animations
+        ...(layer.minimized ? { minimized: true } : {}),      // preserve collapsed state
       };
     }
     // OLD shape → one clip carrying the generator/params/effects.
@@ -161,7 +179,7 @@ export function normalizeComposition(show) {
     };
     return {
       id: layer.id ?? 'l' + (i + 1),
-      name: layer.name ?? 'layer ' + (i + 1),
+      name: layer.name ?? 'Layer ' + (i + 1),
       blend: layer.blend ?? 'add',
       opacity: layer.opacity ?? 1,
       clips: [clip],
@@ -437,7 +455,7 @@ export function makeLayer(id, clipId = 'c1') {
   const clip = makeClip(generator, undefined, clipId);
   return {
     id,
-    name: 'layer',
+    name: 'Layer 1',
     blend: 'add',
     opacity: 1,
     clips: [clip],
@@ -448,11 +466,17 @@ export function makeLayer(id, clipId = 'c1') {
   };
 }
 
-// Append a new default layer (one active clip on the first generator).
+// Append a new default layer (one active clip on the first generator), auto-named
+// "Layer N" with a clip id unique across the whole show.
 export function addLayer(show) {
   const layers = show.composition?.layers || [];
   const id = uniqueId('l', layers.map((l) => l.id));
-  const layer = makeLayer(id);
+  const clipId = uniqueId('c', allClipIds(layers));   // unique across the whole show
+  const maxN = layers.reduce((m, l) => {
+    const match = /(\d+)\s*$/.exec(l.name || '');
+    return match ? Math.max(m, Number(match[1])) : m;
+  }, 0);
+  const layer = { ...makeLayer(id, clipId), name: `Layer ${maxN + 1}` };
   return { ...show, composition: { ...show.composition, layers: [...layers, layer] } };
 }
 

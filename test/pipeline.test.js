@@ -20,8 +20,8 @@ test('buildPipelineInputs orders fixtures by pixelOffset and flattens UVs', () =
   // 'a' (offset 0) comes before 'b' (offset 2).
   assert.deepEqual(fixtureOrder.map((f) => f.id), ['a', 'b']);
   assert.deepEqual(spans, [
-    { id: 'a', start: 0, count: 2 },
-    { id: 'b', start: 2, count: 2 },
+    { id: 'a', start: 0, count: 2, hidden: false },
+    { id: 'b', start: 2, count: 2, hidden: false },
   ]);
   // a: (1,0),(1,1) then b: (0,0),(0,1)
   assert.deepEqual(Array.from(sampleUVs), [1, 0, 1, 1, 0, 0, 0, 1]);
@@ -32,12 +32,42 @@ test('buildPipelineInputs builds one route entry per device with byte range', ()
   assert.equal(route.length, 1);
   assert.deepEqual(route[0], {
     ip: '10.0.0.11', port: 4048, colorOrder: 'GRB', byteStart: 0, byteEnd: 4 * 3,
+    segments: [
+      { start: 0, count: 2, colorOrder: 'GRB' },
+      { start: 2, count: 2, colorOrder: 'GRB' },
+    ],
+    gamma: 1, brightness: 1,
   });
 });
 
 test('single device still yields byteStart 0', () => {
   const { route } = buildPipelineInputs(demo());
   assert.equal(route[0].byteStart, 0);
+});
+
+test('a fixture colorOrder overrides the device default in its segment', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  s = addFixture(s, { id: 'a', name: 'a', pixelCount: 2, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 2 }, input: { points: [[0, 0], [0, 1]], samples: 2 } });
+  s = addFixture(s, { id: 'b', name: 'b', pixelCount: 2, colorOrder: 'RGB',   // different chip on same controller
+    output: { deviceId: 'c1', pixelOffset: 2, pixelCount: 2 }, input: { points: [[1, 0], [1, 1]], samples: 2 } });
+  const { route } = buildPipelineInputs(s);
+  assert.deepEqual(route[0].segments, [
+    { start: 0, count: 2, colorOrder: 'GRB' },
+    { start: 2, count: 2, colorOrder: 'RGB' },
+  ]);
+});
+
+test('hidden fixtures are flagged in spans (zeroed downstream, not skipped)', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  s = addFixture(s, { id: 'a', name: 'a', pixelCount: 2, colorOrder: 'GRB', hidden: true,
+    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 2 }, input: { points: [[0, 0], [0, 1]], samples: 2 } });
+  s = addFixture(s, { id: 'b', name: 'b', pixelCount: 2, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 2, pixelCount: 2 }, input: { points: [[1, 0], [1, 1]], samples: 2 } });
+  const { spans } = buildPipelineInputs(s);
+  assert.equal(spans.find((sp) => sp.id === 'a').hidden, true);
+  assert.equal(spans.find((sp) => sp.id === 'b').hidden, false);
+  assert.equal(spans.find((sp) => sp.id === 'b').start, 2);   // 'a' still occupies its indices
 });
 
 // Two devices, each using DEVICE-LOCAL pixel offsets that reset to 0. The flat
@@ -68,10 +98,20 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
   // devA: global base 0, 200 pixels
   assert.deepEqual(route[0], {
     ip: '10.0.0.1', port: 4048, colorOrder: 'GRB', byteStart: 0, byteEnd: 200 * 3,
+    segments: [
+      { start: 0, count: 100, colorOrder: 'GRB' },
+      { start: 100, count: 100, colorOrder: 'GRB' },
+    ],
+    gamma: 1, brightness: 1,
   });
   // devB: global base 200 (NOT device-local 0), 90 pixels
   assert.deepEqual(route[1], {
     ip: '10.0.0.2', port: 4048, colorOrder: 'RGB', byteStart: 200 * 3, byteEnd: 290 * 3,
+    segments: [
+      { start: 0, count: 50, colorOrder: 'RGB' },
+      { start: 50, count: 40, colorOrder: 'RGB' },
+    ],
+    gamma: 1, brightness: 1,
   });
   // 2 floats per pixel, (200 + 90) pixels
   assert.equal(sampleUVs.length, (200 + 90) * 2);

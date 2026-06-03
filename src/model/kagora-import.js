@@ -1,5 +1,6 @@
 import { emptyShow } from './show.js';
 import { normalizeComposition } from './layers.js';
+import { addChain } from './chains.js';
 
 // Import a Kagora preset into a ledzeppelin show.
 //
@@ -86,6 +87,8 @@ export function importKagora(preset) {
     if (!headsByDevice.has(h.controllerId)) headsByDevice.set(h.controllerId, []);
     headsByDevice.get(h.controllerId).push(h);
   }
+  // Each daisy chain (head → … → tail) in data-flow order, for auto-chaining.
+  const daisyRuns = [];
   for (const [controllerId, heads] of headsByDevice) {
     // Order by the NUMERIC trailing index of the port id (e.g. data-out-2 before
     // data-out-10). Parse defensively: fall back to string compare if no number.
@@ -102,6 +105,7 @@ export function importKagora(preset) {
     for (const head of heads) {
       let cur = head.stripId;
       const seen = new Set();
+      const run = [];
       while (cur && !seen.has(cur)) {
         seen.add(cur);
         const s = instById.get(cur);
@@ -109,9 +113,11 @@ export function importKagora(preset) {
         offsetByStrip.set(cur, cursor);
         deviceIdByStrip.set(cur, controllerId);
         cursor += stripPixelCount(s);
+        run.push(cur);
         const next = outgoingByStrip.get(cur);
         cur = next ? next.to.instId : null;
       }
+      if (run.length >= 2) daisyRuns.push(run);   // a multi-strip run → a chain
     }
   }
 
@@ -173,14 +179,25 @@ export function importKagora(preset) {
           pixelCount,
         },
         input: {
+          // A Kagora strip's full polyline is preserved — a bent run stays bent
+          // (>2 points ⇒ polyline mode; a straight 2-point strip stays a bar).
+          ...(normalizedPoints(s).length > 2 ? { mode: 'polyline' } : {}),
           points: normalizedPoints(s),
           samples: pixelCount,
         },
       };
     });
 
+  // Auto-chain each daisy-chain run (members in data-flow order) so a pulse can
+  // be staggered across it. Start at stagger 0 (no visual change) — the operator
+  // dials it in from the Output → chains panel.
+  let withChains = show;
+  daisyRuns.forEach((run, i) => {
+    withChains = addChain(withChains, run, { stagger: 0, name: `run ${i + 1}` });
+  });
+
   // Guarantee a new-shape (clip schema) composition. The import only sets
   // devices/fixtures; normalizeComposition just ensures canvas + an (empty)
   // clip-shape layers array so downstream code never sees the old shape.
-  return normalizeComposition(show);
+  return normalizeComposition(withChains);
 }

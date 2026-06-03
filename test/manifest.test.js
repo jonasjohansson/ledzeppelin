@@ -1,9 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { REGISTRY, defaultParams, generatorNames, effectNames } from '../src/engine/shaders/manifest.js';
+import { REGISTRY, defaultParams, generatorNames, effectNames, hexToRgb } from '../src/engine/shaders/manifest.js';
+
+test('hexToRgb parses #rrggbb / #rgb to normalized rgb, falls back to white', () => {
+  assert.deepEqual(hexToRgb('#ffffff'), [1, 1, 1]);
+  assert.deepEqual(hexToRgb('#000000'), [0, 0, 0]);
+  assert.deepEqual(hexToRgb('#ff0000'), [1, 0, 0]);
+  assert.deepEqual(hexToRgb('#0f0'), [0, 1, 0]);          // short form expands
+  assert.deepEqual(hexToRgb('garbage'), [1, 1, 1]);       // invalid → white
+  assert.deepEqual(hexToRgb(undefined), [1, 1, 1]);
+});
+
+test('color params expose hex-string defaults', () => {
+  assert.equal(defaultParams('solid').color, '#ffffff');
+  assert.deepEqual([defaultParams('gradient').colorA, defaultParams('gradient').colorB], ['#000000', '#ffffff']);
+  assert.deepEqual([defaultParams('colorize').lowColor, defaultParams('colorize').highColor], ['#000000', '#ffffff']);
+});
 
 test('defaultParams(line) returns the expected defaults', () => {
-  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.45 });
+  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.4 });
 });
 
 test('defaultParams of an unknown name is empty', () => {
@@ -11,10 +26,10 @@ test('defaultParams of an unknown name is empty', () => {
 });
 
 test('registry contains the expected generators and effects', () => {
-  assert.deepEqual(generatorNames().sort(), ['checkers', 'gradient', 'grid', 'line', 'pulse', 'solid']);
+  assert.deepEqual(generatorNames().sort(), ['chase', 'checkers', 'gradient', 'grid', 'kelvin', 'line', 'pulse', 'solid', 'wave']);
   assert.deepEqual(effectNames().sort(),
-    ['brightness', 'color', 'contrast', 'displace', 'gamma', 'hue', 'invert', 'repeat', 'rgb', 'saturation', 'segmenter', 'strobe', 'threshold']);
-  for (const name of ['line', 'gradient', 'solid', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue']) {
+    ['brightcontrast', 'color', 'colorize', 'displace', 'gamma', 'hue', 'invert', 'repeat', 'rgb', 'saturation', 'segmenter', 'strobe', 'threshold']);
+  for (const name of ['line', 'gradient', 'solid', 'kelvin', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize']) {
     const e = REGISTRY[name];
     assert.ok(e, `${name} missing`);
     assert.match(e.src, /^#version 300 es/, `${name} src must start with #version 300 es`);

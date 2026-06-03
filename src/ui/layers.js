@@ -27,9 +27,10 @@ import {
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   setClipTransform, setClipOpacity, setClipDuration,
   setClipAnim, setLayerAnim, patchLayer,
+  addLayer, removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
-import { DIRECTIONS, makeAnim, makeAudioAnim, animatedValue } from '../model/anim.js';
+import { makeAnim, makeAudioAnim, animatedValue } from '../model/anim.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 
@@ -59,6 +60,12 @@ const field = (label, control) =>
 const fmt = (v) => {
   const n = Number(v);
   return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+};
+// Coarser format for the LIVE animated readout — a sweeping value at 3 decimals
+// churns its last digits every frame and reads as noise. 2 decimals is enough.
+const fmtLive = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 };
 
 // A range slider with a live numeric readout, writing back on every input.
@@ -110,37 +117,129 @@ function paramControl(p, value, onInput) {
   return sliderField(p.key, v, min, max, onInput, p.default ?? min, p.step);
 }
 
-// A numeric param that can be BASIC (static slider) or TIMELINE (animated). The
-// "T" toggle flips modes; in Timeline mode the slider is tagged data-animkey so
-// the render loop can move it live, and a compact controls row appears
-// (direction · in · out · duration). Bool/colour params aren't animatable.
+// A dual-handle range track for an animated param: two thumbs mark `in` and `out`
+// on the [min,max] track (Resolume-style), with a fill between and a live marker
+// the render loop moves to the current animated value. Dragging a thumb commits
+// on release (change) — the fill follows live (input) without re-rendering.
+function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo }) {
+  const span = (max - min) || 1;
+  const frac = (v) => Math.max(0, Math.min(1, (v - min) / span));
+  const st = String(step ?? ((max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1));
+  const fill = el('div', { className: 'rt-fill' });
+  const live = el('div', { className: 'anim-live' });
+  const mk = (cls, val, title) => el('input', { type: 'range', className: cls, title, min: String(min), max: String(max), step: st, value: String(val) });
+  const inEl = mk('rt-in', from, 'in');
+  const outEl = mk('rt-out', to, 'out');
+  const layout = () => {
+    const a = frac(Number(inEl.value)), b = frac(Number(outEl.value));
+    fill.style.left = `${Math.min(a, b) * 100}%`;
+    fill.style.width = `${Math.abs(b - a) * 100}%`;
+  };
+  inEl.addEventListener('input', layout);
+  outEl.addEventListener('input', layout);
+  inEl.addEventListener('change', () => onFrom(Number(inEl.value)));
+  outEl.addEventListener('change', () => onTo(Number(outEl.value)));
+  const wrap = el('div', { className: 'range-track' }, [el('div', { className: 'rt-base' }), fill, live, inEl, outEl]);
+  wrap.dataset.animkey = animKey;
+  wrap.dataset.min = String(min); wrap.dataset.max = String(max);
+  layout();
+  return wrap;
+}
+
+// A numeric param that can be BASIC (static slider) or ANIMATED (Timeline/Audio).
+// The cog picks the mode. When animated the row becomes a dual-handle in/out range
+// track (tagged data-animkey so the render loop moves the live marker) and a
+// controls row appears below (direction · in · out · s, or band · in · out · gain).
 //   onValue(v): set the static value · onAnim(spec|null): set/clear the animation
 function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
-  const shown = animated ? anim.from : (value == null ? (p.default ?? min) : value);
-  const wrap = el('div', { className: 'anim-param' });
-  const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min, p.step);
-  if (animated) {
-    const r = row.querySelector('input[type=range]');
-    if (r) r.dataset.animkey = key;
-    row.classList.add('is-animated');
-  }
   const isAudio = anim?.mode === 'audio';
-  row.append(el('button', {
-    className: 'anim-toggle' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: isAudio ? 'A' : 'T',
-    title: animated ? 'animated — click for Basic (use the dropdown for Timeline/Audio)' : 'animate this parameter',
-    onclick: (e) => { e.preventDefault(); onAnim(animated ? null : makeAnim(shown, max, 4000, 'forward')); },
-  }));
-  wrap.append(row);
-  if (animated) wrap.append(animControls(anim, onAnim));
+  const wrap = el('div', { className: 'anim-param' });
+  const cog = animModeMenu({
+    animated, isAudio,
+    onPick: (mode) => {
+      // Default the sweep to the FULL slider range (in = min, out = max).
+      if (mode === 'basic') onAnim(null);
+      else if (mode === 'audio') { enableAudio(); onAnim(makeAudioAnim(min, max, 'level', 1)); }
+      else onAnim(makeAnim(min, max, 10000, 'forward'));
+    },
+  });
+
+  if (!animated) {
+    const shown = value == null ? (p.default ?? min) : value;
+    const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min, p.step);
+    row.append(cog);
+    wrap.append(row);
+    return wrap;
+  }
+
+  // Animated layout (un-crammed): three stacked rows —
+  //   1. label · live value · cog   2. full-width in/out track   3. direction · in · out · s
+  const readout = el('span', { className: 'ly-readout', textContent: fmtLive(anim.from) });
+  const track = rangeTrack({
+    min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
+    onFrom: (v) => onAnim({ ...anim, from: v }),
+    onTo: (v) => onAnim({ ...anim, to: v }),
+  });
+  wrap.classList.add('is-animated');
+  if (isAudio) wrap.classList.add('is-audio');
+  const head = el('div', { className: 'ly-param anim-head' }, [
+    el('span', { className: 'ly-plabel', textContent: p.key }), readout, cog,
+  ]);
+  wrap.append(head);
+  wrap.append(track);
+  wrap.append(animControls(anim, onAnim));
   return wrap;
 }
 
-// Controls for an animated param: a Timeline/Audio mode selector + the fields
-// for that mode (direction·in·out·s, or band·in·out·gain).
+// The cog button + its Basic/Timeline/Audio popover (Resolume-style). The cog
+// reflects the current mode (accent when animated, green for Audio); the menu
+// marks the active mode. Replaces the old inline "T" toggle + mode dropdown.
+function animModeMenu({ animated, isAudio, onPick }) {
+  const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
+  const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
+  const close = () => { menu.hidden = true; };
+  const cur = !animated ? 'basic' : (isAudio ? 'audio' : 'timeline');
+  const item = (mode, label) => el('button', {
+    className: 'fx-menu-item' + (mode === cur ? ' is-current' : ''), textContent: label,
+    onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
+  });
+  menu.append(item('basic', 'Basic'), item('timeline', 'Timeline'), item('audio', 'Audio'));
+  const btn = el('button', {
+    className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
+    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio)',
+  });
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const opening = menu.hidden;
+    menu.hidden = !opening;
+    if (opening) setTimeout(() => {
+      const off = (ev) => { if (!wrap.contains(ev.target)) { close(); document.removeEventListener('click', off); } };
+      document.addEventListener('click', off);
+    }, 0);
+  };
+  wrap.append(btn, menu);
+  return wrap;
+}
+
+// Three small segmented buttons for the sweep direction (mode chosen via the cog).
+function dirButtons(current, onPick) {
+  const defs = [
+    { value: 'forward', glyph: '→', title: 'forward' },
+    { value: 'backward', glyph: '←', title: 'backward' },
+    { value: 'mirror', glyph: '⇄', title: 'ping-pong' },
+  ];
+  return el('div', { className: 'dir-btns' }, defs.map((d) => el('button', {
+    className: 'dir-btn' + (d.value === current ? ' on' : ''),
+    textContent: d.glyph, title: d.title,
+    onclick: (e) => { e.preventDefault(); onPick(d.value); },
+  })));
+}
+
+// Fields for an animated param (mode already chosen via the cog menu):
+//   Timeline → direction buttons · in · out · s    Audio → band · in · out · gain
 function animControls(anim, onAnim) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
@@ -148,15 +247,7 @@ function animControls(anim, onAnim) {
     return el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
   };
   const isAudio = anim.mode === 'audio';
-  const modeSel = selectInput(
-    [{ value: 'timeline', label: 'Timeline' }, { value: 'audio', label: 'Audio' }],
-    isAudio ? 'audio' : 'timeline',
-    (m) => {
-      if (m === 'audio') { enableAudio(); onAnim(makeAudioAnim(anim.from, anim.to, 'level', 1)); }
-      else onAnim(makeAnim(anim.from, anim.to, 4000, 'forward'));
-    },
-  );
-  const kids = [modeSel];
+  const kids = [];
   if (isAudio) {
     kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
       (bnd) => onAnim({ ...anim, band: bnd })));
@@ -164,7 +255,7 @@ function animControls(anim, onAnim) {
     kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
   } else {
-    kids.push(selectInput(DIRECTIONS, anim.direction, (d) => onAnim({ ...anim, direction: d })));
+    kids.push(dirButtons(anim.direction, (d) => onAnim({ ...anim, direction: d })));
     kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
     kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
     kids.push(mini('s', anim.durationMs / 1000, (v) => onAnim({ ...anim, durationMs: Math.max(0, Math.round(v * 1000)) })));
@@ -182,11 +273,13 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
   let selectedClipId = null; // inspector target — SELECT (click) is decoupled from ACTIVE (trigger)
+  let selectedLayerId = null; // which layer the Layer inspector edits
+  const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
   function setPlayhead(i) {
     if (i === playheadIndex) return;
@@ -194,25 +287,31 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     deckCells.forEach((cell, idx) => cell.classList.toggle('clip-playhead', idx === i));
   }
 
-  // Move animated sliders to their live value at time t (selected clip + the
-  // composition FX). Cheap: only touches sliders tagged data-animkey.
+  // Move each animated param's live marker + readout to its value at time t
+  // (selected clip + composition FX). Cheap: only touches data-animkey nodes.
   function applyLive(container, anim, t, bands) {
     if (!anim || !container) return;
     for (const k of Object.keys(anim)) {
-      const r = container.querySelector(`input[data-animkey="${k}"]`);
-      if (!r) continue;
+      const node = container.querySelector(`[data-animkey="${k}"]`);
+      if (!node) continue;
       const v = animatedValue(anim[k], t, bands);
-      r.value = String(v);
-      const out = r.closest('.ly-param')?.querySelector('.ly-readout');
-      if (out) out.textContent = fmt(v);
+      // Range track: slide the live marker along [min,max]. (Fallback: a plain input.)
+      const lo = Number(node.dataset.min), hi = Number(node.dataset.max);
+      const live = node.querySelector?.('.anim-live');
+      if (live && hi > lo) live.style.left = `${Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100}%`;
+      else if (node.tagName === 'INPUT') node.value = String(v);
+      const out = node.closest('.anim-param')?.querySelector('.ly-readout');
+      if (out) out.textContent = fmtLive(v);
     }
   }
   function updateLive(t, bands) {
-    const layer = firstLayer();
-    if (!layer) return;
-    const sel = (layer.clips || []).find((c) => c.id === selectedClipId);
+    const layers = getShow().composition?.layers || [];
+    if (!layers.length) return;
+    // The selected clip can live in any layer; the composition FX shown is the top layer's.
+    let sel = null;
+    for (const L of layers) { sel = (L.clips || []).find((c) => c.id === selectedClipId); if (sel) break; }
     applyLive(mounts?.inspectorClip || root, sel?.anim, t, bands);
-    applyLive(mounts?.inspectorComposition || root, layer.anim, t, bands);
+    applyLive(mounts?.inspectorComposition || root, layers[layers.length - 1].anim, t, bands);
   }
 
   // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).
@@ -226,33 +325,28 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     setShow(nextShow);
     onChange?.();
   }
+  // The layer head fader and the inspector opacity slider are the SAME value —
+  // keep both DOM controls in step live (neither triggers a re-render mid-drag).
+  function syncLayerOpacity(id, v) {
+    const dl = document.querySelector(`.deck-layer[data-layer="${id}"]`);
+    if (dl) {
+      const r = dl.querySelector('.lh-op-range'); if (r) r.value = String(v);
+      const o = dl.querySelector('.lh-op-val'); if (o) o.textContent = Math.round((Number(v) || 0) * 100) + '%';
+    }
+    const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
+    if (insp) {
+      const r = insp.querySelector('input[type=range]'); if (r) r.value = String(v);
+      const o = insp.querySelector('.ly-readout'); if (o) o.textContent = fmt(v);
+    }
+  }
 
   const show = () => getShow();
   const firstLayer = () => getShow().composition?.layers?.[0] || null;
+  const layerById = (lid) => (getShow().composition?.layers || []).find((L) => L.id === lid) || null;
+  const layerOfClip = (cid) => (getShow().composition?.layers || []).find((L) => (L.clips || []).some((c) => c.id === cid)) || null;
+  const topLayer = () => { const ls = getShow().composition?.layers || []; return ls[ls.length - 1] || null; };
   // Live clip lookup (presets read CURRENT params, not the captured render-time clip).
-  const liveClip = (cid) => (firstLayer()?.clips || []).find((c) => c.id === cid) || null;
-
-  // Compact preset widget for a source/effect TYPE — a small load dropdown +
-  // save + reset, meant to sit in a header corner.
-  //   getParams(): current params to save · applyParams(p): load · onReset(): defaults
-  function presetWidget(kind, name, getParams, applyParams, onReset) {
-    const names = listPresets(kind, name);
-    const sel = el('select', { className: 'preset-mini', title: 'load / delete preset' });
-    sel.append(el('option', { value: '', textContent: 'preset' }));
-    for (const n of names) sel.append(el('option', { value: n, textContent: n }));
-    sel.addEventListener('change', () => {
-      if (sel.value) { const p = loadPreset(kind, name, sel.value); if (p) applyParams(p); }
-    });
-    const save = el('button', {
-      className: 'preset-mini-btn', textContent: '＋', title: 'save current as a preset',
-      onclick: () => { const pn = window.prompt(`Save ${name} preset as:`); if (pn && pn.trim()) { savePreset(kind, name, pn.trim(), getParams()); render(); } },
-    });
-    const reset = el('button', {
-      className: 'preset-mini-btn', textContent: '↺', title: 'reset to defaults',
-      onclick: () => onReset?.(),
-    });
-    return el('div', { className: 'preset-widget' }, [sel, save, reset]);
-  }
+  const liveClip = (cid) => layerOfClip(cid)?.clips.find((c) => c.id === cid) || null;
 
   // The param subset of `params` whose keys are prefixed by `name + '.'`.
   const paramsForPrefix = (params, name) => {
@@ -261,9 +355,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return out;
   };
 
-  // A single "⋯" options button for an EFFECT: a popover menu with preset load,
-  // save, reset and remove. Replaces the row of arrow/preset/✕ buttons.
-  function fxMenu({ presetName, getParams, applyParams, onReset, onRemove }) {
+  // A single "⋯" options button: a popover with preset load, save, reset and
+  // (for effects) remove. Shared by effect rows and the clip preset control, so
+  // sources and effects manage saved looks the same way. `kind` selects the
+  // preset namespace ('effect' | 'source'); pass onRemove only for effects.
+  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove }) {
     const wrap = el('div', { className: 'fx-menu-wrap' });
     const menu = el('div', { className: 'fx-menu', hidden: true });
     const close = () => { menu.hidden = true; };
@@ -271,19 +367,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       className: 'fx-menu-item ' + cls, textContent: label,
       onclick: (e) => { e.stopPropagation(); onClick(); },
     });
-    const names = listPresets('effect', presetName);
+    const names = listPresets(kind, presetName);
     if (names.length) {
       menu.append(el('div', { className: 'fx-menu-label', textContent: 'presets' }));
-      for (const n of names) menu.append(item(n, () => { const p = loadPreset('effect', presetName, n); if (p) applyParams(p); close(); }));
+      for (const n of names) menu.append(item(n, () => { const p = loadPreset(kind, presetName, n); if (p) applyParams(p); close(); }));
       menu.append(el('div', { className: 'fx-menu-sep' }));
     }
-    menu.append(item('Save preset…', () => {
+    menu.append(item('save preset…', () => {
       const pn = window.prompt(`Save ${presetName} preset as:`);
-      if (pn && pn.trim()) { savePreset('effect', presetName, pn.trim(), getParams()); render(); }
+      if (pn && pn.trim()) { savePreset(kind, presetName, pn.trim(), getParams()); render(); }
     }));
-    menu.append(item('Reset', () => onReset()));        // commits → re-renders
-    menu.append(item('Remove', () => onRemove(), 'fx-menu-danger'));
-    const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: 'effect options' });
+    menu.append(item('reset', () => onReset()));        // commits → re-renders
+    if (onRemove) menu.append(item('remove', () => onRemove(), 'fx-menu-danger'));
+    const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: onRemove ? 'effect options' : 'preset options' });
     btn.onclick = (e) => {
       e.stopPropagation();
       const opening = menu.hidden;
@@ -310,40 +406,51 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   const libraryEl = mounts?.library || root;
 
   function render() {
-    const layer = firstLayer();
+    const layers = getShow().composition?.layers || [];
     // Clear each distinct container once.
     const seen = new Set();
     for (const c of [deckEl, clipEl, layerEl, compEl, libraryEl]) {
       if (!seen.has(c)) { c.textContent = ''; seen.add(c); }
     }
 
-    if (!layer) {
+    if (!layers.length) {
       deckEl.append(el('div', { className: 'ly-hint', textContent: 'no composition layer' }));
+      deckEl.append(el('button', { className: 'fx-add deck-addlayer', textContent: '+ layer', onclick: () => commit(addLayer(show())) }));
+      libraryEl.append(composerRail());
       return;
     }
-    const id = layer.id;
 
-    // --- DECK region: transport + a layer row (header + clip-slot grid) -------
-    if (transport) deckEl.append(el('div', { className: 'composer-deckhead' }, [transportBar()]));
-    // A Resolume-style layer row: a header (name · opacity) on the left,
-    // then the slot grid (filled clips + empty placeholder slots).
-    deckEl.append(el('div', { className: 'deck-layer' }, [
-      layerHead(layer, id),
-      clipDeck(layer, id),
-    ]));
+    // --- DECK region: one row per layer, TOP-of-stack first (Resolume-style:
+    //     the top row renders on top — it's the LAST layer in the array). A
+    //     "+ layer" button adds another. Transport moved to the Layer autopilot.
+    const deckBox = el('div', { className: 'deck-layers' });
+    // Pad every layer's deck to the same column count so clips line up vertically
+    // into a Resolume-style grid (max clips across layers + 1 trailing empty).
+    const maxClips = layers.reduce((m, L) => Math.max(m, (L.clips || []).length), 0);
+    for (let i = layers.length - 1; i >= 0; i--) {
+      const layer = layers[i];
+      deckBox.append(el('div', {
+        className: 'deck-layer' + (layer.minimized ? ' is-min' : '') + (layer.id === selectedLayerId ? ' is-sel' : ''),
+        'data-layer': layer.id,
+      }, [layerHead(layer, layer.id, i, layers.length > 1), clipDeck(layer, layer.id, maxClips)]));
+    }
+    deckEl.append(deckBox);
+    deckEl.append(el('button', { className: 'fx-add deck-addlayer', textContent: '+ layer', onclick: () => commit(addLayer(show())) }));
 
-    // --- CLIP inspector: the SELECTED clip (defaults to the active one) -------
-    const clips = layer.clips || [];
-    if (!clips.some((c) => c.id === selectedClipId)) selectedClipId = layer.activeClipId;
-    const selClip = clips.find((c) => c.id === selectedClipId);
-    if (selClip) clipEl.append(selectedClipEditor(id, selClip));
+    // --- CLIP inspector: the SELECTED clip, found across ALL layers ----------
+    let selLayer = layers.find((L) => (L.clips || []).some((c) => c.id === selectedClipId));
+    if (!selLayer) { selLayer = layers[layers.length - 1]; selectedClipId = selLayer.activeClipId; }
+    const selClip = (selLayer.clips || []).find((c) => c.id === selectedClipId);
+    if (selClip) clipEl.append(selectedClipEditor(selLayer.id, selClip));
     else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clip selected' }));
 
-    // --- LAYER inspector: layer settings -------------------------------------
-    layerEl.append(layerSettings(layer, id));
+    // --- LAYER inspector: the selected layer's settings ----------------------
+    if (!layers.some((L) => L.id === selectedLayerId)) selectedLayerId = selLayer.id;
+    const inspLayer = layers.find((L) => L.id === selectedLayerId) || selLayer;
+    layerEl.append(layerSettings(inspLayer, inspLayer.id));
 
-    // --- COMPOSITION inspector: composition FX -------------------------------
-    compEl.append(compositionEffects(layer, id));
+    // --- COMPOSITION inspector: composition FX (top layer's output chain) ----
+    compEl.append(compositionEffects(layers[layers.length - 1], layers[layers.length - 1].id));
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());
@@ -356,7 +463,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function compositionEffects(layer, id) {
     const box = el('div', { className: 'comp-fx' });
     box.append(el('div', { className: 'composer-label composer-label-fx',
-      textContent: 'COMPOSITION FX' }));
+      textContent: 'composition fx' }));
     box.append(el('div', { className: 'ly-hint', textContent: 'applied to the whole composition' }));
 
     const fxs = layer.effects || [];
@@ -376,7 +483,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function layerEffectBlock(id, fx, effects) {
     const name = effects[fx];
     const entry = getEntry(name);
-    const layer = firstLayer();
+    const layer = layerById(id);
     const block = el('div', { className: 'ly-fx ly-fx-layer' });
     makeDropTarget(block, (payload) => {
       if (payload.kind === 'fx-layer' && payload.index !== fx) {
@@ -394,7 +501,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     head.addEventListener('dragend', () => { drag = null; });
     head.append(fxMenu({
       presetName: entry?.name || name,
-      getParams: () => paramsForPrefix(firstLayer()?.params, name),
+      getParams: () => paramsForPrefix(layerById(id)?.params, name),
       applyParams: (p) => commit(mergeLayerParams(show(), id, p)),
       onReset: () => commit(mergeLayerParams(show(), id, prefixedDefaults(name))),
       onRemove: () => commit(removeLayerEffect(show(), id, fx)),
@@ -414,33 +521,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return block;
   }
 
-  // Play/stop + loop bar. Toggling re-renders so the label flips and (on stop)
-  // the playhead highlight clears.
-  function transportBar() {
-    const bar = el('div', { className: 'transport' });
-    const playing = transport.isPlaying();
-    bar.append(el('button', {
-      className: 'transport-play' + (playing ? ' is-playing' : ''),
-      textContent: playing ? '■ stop' : '▶ play',
-      onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
-    }));
-    const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop() });
-    loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
-    bar.append(el('label', { className: 'transport-loop' }, [loopCb, el('span', { textContent: 'loop' })]));
-    if (transport.fire) {
-      bar.append(el('button', {
-        className: 'transport-fire', textContent: '⚡ trigger',
-        title: 'fire triggerable sources (Pulse)',
-        onclick: () => transport.fire(),
-      }));
-    }
-    return bar;
-  }
 
   // The clip deck. Each cell: click = trigger; accepts a dragged SOURCE (replace
   // + trigger) or EFFECT (append to that clip). The "+" cell accepts a SOURCE to
   // create a new clip, with a generator <select> as a no-drag fallback.
-  function clipDeck(layer, id) {
+  function clipDeck(layer, id, columns = 0) {
     const deck = el('div', { className: 'clip-deck' });
     deckCells = [];
     const clips = layer.clips || [];
@@ -474,7 +559,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           commit(addClipEffect(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
           // Reorder: move the dragged clip to this clip's position.
-          const cur = (firstLayer()?.clips || []);
+          const cur = (layerById(id)?.clips || []);
           const from = cur.findIndex((c) => c.id === payload.clipId);
           const to = cur.findIndex((c) => c.id === clip.id);
           if (from >= 0 && to >= 0) commit(moveClip(show(), id, payload.clipId, to - from));
@@ -493,11 +578,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       deck.append(cell);
     }
 
-    // Empty placeholder slots (Resolume-style): pad the row so there are always
-    // a few empty slots after the clips. They are pure DROP TARGETS — drag a
-    // source from the library onto one to add a clip there.
-    const MIN_SLOTS = 8;
-    const emptyCount = Math.max(2, MIN_SLOTS - clips.length);
+    // Exactly ONE trailing empty slot — a drop target / "+" to add the next clip.
+    // (Filling it makes a new clip, and a fresh empty slot reappears after it.)
+    const emptyCount = Math.max(1, (columns - clips.length) + 1);
     for (let e = 0; e < emptyCount; e++) {
       const slot = el('div', { className: 'clip-cell clip-empty', title: 'drag a source here' }, [
         el('div', { className: 'clip-empty-plus', textContent: '+' }),
@@ -506,7 +589,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
         else if (payload.kind === 'clip') {
           // Move the dragged clip to the end of the deck.
-          const cur = firstLayer()?.clips || [];
+          const cur = layerById(id)?.clips || [];
           const from = cur.findIndex((c) => c.id === payload.clipId);
           if (from >= 0) commit(moveClip(show(), id, payload.clipId, (cur.length - 1) - from));
         }
@@ -522,18 +605,64 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const name = el('input', { className: 'ly-nameedit', value: layer.name ?? 'Layer 1', title: 'layer name' });
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
     box.append(el('div', { className: 'clip-editor-head' }, [name]));
-    box.append(sliderField('opacity', layer.opacity ?? 1, 0, 1,
-      (v) => commitLive(patchLayer(show(), id, { opacity: v })), 1));
-    box.append(sliderField('crossfade (ms)', layer.transitionMs ?? 500, 0, 5000,
+
+    // Autopilot (Resolume-style): play-through of the clip deck as a timeline.
+    // Always loops (transport.loop defaults true) — no toggle needed.
+    if (transport) {
+      const playing = transport.isPlaying();
+      box.append(el('div', { className: 'fx-pts', textContent: 'autopilot' }));
+      box.append(el('div', { className: 'autopilot' }, [
+        el('button', {
+          className: 'transport-play' + (playing ? ' is-playing' : ''),
+          textContent: playing ? '■ stop' : '▶ play',
+          onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
+        }),
+      ]));
+    }
+
+    box.append(el('div', { className: 'fx-pts', textContent: 'blend' }));
+    box.append(field('blend mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
+      (m) => commit(patchLayer(show(), id, { blend: m })))));
+    const opacityRow = sliderField('opacity', layer.opacity ?? 1, 0, 1,
+      (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
+    opacityRow.dataset.opacityLayer = id;
+    box.append(opacityRow);
+    box.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
       (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
+    // Delete this layer (only when more than one exists — keep at least one).
+    if ((show().composition?.layers || []).length > 1) {
+      box.append(el('button', {
+        className: 'fx-del-link', textContent: 'delete layer',
+        onclick: () => { selectedLayerId = null; commit(removeLayer(show(), id)); },
+      }));
+    }
     return box;
   }
 
   // Resolume-style layer control block: a vertical opacity fader (the "V"),
   // clear/eject + blend controls, and the layer name bar at the bottom.
-  function layerHead(layer, id) {
+  function layerHead(layer, id, index, canReorder) {
     const pct = (v) => Math.round((v ?? 1) * 100) + '%';
-    const head = el('div', { className: 'layer-head-box' });
+    const head = el('div', {
+      className: 'layer-head-box lh-clickable',
+      title: canReorder ? 'click to edit · double-click to minimise · drag to reorder' : 'click to edit · double-click to minimise',
+      draggable: canReorder,
+    });
+    // Click → select this layer (Layer inspector) · double-click → minimise.
+    head.addEventListener('click', () => { selectedLayerId = id; onLayerSelect?.(); render(); });
+    head.addEventListener('dblclick', () => commit(patchLayer(show(), id, { minimized: !layer.minimized })));
+    // Drag the head to reorder layers (drop onto another layer row).
+    head.addEventListener('dragstart', (e) => {
+      drag = { kind: 'layer', layerId: id, index };
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'layer:' + id);
+    });
+    head.addEventListener('dragend', () => { drag = null; });
+    // Drop another layer's head here → reorder it to this layer's position.
+    makeDropTarget(head, (payload) => {
+      if (payload.kind === 'layer' && payload.layerId !== id) {
+        commit(moveLayer(show(), payload.layerId, index - payload.index));
+      }
+    });
     const body = el('div', { className: 'lh-body' });
 
     // Vertical opacity fader.
@@ -544,24 +673,49 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       className: 'lh-op-range', title: 'layer opacity',
     });
     opRange.addEventListener('input', () => {
-      opOut.textContent = pct(Number(opRange.value));
-      commitLive(patchLayer(show(), id, { opacity: Number(opRange.value) }));
+      const v = Number(opRange.value);
+      opOut.textContent = pct(v);
+      commitLive(patchLayer(show(), id, { opacity: v }));
+      syncLayerOpacity(id, v);
+    });
+    // The fader lives inside the draggable head, so a press on it can otherwise
+    // start a native layer-reorder drag. Suspend draggable while the fader is
+    // grabbed; restore it on release.
+    opRange.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      head.draggable = false;
+      const restore = () => { head.draggable = canReorder; window.removeEventListener('pointerup', restore); };
+      window.addEventListener('pointerup', restore);
     });
     opCol.append(opOut, opRange);
     body.append(opCol);
 
-    // Clear (eject active clip).
+    // B (bypass) · S (solo) · ✕ (clear). stopPropagation so they don't also
+    // trigger the layer-select click on the head.
     const ctrls = el('div', { className: 'lh-ctrls' });
-    ctrls.append(el('button', {
-      className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
-      onclick: () => commit(setActiveClip(show(), id, null)),
-    }));
+    const tog = (label, on, title, fn) => el('button', {
+      className: 'lh-tog' + (on ? ' on' : ''), textContent: label, title,
+      onclick: (e) => { e.stopPropagation(); fn(); },
+    });
+    ctrls.append(
+      tog('B', !!layer.bypass, layer.bypass ? 'un-bypass layer' : 'bypass (mute) this layer',
+        () => commit(patchLayer(show(), id, { bypass: !layer.bypass }))),
+      tog('S', !!layer.solo, layer.solo ? 'un-solo layer' : 'solo this layer',
+        () => commit(patchLayer(show(), id, { solo: !layer.solo }))),
+      el('button', {
+        className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
+        onclick: (e) => { e.stopPropagation(); commit(setActiveClip(show(), id, null)); },
+      }),
+    );
     body.append(ctrls);
     head.append(body);
+
+    // (Blend mode lives only in the contextual Layer inspector — not the head.)
 
     // Layer name bar (Resolume highlights the active layer's name bar).
     const name = el('input', { className: 'lh-name', value: layer.name ?? 'Layer 1', title: 'layer name' });
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
+    name.addEventListener('click', (e) => e.stopPropagation());
     head.append(name);
     return head;
   }
@@ -581,21 +735,23 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // "source: X" / "X params" meta (the slot already shows the source).
     const gen = getEntry(clip.generator);
 
-    // Header: clip name + a compact SOURCE preset widget (presets · save · reset)
-    // in the corner. Reset re-applies the generator's manifest defaults.
-    const head = el('div', { className: 'clip-editor-head' }, [nameInput]);
+    // Header: clip name + a "⋯" preset menu in the corner (load/save/reset a
+    // saved look), mirroring how effect rows carry their options menu.
+    const clipHead = el('div', { className: 'clip-editor-head' }, [nameInput]);
     if (gen && gen.params.length) {
-      head.append(presetWidget('source', gen.name,
-        () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
-        (p) => commit(mergeClipParams(show(), id, clip.id, p)),
-        () => commit(changeClipGenerator(show(), id, clip.id, clip.generator))));
+      clipHead.append(fxMenu({
+        kind: 'source', presetName: gen.name,
+        getParams: () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
+        applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
+        onReset: () => commit(changeClipGenerator(show(), id, clip.id, clip.generator)),
+      }));
     }
-    box.append(head);
+    box.append(clipHead);
 
     // Triggerable sources (Pulse) get a prominent Trigger button here.
     if (gen?.triggerable && transport?.fire) {
       box.append(el('button', {
-        className: 'clip-trigger', textContent: '⚡ Trigger',
+        className: 'clip-trigger', textContent: '⚡ trigger',
         title: 'fire the pulse', onclick: () => transport.fire(),
       }));
     }
@@ -603,7 +759,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Transport: how long the timeline transport holds this slot (Resolume names
     // this section "Transport").
     box.append(el('div', { className: 'fx-pts', textContent: 'transport' }));
-    box.append(sliderField('duration (s)', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
+    box.append(sliderField('duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
       (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
     if (gen && gen.params.length) {
       for (const p of gen.params) {
@@ -615,22 +771,24 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         }));
       }
     }
-    // Transform + opacity (the clip's placement on the canvas).
+    // Transform + opacity (the clip's placement on the canvas) — all animatable
+    // (Timeline/Audio) via the cog, like the source params. Anim keyed `tf.*`.
     const t = clip.transform || {};
     box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
-    box.append(sliderField('x', t.x ?? 0, -1, 1,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { x: v })), 0));
-    box.append(sliderField('y', t.y ?? 0, -1, 1,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { y: v })), 0));
-    box.append(sliderField('scale', t.scale ?? 1, 0, 3,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { scale: v })), 1));
-    box.append(sliderField('rotation', t.rotation ?? 0, -180, 180,
-      (v) => commitLive(setClipTransform(show(), id, clip.id, { rotation: v })), 0));
-    box.append(sliderField('opacity', clip.opacity ?? 1, 0, 1,
-      (v) => commitLive(setClipOpacity(show(), id, clip.id, v)), 1));
+    const tfParam = (key, label, min, max, def, value, apply) => box.append(animatableParam({
+      key: 'tf.' + key, p: { key: label, type: 'float', min, max, default: def },
+      value, anim: clip.anim?.['tf.' + key],
+      onValue: (v) => commitLive(apply(v)),
+      onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
+    }));
+    tfParam('x', 'x', -1, 1, 0, t.x ?? 0, (v) => setClipTransform(show(), id, clip.id, { x: v }));
+    tfParam('y', 'y', -1, 1, 0, t.y ?? 0, (v) => setClipTransform(show(), id, clip.id, { y: v }));
+    tfParam('scale', 'scale', 0, 3, 1, t.scale ?? 1, (v) => setClipTransform(show(), id, clip.id, { scale: v }));
+    tfParam('rotation', 'rotation', -180, 180, 0, t.rotation ?? 0, (v) => setClipTransform(show(), id, clip.id, { rotation: v }));
+    tfParam('opacity', 'opacity', 0, 1, 1, clip.opacity ?? 1, (v) => setClipOpacity(show(), id, clip.id, v));
 
     // Effect chain.
-    box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'EFFECTS' }));
+    box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'effects' }));
     const fxs = clip.effects || [];
     for (let fx = 0; fx < fxs.length; fx++) {
       box.append(clipEffectBlock(id, clip, fx, fxs));
@@ -688,10 +846,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // --- right column: draggable Sources + Effects libraries -------------------
   function composerRail() {
     const rail = el('div', { className: 'composer-rail' });
-    rail.append(el('div', { className: 'composer-label', textContent: 'SOURCES' }));
+    rail.append(el('div', { className: 'composer-label', textContent: 'sources' }));
     rail.append(libList('source', generatorNames()));
     rail.append(videoAddItem());
-    rail.append(el('div', { className: 'composer-label composer-label-fx', textContent: 'EFFECTS' }));
+    rail.append(el('div', { className: 'composer-label composer-label-fx', textContent: 'effects' }));
     rail.append(libList('effect', effectNames()));
     return rail;
   }
@@ -699,13 +857,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // "+ Video…" — pick a video file and add it as a new clip.
   function videoAddItem() {
     const item = el('div', { className: 'lib-item lib-video', title: 'add a video file as a clip' }, [
-      el('span', { className: 'lib-label', textContent: '+ Video…' }),
+      el('span', { className: 'lib-label', textContent: '+ video…' }),
     ]);
     item.addEventListener('click', () => {
       const inp = el('input', { type: 'file', accept: 'video/*' });
       inp.addEventListener('change', () => {
         const f = inp.files && inp.files[0];
-        const l = firstLayer();
+        const l = layerOfClip(selectedClipId) || topLayer();
         if (!f || !l) return;
         const name = f.name.replace(/\.[^.]+$/, '');
         const next = addVideoClip(show(), l.id, name, URL.createObjectURL(f));
@@ -762,7 +920,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Delete the selected clip (bound to the Delete key by app.js).
   function deleteActiveClip() {
-    const l = firstLayer();
+    const l = layerOfClip(selectedClipId) || topLayer();
     const target = selectedClipId || l?.activeClipId;
     if (l && target) commit(removeClip(show(), l.id, target));
   }

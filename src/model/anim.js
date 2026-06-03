@@ -18,7 +18,7 @@ export const DIRECTIONS = ['forward', 'backward', 'mirror'];
 
 // A param spec is BASIC (no entry), TIMELINE (mode 'timeline', default), or
 // AUDIO (mode 'audio', driven by an audio band 0..1 scaled by gain).
-export function makeAnim(from, to, durationMs = 4000, direction = 'forward') {
+export function makeAnim(from, to, durationMs = 10000, direction = 'forward') {
   return { mode: 'timeline', from: Number(from) || 0, to: Number(to) || 0, durationMs: Math.max(0, Math.round(durationMs)), direction };
 }
 
