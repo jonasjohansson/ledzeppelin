@@ -11,11 +11,12 @@ import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setCompositionOpacity,
 } from './model/layers.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints } from './model/fixture-transform.js';
-import { resolveParams } from './model/anim.js';
-import { updateAudio } from './model/audio.js';
+import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChains } from './model/chains.js';
+import { resolveParams, animatedValue } from './model/anim.js';
+import { updateAudio, setAudioGain } from './model/audio.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 
 const canvas = document.getElementById('stage');
@@ -45,7 +46,7 @@ function defaultShow() {
   // in-shader via uT. Layer-level effects/params start empty.
   const clip = { ...makeClip('line', undefined, 'c1'), params: prefixedDefaults('line') };
   show.composition.layers = [
-    { id: 'l1', name: 'layer 1', blend: 'add', opacity: 1,
+    { id: 'l1', name: 'Layer 1', blend: 'add', opacity: 1,
       clips: [clip], activeClipId: clip.id,
       effects: [], params: {}, transitionMs: 500 },
   ];
@@ -96,7 +97,9 @@ let sampler = null, bridge = null, lastRGBA = null;
 const SCREEN_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex;
-void main(){ frag = vec4(texture(uTex, uv).rgb, 1.0); }`;
+// Pass the composite's alpha through so empty regions are transparent and the
+// CSS checkerboard "canvas paper" shows behind them (opaque content covers it).
+void main(){ frag = texture(uTex, uv); }`;
 const screenProg = program(gl, SCREEN_FS);
 const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
@@ -104,12 +107,26 @@ function rebuild(next) {
   // Geometry path: ensure fixtures' derived sample points are in sync with their
   // pixel-space transforms + the current canvas before building the sampler.
   show = syncShowFixtures(next);
-  const { sampleUVs, route } = buildPipelineInputs(show);
+  const { sampleUVs, route, spans } = buildPipelineInputs(show);
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
   if (bridge?.close) bridge.close();
   bridge = connectBridge(route);
+  lastSpans = spans;
+  recomputeHiddenSpans();
   lastRGBA = null;
+}
+
+// Hidden ("eye"-off) fixtures must go DARK on the wall, not just in the preview —
+// so we still sample them (to keep DDP indices contiguous) and zero their bytes
+// before sending. Recompute when the hidden flag toggles (no full rebuild).
+let lastSpans = [];
+let hiddenSpans = [];
+function recomputeHiddenSpans() {
+  hiddenSpans = (lastSpans || []).filter((s) => {
+    const f = show.fixtures.find((x) => x.id === s.id);
+    return f && f.hidden;
+  });
 }
 
 // Composition-only edit path (layers/effects/params): the compositor reads
@@ -163,6 +180,10 @@ const transport = {
   setLoop(b) { this.loop = !!b; },
   toggle() { this.playing = !this.playing; if (this.playing) this.startTs = lastTs; },
   fire() { pulseTrigSecs.push(nowSec()); if (pulseTrigSecs.length > 8) pulseTrigSecs = pulseTrigSecs.slice(-8); },
+  // Restart the animation timer: clock back to 0 (Timeline sweeps, pulse autofire),
+  // clear pending pulse triggers, and reset the compositor's integrated phase
+  // clocks (line/hue speed sweeps) so everything re-syncs to its start.
+  reset() { t0 = lastTs; this.startTs = lastTs; pulseTrigSecs = []; compositor?.resetPhases?.(); },
 };
 
 // The composer renders into the Resolume-style shell's three regions: the DECK
@@ -173,6 +194,7 @@ const layerPanel = createLayerPanel({
   transport,
   thumbnails,
   onClipSelect: () => setInspectorTab('clip'), // clicking a clip focuses the Clip inspector
+  onLayerSelect: () => setInspectorTab('layer'), // clicking the layer rectangle focuses the Layer inspector
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -338,12 +360,13 @@ function renderOutput() {
     eye.onclick = (e) => {
       e.stopPropagation();
       const n = structuredClone(show); const ff = n.fixtures.find((x) => x.id === f.id);
-      ff.hidden = !ff.hidden; show = n; saveShow(n); renderOutput(); redrawOverlay();
+      ff.hidden = !ff.hidden; show = n; saveShow(n); recomputeHiddenSpans(); renderOutput(); redrawOverlay();
     };
     const del = oel('button', { textContent: '✕', className: 'ly-rmfx', title: 'remove fixture' });
     del.onclick = (e) => {
       e.stopPropagation();
-      const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
+      let n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
+      n = pruneChains(n);   // keep chain stagger indices correct after a deletion
       selectedFixtureIds.delete(f.id); rebuild(n); panel.refresh(); renderOutput();
     };
     row.onclick = (e) => selectFixture(f.id, e);
@@ -351,12 +374,19 @@ function renderOutput() {
     outputListEl.append(row);
   }
 
-  // Multiple selected → group hint (drag moves them together). Exactly one →
-  // its position editor. Size lives in the Fixtures tab (kept out of Output).
+  // Multiple selected → group hint (drag moves them together) + "chain" action.
   if (selectedFixtureIds.size > 1) {
     outputListEl.append(oel('div', { className: 'output-edit' }, [
       oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
+      oel('button', {
+        className: 'fx-add', textContent: '⛓ chain selected (stagger)',
+        onclick: () => {
+          const next = addChain(show, [...selectedFixtureIds]);
+          saveShow(next); rebuild(next); renderOutput(); redrawOverlay();
+        },
+      }),
     ]));
+    renderChains();
     return;
   }
   const sel = fixtures.find((f) => selectedFixtureIds.has(f.id));
@@ -375,6 +405,62 @@ function renderOutput() {
       ]),
     ]));
   }
+  renderChains();
+}
+
+// Chains: ordered fixture groups with a stagger offset (cascade a pulse). Each
+// card: members (reorderable), a stagger slider, an axis toggle, and delete.
+function renderChains() {
+  const chains = show.chains || [];
+  if (!chains.length) return;
+  const commit = (next) => { saveShow(next); rebuild(next); renderOutput(); redrawOverlay(); };
+  const fxName = (id) => (show.fixtures.find((f) => f.id === id)?.name || id);
+
+  const wrap = oel('div', { className: 'chains' }, [oel('div', { className: 'fx-pts', textContent: 'chains (stagger)' })]);
+  for (const c of chains) {
+    const card = oel('div', { className: 'chain-card' });
+    const head = oel('div', { className: 'chain-head' }, [
+      oel('span', { className: 'chain-name', textContent: c.name }),
+      oel('button', { className: 'chain-fire', textContent: '⚡', title: 'fire a pulse to preview the stagger', onclick: () => transport.fire() }),
+      oel('button', { className: 'ly-rmfx', textContent: '✕', title: 'remove chain', onclick: () => commit(removeChain(show, c.id)) }),
+    ]);
+    card.append(head);
+
+    // Ordered members — index drives the stagger; ▲▼ reorder, ✕ removes one.
+    const list = oel('div', { className: 'chain-members' });
+    c.members.forEach((m, i) => {
+      list.append(oel('div', { className: 'chain-member' }, [
+        oel('span', { className: 'chain-idx', textContent: String(i) }),
+        oel('span', { className: 'chain-mname', textContent: fxName(m) }),
+        oel('button', { textContent: '▲', title: 'earlier', disabled: i === 0, onclick: () => commit(moveChainMember(show, c.id, m, -1)) }),
+        oel('button', { textContent: '▼', title: 'later', disabled: i === c.members.length - 1, onclick: () => commit(moveChainMember(show, c.id, m, 1)) }),
+        oel('button', { className: 'ly-rmfx', textContent: '✕', title: 'remove from chain', onclick: () => commit(patchChain(show, c.id, { members: c.members.filter((x) => x !== m) })) }),
+      ]));
+    });
+    card.append(list);
+
+    // Stagger amount (normalized canvas offset per step) + readout.
+    const sOut = oel('span', { className: 'ly-readout', textContent: c.stagger.toFixed(2) });
+    const sRange = oel('input', { type: 'range', min: '-0.5', max: '0.5', step: '0.01', value: String(c.stagger) });
+    sRange.addEventListener('input', () => { sOut.textContent = Number(sRange.value).toFixed(2); });
+    sRange.addEventListener('change', () => commit(patchChain(show, c.id, { stagger: Number(sRange.value) })));
+    sRange.addEventListener('contextmenu', (e) => { e.preventDefault(); commit(patchChain(show, c.id, { stagger: 0.1 })); });
+    card.append(oel('label', { className: 'fx-field ly-param ly-row' }, [
+      oel('span', { className: 'ly-plabel', textContent: 'stagger' }), sOut, sRange,
+    ]));
+
+    // Axis: which way the cascade travels (matches the source's travel axis).
+    const axisBtns = oel('div', { className: 'dir-btns chain-axis' }, ['x', 'y'].map((ax) => oel('button', {
+      className: 'dir-btn' + (c.axis === ax ? ' on' : ''), textContent: ax.toUpperCase(),
+      onclick: () => commit(patchChain(show, c.id, { axis: ax })),
+    })));
+    card.append(oel('label', { className: 'fx-field ly-param ly-row' }, [
+      oel('span', { className: 'ly-plabel', textContent: 'axis' }), axisBtns,
+    ]));
+
+    wrap.append(card);
+  }
+  outputListEl.append(wrap);
 }
 const renderOutputList = renderOutput; // back-compat alias
 
@@ -423,13 +509,33 @@ tabsEl?.addEventListener('click', (ev) => {
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
-// 'h' toggles all GUI off to view the canvas full-screen. (Tab is intentionally
-// NOT bound — it's too easy to hit and would hide the UI unexpectedly.)
+// Show/hide all GUI to view the canvas full-screen — via the 'h' key OR the
+// top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
+// always a way back). Tab is intentionally NOT bound (too easy to hit).
+const toggleGui = () => document.body.classList.toggle('gui-hidden');
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'h' && e.key !== 'H') return;
   if (typingIn(e.target)) return;
-  document.body.classList.toggle('gui-hidden');
+  toggleGui();
 });
+
+// --- Top-bar global tweaks: master opacity · reset timer · hide UI ---
+const gMaster = document.getElementById('g-master');
+const gMasterVal = document.getElementById('g-master-val');
+function syncMasterFader() {
+  const o = show.composition?.opacity ?? 1;
+  if (gMaster) gMaster.value = String(o);
+  if (gMasterVal) gMasterVal.textContent = `${Math.round(o * 100)}%`;
+}
+gMaster?.addEventListener('input', () => {
+  const v = Number(gMaster.value);
+  if (gMasterVal) gMasterVal.textContent = `${Math.round(v * 100)}%`;
+  setComposition(setCompositionOpacity(show, v));
+});
+document.getElementById('g-reset')?.addEventListener('click', () => transport.reset());
+document.getElementById('g-hide')?.addEventListener('click', toggleGui);
+document.getElementById('show-ui')?.addEventListener('click', toggleGui);
+syncMasterFader();
 
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
@@ -529,13 +635,25 @@ function loop(ts) {
     // Per-parameter animations run on a free-running clock (Timeline) or off the
     // live audio bands (Audio); resolve each layer's + clip's animated params to
     // plain numbers before compositing. No-op (same ref) when nothing is animated.
+    setAudioGain(show.composition?.audioGain ?? 1);
     const bands = updateAudio();
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, bands);
       let clips = L.clips;
       if (clips && clips.some((c) => c.anim && Object.keys(c.anim).length)) {
-        clips = clips.map((c) => (c.anim && Object.keys(c.anim).length)
-          ? { ...c, params: resolveParams(c.params, c.anim, t, bands) } : c);
+        clips = clips.map((c) => {
+          const a = c.anim;
+          if (!(a && Object.keys(a).length)) return c;
+          const params = resolveParams(c.params, a, t, bands);
+          // Animated TRANSFORM (keys tf.x/tf.y/tf.scale/tf.rotation) + OPACITY (tf.opacity).
+          let transform = c.transform, opacity = c.opacity;
+          if (a['tf.x'] || a['tf.y'] || a['tf.scale'] || a['tf.rotation']) {
+            transform = { ...(c.transform || {}) };
+            for (const f of ['x', 'y', 'scale', 'rotation']) if (a['tf.' + f]) transform[f] = animatedValue(a['tf.' + f], t, bands);
+          }
+          if (a['tf.opacity']) opacity = animatedValue(a['tf.opacity'], t, bands);
+          return { ...c, params, transform, opacity };
+        });
       }
       return (lp === L.params && clips === L.clips) ? L : { ...L, params: lp, clips };
     });
@@ -544,16 +662,23 @@ function loop(ts) {
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
-    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs, videoTex });
+    const masterOpacity = show.composition?.opacity ?? 1;
+    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs, videoTex, masterOpacity });
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
-    lastRGBA = sampler.sample(compositor.tex);
-    bridge?.send(lastRGBA);
+    // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
+    lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
+    if (lastRGBA) {
+      for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
+      bridge?.send(lastRGBA);
+    }
     preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0);          // transparent so the checkerboard shows through
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.BLEND);
     gl.useProgram(screenProg);
     gl.activeTexture(gl.TEXTURE0);
@@ -564,7 +689,10 @@ function loop(ts) {
   frames++;
   if (ts - last > 500) {
     const fps = (frames * 1000 / (ts - last)).toFixed(0);
-    hud.textContent = `${fps} fps · ${bridge?.connected?.() ? 'output live' : 'output offline (no daemon)'}`;
+    const cv = show.composition?.canvas || {};
+    const nFix = (show.fixtures || []).length;
+    const out = bridge?.connected?.() ? 'output live' : 'output offline';
+    hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`;
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);

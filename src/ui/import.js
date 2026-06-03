@@ -33,7 +33,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
 
   function render() {
     root.textContent = '';
-    root.append(el('div', { className: 'fx-title', textContent: 'Import' }));
+    root.append(el('div', { className: 'fx-title', textContent: 'import' }));
 
     // --- Import button + hidden file input ---
     const banner = el('div', { className: 'fx-err imp-banner' });
@@ -67,14 +67,14 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
     });
 
     root.append(el('button', {
-      className: 'fx-add imp-btn', textContent: 'Import from Kagora…',
+      className: 'fx-add imp-btn', textContent: 'import from Kagora…',
       onclick: () => fileIn.click(),
     }), fileIn, banner);
 
     if (!pending) return;
 
     // --- Assign-IPs panel ---
-    root.append(el('div', { className: 'fx-section', textContent: 'Assign controller IPs' }));
+    root.append(el('div', { className: 'fx-section', textContent: 'assign controller ips' }));
     root.append(el('div', { className: 'fx-pts',
       textContent: `${pending.devices.length} device(s), ${pending.fixtures.length} fixture(s) imported` }));
 
@@ -82,7 +82,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
     const baseInput = el('input', { type: 'text', value: '10.0.0.11', placeholder: 'base IP' });
     baseInput.className = 'imp-base';
     const fillBtn = el('button', {
-      className: 'imp-fill', textContent: 'Auto-fill sequential',
+      className: 'imp-fill', textContent: 'auto-fill sequential',
       onclick: () => {
         const ips = nextIPs(baseInput.value.trim(), pending.devices.length);
         if (!ips) { showError(`auto-fill: invalid base IP or range overflow ("${baseInput.value}")`); return; }
@@ -117,7 +117,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
     // --- Apply / Cancel ---
     const actions = el('div', { className: 'fx-io' });
     actions.append(el('button', {
-      className: 'imp-apply', textContent: 'Apply import',
+      className: 'imp-apply', textContent: 'apply import',
       onclick: () => {
         // 1) Block blank/invalid IPs before touching validate/rebuild.
         const badIps = pending.devices.filter((d) => !isValidIPv4(d.ip));
@@ -139,7 +139,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
       },
     }));
     actions.append(el('button', {
-      className: 'imp-cancel', textContent: 'Cancel',
+      className: 'imp-cancel', textContent: 'cancel',
       onclick: () => { pending = null; clearError(); render(); },
     }));
     root.append(actions);

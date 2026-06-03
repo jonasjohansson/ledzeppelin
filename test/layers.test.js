@@ -14,7 +14,7 @@ import {
 // --- prefixedDefaults (unchanged) ---
 test('prefixedDefaults namespaces keys with the entry name', () => {
   assert.deepEqual(prefixedDefaults('line'),
-    { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90, 'line.speed': 1, 'line.amp': 0.45 });
+    { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90, 'line.speed': 1, 'line.amp': 0.4 });
 });
 
 // --- migration: normalizeComposition ---
@@ -57,6 +57,21 @@ test('normalizeComposition is idempotent (twice == once)', () => {
   const once = normalizeComposition(oldShow());
   const twice = normalizeComposition(once);
   assert.deepEqual(twice, once);
+});
+
+test('normalizeComposition preserves clip + layer per-param animations (no data loss on reload)', () => {
+  const clipAnim = { 'line.pos': { mode: 'timeline', from: 0, to: 1, durationMs: 10000, direction: 'forward' } };
+  const layerAnim = { 'hue.shift': { mode: 'audio', from: 0, to: 1, band: 'bass', gain: 2 } };
+  const show = {
+    version: 1, devices: [], fixtures: [],
+    composition: { canvas: { w: 1280, h: 720 }, layers: [{
+      id: 'l1', activeClipId: 'c1', effects: ['hue'], anim: layerAnim,
+      clips: [{ id: 'c1', generator: 'line', anim: clipAnim }],
+    }] },
+  };
+  const out = normalizeComposition(show);
+  assert.deepEqual(out.composition.layers[0].clips[0].anim, clipAnim);
+  assert.deepEqual(out.composition.layers[0].anim, layerAnim);
 });
 
 test('normalizeComposition ensures canvas + fills clip-layer defaults', () => {

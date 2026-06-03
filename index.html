@@ -2,15 +2,35 @@
 <html lang="en">
 <head><meta charset="utf-8"><title>ledzeppelin</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-<style>html,body{margin:0;background:#0a0a0a;color:#eee;font:13px system-ui}
-canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index:10;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px #000}</style>
+<!-- Type: MONO-FORWARD — one monospace face (Spline Sans Mono by default,
+     Martian Mono swappable) drives chrome + data, self-hosted via @font-face in
+     ui.css (offline-safe). Preload the active face. -->
+<link rel="preload" href="./fonts/SplineSansMono.woff2" as="font" type="font/woff2" crossorigin>
+<style>html,body{margin:0;background:#0a0a0a;color:#eee;font-size:11px}
+canvas{display:block}
+/* Status bar: a solid footer strip (application chrome). Mono face mirrors --ui-font;
+   inline because this <style> runs before ui.css defines the token. */
+#hud{position:fixed;bottom:0;left:0;right:0;height:24px;display:flex;align-items:center;gap:16px;padding:0 12px;z-index:6;pointer-events:none;color:#9aa2ac;background:#181a1f;border-top:1px solid #2d3139;font:11px "Spline Sans Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
 <div id="hud">booting…</div>
-<div id="tabs" class="tabs">
-  <button id="tab-composition" class="tab tab-active" data-tab="composition">Composition</button>
-  <button id="tab-output" class="tab" data-tab="output">Output</button>
-  <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
+<button id="show-ui" title="show the UI (H)">▸ show UI</button>
+<div id="topbar">
+  <div id="tabs" class="tabs">
+    <button id="tab-composition" class="tab tab-active" data-tab="composition">Composition</button>
+    <button id="tab-output" class="tab" data-tab="output">Output</button>
+    <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
+  </div>
+  <!-- Global tweaks (apply across the whole show) -->
+  <div id="globals">
+    <label class="g-fader" title="master opacity (whole composition)">
+      <span class="g-label">master</span>
+      <input type="range" id="g-master" min="0" max="1" step="0.01" value="1">
+      <span class="g-val" id="g-master-val">100%</span>
+    </label>
+    <button id="g-reset" class="g-btn" title="restart the animation timer">↺ reset</button>
+    <button id="g-hide" class="g-btn" title="hide all UI (H)">hide UI</button>
+  </div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
      letterboxed to the composition aspect; the UI panels float over it. -->
@@ -46,7 +66,7 @@ canvas{display:block}#hud{position:fixed;bottom:8px;left:14px;opacity:.7;z-index
 
   <!-- OUTPUT view: the mapping panel (add + position fixtures on the canvas) -->
   <aside id="output-view" class="panel" hidden>
-    <div class="fx-title">Output mapping</div>
+    <div class="fx-title">output mapping</div>
     <div class="seg-hint">Click a fixture to select (shift-click for multiple) · drag to move · Delete to remove.</div>
     <div class="output-tools">
       <button id="add-fixture" class="fx-add">+ add fixture</button>
