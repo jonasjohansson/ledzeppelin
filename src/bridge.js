@@ -12,23 +12,29 @@ export function connectBridge(route) {
   let closed = false;     // explicit close() → stop reconnecting
   let backoff = 500;      // ms; doubles per failed attempt, capped at 5s
   let timer = null;
+  let everOpen = false;   // distinguish "never reached the daemon" from "dropped"
+  let lastErr = null;     // surfaced in the HUD instead of being swallowed
 
   const open = () => {
     if (closed) return;
     try {
       ws = new WebSocket(`${proto}://${location.host}/frames`);
       ws.binaryType = 'arraybuffer';
-      // On (re)connect, (re)send the route so the daemon knows where bytes go.
-      ws.addEventListener('open', () => { backoff = 500; try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ } });
-      ws.addEventListener('error', () => {});         // a failed connect fires 'close' next
+      // On (re)connect, (re)send the current route so the daemon knows where bytes go.
+      ws.addEventListener('open', () => {
+        backoff = 500; everOpen = true; lastErr = null;
+        try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ }
+      });
+      ws.addEventListener('error', () => { lastErr = 'connection error'; });   // a failed connect fires 'close' next
       ws.addEventListener('close', () => {
         if (closed) return;
+        if (!lastErr) lastErr = everOpen ? 'daemon disconnected' : 'daemon unreachable';
         ws = null;
         timer = setTimeout(open, backoff);            // retry, backing off
         backoff = Math.min(backoff * 2, 5000);
       });
     } catch {
-      ws = null;   // insecure-context / construction failure → run UI-only, no retry loop
+      ws = null; lastErr = 'insecure context';   // construction failure → run UI-only, no retry loop
     }
   };
   open();
@@ -40,7 +46,14 @@ export function connectBridge(route) {
       for (let i = 0; i < n; i++) { rgb[i * 3] = rgba[i * 4]; rgb[i * 3 + 1] = rgba[i * 4 + 1]; rgb[i * 3 + 2] = rgba[i * 4 + 2]; }
       ws.send(rgb);
     },
+    // Live route update over the EXISTING socket — no teardown/reconnect blip
+    // (the daemon just reassigns its route). Used on every geometry edit.
+    setRoute(next) {
+      route = next;
+      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ } }
+    },
     connected: () => !!ws && ws.readyState === 1,
+    lastError: () => lastErr,
     close() { closed = true; if (timer) clearTimeout(timer); try { ws?.close(); } catch { /* already closing */ } },
   };
 }

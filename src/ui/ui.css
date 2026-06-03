@@ -43,6 +43,12 @@
   --ls-caps:.1em; --ls-ui:.04em;
 }
 html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
+/* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
+#hud.hud-offline { color: var(--amber); }
+/* No text selection anywhere — this is an app surface, not a document. Editable
+   fields keep selection so you can still edit their contents. */
+*{ user-select:none; -webkit-user-select:none; }
+input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* MONO only for data: numeric readouts, lowercase param keys, editable name/coord
    inputs. Numbers read as aligned data (tabular) — neutral colour, not a hue. */
 .ly-readout, .g-val, .cmp-readout, .lh-op-val, .anim-num,
@@ -77,20 +83,8 @@ html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); lin
 .subtab:hover { color: var(--text); }
 .subtab-active { color: var(--text); border-bottom-color: var(--accent); background: transparent; }
 
-/* --- Output Input/Output segmented toggle --- */
-.seg {
-  display: inline-flex; gap: 0; margin-bottom: 6px;
-  border: 1px solid var(--field-border); border-radius: 3px; overflow: hidden;
-}
-.seg-btn {
-  background: var(--surface); color: var(--muted); border: none; border-radius: 0;
-  padding: 5px 16px; font: var(--fs-ctrl) var(--sans); cursor: pointer;
-  text-transform: uppercase; letter-spacing: var(--ls-caps);
-}
-.seg-btn + .seg-btn { border-left: 1px solid var(--field-border); }
-.seg-btn:hover { background: var(--surface-hover); color: var(--text); }
-.seg-active { background: var(--hover); color: var(--text); }
-.seg-hint { font-size: var(--fs-micro); color: var(--muted); margin: 0 0 10px; line-height: var(--lh-ctrl); }
+/* Output mapping hint line (small, muted). */
+.seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
 
 /* --- Output mapping: fixture list --- */
 .output-tools { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
@@ -110,7 +104,7 @@ html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); lin
 .output-row:hover { border-color: var(--line-2); }
 .output-row.selected { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
-.output-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 8px; }
+.output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
 .output-grid .fx-field input {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
   border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
@@ -161,23 +155,26 @@ html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); lin
 /* The panels overlay the canvas: the container passes clicks through to the
    canvas, the panels themselves capture them. */
 #layout {
-  position: relative; z-index: 1; display: flex; gap: var(--s2);
-  align-items: stretch; padding: var(--s2); box-sizing: border-box;
+  position: relative; z-index: 1; display: flex; gap: 0;
+  align-items: stretch; padding: 0; box-sizing: border-box;
   height: calc(100vh - 42px - 24px); pointer-events: none;   /* between the header (42) and footer (24) */
 }
-#left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--s2); pointer-events: none; }
+#left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent; }
 #deckbar, #inspector-col, #library-col, #output-view, #fixtures-view { pointer-events: auto; }
 /* Side panels dock to full height with internal scroll (scrollbars hidden). */
-#inspector-col, #library-col, #output-view, #fixtures-view { overflow-y: auto; align-self: stretch; }
+/* Side panels dock flush; -1px overlaps each left neighbour's border into a
+   single shared hairline (no doubled 2px seam) — the packed-grid look. */
+#inspector-col, #library-col, #output-view, #fixtures-view { overflow-y: auto; align-self: stretch; margin-left: -1px; }
 
-/* Solid, docked panel chrome (no glass blur — reads as stable pro software). */
+/* Solid, docked panel chrome — flush cells (no radius), distinct from the
+   checker pasteboard via solid fill + hairline. */
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 0;
   padding: var(--s3);
   box-sizing: border-box;
 }
@@ -194,17 +191,17 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
 #topbar {
   position: relative; z-index: 2; display: flex; align-items: center;
   justify-content: space-between; gap: 12px;
-  height: 42px; padding: 0 10px 0 var(--s2);   /* left padding matches #layout so tabs align with the deck */
+  height: 42px; padding: 0 10px 0 0;   /* flush left — tabs align with the now edge-to-edge deck */
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
 /* The first tab (Composition) lines its text up with the layer column below. */
-.tabs .tab:first-child { padding-left: calc(var(--s2) * 2); }
+.tabs .tab:first-child { padding-left: 4px; }
 #globals { display: inline-flex; align-items: center; gap: 14px; }
 .g-fader { display: inline-flex; align-items: center; gap: 6px; font: var(--fs-body) var(--sans); color: var(--muted); }
 .g-fader input[type=range] { width: 88px; accent-color: var(--accent); }
 .g-val { color: var(--readout); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 .g-btn {
-  background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
   padding: 5px 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
 .g-btn:hover { color: var(--text); border-color: var(--line-2); }
@@ -213,7 +210,7 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
    the same spot. */
 #show-ui {
   position: fixed; top: 8px; right: 10px; z-index: 5; display: none; pointer-events: auto;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 6px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   padding: 5px 12px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
 }
 #show-ui:hover { color: var(--text); }
@@ -223,27 +220,29 @@ body.gui-hidden #show-ui { display: block; }
 .lh-clickable { cursor: pointer; }
 .lh-clickable:hover { border-color: var(--line-2); }
 .lh-tog {
-  padding: 0 6px; min-width: 0; font-size: var(--fs-micro); line-height: var(--lh-ctrl); font-weight: var(--fw-med);
+  width: 22px; height: 22px; flex: 0 0 22px; padding: 0; border-radius: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: var(--fs-micro); font-weight: var(--fw-med);
   color: var(--faint); background: var(--field-bg); border: 1px solid var(--line);
 }
 .lh-tog.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
 /* Autopilot (play/loop) block in the Layer inspector. */
-.autopilot { display: flex; align-items: center; gap: 10px; margin: 2px 0 6px; }
+.autopilot { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
 
 /* Library column hosts the Sources/Effects rail full-width (no side border). */
 #library .composer-rail { flex: 1 1 auto; border-left: none; padding-left: 0; gap: 4px; }
 
 .fx-panel { display: flex; flex-direction: column; gap: 6px; }
 .fx-title { font-size: var(--fs-title); font-weight: var(--fw-med); color: var(--text); }
-.fx-section { margin-top: var(--s4); }   /* recipe above; faint uppercase, no border */
+.fx-section { margin: 12px 0 4px; }   /* recipe above; faint uppercase, no border */
 
 .fx-ok { color: var(--green); font-size: var(--fs-body); }
 .fx-err { color: var(--danger); font-size: var(--fs-body); white-space: pre-wrap; }
 
 .fx-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--s1) var(--s2);
+  grid-template-columns: 1fr;
+  gap: 0;
   background: transparent; border: none; border-radius: 0;
   border-top: 1px solid var(--line); padding: var(--s2) 0 0;
 }
@@ -253,8 +252,36 @@ body.gui-hidden #show-ui { display: block; }
   font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans);
   letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
 }
-.fx-pts { grid-column: 1 / -1; margin: var(--s4) 0 var(--s2); }
+.fx-pts { grid-column: 1 / -1; margin: 12px 0 4px; }
 .fx-pts:first-child { margin-top: 0; }
+
+/* Collapsible inspector sections (Resolume-style disclosure groups). Flush,
+   hairline-separated; the header is a full-width click target with a triangle. */
+.insp-sec { border-top: 1px solid var(--line); }
+.insp-sec:first-child { border-top: none; }
+.insp-sec-head {
+  display: flex; align-items: center; gap: 6px; width: 100%; height: 24px;
+  padding: 0 2px; background: none; border: none; border-radius: 0; cursor: pointer;
+}
+.insp-sec-head:hover { background: var(--hover); }
+.insp-sec-title {
+  font: var(--fw-med) var(--fs-micro)/1 var(--sans); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--faint);
+}
+.insp-sec-head:hover .insp-sec-title { color: var(--muted); }
+.insp-tri {
+  width: 0; height: 0; flex: 0 0 auto;
+  border-left: 4px solid var(--faint); border-top: 3px solid transparent; border-bottom: 3px solid transparent;
+  transition: transform .12s;
+}
+.insp-sec.is-open .insp-tri { transform: rotate(90deg); }
+.insp-sec-body { display: none; padding: 2px 0 6px; }
+.insp-sec.is-open .insp-sec-body { display: block; }
+/* Subtle table separation so a run of rows reads as a ledger (Resolume-like). */
+.insp-sec-body .ly-param.ly-row, .insp-sec-body .anim-param {
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.insp-sec-body .ly-param.ly-row:first-child, .insp-sec-body .anim-param:first-child { border-top: none; }
 
 /* Master-detail Fixtures tab: compact selectable list rows + one detail editor. */
 .fx-list { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
@@ -263,6 +290,8 @@ body.gui-hidden #show-ui { display: block; }
   background: var(--field-bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
 }
 .fx-detail { margin-top: 2px; }
+.fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
+.fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
 .fx-del-link {
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
@@ -271,7 +300,10 @@ body.gui-hidden #show-ui { display: block; }
 /* Fixtures panel scrolls within the viewport for big shows (scrollbar hidden). */
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
-.fx-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-body); color: var(--muted); }
+/* Shared horizontal row module: label left (fixed column) · value right. */
+.fx-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 22px; font-size: var(--fs-body); color: var(--muted); }
+.fx-field > span:first-child { flex: 0 0 84px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-field > input, .fx-field > select { flex: 1 1 auto; width: auto; }
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
   border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
@@ -308,7 +340,7 @@ input[type=checkbox]:checked::after {
 .cmp-panel { margin-bottom: var(--s4); }
 .cmp-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .cmp-preset { padding: 3px 8px; }
-.cmp-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 4px; }
+.cmp-grid { grid-template-columns: 1fr; margin-top: 4px; }
 .cmp-readout {
   font-size: var(--fs-body); color: var(--readout); font-variant-numeric: tabular-nums;
   margin: 2px 0; letter-spacing: 0;
@@ -342,9 +374,9 @@ input[type=checkbox]:checked::after {
 .ly-param input[type=range] { width: 100%; accent-color: var(--accent); }
 
 /* Per-parameter animation: a cog opens Basic/Timeline/Audio (Resolume-style). */
-.anim-param { display: flex; flex-direction: column; gap: 4px; padding: 2px 0 4px; }
+.anim-param { display: flex; flex-direction: column; gap: 4px; padding: 0; }
 /* Header row of an animated param: name · live value (fills) · cog at far right. */
-.anim-head { display: flex; align-items: center; gap: 8px; }
+.anim-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
 .anim-head .ly-readout { flex: 1 1 auto; text-align: right; min-width: 38px; }
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
@@ -410,13 +442,14 @@ input[type=checkbox]:checked::after {
 .dir-btn.on { color: var(--text); background: var(--hover); border-color: var(--line-2); }
 
 /* Bool param: label left, checkbox right (matches the slider rows). */
-.bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
+.bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
 
-/* Compact single-row param: name left · value · slider fills (Resolume-style). */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; }
-.ly-plabel { flex: 0 0 74px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { flex: 0 0 auto; min-width: 38px; text-align: right; }
+/* Compact single-row param: name left · value · slider fills (Resolume-style).
+   One module shared with .fx-field: 84px label column, 44px value column. */
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: 22px; }
+.ly-plabel { flex: 0 0 84px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-row .ly-readout { flex: 0 0 44px; min-width: 44px; text-align: right; }
 .ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
@@ -429,7 +462,7 @@ input[type=checkbox]:checked::after {
 .fx-menu-btn { padding: 0 7px; line-height: var(--lh-ctrl); font-size: var(--fs-glyph); min-width: 0; }
 .fx-menu {
   position: absolute; right: 0; top: 100%; margin-top: 3px; z-index: 20;
-  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px;
   padding: 3px; min-width: 126px; display: flex; flex-direction: column; gap: 1px;
   box-shadow: 0 6px 16px rgba(0,0,0,.5);
 }
@@ -463,7 +496,8 @@ input[type=checkbox]:checked::after {
 .ly-fx-layer { border-color: var(--line); }
 
 /* --- Layer row (control block + horizontal slot row), Resolume-style --- */
-.deck-layer { display: flex; align-items: stretch; gap: 2px; margin: 0; }
+.deck-layer { display: flex; align-items: stretch; gap: 0; margin: 0; }
+.deck-layer + .deck-layer { border-top: 1px solid var(--line); }
 /* Minimised layer (double-click the head): condensed + lower height, still usable
    — clips collapse to triggerable labels and the tall opacity fader hides. */
 /* Minimised: clips = small thumbnail + bottom label. The layer head MIRRORS a
@@ -485,7 +519,7 @@ input[type=checkbox]:checked::after {
 .deck-layer.is-min.is-sel .lh-name { background: var(--accent); color: #07151f; }
 
 /* Multi-layer stack: flush rows, thin separators (flat Resolume grid). */
-.deck-layers { display: flex; flex-direction: column; gap: 1px; }
+.deck-layers { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); }
 .deck-addlayer { margin-top: 4px; align-self: flex-start; color: var(--green); }
 .lh-blend {
   width: 100%; margin-top: 3px; box-sizing: border-box;
@@ -496,18 +530,23 @@ input[type=checkbox]:checked::after {
 .deck-layer.is-sel .lh-name { background: var(--accent); color: #07151f; }
 .layer-head-box.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .layer-head-box {
-  flex: 0 0 128px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px;
-  background: var(--panel-2); border: none; border-radius: 0; padding: 4px;
+  flex: 0 0 128px; box-sizing: border-box; display: flex; flex-direction: column; gap: 0;
+  background: var(--panel-2); border: none; border-right: 1px solid var(--line); border-radius: 0; padding: 0;
 }
-.lh-body { display: flex; gap: 10px; flex: 1 1 auto; }
+.lh-body { display: flex; gap: 6px; flex: 1 1 auto; padding: 4px; }
 .lh-op { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
 .lh-op-range {
   writing-mode: vertical-lr; direction: rtl;
   width: 12px; height: 64px; accent-color: var(--green);
 }
-.lh-ctrls { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto; align-content: flex-start; }
-.lh-clear { color: var(--muted); border-color: var(--line); padding: 0 6px; line-height: var(--lh-ctrl); }
+.lh-ctrls { display: flex; flex-wrap: nowrap; gap: 0; flex: 1 1 auto; align-content: flex-start; }
+.lh-ctrls > button + button { margin-left: -1px; }
+.lh-clear {
+  width: 22px; height: 22px; flex: 0 0 22px; padding: 0; border-radius: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--muted); border-color: var(--line);
+}
 .lh-clear:hover { color: var(--danger); border-color: var(--line-2); }
 .lh-blend-label { color: var(--muted); margin-top: 2px; }   /* size/caps/tracking from the shared header recipe */
 .lh-ctrls select {
@@ -515,8 +554,8 @@ input[type=checkbox]:checked::after {
   border-radius: 3px; padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
 }
 .lh-name {
-  background: var(--field-bg); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-body);
-  text-align: center; border: 1px solid var(--line); border-radius: 4px; padding: 4px;
+  background: var(--surface-2); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-body);
+  text-align: left; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 4px 6px;
   font-family: var(--sans); box-sizing: border-box; width: 100%;
 }
 .lh-name:focus { outline: none; border-color: var(--accent); }
@@ -524,7 +563,7 @@ input[type=checkbox]:checked::after {
 /* --- Clip slot row: flush, no horizontal gaps (shared borders) --- */
 .clip-deck {
   flex: 1 1 auto; min-width: 0;
-  display: flex; flex-wrap: nowrap; gap: 0; margin: 0; overflow-x: auto; padding-bottom: 2px;
+  display: flex; flex-wrap: nowrap; gap: 0; margin: 0; overflow-x: auto; padding-bottom: 0;
 }
 .clip-deck > .clip-cell { border-radius: 0; }
 .clip-deck > .clip-cell + .clip-cell { margin-left: -1px; }       /* collapse the shared border */
@@ -616,7 +655,7 @@ input[type=checkbox]:checked::after {
   grid-column: 1 / -1; text-align: center; font-size: var(--fs-body); color: var(--faint);
   border: 1px dashed var(--field-border); border-radius: 3px; padding: 8px; margin-top: 4px;
 }
-.comp-fx { margin-top: 10px; border-top: 1px solid var(--border-2); padding-top: 6px; }
+.comp-fx { margin-top: 8px; }   /* section provides its own top hairline */
 
 /* Transport bar (play-through of the clip timeline). */
 .composer-deckhead { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }
@@ -635,10 +674,10 @@ input[type=checkbox]:checked::after {
   border-color: var(--amber) !important;
 }
 
-/* Active-clip editor: the panel below the deck that edits the lit clip. */
+/* Active-clip editor: a flat single-column block so collapsible sections stack
+   cleanly (no grid for the Section wrappers to fight). */
 .clip-editor {
-  grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s2) var(--s3);
-  border: none; border-radius: 0; padding: 0; margin: 0; background: transparent;
+  display: block; border: none; border-radius: 0; padding: 0; margin: 0; background: transparent;
 }
 .clip-editor-head {
   grid-column: 1 / -1; font-size: var(--fs-body); color: var(--accent); font-weight: var(--fw-med);

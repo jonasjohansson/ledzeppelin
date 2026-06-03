@@ -110,8 +110,10 @@ function rebuild(next) {
   const { sampleUVs, route, spans } = buildPipelineInputs(show);
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
-  if (bridge?.close) bridge.close();
-  bridge = connectBridge(route);
+  // Push the new route over the existing socket (no reconnect blip); only
+  // construct a bridge on first build. Keeps output live + stats across edits.
+  if (bridge?.setRoute) bridge.setRoute(route);
+  else bridge = connectBridge(route);
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -310,6 +312,7 @@ if (previewCanvas) {
 
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
+let outputTab = 'fixtures';   // Output sub-tab: fixtures | chains | devices
 const addFixtureBtn = document.getElementById('add-fixture');
 const snapToggle = document.getElementById('snap-cb');
 snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
@@ -343,12 +346,70 @@ function txField(label, value, onCommit) {
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
 
+// Position editor for one selected fixture (inlined under its row).
+function positionEditor(sel) {
+  const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
+  const setT = (patch) => {
+    const next = setFixtureTransform(show, sel.id, patch);
+    saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+  };
+  return oel('div', { className: 'output-edit' }, [
+    oel('div', { className: 'output-grid' }, [
+      txField('x', tf.x, (v) => setT({ x: v })),
+      txField('y', tf.y, (v) => setT({ y: v })),
+      txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
+    ]),
+  ]);
+}
+
+// "chain selected (stagger)" action shown when 2+ fixtures are selected.
+function chainSelectedAction() {
+  return oel('div', { className: 'output-edit' }, [
+    oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
+    oel('button', {
+      className: 'fx-add', textContent: '⛓ chain selected (stagger)',
+      onclick: () => {
+        const next = addChain(show, [...selectedFixtureIds]);
+        saveShow(next); rebuild(next); renderOutput(); redrawOverlay();
+      },
+    }),
+  ]);
+}
+
+// Read-only per-device routing overview (the Devices sub-tab) — pixel + fixture
+// totals per controller. A natural home for live health pills later.
+function renderDeviceSummary() {
+  const devs = show.devices || [];
+  if (!devs.length) {
+    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no devices — add them in the Fixtures tab' }));
+    return;
+  }
+  for (const d of devs) {
+    const fxs = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === d.id);
+    const px = fxs.reduce((m, f) => m + (f.pixelCount || 0), 0);
+    outputListEl.append(oel('div', { className: 'output-row' }, [
+      oel('span', { textContent: d.name || d.id }),
+      oel('span', { className: 'output-dev', textContent: d.ip || 'no ip' }),
+      oel('span', { className: 'fx-badge', textContent: `${px} px` }),
+      oel('span', { className: 'fx-badge', textContent: `${fxs.length} fx` }),
+    ]));
+  }
+}
+
 function renderOutput() {
   if (!outputListEl) return;
   outputListEl.textContent = '';
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
 
+  if (outputTab === 'devices') { renderDeviceSummary(); return; }
+  if (outputTab === 'chains') {
+    if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
+    renderChains();
+    return;
+  }
+
+  // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
   for (const f of fixtures) {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     const name = oel('span', { textContent: f.name || f.id });
@@ -372,40 +433,11 @@ function renderOutput() {
     row.onclick = (e) => selectFixture(f.id, e);
     row.append(name, dev, eye, del);
     outputListEl.append(row);
+    // Inline the position editor directly under the singly-selected fixture.
+    if (selectedFixtureIds.size === 1 && selectedFixtureIds.has(f.id)) outputListEl.append(positionEditor(f));
   }
 
-  // Multiple selected → group hint (drag moves them together) + "chain" action.
-  if (selectedFixtureIds.size > 1) {
-    outputListEl.append(oel('div', { className: 'output-edit' }, [
-      oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
-      oel('button', {
-        className: 'fx-add', textContent: '⛓ chain selected (stagger)',
-        onclick: () => {
-          const next = addChain(show, [...selectedFixtureIds]);
-          saveShow(next); rebuild(next); renderOutput(); redrawOverlay();
-        },
-      }),
-    ]));
-    renderChains();
-    return;
-  }
-  const sel = fixtures.find((f) => selectedFixtureIds.has(f.id));
-  if (sel) {
-    const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
-    const setT = (patch) => {
-      const next = setFixtureTransform(show, sel.id, patch);
-      saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
-    };
-    outputListEl.append(oel('div', { className: 'output-edit' }, [
-      oel('div', { className: 'fx-pts', textContent: `${sel.name || sel.id} — position (px)` }),
-      oel('div', { className: 'output-grid' }, [
-        txField('x', tf.x, (v) => setT({ x: v })),
-        txField('y', tf.y, (v) => setT({ y: v })),
-        txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
-      ]),
-    ]));
-  }
-  renderChains();
+  if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
 }
 
 // Chains: ordered fixture groups with a stagger offset (cascade a pulse). Each
@@ -551,6 +583,29 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// Arrow-key nudge on Output: move the selected fixture(s) by 1px (10px with
+// Shift). Same commit path as a canvas drag. Ignored while typing in a field.
+document.addEventListener('keydown', (e) => {
+  if (view.activeTab !== 'output' || !selectedFixtureIds.size) return;
+  if (typingIn(e.target)) return;
+  const step = e.shiftKey ? 10 : 1;
+  let dx = 0; let dy = 0;
+  if (e.key === 'ArrowLeft') dx = -step;
+  else if (e.key === 'ArrowRight') dx = step;
+  else if (e.key === 'ArrowUp') dy = -step;
+  else if (e.key === 'ArrowDown') dy = step;
+  else return;
+  e.preventDefault();
+  let next = show;
+  for (const id of selectedFixtureIds) {
+    const f = next.fixtures.find((x) => x.id === id);
+    if (!f) continue;
+    const tf = f.input.transform || transformFromPoints(f.input.points, next.composition?.canvas);
+    next = setFixtureTransform(next, id, { x: tf.x + dx, y: tf.y + dy });
+  }
+  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+});
+
 // Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.
 const inspTabsEl = document.getElementById('insp-tabs');
 const inspPanes = {
@@ -566,6 +621,19 @@ function setInspectorTab(which) {
 inspTabsEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
   if (b) setInspectorTab(b.dataset.itab);
+});
+
+// Output sub-tabs (Fixtures | Chains | Devices).
+const outputTabsEl = document.getElementById('output-tabs');
+function setOutputTab(which) {
+  outputTab = which;
+  outputTabsEl?.querySelectorAll('.subtab').forEach((x) =>
+    x.classList.toggle('subtab-active', x.dataset.otab === which));
+  renderOutput();
+}
+outputTabsEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.subtab');
+  if (b) setOutputTab(b.dataset.otab);
 });
 
 applyView();
@@ -691,7 +759,12 @@ function loop(ts) {
     const fps = (frames * 1000 / (ts - last)).toFixed(0);
     const cv = show.composition?.canvas || {};
     const nFix = (show.fixtures || []).length;
-    const out = bridge?.connected?.() ? 'output live' : 'output offline';
+    const live = bridge?.connected?.();
+    const err = bridge?.lastError?.();
+    // Surface the real failure instead of a bare "offline" — a swallowed bad IP
+    // or dead daemon now reads on the status bar (and tints it).
+    const out = live ? 'output live' : `output offline${err ? ` (${err})` : ''}`;
+    hud.classList.toggle('hud-offline', !live);
     hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`;
     frames = 0; last = ts;
   }

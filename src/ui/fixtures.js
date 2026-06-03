@@ -1,6 +1,7 @@
 import { validate } from '../model/show.js';
 import { setFixtureTransform, transformFromPoints } from '../model/fixture-transform.js';
 import { pruneChains } from '../model/chains.js';
+import { Section } from './section.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
@@ -81,6 +82,105 @@ export function createFixturePanel({ getShow, setShow }) {
     render();
   }
 
+  // Running end of a device's DDP address space (offset must stay contiguous
+  // per device — see validate()). Used to append new/duplicated fixtures.
+  const deviceEnd = (show, devId) => show.fixtures
+    .filter((x) => (x.output?.deviceId || '') === devId)
+    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
+
+  // Inline editor for the selected DEVICE (rendered under its list row).
+  function deviceDetail(show, d) {
+    const di = show.devices.indexOf(d);
+    const upd = (patch) => { const next = structuredClone(show); Object.assign(next.devices[di], patch); commit(next); };
+    return el('div', { className: 'fx-card fx-detail' }, [
+      field('id', textInputCommit(d.id, (x) => upd({ id: x }))),
+      field('name', textInputCommit(d.name, (x) => upd({ name: x }))),
+      field('ip', textInputCommit(d.ip, (x) => upd({ ip: x }))),
+      field('color order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      field('port', numInputCommit(d.port ?? 4048, (x) => upd({ port: x }))),
+      // Output calibration (LEDs, not preview): perceptual gamma (~2.2 smooths
+      // low-end fades) + a max-brightness cap 0..1.
+      field('gamma', numInputCommit(d.gamma ?? 1, (x) => upd({ gamma: x }), '0.05')),
+      field('max bright', numInputCommit(d.brightness ?? 1, (x) => upd({ brightness: x }), '0.01')),
+      el('button', {
+        className: 'fx-del-link', textContent: 'delete device',
+        onclick: () => { const next = structuredClone(show); next.devices.splice(di, 1); selDeviceId = null; commit(next); },
+      }),
+    ]);
+  }
+
+  // Inline editor for the selected FIXTURE (DESIGN + routing + SIZE; canvas
+  // PLACEMENT lives in Output). Rendered under its list row.
+  function fixtureDetail(show, f) {
+    const fi = show.fixtures.indexOf(f);
+    const tf = f.input.transform || transformFromPoints(f.input.points, show.composition?.canvas);
+    const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
+    const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtures[fi]); commit(next); };
+    return el('div', { className: 'fx-card fx-detail' }, [
+      field('id', textInputCommit(f.id, (x) => upd((nf) => { nf.id = x; }))),
+      field('name', textInputCommit(f.name, (x) => upd((nf) => { nf.name = x; }))),
+      field('pixel count', numInputCommit(f.pixelCount, (x) => upd((nf) => {
+        nf.pixelCount = x; nf.output.pixelCount = x;       // keep in sync (validate requires match)
+        if (nf.input) nf.input.samples = nf.input.samples || x;
+      }))),
+      field('color order', selectInput(COLOR_ORDERS, f.colorOrder ?? 'GRB', (x) => upd((nf) => { nf.colorOrder = x; }))),
+      field('device', selectInput(deviceOpts.length ? deviceOpts : [{ value: '', label: '(none)' }],
+        f.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
+      field('pixel offset', numInputCommit(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }))),
+      field('samples', numInputCommit(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }))),
+      el('div', { className: 'fx-pts', textContent: 'size (px)' }),
+      field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
+      field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
+      el('div', { className: 'fx-detail-actions' }, [
+        el('button', { className: 'fx-del-link', textContent: 'duplicate', onclick: () => duplicateFixture(show, f) }),
+        el('button', {
+          className: 'fx-del-link', textContent: 'delete fixture',
+          onclick: () => {
+            let next = structuredClone(show);
+            next.fixtures.splice(fi, 1);
+            next = pruneChains(next);          // keep chain stagger indices valid
+            selFixtureId = null;
+            commit(next);
+          },
+        }),
+      ]),
+    ]);
+  }
+
+  // Append a fresh generic strip (150px GRB bar) on the first device,
+  // contiguous in that device's address space; select it.
+  function newFixture(show) {
+    const next = structuredClone(show);
+    const id = `f${next.fixtures.length + 1}`;
+    const devId = next.devices[0]?.id ?? '';
+    const px = 150;
+    next.fixtures.push({
+      id, name: id, pixelCount: px, colorOrder: 'GRB',
+      output: { deviceId: devId, pixelOffset: deviceEnd(next, devId), pixelCount: px },
+      input: { points: [[0.05, 0.5], [0.95, 0.5]], samples: px },
+    });
+    selFixtureId = id;
+    commit(next);
+    return id;
+  }
+
+  // Clone the selected fixture (same device/colorOrder/geometry), appended
+  // contiguously in its device's address space.
+  function duplicateFixture(show, f) {
+    const next = structuredClone(show);
+    const src = next.fixtures.find((x) => x.id === f.id);
+    let n = 1; let id;
+    do { id = `${f.id}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === id));
+    const devId = src.output?.deviceId || '';
+    const copy = structuredClone(src);
+    copy.id = id;
+    copy.name = `${f.name || f.id} copy`;
+    copy.output.pixelOffset = deviceEnd(next, devId);
+    next.fixtures.push(copy);
+    selFixtureId = id;
+    commit(next);
+  }
+
   function render() {
     const show = getShow();
     root.textContent = '';
@@ -103,107 +203,54 @@ export function createFixturePanel({ getShow, setShow }) {
       return row;
     };
 
-    // --- Devices (list → edit the selected one) ---
-    root.append(el('div', { className: 'fx-section', textContent: 'Devices' }));
-    if (!show.devices.some((d) => d.id === selDeviceId)) selDeviceId = show.devices[0]?.id ?? null;
-    const devList = el('div', { className: 'fx-list' });
-    for (const d of show.devices) {
-      devList.append(listRow(d.name || d.id, [d.ip || 'no ip', d.colorOrder || 'GRB'],
-        d.id === selDeviceId, () => { selDeviceId = d.id; render(); }));
-    }
-    root.append(devList);
-    root.append(el('button', {
-      className: 'fx-add', textContent: '+ device',
-      onclick: () => {
-        const next = structuredClone(show);
-        const id = `c${next.devices.length + 1}`;
-        next.devices.push({ id, name: id, ip: '127.0.0.1', colorOrder: 'GRB', port: 4048 });
-        selDeviceId = id;
-        commit(next);
-      },
-    }));
-    const selDev = show.devices.find((d) => d.id === selDeviceId);
-    if (selDev) {
-      const di = show.devices.indexOf(selDev);
-      const upd = (patch) => { const next = structuredClone(show); Object.assign(next.devices[di], patch); commit(next); };
-      root.append(el('div', { className: 'fx-card fx-detail' }, [
-        field('id', textInputCommit(selDev.id, (x) => upd({ id: x }))),
-        field('name', textInputCommit(selDev.name, (x) => upd({ name: x }))),
-        field('ip', textInputCommit(selDev.ip, (x) => upd({ ip: x }))),
-        field('color order', selectInput(COLOR_ORDERS, selDev.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
-        field('port', numInputCommit(selDev.port ?? 4048, (x) => upd({ port: x }))),
-        // Output calibration (LEDs, not preview): perceptual gamma (~2.2 smooths
-        // low-end fades) + a max-brightness cap 0..1.
-        field('gamma', numInputCommit(selDev.gamma ?? 1, (x) => upd({ gamma: x }), '0.05')),
-        field('max bright', numInputCommit(selDev.brightness ?? 1, (x) => upd({ brightness: x }), '0.01')),
-        el('button', {
-          className: 'fx-del-link', textContent: 'delete device',
-          onclick: () => { const next = structuredClone(show); next.devices.splice(di, 1); selDeviceId = null; commit(next); },
-        }),
-      ]));
-    }
+    // Pixels routed to one device (hidden fixtures still occupy DDP address space).
+    const devicePixels = (devId) => show.fixtures
+      .filter((f) => (f.output?.deviceId || '') === devId)
+      .reduce((m, f) => m + (f.pixelCount || 0), 0);
 
-    // --- Fixtures (list → edit the selected one) ---
-    root.append(el('div', { className: 'fx-section', textContent: 'Fixtures' }));
-    const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
-    if (!show.fixtures.some((f) => f.id === selFixtureId)) selFixtureId = show.fixtures[0]?.id ?? null;
-    const fxList = el('div', { className: 'fx-list' });
-    for (const f of show.fixtures) {
-      const o = f.output || {};
-      const range = `${o.pixelOffset ?? 0}–${(o.pixelOffset ?? 0) + (o.pixelCount ?? 0)}`;
-      fxList.append(listRow(f.name || f.id, [o.deviceId || '—', `${range} px`],
-        f.id === selFixtureId, () => { selFixtureId = f.id; render(); }));
-    }
-    root.append(fxList);
-    root.append(el('button', {
-      className: 'fx-add', textContent: '+ fixture',
-      onclick: () => {
-        const next = structuredClone(show);
-        const id = `f${next.fixtures.length + 1}`;
-        const off = next.fixtures.reduce((m, x) => Math.max(m, x.output.pixelOffset + x.output.pixelCount), 0);
-        const px = 150;
-        next.fixtures.push({
-          id, name: id, pixelCount: px, colorOrder: 'GRB',
-          output: { deviceId: next.devices[0]?.id ?? '', pixelOffset: off, pixelCount: px },
-          input: { points: [[0.05, 0.5], [0.95, 0.5]], samples: px },
-        });
-        selFixtureId = id;
-        commit(next);
-      },
+    // --- Devices (collapsible: selectable list → inline editor under the row) ---
+    if (!show.devices.some((d) => d.id === selDeviceId)) selDeviceId = show.devices[0]?.id ?? null;
+    root.append(Section('Devices', 'devices', (b) => {
+      const devList = el('div', { className: 'fx-list' });
+      for (const d of show.devices) {
+        devList.append(listRow(d.name || d.id, [d.ip || 'no ip', d.colorOrder || 'GRB', `${devicePixels(d.id)} px`],
+          d.id === selDeviceId, () => { selDeviceId = d.id; render(); }));
+        if (d.id === selDeviceId) devList.append(deviceDetail(show, d));
+      }
+      b.append(devList);
+      // Grand total across the whole patch.
+      const totalPx = show.fixtures.reduce((m, f) => m + (f.pixelCount || 0), 0);
+      b.append(el('div', { className: 'fx-budget',
+        textContent: `${totalPx} px · ${show.devices.length} device${show.devices.length === 1 ? '' : 's'}` }));
+      b.append(el('button', {
+        className: 'fx-add', textContent: '+ device',
+        onclick: () => {
+          const next = structuredClone(show);
+          const id = `c${next.devices.length + 1}`;
+          next.devices.push({ id, name: id, ip: '127.0.0.1', colorOrder: 'GRB', port: 4048 });
+          selDeviceId = id;
+          commit(next);
+        },
+      }));
     }));
-    const selFx = show.fixtures.find((f) => f.id === selFixtureId);
-    if (selFx) {
-      const fi = show.fixtures.indexOf(selFx);
-      const tf = selFx.input.transform || transformFromPoints(selFx.input.points, show.composition?.canvas);
-      const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtures[fi]); commit(next); };
-      // The Fixtures tab is DESIGN + routing + SIZE; canvas PLACEMENT lives in Output.
-      root.append(el('div', { className: 'fx-card fx-detail' }, [
-        field('id', textInputCommit(selFx.id, (x) => upd((nf) => { nf.id = x; }))),
-        field('name', textInputCommit(selFx.name, (x) => upd((nf) => { nf.name = x; }))),
-        field('pixel count', numInputCommit(selFx.pixelCount, (x) => upd((nf) => {
-          nf.pixelCount = x; nf.output.pixelCount = x;       // keep in sync (validate requires match)
-          if (nf.input) nf.input.samples = nf.input.samples || x;
-        }))),
-        field('color order', selectInput(COLOR_ORDERS, selFx.colorOrder ?? 'GRB', (x) => upd((nf) => { nf.colorOrder = x; }))),
-        field('device', selectInput(deviceOpts.length ? deviceOpts : [{ value: '', label: '(none)' }],
-          selFx.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
-        field('pixel offset', numInputCommit(selFx.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }))),
-        field('samples', numInputCommit(selFx.input.samples, (x) => upd((nf) => { nf.input.samples = x; }))),
-        el('div', { className: 'fx-pts', textContent: 'size (px)' }),
-        field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, selFx.id, { w: v })))),
-        field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, selFx.id, { h: v })))),
-        el('button', {
-          className: 'fx-del-link', textContent: 'delete fixture',
-          onclick: () => {
-            let next = structuredClone(show);
-            next.fixtures.splice(fi, 1);
-            next = pruneChains(next);          // keep chain stagger indices valid
-            selFixtureId = null;
-            commit(next);
-          },
-        }),
-      ]));
-    }
+
+    // --- Fixtures (collapsible: selectable list → inline editor under the row) ---
+    if (!show.fixtures.some((f) => f.id === selFixtureId)) selFixtureId = show.fixtures[0]?.id ?? null;
+    root.append(Section('Fixtures', 'fixtures', (b) => {
+      const fxList = el('div', { className: 'fx-list' });
+      for (const f of show.fixtures) {
+        const o = f.output || {};
+        const range = `${o.pixelOffset ?? 0}–${(o.pixelOffset ?? 0) + (o.pixelCount ?? 0)}`;
+        fxList.append(listRow(f.name || f.id, [o.deviceId || '—', `${range} px`],
+          f.id === selFixtureId, () => { selFixtureId = f.id; render(); }));
+        if (f.id === selFixtureId) fxList.append(fixtureDetail(show, f));
+      }
+      b.append(fxList);
+      b.append(el('button', {
+        className: 'fx-add', textContent: '+ fixture',
+        onclick: () => { selFixtureId = newFixture(show); },
+      }));
+    }));
 
     // --- Persistence (File API) ---
     const io = el('div', { className: 'fx-io' });
