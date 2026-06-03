@@ -348,28 +348,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // Live clip lookup (presets read CURRENT params, not the captured render-time clip).
   const liveClip = (cid) => layerOfClip(cid)?.clips.find((c) => c.id === cid) || null;
 
-  // Compact preset widget for a source/effect TYPE — a small load dropdown +
-  // save + reset, meant to sit in a header corner.
-  //   getParams(): current params to save · applyParams(p): load · onReset(): defaults
-  function presetWidget(kind, name, getParams, applyParams, onReset) {
-    const names = listPresets(kind, name);
-    const sel = el('select', { className: 'preset-mini', title: 'load / delete preset' });
-    sel.append(el('option', { value: '', textContent: 'preset' }));
-    for (const n of names) sel.append(el('option', { value: n, textContent: n }));
-    sel.addEventListener('change', () => {
-      if (sel.value) { const p = loadPreset(kind, name, sel.value); if (p) applyParams(p); }
-    });
-    const save = el('button', {
-      className: 'preset-mini-btn', textContent: '＋', title: 'save current as a preset',
-      onclick: () => { const pn = window.prompt(`Save ${name} preset as:`); if (pn && pn.trim()) { savePreset(kind, name, pn.trim(), getParams()); render(); } },
-    });
-    const reset = el('button', {
-      className: 'preset-mini-btn', textContent: '↺', title: 'reset to defaults',
-      onclick: () => onReset?.(),
-    });
-    return el('div', { className: 'preset-widget' }, [sel, save, reset]);
-  }
-
   // The param subset of `params` whose keys are prefixed by `name + '.'`.
   const paramsForPrefix = (params, name) => {
     const out = {}; const pfx = name + '.';
@@ -377,9 +355,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return out;
   };
 
-  // A single "⋯" options button for an EFFECT: a popover menu with preset load,
-  // save, reset and remove. Replaces the row of arrow/preset/✕ buttons.
-  function fxMenu({ presetName, getParams, applyParams, onReset, onRemove }) {
+  // A single "⋯" options button: a popover with preset load, save, reset and
+  // (for effects) remove. Shared by effect rows and the clip preset control, so
+  // sources and effects manage saved looks the same way. `kind` selects the
+  // preset namespace ('effect' | 'source'); pass onRemove only for effects.
+  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove }) {
     const wrap = el('div', { className: 'fx-menu-wrap' });
     const menu = el('div', { className: 'fx-menu', hidden: true });
     const close = () => { menu.hidden = true; };
@@ -387,19 +367,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       className: 'fx-menu-item ' + cls, textContent: label,
       onclick: (e) => { e.stopPropagation(); onClick(); },
     });
-    const names = listPresets('effect', presetName);
+    const names = listPresets(kind, presetName);
     if (names.length) {
       menu.append(el('div', { className: 'fx-menu-label', textContent: 'presets' }));
-      for (const n of names) menu.append(item(n, () => { const p = loadPreset('effect', presetName, n); if (p) applyParams(p); close(); }));
+      for (const n of names) menu.append(item(n, () => { const p = loadPreset(kind, presetName, n); if (p) applyParams(p); close(); }));
       menu.append(el('div', { className: 'fx-menu-sep' }));
     }
     menu.append(item('save preset…', () => {
       const pn = window.prompt(`Save ${presetName} preset as:`);
-      if (pn && pn.trim()) { savePreset('effect', presetName, pn.trim(), getParams()); render(); }
+      if (pn && pn.trim()) { savePreset(kind, presetName, pn.trim(), getParams()); render(); }
     }));
     menu.append(item('reset', () => onReset()));        // commits → re-renders
-    menu.append(item('remove', () => onRemove(), 'fx-menu-danger'));
-    const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: 'effect options' });
+    if (onRemove) menu.append(item('remove', () => onRemove(), 'fx-menu-danger'));
+    const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: onRemove ? 'effect options' : 'preset options' });
     btn.onclick = (e) => {
       e.stopPropagation();
       const opening = menu.hidden;
@@ -755,20 +735,18 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // "source: X" / "X params" meta (the slot already shows the source).
     const gen = getEntry(clip.generator);
 
-    // Header: just the clip name.
-    box.append(el('div', { className: 'clip-editor-head' }, [nameInput]));
-
-    // Preset on its OWN full-width row at the top (load/save/reset a saved look),
-    // not crammed into the header corner.
+    // Header: clip name + a "⋯" preset menu in the corner (load/save/reset a
+    // saved look), mirroring how effect rows carry their options menu.
+    const clipHead = el('div', { className: 'clip-editor-head' }, [nameInput]);
     if (gen && gen.params.length) {
-      box.append(el('div', { className: 'preset-row' }, [
-        el('span', { className: 'preset-row-label', textContent: 'preset' }),
-        presetWidget('source', gen.name,
-          () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
-          (p) => commit(mergeClipParams(show(), id, clip.id, p)),
-          () => commit(changeClipGenerator(show(), id, clip.id, clip.generator))),
-      ]));
+      clipHead.append(fxMenu({
+        kind: 'source', presetName: gen.name,
+        getParams: () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
+        applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
+        onReset: () => commit(changeClipGenerator(show(), id, clip.id, clip.generator)),
+      }));
     }
+    box.append(clipHead);
 
     // Triggerable sources (Pulse) get a prominent Trigger button here.
     if (gen?.triggerable && transport?.fire) {

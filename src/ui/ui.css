@@ -409,19 +409,6 @@ input[type=checkbox]:checked::after {
 .dir-btn:last-child { border-radius: 0 4px 4px 0; border-right-width: 1px; }
 .dir-btn.on { color: var(--text); background: var(--hover); border-color: var(--line-2); }
 
-/* Compact preset widget (presets dropdown · save · reset) for a header corner. */
-.preset-widget { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
-.preset-mini {
-  background: var(--field-bg); color: var(--muted); border: 1px solid var(--field-border);
-  border-radius: 4px; padding: 1px 3px; font: var(--fs-micro) var(--sans); max-width: 78px;
-}
-.preset-mini-btn { padding: 0 5px; line-height: var(--lh-ctrl); font-size: var(--fs-body); min-width: 0; }
-/* Preset on its own full-width row (top of the source inspector). */
-.preset-row { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--s3); }
-.preset-row-label { flex: 0 0 auto; color: var(--muted); font-size: var(--fs-body); }
-.preset-row .preset-widget { flex: 1 1 auto; }
-.preset-row .preset-mini { flex: 1 1 auto; max-width: none; padding: 3px 5px; font-size: var(--fs-body); }
-
 /* Bool param: label left, checkbox right (matches the slider rows). */
 .bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
@@ -658,7 +645,7 @@ input[type=checkbox]:checked::after {
   margin-bottom: 2px; display: flex; align-items: center; gap: 6px;
 }
 .clip-editor-head .ly-nameedit { flex: 1 1 auto; min-width: 0; }
-.ly-fxhead .preset-widget { margin-left: auto; }
+.ly-fxhead .fx-menu-wrap, .clip-editor-head .fx-menu-wrap { margin-left: auto; }
 .clip-trigger {
   grid-column: 1 / -1; width: 100%; margin: 2px 0 4px; font-weight: var(--fw-med);
   color: var(--amber); border-color: var(--line);
