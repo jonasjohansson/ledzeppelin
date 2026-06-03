@@ -67,10 +67,15 @@ canvas{display:block}
   <!-- OUTPUT view: the mapping panel (add + position fixtures on the canvas) -->
   <aside id="output-view" class="panel" hidden>
     <div class="fx-title">output mapping</div>
-    <div class="seg-hint">Click a fixture to select (shift-click for multiple) · drag to move · Delete to remove.</div>
+    <div class="subtabs" id="output-tabs">
+      <button class="subtab subtab-active" data-otab="fixtures">fixtures</button>
+      <button class="subtab" data-otab="chains">chains</button>
+      <button class="subtab" data-otab="devices">devices</button>
+    </div>
     <div class="output-tools">
       <button id="add-fixture" class="fx-add">+ add fixture</button>
       <label class="snap-toggle"><input type="checkbox" id="snap-cb"> snap</label>
+      <span class="seg-hint">click to select · shift-click multiple · drag to move · ←↑↓→ nudge</span>
     </div>
     <div id="output-list"></div>
   </aside>

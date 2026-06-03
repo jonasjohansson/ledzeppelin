@@ -33,6 +33,7 @@ import {
 import { makeAnim, makeAudioAnim, animatedValue } from '../model/anim.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
+import { Section } from './section.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
@@ -42,6 +43,10 @@ const el = (tag, props = {}, kids = []) => {
   for (const k of kids) n.append(k);
   return n;
 };
+
+// Library rail tab (Sources | Effects, Resolume-style). Module-scoped so the
+// choice persists across the panel's structural re-renders.
+let libTab = 'source';
 
 const selectInput = (options, value, onInput) => {
   const s = el('select');
@@ -462,19 +467,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // zone, or reorder/remove with the per-block controls.
   function compositionEffects(layer, id) {
     const box = el('div', { className: 'comp-fx' });
-    box.append(el('div', { className: 'composer-label composer-label-fx',
-      textContent: 'composition fx' }));
-    box.append(el('div', { className: 'ly-hint', textContent: 'applied to the whole composition' }));
-
-    const fxs = layer.effects || [];
-    for (let fx = 0; fx < fxs.length; fx++) {
-      box.append(layerEffectBlock(id, fx, fxs));
-    }
-    const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
-    makeDropTarget(dropZone, (payload) => {
-      if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
-    });
-    box.append(dropZone);
+    box.append(Section('Composition FX', 'comp-fx', (b) => {
+      const fxs = layer.effects || [];
+      for (let fx = 0; fx < fxs.length; fx++) b.append(layerEffectBlock(id, fx, fxs));
+      const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
+      makeDropTarget(dropZone, (payload) => {
+        if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
+      });
+      b.append(dropZone);
+    }));
     return box;
   }
 
@@ -610,25 +611,27 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Always loops (transport.loop defaults true) — no toggle needed.
     if (transport) {
       const playing = transport.isPlaying();
-      box.append(el('div', { className: 'fx-pts', textContent: 'autopilot' }));
-      box.append(el('div', { className: 'autopilot' }, [
-        el('button', {
-          className: 'transport-play' + (playing ? ' is-playing' : ''),
-          textContent: playing ? '■ stop' : '▶ play',
-          onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
-        }),
-      ]));
+      box.append(Section('Autopilot', 'autopilot', (b) => {
+        b.append(el('div', { className: 'autopilot' }, [
+          el('button', {
+            className: 'transport-play' + (playing ? ' is-playing' : ''),
+            textContent: playing ? '■ stop' : '▶ play',
+            onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
+          }),
+        ]));
+      }));
     }
 
-    box.append(el('div', { className: 'fx-pts', textContent: 'blend' }));
-    box.append(field('blend mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
-      (m) => commit(patchLayer(show(), id, { blend: m })))));
-    const opacityRow = sliderField('opacity', layer.opacity ?? 1, 0, 1,
-      (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
-    opacityRow.dataset.opacityLayer = id;
-    box.append(opacityRow);
-    box.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
-      (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
+    box.append(Section('Composition', 'layer-comp', (b) => {
+      b.append(field('blend mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
+        (m) => commit(patchLayer(show(), id, { blend: m })))));
+      const opacityRow = sliderField('opacity', layer.opacity ?? 1, 0, 1,
+        (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
+      opacityRow.dataset.opacityLayer = id;
+      b.append(opacityRow);
+      b.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
+        (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
+    }));
     // Delete this layer (only when more than one exists — keep at least one).
     if ((show().composition?.layers || []).length > 1) {
       box.append(el('button', {
@@ -756,48 +759,49 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }));
     }
 
-    // Transport: how long the timeline transport holds this slot (Resolume names
-    // this section "Transport").
-    box.append(el('div', { className: 'fx-pts', textContent: 'transport' }));
-    box.append(sliderField('duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
-      (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
-    if (gen && gen.params.length) {
-      for (const p of gen.params) {
-        const key = gen.name + '.' + p.key;
-        box.append(animatableParam({
-          key, p, value: clip.params?.[key], anim: clip.anim?.[key],
-          onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
-          onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
-        }));
+    // Transport: how long the timeline transport holds this slot + source params.
+    box.append(Section('Transport', 'transport', (b) => {
+      b.append(sliderField('duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
+        (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
+      if (gen && gen.params.length) {
+        for (const p of gen.params) {
+          const key = gen.name + '.' + p.key;
+          b.append(animatableParam({
+            key, p, value: clip.params?.[key], anim: clip.anim?.[key],
+            onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
+            onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+          }));
+        }
       }
-    }
+    }));
+
     // Transform + opacity (the clip's placement on the canvas) — all animatable
     // (Timeline/Audio) via the cog, like the source params. Anim keyed `tf.*`.
     const t = clip.transform || {};
-    box.append(el('div', { className: 'fx-pts', textContent: 'transform' }));
-    const tfParam = (key, label, min, max, def, value, apply) => box.append(animatableParam({
-      key: 'tf.' + key, p: { key: label, type: 'float', min, max, default: def },
-      value, anim: clip.anim?.['tf.' + key],
-      onValue: (v) => commitLive(apply(v)),
-      onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
+    box.append(Section('Transform', 'transform', (b) => {
+      const tfParam = (key, label, min, max, def, value, apply) => b.append(animatableParam({
+        key: 'tf.' + key, p: { key: label, type: 'float', min, max, default: def },
+        value, anim: clip.anim?.['tf.' + key],
+        onValue: (v) => commitLive(apply(v)),
+        onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
+      }));
+      tfParam('x', 'x', -1, 1, 0, t.x ?? 0, (v) => setClipTransform(show(), id, clip.id, { x: v }));
+      tfParam('y', 'y', -1, 1, 0, t.y ?? 0, (v) => setClipTransform(show(), id, clip.id, { y: v }));
+      tfParam('scale', 'scale', 0, 3, 1, t.scale ?? 1, (v) => setClipTransform(show(), id, clip.id, { scale: v }));
+      tfParam('rotation', 'rotation', -180, 180, 0, t.rotation ?? 0, (v) => setClipTransform(show(), id, clip.id, { rotation: v }));
+      tfParam('opacity', 'opacity', 0, 1, 1, clip.opacity ?? 1, (v) => setClipOpacity(show(), id, clip.id, v));
     }));
-    tfParam('x', 'x', -1, 1, 0, t.x ?? 0, (v) => setClipTransform(show(), id, clip.id, { x: v }));
-    tfParam('y', 'y', -1, 1, 0, t.y ?? 0, (v) => setClipTransform(show(), id, clip.id, { y: v }));
-    tfParam('scale', 'scale', 0, 3, 1, t.scale ?? 1, (v) => setClipTransform(show(), id, clip.id, { scale: v }));
-    tfParam('rotation', 'rotation', -180, 180, 0, t.rotation ?? 0, (v) => setClipTransform(show(), id, clip.id, { rotation: v }));
-    tfParam('opacity', 'opacity', 0, 1, 1, clip.opacity ?? 1, (v) => setClipOpacity(show(), id, clip.id, v));
 
     // Effect chain.
-    box.append(el('div', { className: 'fx-pts ly-fxlabel-clip', textContent: 'effects' }));
-    const fxs = clip.effects || [];
-    for (let fx = 0; fx < fxs.length; fx++) {
-      box.append(clipEffectBlock(id, clip, fx, fxs));
-    }
-    const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
-    makeDropTarget(dropZone, (payload) => {
-      if (payload.kind === 'effect') commit(addClipEffect(show(), id, clip.id, payload.name));
-    });
-    box.append(dropZone);
+    box.append(Section('Effects', 'effects', (b) => {
+      const fxs = clip.effects || [];
+      for (let fx = 0; fx < fxs.length; fx++) b.append(clipEffectBlock(id, clip, fx, fxs));
+      const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
+      makeDropTarget(dropZone, (payload) => {
+        if (payload.kind === 'effect') commit(addClipEffect(show(), id, clip.id, payload.name));
+      });
+      b.append(dropZone);
+    }));
     return box;
   }
 
@@ -846,11 +850,32 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // --- right column: draggable Sources + Effects libraries -------------------
   function composerRail() {
     const rail = el('div', { className: 'composer-rail' });
-    rail.append(el('div', { className: 'composer-label', textContent: 'sources' }));
-    rail.append(libList('source', generatorNames()));
-    rail.append(videoAddItem());
-    rail.append(el('div', { className: 'composer-label composer-label-fx', textContent: 'effects' }));
-    rail.append(libList('effect', effectNames()));
+
+    // Two panes — Sources (generators + video) and Effects — switched by a tab
+    // bar that mirrors the inspector's Clip/Layer/Composition sub-tabs.
+    const sources = el('div', { className: 'lib-pane' });
+    sources.append(libList('source', generatorNames()), videoAddItem());
+    const effects = el('div', { className: 'lib-pane' });
+    effects.append(libList('effect', effectNames()));
+
+    const tabs = el('div', { className: 'subtabs lib-tabs' });
+    const mkTab = (key, label) => {
+      const t = el('button', {
+        className: 'subtab' + (libTab === key ? ' subtab-active' : ''), textContent: label,
+      });
+      t.addEventListener('click', () => {
+        libTab = key;
+        sources.hidden = key !== 'source';
+        effects.hidden = key !== 'effect';
+        tabs.querySelectorAll('.subtab').forEach((b) => b.classList.toggle('subtab-active', b === t));
+      });
+      return t;
+    };
+    tabs.append(mkTab('source', 'sources'), mkTab('effect', 'effects'));
+    sources.hidden = libTab !== 'source';
+    effects.hidden = libTab !== 'effect';
+
+    rail.append(tabs, sources, effects);
     return rail;
   }
 
