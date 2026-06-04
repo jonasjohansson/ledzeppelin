@@ -216,8 +216,6 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
    right edge aligns with where the clips begin — tabs read as columns. */
 .tabs .tab:first-child { flex: 0 0 var(--layer-w); box-sizing: border-box; justify-content: flex-start; padding: 0 0 0 4px; }
 #globals { display: inline-flex; align-items: center; gap: 14px; }
-.g-fader { display: inline-flex; align-items: center; gap: 6px; font: var(--fs-body) var(--sans); color: var(--muted); }
-.g-fader input[type=range] { width: 88px; accent-color: var(--accent); }
 .g-val { color: var(--readout); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
@@ -478,11 +476,13 @@ input[type=checkbox]:checked::after {
 .bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--row-h); }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
 
-/* Matte-style param row: label fills the LEFT, then a fixed slider, then the
-   value on the FAR RIGHT (flex `order` reorders the DOM [label, value, slider]). */
+/* Matte-style param row: label fills the LEFT, then the value, then a fixed
+   slider, and (for animatable params) the contextual cog on the FAR RIGHT.
+   Flex `order` reorders the DOM [label, value, slider, cog]. */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
 .ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { order: 2; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+.ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+.ly-row .anim-cog-wrap { order: 3; }
 /* Editable readout: a borderless number field that reads as plain text until you
    hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
@@ -496,7 +496,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    in JS) so it reaches the very ends (native ranges inset the fill by half a
    thumb). Small thumb → minimal edge inset. */
 .ly-row input[type=range] {
-  order: 1; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0;
+  order: 2; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0;
   -webkit-appearance: none; appearance: none; height: 14px; background: transparent; cursor: pointer;
 }
 .ly-row input[type=range]::-webkit-slider-runnable-track {
@@ -581,8 +581,48 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .deck-layer.is-min.is-sel .lh-name { background: var(--accent); color: #07151f; }
 
 /* Multi-layer stack: flush rows, thin separators (flat Resolume grid). */
-.deck-layers { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); }
+.deck-layers { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-top: none; }
 .deck-addlayer { margin-top: 4px; align-self: flex-start; color: var(--green); }
+
+/* COMPOSITION GROUP — the parent node wrapping the layer stack. A left bracket
+   (accent rail) ties the head to the layers nested beneath it. */
+.deck-group { position: relative; display: flex; flex-direction: column; padding-left: 8px; }
+.deck-group::before {
+  content: ''; position: absolute; left: 0; top: 9px; bottom: 0; width: 2px;
+  background: var(--line-2); border-radius: 1px;
+}
+.deck-group.is-sel::before { background: var(--accent); }
+.group-head-box {
+  display: flex; align-items: center; gap: 10px; box-sizing: border-box;
+  padding: 5px 6px 5px 8px; background: var(--panel-2);
+  border: 1px solid var(--line); border-bottom: none; cursor: pointer;
+}
+.group-head-box:hover { background: var(--surface-2); }
+.deck-group.is-sel .group-head-box { box-shadow: inset 2px 0 0 var(--accent); }
+.gh-body { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.gh-title {
+  color: var(--muted); font-size: var(--fs-micro); font-weight: var(--fw-med);
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; flex: 0 0 auto;
+}
+.deck-group.is-sel .gh-title { color: var(--accent); }
+.gh-op { flex: 1 1 auto; min-width: 60px; display: flex; align-items: center; }
+.gh-op-range {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 14px;
+  background: transparent; cursor: pointer; accent-color: var(--green);
+}
+.gh-op-range::-webkit-slider-runnable-track {
+  height: 4px; border-radius: var(--radius-sm);
+  background: linear-gradient(to right, var(--green) var(--fill, 100%), var(--line-2) var(--fill, 100%));
+}
+.gh-op-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
+  background: var(--green); border: 2px solid var(--bg);
+}
+.gh-op-range::-moz-range-track { height: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
+.gh-op-range::-moz-range-progress { height: 4px; border-radius: var(--radius-sm); background: var(--green); }
+.gh-op-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--green); }
+.gh-op-val { flex: 0 0 auto; font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
+.gh-addlayer { flex: 0 0 auto; margin: 0; }
 .lh-blend {
   width: 100%; margin-top: 3px; box-sizing: border-box;
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -763,3 +803,36 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .clip-trigger:hover { background: rgba(232,178,127,.14); border-color: var(--amber); }
 .clip-trigger:active { background: rgba(232,178,127,.3); }
+
+/* --- Settings: a traditional modal preferences dialog ---------------------- */
+.modal { display: none; position: fixed; inset: 0; z-index: 60; align-items: flex-start; justify-content: center; }
+.modal:not([hidden]) { display: flex; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.modal-card {
+  position: relative; margin: 7vh 0; width: min(620px, 92vw); max-height: 86vh;
+  display: flex; flex-direction: column; background: var(--panel);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 18px 60px rgba(0,0,0,.5);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+}
+.modal-title { font-size: var(--fs-title); font-weight: var(--fw-med); color: var(--text); letter-spacing: 0.02em; }
+.modal-close {
+  background: none; border: none; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
+  padding: 3px 7px; border-radius: var(--radius-sm);
+}
+.modal-close:hover { color: var(--text); background: var(--hover); }
+.modal-body { overflow-y: auto; padding: 6px 16px 18px; }
+
+/* Settings page: roomier than the inspector rail — section headers split by a
+   hairline, full (un-truncated) labels, colour pickers in two comfortable cols. */
+.settings-panel.fx-panel { gap: 0; }
+.settings-panel .fx-pts { border-top: 1px solid var(--line); margin: 14px 0 7px; padding-top: 14px; }
+.settings-panel .fx-pts:first-child { border-top: none; margin-top: 4px; padding-top: 0; }
+.settings-panel .fx-field { min-height: 30px; }
+.settings-panel .fx-field > span:first-child { white-space: normal; overflow: visible; text-overflow: clip; flex: 0 0 40%; }
+.settings-panel .cmp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; row-gap: 2px; }
+.settings-panel .cmp-grid .fx-field > span:first-child { flex: 1 1 auto; }
+.settings-panel .cmp-grid input[type=color] { flex: 0 0 64px; }
+.settings-panel .fx-io { margin-top: 12px; }

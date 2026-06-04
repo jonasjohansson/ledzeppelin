@@ -21,14 +21,10 @@ canvas{display:block}
     <button id="tab-output" class="tab" data-tab="output">Output</button>
     <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
   </div>
-  <!-- Global tweaks (apply across the whole show) -->
+  <!-- Top-bar chrome (master opacity now lives on the Composition group head) -->
   <div id="globals">
-    <label class="g-fader" title="master opacity (whole composition)">
-      <span class="g-label">master</span>
-      <input type="range" id="g-master" min="0" max="1" step="0.01" value="1">
-      <span class="g-val" id="g-master-val">100%</span>
-    </label>
     <button id="g-reset" class="g-btn" title="restart the animation timer">↺ reset</button>
+    <button id="g-settings" class="g-btn" title="settings">⚙ settings</button>
     <button id="g-hide" class="g-btn" title="hide all UI (H)">hide UI</button>
   </div>
 </div>
@@ -83,6 +79,20 @@ canvas{display:block}
   <aside id="fixtures-view" class="panel" hidden>
     <div id="fixtures-panels"></div>
   </aside>
+
+</div>
+
+<!-- SETTINGS: a traditional preferences DIALOG (opened from the top-bar gear),
+     centred over a dimmed backdrop — app-wide prefs, not a workspace tab. -->
+<div id="settings-modal" class="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-label="Settings" aria-modal="true">
+    <div class="modal-head">
+      <span class="modal-title">Settings</span>
+      <button id="settings-close" class="modal-close" title="close (Esc)" data-close>✕</button>
+    </div>
+    <div id="settings-panel" class="modal-body"></div>
+  </div>
 </div>
 <script type="module" src="./src/app.js"></script></body>
 </html>

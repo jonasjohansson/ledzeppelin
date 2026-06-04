@@ -9,9 +9,10 @@ import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
+import { createSettingsPanel } from './ui/settings.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setCompositionOpacity,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, snap90, flipFixture } from './model/fixture-transform.js';
 import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChains } from './model/chains.js';
@@ -126,7 +127,7 @@ function snapshotForUndo(prev) {
 function restoreShow(s) {
   undoSuppress = true;
   rebuild(s);
-  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay(); syncMasterFader();
+  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
   undoSuppress = false;
   undoLastAt = 0;
 }
@@ -232,6 +233,7 @@ const layerPanel = createLayerPanel({
   thumbnails,
   onClipSelect: () => setInspectorTab('clip'), // clicking a clip focuses the Clip inspector
   onLayerSelect: () => setInspectorTab('layer'), // clicking the layer rectangle focuses the Layer inspector
+  onGroupSelect: () => setInspectorTab('composition'), // clicking the composition group focuses the Composition inspector
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -253,8 +255,28 @@ const importPanel = createImportPanel({
 const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
-  setShow: (next) => setComposition(next), // crossfade: composition-only persist
+});
+// Output selection + snap state. Declared here (before the Settings panel, whose
+// initial render reads snap state) to avoid a temporal-dead-zone access.
+let selectedFixtureIds = new Set();
+let SNAP_GRID = 20;     // grid step (px) fixtures snap to when not aligning to a neighbour
+let SNAP_DIST = 10;     // px tolerance for aligning to another fixture / centre
+let snapEnabled = false;
+let snapGuides = [];    // alignment guide lines to draw during a snapped drag
+// Global Settings panel — app-wide preferences (theme, audio gain, crossfade,
+// snap, composition file I/O). Mounts into its own top-level Settings view.
+const settingsPanel = createSettingsPanel({
+  getShow: () => show,
+  setShow: (next) => setComposition(next), // crossfade / audio gain: composition-only persist
   loadComposition: (comp) => applyComposition(comp),
+  snap: {
+    enabled: () => snapEnabled,
+    setEnabled: (b) => setSnapEnabled(b),
+    grid: () => SNAP_GRID,
+    setGrid: (n) => { SNAP_GRID = Math.max(1, n); redrawOverlay(); },
+    dist: () => SNAP_DIST,
+    setDist: (n) => { SNAP_DIST = Math.max(0, n); },
+  },
 });
 
 // Replace the whole composition (layers/clips/effects/canvas) from a loaded file,
@@ -267,7 +289,7 @@ function applyComposition(comp) {
   if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
   compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
   saveShow(next); rebuild(next);
-  layerPanel.refresh(); panel.refresh(); compositionPanel.refresh(); renderOutput(); redrawOverlay(); syncMasterFader();
+  layerPanel.refresh(); panel.refresh(); compositionPanel.refresh(); renderOutput(); redrawOverlay();
 }
 // --- Resolume-style shell routing ----------------------------------------
 // Panels are CONSTRUCTED ONCE and mounted into fixed regions; switching
@@ -291,13 +313,9 @@ const fixturesPanels = document.getElementById('fixtures-panels');
 compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
 fixturesPanels?.append(importPanel.el);
 fixturesPanels?.append(panel.el);
+document.getElementById('settings-panel')?.append(settingsPanel.el);
 
-// Output selection: a SET of selected fixtures (multi-select), and snapping.
-let selectedFixtureIds = new Set();
-const SNAP_GRID = 20;
-const SNAP_DIST = 10;   // px tolerance for aligning to another fixture / centre
-let snapEnabled = false;
-let snapGuides = [];    // alignment guide lines to draw during a snapped drag
+// (Output selection + snap state are declared earlier, above the Settings panel.)
 
 // Snap a proposed CENTRE (x,y) for fixture `fid`: align its left/centre/right
 // EDGES (and top/centre/bottom) to other fixtures' edges/centres and the canvas
@@ -363,7 +381,14 @@ if (previewCanvas) {
 const outputListEl = document.getElementById('output-list');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures | chains | devices
 const snapToggle = document.getElementById('snap-cb');
-snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
+// Snap enable lives in two mirrored controls (the Output strip checkbox + the
+// Settings panel). setSnapEnabled keeps both in step.
+function setSnapEnabled(v) {
+  snapEnabled = !!v;
+  if (snapToggle) snapToggle.checked = snapEnabled;
+  redrawOverlay();
+}
+snapToggle?.addEventListener('change', () => setSnapEnabled(snapToggle.checked));
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
@@ -570,6 +595,17 @@ function applyView() {
   if (overlay) renderOutputList();
 }
 
+// --- Settings dialog: a modal opened from the top-bar gear (not a workspace
+//     tab). Refreshes on open so it reads live snap/theme/gain state. ---
+const settingsModal = document.getElementById('settings-modal');
+function openSettings() { settingsPanel.refresh(); if (settingsModal) settingsModal.hidden = false; }
+function closeSettings() { if (settingsModal) settingsModal.hidden = true; }
+document.getElementById('g-settings')?.addEventListener('click', openSettings);
+settingsModal?.addEventListener('click', (e) => { if (e.target.dataset.close !== undefined) closeSettings(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && settingsModal && !settingsModal.hidden) { closeSettings(); e.preventDefault(); }
+});
+
 tabsEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.tab');
   if (!b) return;
@@ -598,23 +634,11 @@ document.addEventListener('keydown', (e) => {
   toggleGui();
 });
 
-// --- Top-bar global tweaks: master opacity · reset timer · hide UI ---
-const gMaster = document.getElementById('g-master');
-const gMasterVal = document.getElementById('g-master-val');
-function syncMasterFader() {
-  const o = show.composition?.opacity ?? 1;
-  if (gMaster) gMaster.value = String(o);
-  if (gMasterVal) gMasterVal.textContent = `${Math.round(o * 100)}%`;
-}
-gMaster?.addEventListener('input', () => {
-  const v = Number(gMaster.value);
-  if (gMasterVal) gMasterVal.textContent = `${Math.round(v * 100)}%`;
-  setComposition(setCompositionOpacity(show, v));
-});
+// --- Top-bar chrome: reset timer · hide UI. (Master opacity now lives on the
+//     Composition GROUP head in the deck — see layers.js groupHead.) ---
 document.getElementById('g-reset')?.addEventListener('click', () => transport.reset());
 document.getElementById('g-hide')?.addEventListener('click', toggleGui);
 document.getElementById('show-ui')?.addEventListener('click', toggleGui);
-syncMasterFader();
 
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
@@ -623,8 +647,10 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (typingIn(t)) return;
   if (view.activeTab === 'composition') {
-    // A selected effect deletes first; otherwise the selected clip.
-    if (!layerPanel.deleteSelectedEffect?.()) layerPanel.deleteActiveClip();
+    // Delete priority: a selected effect, else a selected layer, else the clip.
+    // (Clicking a layer clears the clip selection, so a layer is the delete
+    // target only when no clip is selected.)
+    if (!layerPanel.deleteSelectedEffect?.() && !layerPanel.deleteSelectedLayer?.()) layerPanel.deleteActiveClip();
     e.preventDefault();
   } else if (selectedFixtureIds.size) {
     const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));

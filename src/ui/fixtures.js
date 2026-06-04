@@ -93,15 +93,15 @@ export function createFixturePanel({ getShow, setShow }) {
     const di = show.devices.indexOf(d);
     const upd = (patch) => { const next = structuredClone(show); Object.assign(next.devices[di], patch); commit(next); };
     return el('div', { className: 'fx-card fx-detail' }, [
-      field('id', textInputCommit(d.id, (x) => upd({ id: x }))),
-      field('name', textInputCommit(d.name, (x) => upd({ name: x }))),
-      field('ip', textInputCommit(d.ip, (x) => upd({ ip: x }))),
-      field('color order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
-      field('port', numInputCommit(d.port ?? 4048, (x) => upd({ port: x }))),
+      field('ID', textInputCommit(d.id, (x) => upd({ id: x }))),
+      field('Name', textInputCommit(d.name, (x) => upd({ name: x }))),
+      field('IP', textInputCommit(d.ip, (x) => upd({ ip: x }))),
+      field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      field('Port', numInputCommit(d.port ?? 4048, (x) => upd({ port: x }))),
       // Output calibration (LEDs, not preview): perceptual gamma (~2.2 smooths
       // low-end fades) + a max-brightness cap 0..1.
-      field('gamma', numInputCommit(d.gamma ?? 1, (x) => upd({ gamma: x }), '0.05')),
-      field('max bright', numInputCommit(d.brightness ?? 1, (x) => upd({ brightness: x }), '0.01')),
+      field('Gamma', numInputCommit(d.gamma ?? 1, (x) => upd({ gamma: x }), '0.05')),
+      field('Max Bright', numInputCommit(d.brightness ?? 1, (x) => upd({ brightness: x }), '0.01')),
       el('button', {
         className: 'fx-del-link', textContent: 'delete device',
         onclick: () => { const next = structuredClone(show); next.devices.splice(di, 1); selDeviceId = null; commit(next); },
@@ -117,20 +117,20 @@ export function createFixturePanel({ getShow, setShow }) {
     const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
     const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtures[fi]); commit(next); };
     return el('div', { className: 'fx-card fx-detail' }, [
-      field('id', textInputCommit(f.id, (x) => upd((nf) => { nf.id = x; }))),
-      field('name', textInputCommit(f.name, (x) => upd((nf) => { nf.name = x; }))),
-      field('pixel count', numInputCommit(f.pixelCount, (x) => upd((nf) => {
+      field('ID', textInputCommit(f.id, (x) => upd((nf) => { nf.id = x; }))),
+      field('Name', textInputCommit(f.name, (x) => upd((nf) => { nf.name = x; }))),
+      field('Pixel Count', numInputCommit(f.pixelCount, (x) => upd((nf) => {
         nf.pixelCount = x; nf.output.pixelCount = x;       // keep in sync (validate requires match)
         if (nf.input) nf.input.samples = nf.input.samples || x;
       }))),
-      field('color order', selectInput(COLOR_ORDERS, f.colorOrder ?? 'GRB', (x) => upd((nf) => { nf.colorOrder = x; }))),
-      field('device', selectInput(deviceOpts.length ? deviceOpts : [{ value: '', label: '(none)' }],
+      field('Color Order', selectInput(COLOR_ORDERS, f.colorOrder ?? 'GRB', (x) => upd((nf) => { nf.colorOrder = x; }))),
+      field('Device', selectInput(deviceOpts.length ? deviceOpts : [{ value: '', label: '(none)' }],
         f.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
-      field('pixel offset', numInputCommit(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }))),
-      field('samples', numInputCommit(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }))),
+      field('Pixel Offset', numInputCommit(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }))),
+      field('Samples', numInputCommit(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }))),
       el('div', { className: 'fx-pts', textContent: 'size (px)' }),
-      field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
-      field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
+      field('Width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
+      field('Height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
       el('div', { className: 'fx-detail-actions' }, [
         el('button', { className: 'fx-del-link', textContent: 'duplicate', onclick: () => duplicateFixture(show, f) }),
         el('button', {

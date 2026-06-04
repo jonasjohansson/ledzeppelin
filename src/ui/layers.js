@@ -26,7 +26,7 @@ import {
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
-  setCompositionParam, mergeCompositionParams, setCompositionAnim,
+  setCompositionParam, mergeCompositionParams, setCompositionAnim, setCompositionOpacity,
   setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
   setClipAnim, setLayerAnim, patchLayer,
   addLayer, removeLayer, moveLayer,
@@ -63,6 +63,12 @@ const selectInput = (options, value, onInput) => {
 
 const field = (label, control) =>
   el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
+
+// Param keys in the manifest are terse (lowercase / camelCase: `pos`, `headWidth`,
+// `modFreq`). Show them title-cased with the camelCase seam split, so labels read
+// like a pro UI ("Pos", "Head Width", "Mod Freq") without changing the model keys.
+const prettyParam = (key) =>
+  String(key).replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
 
 const fmt = (v) => {
   const n = Number(v);
@@ -146,19 +152,19 @@ function paramControl(p, value, onInput) {
   if (p.type === 'color') {
     const i = el('input', { type: 'color', value: value || '#ffffff' });
     i.addEventListener('input', () => onInput(i.value));
-    return field(p.key, i);
+    return field(prettyParam(p.key), i);
   }
   if (p.type === 'bool') {
     const i = el('input', { type: 'checkbox', checked: !!value });
     i.addEventListener('change', () => onInput(i.checked));
     // Inline row: label left, checkbox right (matches the slider params).
     return el('label', { className: 'fx-field bool-row' }, [
-      el('span', { className: 'ly-plabel', textContent: p.key }), i,
+      el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), i,
     ]);
   }
   const min = p.min ?? 0, max = p.max ?? 1;
   const v = value == null ? (p.default ?? min) : value;
-  return sliderField(p.key, v, min, max, onInput, p.default ?? min, p.step);
+  return sliderField(prettyParam(p.key), v, min, max, onInput, p.default ?? min, p.step);
 }
 
 // A dual-handle range track for an animated param: two thumbs mark `in` and `out`
@@ -213,7 +219,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
 
   if (!animated) {
     const shown = value == null ? (p.default ?? min) : value;
-    const row = sliderField(p.key, shown, min, max, onValue, p.default ?? min, p.step);
+    const row = sliderField(prettyParam(p.key), shown, min, max, onValue, p.default ?? min, p.step);
     row.append(cog);
     wrap.append(row);
     return wrap;
@@ -230,7 +236,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
   const head = el('div', { className: 'ly-param anim-head' }, [
-    el('span', { className: 'ly-plabel', textContent: p.key }), readout, cog,
+    el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout, cog,
   ]);
   wrap.append(head);
   wrap.append(track);
@@ -317,12 +323,14 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onGroupSelect }) {
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
   let selectedClipId = null; // inspector target — SELECT (click) is decoupled from ACTIVE (trigger)
   let selectedLayerId = null; // which layer the Layer inspector edits
+  let selectedGroup = false; // is the COMPOSITION GROUP node selected (its inspector = Composition tab)?
+  let didInitSelect = false; // have we auto-picked a default clip yet (first render only)?
   let selectedEffect = null; // a selected effect row: { scope:'clip'|'layer', layerId, clipId?, index } — Backspace deletes it
   const fxSel = (scope, layerId, clipId, index) => selectedEffect
     && selectedEffect.scope === scope && selectedEffect.layerId === layerId
@@ -382,6 +390,22 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const o = dl.querySelector('.lh-op-val'); if (o) o.textContent = Math.round((Number(v) || 0) * 100) + '%';
     }
     const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
+    if (insp) {
+      const r = insp.querySelector('input[type=range]'); if (r) { r.value = String(v); r.style.setProperty('--fill', (v * 100) + '%'); }
+      const o = insp.querySelector('.ly-readout');
+      if (o && document.activeElement !== o) { if (o.tagName === 'INPUT') o.value = fmt(v); else o.textContent = fmt(v); }
+    }
+  }
+  // Master (composition) opacity lives in two synced controls: the group-head
+  // fader in the deck and the row in the Composition inspector. Keep both in step
+  // live during a drag (neither re-renders), mirroring syncLayerOpacity.
+  function syncMasterOpacity(v) {
+    const head = document.querySelector('.group-head-box');
+    if (head) {
+      const r = head.querySelector('.gh-op-range'); if (r) r.value = String(v);
+      const o = head.querySelector('.gh-op-val'); if (o) o.textContent = Math.round((Number(v) || 0) * 100) + '%';
+    }
+    const insp = document.querySelector('.ly-param[data-opacity-master]');
     if (insp) {
       const r = insp.querySelector('input[type=range]'); if (r) { r.value = String(v); r.style.setProperty('--fill', (v * 100) + '%'); }
       const o = insp.querySelector('.ly-readout');
@@ -470,9 +494,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       return;
     }
 
-    // --- DECK region: one row per layer, TOP-of-stack first (Resolume-style:
-    //     the top row renders on top — it's the LAST layer in the array). A
-    //     "+ layer" button adds another. Transport moved to the Layer autopilot.
+    // --- DECK region: a COMPOSITION GROUP node wrapping one row per layer,
+    //     TOP-of-stack first (Resolume-style: the top row renders on top — it's
+    //     the LAST layer in the array). The group head owns the master-opacity
+    //     fader (mirroring each layer's fader) and the "+ layer" button, so the
+    //     deck reads top-to-bottom as composition → layers → clips.
     const deckBox = el('div', { className: 'deck-layers' });
     // Pad every layer's deck to the same column count so clips line up vertically
     // into a Resolume-style grid (max clips across layers + 1 trailing empty).
@@ -480,16 +506,31 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
       deckBox.append(el('div', {
-        className: 'deck-layer' + (layer.minimized ? ' is-min' : '') + (layer.id === selectedLayerId ? ' is-sel' : ''),
+        className: 'deck-layer' + (layer.minimized ? ' is-min' : '') + (layer.id === selectedLayerId && !selectedGroup ? ' is-sel' : ''),
         'data-layer': layer.id,
       }, [layerHead(layer, layer.id, i, layers.length > 1), clipDeck(layer, layer.id, maxClips)]));
     }
-    deckEl.append(deckBox);
-    deckEl.append(el('button', { className: 'fx-add deck-addlayer', textContent: '+ layer', onclick: () => commit(addLayer(show())) }));
+    const group = el('div', { className: 'deck-group' + (selectedGroup ? ' is-sel' : '') }, [groupHead(), deckBox]);
+    deckEl.append(group);
 
     // --- CLIP inspector: the SELECTED clip, found across ALL layers ----------
     let selLayer = layers.find((L) => (L.clips || []).some((c) => c.id === selectedClipId));
-    if (!selLayer) { selLayer = layers[layers.length - 1]; selectedClipId = selLayer.activeClipId; }
+    // First render with nothing selected (e.g. a fresh reload): default to a real
+    // clip so the inspector opens on something — the topmost layer's active clip,
+    // else the first clip of the topmost layer that has any. We only auto-pick
+    // ONCE, so a later layer-click that clears the clip (to make the layer the
+    // delete target) is respected.
+    if (!selLayer && !didInitSelect && selectedClipId == null) {
+      for (let i = layers.length - 1; i >= 0 && !selLayer; i--) {
+        const clips = layers[i].clips || [];
+        if (!clips.length) continue;
+        selLayer = layers[i];
+        selectedClipId = clips.find((c) => c.id === selLayer.activeClipId)?.id ?? clips[0].id;
+        selectedLayerId = selLayer.id;
+      }
+    }
+    didInitSelect = true;
+    if (!selLayer) selLayer = layers.find((L) => L.id === selectedLayerId) || layers[layers.length - 1];
     const selClip = (selLayer.clips || []).find((c) => c.id === selectedClipId);
     if (selClip) clipEl.append(selectedClipEditor(selLayer.id, selClip));
     else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clip selected' }));
@@ -499,12 +540,29 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const inspLayer = layers.find((L) => L.id === selectedLayerId) || selLayer;
     layerEl.append(layerSettings(inspLayer, inspLayer.id));
 
-    // COMPOSITION effects (3rd tier) — applied to the final composite of ALL
-    // layers. Lives at the bottom of the Composition tab (#insp-compfx).
+    // COMPOSITION inspector (the group's inspector): master opacity at the top,
+    // then the composition effect chain (3rd tier, applied to the final composite
+    // of ALL layers). Canvas resolution sits above this in #comp-settings.
+    compEl.append(compositionMaster());
     compEl.append(compositionFx());
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());
+  }
+
+  // Master-opacity row for the Composition inspector — the same value as the
+  // group-head fader (kept in sync via syncMasterOpacity). Tagged so the sync can
+  // find it. Right-click the slider resets to 1 (full).
+  function compositionMaster() {
+    const o = getShow().composition?.opacity ?? 1;
+    const box = el('div', { className: 'comp-master' });
+    box.append(Section('Master', 'comp-master', (b) => {
+      const row = sliderField('Opacity', o, 0, 1,
+        (v) => { commitLive(setCompositionOpacity(show(), v)); syncMasterOpacity(v); }, 1);
+      row.dataset.opacityMaster = '1';
+      b.append(row);
+    }, () => { commit(setCompositionOpacity(show(), 1)); }));
+    return box;
   }
 
   // Composition effect chain — applied to the WHOLE composite (all layers), after
@@ -622,8 +680,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         draggable: true,
       });
       // Click = SELECT (edit in inspector) without activating; double-click = trigger.
-      // Selecting also focuses the Clip inspector tab (onClipSelect).
-      const selectThis = () => { selectedClipId = clip.id; onClipSelect?.(); };
+      // Selecting also focuses the Clip inspector tab (onClipSelect) and makes the
+      // clip's own layer the selected layer, so the layer highlight follows the
+      // clip you're editing (not whichever layer head was last clicked).
+      const selectThis = () => { selectedClipId = clip.id; selectedLayerId = id; selectedGroup = false; onClipSelect?.(); };
       cell.addEventListener('click', () => { selectThis(); render(); });
       cell.addEventListener('dblclick', () => { selectThis(); commit(setActiveClip(show(), id, clip.id)); });
       // Drag this clip to reorder it (drop on another clip / empty slot).
@@ -701,7 +761,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           className: 'dir-btn' + (dir === d ? ' on' : ''), textContent: glyph, title,
           onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
         });
-        b.append(field('direction', el('div', { className: 'dir-btns' }, [
+        b.append(field('Direction', el('div', { className: 'dir-btns' }, [
           dirBtn('backward', '◀', 'play backward'),
           dirBtn('off', '■', 'stop'),
           dirBtn('forward', '▶', 'play forward'),
@@ -710,15 +770,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop?.() ?? true });
         loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
         b.append(el('label', { className: 'fx-field bool-row' }, [
-          el('span', { className: 'ly-plabel', textContent: 'loop' }), loopCb,
+          el('span', { className: 'ly-plabel', textContent: 'Loop' }), loopCb,
         ]));
       }));
     }
 
     box.append(Section('Composition', 'layer-comp', (b) => {
-      b.append(field('blend mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
+      b.append(field('Blend Mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
         (m) => commit(patchLayer(show(), id, { blend: m })))));
-      const opacityRow = sliderField('opacity', layer.opacity ?? 1, 0, 1,
+      const opacityRow = sliderField('Opacity', layer.opacity ?? 1, 0, 1,
         (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
       opacityRow.dataset.opacityLayer = id;
       b.append(opacityRow);
@@ -740,7 +800,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Delete this layer (only when more than one exists — keep at least one).
     if ((show().composition?.layers || []).length > 1) {
       box.append(el('button', {
-        className: 'fx-del-link', textContent: 'delete layer',
+        className: 'fx-del-link', textContent: 'Delete Layer',
         onclick: () => {
           if (!window.confirm(`Delete "${layer.name ?? 'layer'}" and its clips?`)) return;
           selectedLayerId = null; commit(removeLayer(show(), id));
@@ -748,6 +808,55 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }));
     }
     return box;
+  }
+
+  // COMPOSITION GROUP head: the parent node of the whole layer stack. Carries the
+  // master-opacity fader (mirroring each layer's fader) + the "+ layer" button.
+  // Clicking it selects the group → routes the inspector to the Composition tab.
+  function groupHead() {
+    const o = getShow().composition?.opacity ?? 1;
+    const pct = (v) => Math.round((Number(v) || 0) * 100) + '%';
+    const head = el('div', {
+      className: 'group-head-box lh-clickable',
+      title: 'composition — click to edit master opacity, canvas & effects',
+    });
+    head.addEventListener('click', () => {
+      selectedGroup = true; selectedClipId = null;
+      onGroupSelect?.(); render();
+    });
+    // Master-opacity fader (horizontal) + live readout. The value-based accent
+    // fill reaches the ends (same trick as the param sliders).
+    const opRange = el('input', {
+      type: 'range', min: '0', max: '1', step: '0.001', value: String(o),
+      className: 'gh-op-range', title: 'master opacity (whole composition)',
+    });
+    opRange.style.setProperty('--fill', (o * 100) + '%');
+    const opVal = el('div', { className: 'gh-op-val', textContent: pct(o) });
+    opRange.addEventListener('input', () => {
+      const v = Number(opRange.value);
+      opRange.style.setProperty('--fill', (v * 100) + '%');
+      opVal.textContent = pct(v);
+      commitLive(setCompositionOpacity(show(), v));
+      syncMasterOpacity(v);
+    });
+    opRange.addEventListener('contextmenu', (e) => {           // right-click → full
+      e.preventDefault(); opRange.value = '1'; opRange.style.setProperty('--fill', '100%');
+      opVal.textContent = '100%'; commit(setCompositionOpacity(show(), 1));
+    });
+    opRange.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // Header bar: COMPOSITION label · master fader · readout · "+ layer".
+    head.append(
+      el('div', { className: 'gh-body' }, [
+        el('div', { className: 'gh-title', textContent: 'COMPOSITION' }),
+        el('div', { className: 'gh-op' }, [opRange]),
+        opVal,
+      ]),
+      el('button', {
+        className: 'fx-add deck-addlayer gh-addlayer', textContent: '+ layer',
+        onclick: (e) => { e.stopPropagation(); commit(addLayer(show())); },
+      }),
+    );
+    return head;
   }
 
   // Resolume-style layer control block: a vertical opacity fader (the "V"),
@@ -760,7 +869,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       draggable: canReorder,
     });
     // Click → select this layer (Layer inspector) · double-click → minimise.
-    head.addEventListener('click', () => { selectedLayerId = id; onLayerSelect?.(); render(); });
+    // Selecting the layer clears any clip selection, so the layer is now the sole
+    // delete target and no clip stays highlighted underneath it.
+    head.addEventListener('click', () => { selectedLayerId = id; selectedClipId = null; selectedGroup = false; onLayerSelect?.(); render(); });
     head.addEventListener('dblclick', () => commit(patchLayer(show(), id, { minimized: !layer.minimized })));
     // Drag the head to reorder layers (drop onto another layer row).
     head.addEventListener('dragstart', (e) => {
@@ -875,7 +986,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
     // Playback: how long the layer's autopilot dwells on this clip.
     box.append(Section('Playback', 'playback', (b) => {
-      b.append(sliderField('duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
+      b.append(sliderField('Duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
         (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
     }, () => commit(setClipDuration(show(), id, clip.id, 4000))));
 
@@ -1088,8 +1199,26 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     commit(removeClip(show(), l.id, target));
   }
 
+  // Delete the selected LAYER (Backspace, when a layer — not a clip — is the
+  // selection). Refuses the last layer (the composition must keep one). Returns
+  // true if it acted, so app.js can chain the delete priorities.
+  function deleteSelectedLayer() {
+    // Only when a layer is the active selection — a selected clip wins (and
+    // clip-selection leaves selectedLayerId untouched, so check it here).
+    if (selectedClipId) return false;
+    const layers = show().composition?.layers || [];
+    if (!selectedLayerId || layers.length <= 1) return false;
+    const i = layers.findIndex((l) => l.id === selectedLayerId);
+    if (i < 0) return false;
+    const target = selectedLayerId;
+    // Keep a layer selected: hop to a neighbour.
+    selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;
+    commit(removeLayer(show(), target));
+    return true;
+  }
+
   render();
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we

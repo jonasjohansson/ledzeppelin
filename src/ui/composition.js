@@ -11,8 +11,7 @@
 //
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { clampCanvasSize, setShowAudioGain, setCompositionTransition } from '../model/layers.js';
-import { THEME_TOKENS, tokenValue, setToken, resetTheme } from './theme.js';
+import { clampCanvasSize } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -24,21 +23,6 @@ const el = (tag, props = {}, kids = []) => {
 const field = (label, control) =>
   el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
 
-// Paint a param-row slider's value-based accent fill (so it reaches the ends).
-const fill = (r) => { const mn = +r.min, mx = +r.max; r.style.setProperty('--fill', (mx > mn ? (+r.value - mn) / (mx - mn) * 100 : 50) + '%'); };
-
-// A range slider with a live readout (writes back on every input, no re-render).
-const sliderRow = (label, value, min, max, onInput) => {
-  const out = el('span', { className: 'ly-readout', textContent: String(Math.round(value)) });
-  const range = el('input', {
-    type: 'range', min: String(min), max: String(max), step: '1', value: String(value ?? 0),
-  });
-  range.addEventListener('input', () => { out.textContent = range.value; onInput(Number(range.value)); });
-  return el('label', { className: 'fx-field ly-param ly-row' }, [
-    el('span', { className: 'ly-plabel', textContent: label }), out, range,
-  ]);
-};
-
 // gcd-based aspect string (e.g. 1280×720 → "16:9"). Falls back to "—" on 0.
 function aspectLabel(w, h) {
   if (!(w > 0) || !(h > 0)) return '—';
@@ -47,10 +31,11 @@ function aspectLabel(w, h) {
   return `${Math.round(w) / d}:${Math.round(h) / d}`;
 }
 
-// createCompositionPanel({ getShow, setSize, setShow })
-//   setShow(s): composition-only persist (no rebuild) — used for the crossfade,
-//   which is a composition-global setting living on the single layer.
-export function createCompositionPanel({ getShow, setSize, setShow, loadComposition }) {
+// createCompositionPanel({ getShow, setSize })
+//   Canvas resolution only. Composition-global preferences (crossfade, audio
+//   gain, theme, file I/O) moved to the global Settings panel; master opacity
+//   moved to the Composition group head + its inspector.
+export function createCompositionPanel({ getShow, setSize }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
 
   // Working draft of the fields (not yet applied). Seeded from the show.
@@ -77,8 +62,8 @@ export function createCompositionPanel({ getShow, setSize, setShow, loadComposit
     const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; updateReadout(); });
 
     const grid = el('div', { className: 'fx-card cmp-grid' }, [
-      field('width', wInput),
-      field('height', hInput),
+      field('Width', wInput),
+      field('Height', hInput),
     ]);
     root.append(grid);
 
@@ -100,86 +85,6 @@ export function createCompositionPanel({ getShow, setSize, setShow, loadComposit
         render();
       },
     }));
-
-    // --- Crossfade (global): how long a clip change fades, across ALL layers. ---
-    const xf = getShow().composition?.transitionMs ?? 500;
-    const xfOut = el('span', { className: 'ly-readout', textContent: String(Math.round(xf)) });
-    const xfRange = el('input', { type: 'range', min: '0', max: '5000', step: '10', value: String(xf) });
-    fill(xfRange);
-    xfRange.addEventListener('input', () => {
-      xfOut.textContent = String(Math.round(Number(xfRange.value)));
-      fill(xfRange);
-      setShow?.(setCompositionTransition(getShow(), Number(xfRange.value)));
-    });
-    xfRange.addEventListener('contextmenu', (e) => { e.preventDefault(); xfRange.value = '500'; xfOut.textContent = '500'; setShow?.(setCompositionTransition(getShow(), 500)); });
-    root.append(el('div', { className: 'fx-pts', textContent: 'crossfade' }));
-    root.append(el('div', { className: 'fx-card' }, [
-      el('label', { className: 'fx-field ly-param ly-row resettable' }, [
-        el('span', { className: 'ly-plabel', textContent: 'time (ms)' }), xfOut, xfRange,
-      ]),
-    ]));
-
-    // --- Audio input (general config): global gain on the mic before it drives
-    //     Audio-mode params. ×0 mutes, ×1 unity, up to ×8 to boost quiet input. ---
-    const gain = getShow().composition?.audioGain ?? 1;
-    const gOut = el('span', { className: 'ly-readout', textContent: `×${gain.toFixed(2)}` });
-    const gRange = el('input', { type: 'range', min: '0', max: '8', step: '0.05', value: String(gain) });
-    fill(gRange);
-    gRange.addEventListener('input', () => {
-      gOut.textContent = `×${Number(gRange.value).toFixed(2)}`;
-      fill(gRange);
-      setShow?.(setShowAudioGain(getShow(), Number(gRange.value)));
-    });
-    gRange.addEventListener('contextmenu', (e) => {           // right-click → reset to ×1
-      e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00'; fill(gRange);
-      setShow?.(setShowAudioGain(getShow(), 1));
-    });
-    // --- Save / load the COMPOSITION (visuals only — keeps the fixture patch). ---
-    root.append(el('div', { className: 'fx-pts', textContent: 'composition file' }));
-    const io = el('div', { className: 'fx-io' });
-    io.append(el('button', {
-      textContent: 'save composition',
-      onclick: () => {
-        const comp = getShow().composition || {};
-        const blob = new Blob([JSON.stringify(comp, null, 2)], { type: 'application/json' });
-        const a = el('a', { href: URL.createObjectURL(blob), download: 'composition.json' });
-        a.click(); URL.revokeObjectURL(a.href);
-      },
-    }));
-    const compFileIn = el('input', { type: 'file', accept: '.json,application/json' });
-    compFileIn.style.display = 'none';
-    compFileIn.addEventListener('change', async () => {
-      const file = compFileIn.files[0];
-      if (!file) return;
-      try { loadComposition?.(JSON.parse(await file.text())); }
-      catch (e) { window.alert(`load failed: ${e.message}`); }
-      compFileIn.value = '';
-    });
-    io.append(el('button', { textContent: 'load composition', onclick: () => compFileIn.click() }), compFileIn);
-    root.append(io);
-
-    // --- GUI colours (live theme): each picker writes a CSS token immediately
-    //     and persists it; the whole UI updates as you drag. ---
-    root.append(el('div', { className: 'fx-pts', textContent: 'gui colors' }));
-    const colorGrid = el('div', { className: 'fx-card cmp-grid' });
-    for (const [label, varName] of THEME_TOKENS) {
-      const picker = el('input', { type: 'color', value: tokenValue(varName) });
-      picker.addEventListener('input', () => setToken(varName, picker.value));
-      colorGrid.append(field(label, picker));
-    }
-    root.append(colorGrid);
-    root.append(el('button', {
-      className: 'fx-del-link', textContent: 'reset colors',
-      onclick: () => { resetTheme(); render(); },
-    }));
-
-    root.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
-    root.append(el('div', { className: 'fx-card' }, [
-      el('label', { className: 'fx-field ly-param ly-row resettable' }, [
-        el('span', { className: 'ly-plabel', textContent: 'gain' }), gOut, gRange,
-      ]),
-    ]));
-
   }
 
   render();
