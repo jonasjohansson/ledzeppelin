@@ -342,31 +342,10 @@ if (previewCanvas) {
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures | chains | devices
-const addFixtureBtn = document.getElementById('add-fixture');
 const snapToggle = document.getElementById('snap-cb');
 snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
-
-function addFixtureCentered() {
-  const next = structuredClone(show);
-  const id = `f${next.fixtures.length + 1}`;
-  const devId = next.devices[0]?.id ?? '';
-  // Offset must be contiguous-from-0 PER DEVICE (validate()): take the running
-  // end of the chosen device's fixtures.
-  const off = next.fixtures
-    .filter((x) => x.output?.deviceId === devId)
-    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
-  const px = 150;
-  const c = next.composition?.canvas || { w: 1280, h: 720 };
-  next.fixtures.push({
-    id, name: id, pixelCount: px, colorOrder: 'GRB',
-    output: { deviceId: devId, pixelOffset: off, pixelCount: px },
-    input: { transform: { x: c.w / 2, y: c.h / 2, w: c.w * 0.6, h: 8, rotation: 0 }, samples: px },
-  });
-  selectedFixtureIds = new Set([id]);
-  rebuild(next); panel.refresh(); renderOutput();
-}
-addFixtureBtn?.addEventListener('click', addFixtureCentered);
+// Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
 // A px number field (commits on change) for the selected fixture's transform.
 function txField(label, value, onCommit) {
@@ -445,6 +424,10 @@ function renderOutput() {
   }
 
   // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
+  if (!fixtures.length) {
+    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no fixtures yet — design them in the Fixtures tab, then place them here' }));
+    return;
+  }
   for (const f of fixtures) {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     const name = oel('span', { textContent: f.name || f.id });
