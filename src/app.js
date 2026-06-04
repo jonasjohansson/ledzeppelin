@@ -248,7 +248,21 @@ const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
   setShow: (next) => setComposition(next), // crossfade: composition-only persist
+  loadComposition: (comp) => applyComposition(comp),
 });
+
+// Replace the whole composition (layers/clips/effects/canvas) from a loaded file,
+// keeping devices/fixtures. Resizes the stage + recreates the compositor for the
+// new canvas, then refreshes every panel.
+function applyComposition(comp) {
+  const next = normalizeComposition({ ...show, composition: comp });
+  const c = next.composition.canvas || { w: 1280, h: 720 };
+  canvas.width = c.w; canvas.height = c.h;
+  if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+  compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+  saveShow(next); rebuild(next);
+  layerPanel.refresh(); panel.refresh(); compositionPanel.refresh(); renderOutput(); redrawOverlay(); syncMasterFader();
+}
 // --- Resolume-style shell routing ----------------------------------------
 // Panels are CONSTRUCTED ONCE and mounted into fixed regions; switching
 // tabs/modes only toggles region visibility + interactivity (never

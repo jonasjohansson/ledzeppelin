@@ -46,7 +46,7 @@ function aspectLabel(w, h) {
 // createCompositionPanel({ getShow, setSize, setShow })
 //   setShow(s): composition-only persist (no rebuild) — used for the crossfade,
 //   which is a composition-global setting living on the single layer.
-export function createCompositionPanel({ getShow, setSize, setShow }) {
+export function createCompositionPanel({ getShow, setSize, setShow, loadComposition }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
 
   // Working draft of the fields (not yet applied). Seeded from the show.
@@ -126,6 +126,30 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
       e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00';
       setShow?.(setShowAudioGain(getShow(), 1));
     });
+    // --- Save / load the COMPOSITION (visuals only — keeps the fixture patch). ---
+    root.append(el('div', { className: 'fx-pts', textContent: 'composition file' }));
+    const io = el('div', { className: 'fx-io' });
+    io.append(el('button', {
+      textContent: 'save composition',
+      onclick: () => {
+        const comp = getShow().composition || {};
+        const blob = new Blob([JSON.stringify(comp, null, 2)], { type: 'application/json' });
+        const a = el('a', { href: URL.createObjectURL(blob), download: 'composition.json' });
+        a.click(); URL.revokeObjectURL(a.href);
+      },
+    }));
+    const compFileIn = el('input', { type: 'file', accept: '.json,application/json' });
+    compFileIn.style.display = 'none';
+    compFileIn.addEventListener('change', async () => {
+      const file = compFileIn.files[0];
+      if (!file) return;
+      try { loadComposition?.(JSON.parse(await file.text())); }
+      catch (e) { window.alert(`load failed: ${e.message}`); }
+      compFileIn.value = '';
+    });
+    io.append(el('button', { textContent: 'load composition', onclick: () => compFileIn.click() }), compFileIn);
+    root.append(io);
+
     root.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
     root.append(el('div', { className: 'fx-card' }, [
       el('label', { className: 'fx-field ly-param ly-row resettable' }, [
