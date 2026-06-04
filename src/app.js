@@ -512,7 +512,9 @@ function renderChains() {
     // Stagger amount (normalized canvas offset per step) + readout.
     const sOut = oel('span', { className: 'ly-readout', textContent: c.stagger.toFixed(2) });
     const sRange = oel('input', { type: 'range', min: '-0.5', max: '0.5', step: '0.01', value: String(c.stagger) });
-    sRange.addEventListener('input', () => { sOut.textContent = Number(sRange.value).toFixed(2); });
+    const fillS = () => sRange.style.setProperty('--fill', ((Number(sRange.value) + 0.5) / 1 * 100) + '%');
+    fillS();
+    sRange.addEventListener('input', () => { sOut.textContent = Number(sRange.value).toFixed(2); fillS(); });
     sRange.addEventListener('change', () => commit(patchChain(show, c.id, { stagger: Number(sRange.value) })));
     sRange.addEventListener('contextmenu', (e) => { e.preventDefault(); commit(patchChain(show, c.id, { stagger: 0.1 })); });
     card.append(oel('label', { className: 'fx-field ly-param ly-row' }, [

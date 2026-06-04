@@ -24,6 +24,9 @@ const el = (tag, props = {}, kids = []) => {
 const field = (label, control) =>
   el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
 
+// Paint a param-row slider's value-based accent fill (so it reaches the ends).
+const fill = (r) => { const mn = +r.min, mx = +r.max; r.style.setProperty('--fill', (mx > mn ? (+r.value - mn) / (mx - mn) * 100 : 50) + '%'); };
+
 // A range slider with a live readout (writes back on every input, no re-render).
 const sliderRow = (label, value, min, max, onInput) => {
   const out = el('span', { className: 'ly-readout', textContent: String(Math.round(value)) });
@@ -102,8 +105,10 @@ export function createCompositionPanel({ getShow, setSize, setShow, loadComposit
     const xf = getShow().composition?.transitionMs ?? 500;
     const xfOut = el('span', { className: 'ly-readout', textContent: String(Math.round(xf)) });
     const xfRange = el('input', { type: 'range', min: '0', max: '5000', step: '10', value: String(xf) });
+    fill(xfRange);
     xfRange.addEventListener('input', () => {
       xfOut.textContent = String(Math.round(Number(xfRange.value)));
+      fill(xfRange);
       setShow?.(setCompositionTransition(getShow(), Number(xfRange.value)));
     });
     xfRange.addEventListener('contextmenu', (e) => { e.preventDefault(); xfRange.value = '500'; xfOut.textContent = '500'; setShow?.(setCompositionTransition(getShow(), 500)); });
@@ -119,12 +124,14 @@ export function createCompositionPanel({ getShow, setSize, setShow, loadComposit
     const gain = getShow().composition?.audioGain ?? 1;
     const gOut = el('span', { className: 'ly-readout', textContent: `×${gain.toFixed(2)}` });
     const gRange = el('input', { type: 'range', min: '0', max: '8', step: '0.05', value: String(gain) });
+    fill(gRange);
     gRange.addEventListener('input', () => {
       gOut.textContent = `×${Number(gRange.value).toFixed(2)}`;
+      fill(gRange);
       setShow?.(setShowAudioGain(getShow(), Number(gRange.value)));
     });
     gRange.addEventListener('contextmenu', (e) => {           // right-click → reset to ×1
-      e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00';
+      e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00'; fill(gRange);
       setShow?.(setShowAudioGain(getShow(), 1));
     });
     // --- Save / load the COMPOSITION (visuals only — keeps the fixture patch). ---

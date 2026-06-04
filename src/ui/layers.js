@@ -88,9 +88,13 @@ const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride
     type: 'range', min: String(min), max: String(max),
     step: String(step), value: String(value ?? 0),
   });
+  // Paint the value-based accent fill (so it reaches the track ends).
+  const paint = () => range.style.setProperty('--fill', (max > min ? (Number(range.value) - min) / (max - min) * 100 : 50) + '%');
+  paint();
   range.addEventListener('input', () => {
     const v = Number(range.value);
     out.value = fmt(v);
+    paint();
     onInput(v);
   });
   // Accept ONLY a number as you type: digits, one '.', and a leading '-' (only
@@ -116,7 +120,7 @@ const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride
     const v = Number(out.value);
     if (Number.isFinite(v)) {
       const c = Math.min(max, Math.max(min, v));
-      range.value = String(c); out.value = fmt(c); onInput(c);
+      range.value = String(c); out.value = fmt(c); paint(); onInput(c);
     } else { out.value = fmt(Number(range.value)); }
   });
   // Right-click the slider resets to the default value.
@@ -125,6 +129,7 @@ const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride
       e.preventDefault();
       range.value = String(defaultValue);
       out.value = fmt(defaultValue);
+      paint();
       onInput(defaultValue);
     });
   }
@@ -378,7 +383,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
     const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
     if (insp) {
-      const r = insp.querySelector('input[type=range]'); if (r) r.value = String(v);
+      const r = insp.querySelector('input[type=range]'); if (r) { r.value = String(v); r.style.setProperty('--fill', (v * 100) + '%'); }
       const o = insp.querySelector('.ly-readout');
       if (o && document.activeElement !== o) { if (o.tagName === 'INPUT') o.value = fmt(v); else o.textContent = fmt(v); }
     }
