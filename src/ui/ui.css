@@ -492,7 +492,24 @@ input.ly-readout {
   border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: text;
 }
 input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); }
-.ly-row input[type=range] { order: 1; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0; }
+/* Param-row slider: a custom track whose ACCENT fill is value-based (--fill set
+   in JS) so it reaches the very ends (native ranges inset the fill by half a
+   thumb). Small thumb → minimal edge inset. */
+.ly-row input[type=range] {
+  order: 1; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0;
+  -webkit-appearance: none; appearance: none; height: 14px; background: transparent; cursor: pointer;
+}
+.ly-row input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: var(--radius-sm);
+  background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--line-2) var(--fill, 50%));
+}
+.ly-row input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+}
+.ly-row input[type=range]::-moz-range-track { height: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
+.ly-row input[type=range]::-moz-range-progress { height: 4px; border-radius: var(--radius-sm); background: var(--accent); }
+.ly-row input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
 /* Selected effect (click its header) — Backspace deletes it. */
