@@ -221,12 +221,17 @@ uniform float horizontal;  // 0 = split x (bands are columns), 1 = split y (rows
 uniform float reverse;     // flip the cascade direction
 uniform float falloff;     // 0..1 dim later bands (a fading tail across parts)
 uniform float wrap;        // wrap the travel coord instead of going dark off-edge
+uniform float wave;        // 0 = linear staircase; >0 = offsets follow a sine (cycles across the bands)
 void main(){
   float n = max(1.0, floor(count + 0.5));
   float perp = (horizontal < 0.5) ? uv.x : uv.y;          // split axis
   float band = floor(clamp(perp, 0.0, 0.999999) * n);
   float order = (reverse < 0.5) ? band : (n - 1.0 - band);
-  float shift = order * offset;
+  float t = order / max(1.0, n - 1.0);                    // 0..1 across the bands
+  // Linear ramp, OR (wave>0) a sine so the per-band delay rises and falls.
+  float shift = (wave > 0.0)
+    ? (sin(t * 6.2831853 * wave) * 0.5 + 0.5) * (n - 1.0) * offset
+    : order * offset;
   float tc = (horizontal < 0.5) ? uv.y : uv.x;            // travel coord (other axis)
   tc -= shift;
   if (wrap > 0.5) { tc = fract(tc); }
@@ -434,6 +439,7 @@ export const REGISTRY = {
       { key: 'reverse', type: 'bool', default: false },
       { key: 'falloff', type: 'float', min: 0, max: 1, default: 0 },
       { key: 'wrap', type: 'bool', default: false },
+      { key: 'wave', type: 'float', min: 0, max: 8, default: 0 },
     ],
   },
   hue: {
