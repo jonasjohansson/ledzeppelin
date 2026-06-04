@@ -103,7 +103,35 @@ void main(){ frag = texture(uTex, uv); }`;
 const screenProg = program(gl, SCREEN_FS);
 const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
+// --- Undo / redo history (Cmd+Z · Cmd+Shift+Z) -----------------------------
+// The show is immutable (commits produce new objects), so a snapshot is just the
+// previous reference. Rapid edits (a slider drag) coalesce into ONE entry so an
+// undo step maps to a user action, not a tick.
+const undoStack = [];
+const redoStack = [];
+let undoLastAt = 0;
+let undoSuppress = false;
+function snapshotForUndo(prev) {
+  if (undoSuppress || !prev) return;
+  const now = performance.now();
+  if (now - undoLastAt < 500 && undoStack.length) { undoLastAt = now; return; }   // coalesce a drag
+  undoStack.push(prev);
+  if (undoStack.length > 120) undoStack.shift();
+  redoStack.length = 0;          // a fresh edit invalidates redo
+  undoLastAt = now;
+}
+function restoreShow(s) {
+  undoSuppress = true;
+  rebuild(s);
+  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay(); syncMasterFader();
+  undoSuppress = false;
+  undoLastAt = 0;
+}
+function undo() { if (undoStack.length) { redoStack.push(show); restoreShow(undoStack.pop()); } }
+function redo() { if (redoStack.length) { undoStack.push(show); restoreShow(redoStack.pop()); } }
+
 function rebuild(next) {
+  snapshotForUndo(show);   // capture the pre-change state for undo
   // Geometry path: ensure fixtures' derived sample points are in sync with their
   // pixel-space transforms + the current canvas before building the sampler.
   show = syncShowFixtures(next);
@@ -136,6 +164,7 @@ function recomputeHiddenSpans() {
 // and persist it — NO sampler/route/bridge rebuild (that's expensive and only
 // fixture/device GEOMETRY changes require it).
 function setComposition(next) {
+  snapshotForUndo(show);   // capture the pre-change state for undo (coalesced)
   show = next;
   saveShow(show);
 }
@@ -544,6 +573,15 @@ tabsEl?.addEventListener('click', (ev) => {
 });
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+// Cmd/Ctrl+Z = undo · Cmd/Ctrl+Shift+Z = redo. Ignored while typing in a field
+// (so the input does its own native text undo).
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+  if (typingIn(e.target)) return;
+  e.preventDefault();
+  if (e.shiftKey) redo(); else undo();
+});
 
 // Show/hide all GUI to view the canvas full-screen — via the 'h' key OR the
 // top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
