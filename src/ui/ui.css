@@ -491,6 +491,9 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); color: var(
 .ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
+/* Selected effect (click its header) — Backspace deletes it. */
+.ly-fx.is-sel .ly-fxname { color: var(--accent); }
+.ly-fx.is-sel { box-shadow: inset 2px 0 0 var(--accent); padding-left: 6px; }
 .ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; cursor: grab; }
 .ly-fxhead:active { cursor: grabbing; }
 .ly-fxname { color: var(--amber); font-size: var(--fs-body); }

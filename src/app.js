@@ -618,7 +618,9 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (typingIn(t)) return;
   if (view.activeTab === 'composition') {
-    layerPanel.deleteActiveClip(); e.preventDefault();
+    // A selected effect deletes first; otherwise the selected clip.
+    if (!layerPanel.deleteSelectedEffect?.()) layerPanel.deleteActiveClip();
+    e.preventDefault();
   } else if (selectedFixtureIds.size) {
     const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
     selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();

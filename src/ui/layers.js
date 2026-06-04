@@ -316,6 +316,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   let playheadIndex = -1;
   let selectedClipId = null; // inspector target — SELECT (click) is decoupled from ACTIVE (trigger)
   let selectedLayerId = null; // which layer the Layer inspector edits
+  let selectedEffect = null; // a selected effect row: { scope:'clip'|'layer', layerId, clipId?, index } — Backspace deletes it
+  const fxSel = (scope, layerId, clipId, index) => selectedEffect
+    && selectedEffect.scope === scope && selectedEffect.layerId === layerId
+    && selectedEffect.clipId === clipId && selectedEffect.index === index;
   const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
   function setPlayhead(i) {
@@ -519,7 +523,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const name = effects[fx];
     const entry = getEntry(name);
     const layer = layerById(id);
-    const block = el('div', { className: 'ly-fx ly-fx-layer' });
+    const block = el('div', { className: 'ly-fx ly-fx-layer' + (fxSel('layer', id, undefined, fx) ? ' is-sel' : '') });
     makeDropTarget(block, (payload) => {
       if (payload.kind === 'fx-layer' && payload.index !== fx) {
         commit(moveLayerEffect(show(), id, payload.index, fx - payload.index));
@@ -529,6 +533,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const head = el('div', { className: 'ly-fxhead', draggable: true }, [
       el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
     ]);
+    head.addEventListener('click', () => { selectedEffect = { scope: 'layer', layerId: id, clipId: undefined, index: fx }; render(); });
     head.addEventListener('dragstart', (e) => {
       drag = { kind: 'fx-layer', index: fx };
       e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx');
@@ -875,7 +880,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function clipEffectBlock(id, clip, fx, effects) {
     const name = effects[fx];
     const entry = getEntry(name);
-    const block = el('div', { className: 'ly-fx ly-fx-clip' });
+    const block = el('div', { className: 'ly-fx ly-fx-clip' + (fxSel('clip', id, clip.id, fx) ? ' is-sel' : '') });
     makeDropTarget(block, (payload) => {
       if (payload.kind === 'fx-clip' && payload.index !== fx) {
         commit(moveClipEffect(show(), id, clip.id, payload.index, fx - payload.index));
@@ -883,9 +888,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
 
     // The header is the drag handle (so sliders inside still scrub normally).
+    // Clicking it SELECTS the effect (Backspace then deletes it).
     const head = el('div', { className: 'ly-fxhead', draggable: true }, [
       el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
     ]);
+    head.addEventListener('click', () => { selectedEffect = { scope: 'clip', layerId: id, clipId: clip.id, index: fx }; render(); });
     head.addEventListener('dragstart', (e) => {
       drag = { kind: 'fx-clip', index: fx };
       e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx');
@@ -1009,6 +1016,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
   }
 
+  // Delete the currently-selected EFFECT (Backspace). Returns true if it acted,
+  // so app.js can fall back to deleting the clip when no effect is selected.
+  function deleteSelectedEffect() {
+    const s = selectedEffect;
+    if (!s) return false;
+    selectedEffect = null;
+    if (s.scope === 'clip') commit(removeClipEffect(show(), s.layerId, s.clipId, s.index));
+    else commit(removeLayerEffect(show(), s.layerId, s.index));
+    return true;
+  }
+
   // Delete the selected clip (bound to the Delete key by app.js).
   function deleteActiveClip() {
     const l = layerOfClip(selectedClipId) || topLayer();
@@ -1022,7 +1040,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   }
 
   render();
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
