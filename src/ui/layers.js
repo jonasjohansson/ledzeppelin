@@ -655,6 +655,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (thumb) thumbWrap.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       const fxCount = (clip.effects || []).length;
       if (fxCount) thumbWrap.append(el('div', { className: 'clip-fxcount', textContent: `${fxCount} fx` }));
+      // Triggerable source (e.g. Pulse) → a ⚡ badge so you know it fires.
+      if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable — fire from the Clip inspector' }));
       cell.append(thumbWrap);
       cell.append(el('div', { className: 'clip-label-bar', textContent: clip.name || clip.id }));
       if (ci === playheadIndex) cell.classList.add('clip-playhead');

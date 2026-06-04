@@ -2,7 +2,7 @@ import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
 import { chainOffset } from '../model/chains.js';
 import {
-  setFixtureTransform, isPolylineFixture, snap90, transformFromPoints,
+  setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
   setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex,
 } from '../model/fixture-transform.js';
 
@@ -263,7 +263,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const tf = f?.input?.transform || transformFromPoints(f?.input?.points, dragState.cv);
       const [pxc, pyc] = canvasPx(ev, dragState.cv);
       let rot = Math.atan2(pyc - tf.y, pxc - tf.x) * 180 / Math.PI - 90;
-      if (ev.shiftKey) rot = snap90(rot);          // Shift → snap to 90°
+      if (ev.shiftKey) rot = snapDeg(rot, 15);     // Shift → snap to 15° increments
       next = setFixtureTransform(next, dragState.id, { rotation: rot });
     } else if (dragState.kind === 'vertex') {
       const [nx, ny] = norm(ev);

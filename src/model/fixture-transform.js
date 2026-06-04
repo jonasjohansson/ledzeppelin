@@ -148,8 +148,10 @@ export function syncShowFixtures(show) {
   return { ...show, fixtures: show.fixtures.map((f) => syncFixtureGeometry(f, canvas)) };
 }
 
-// Snap a rotation (degrees) to the nearest 90° increment, normalized to [0,360).
-export const snap90 = (deg) => ((Math.round((Number(deg) || 0) / 90) * 90) % 360 + 360) % 360;
+// Snap a rotation (degrees) to the nearest `step`° increment, normalized to [0,360).
+export const snapDeg = (deg, step = 90) => ((Math.round((Number(deg) || 0) / step) * step) % 360 + 360) % 360;
+// Nearest 90° (explicit ⟳ quarter-turn button).
+export const snap90 = (deg) => snapDeg(deg, 90);
 
 // FLIP a fixture: toggle its pixel DIRECTION (which physical end is pixel 0).
 // A reverse of the sample walk (applied in pipeline.js), NOT a geometry mirror —
