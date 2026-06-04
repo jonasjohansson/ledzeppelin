@@ -237,9 +237,9 @@ body.gui-hidden #show-ui { display: block; }
 .lh-clickable { cursor: pointer; }
 .lh-clickable:hover { border-color: var(--line-2); }
 .lh-tog {
-  width: var(--row-h); height: var(--row-h); flex: 0 0 var(--row-h); padding: 0; border-radius: 0;
+  padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: var(--fs-micro); font-weight: var(--fw-med);
+  font-size: var(--fs-body); font-weight: var(--fw-med);
   color: var(--faint); background: var(--field-bg); border: 1px solid var(--line);
 }
 .lh-tog.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
@@ -321,6 +321,7 @@ body.gui-hidden #show-ui { display: block; }
 .fx-detail { margin-top: 2px; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
+.out-transform { margin-top: 4px; }   /* rotate-90° / flip button row in the Output editor */
 .fx-del-link {
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
@@ -490,6 +491,9 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); color: var(
 .ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
+/* Selected effect (click its header) — Backspace deletes it. */
+.ly-fx.is-sel .ly-fxname { color: var(--accent); }
+.ly-fx.is-sel { box-shadow: inset 2px 0 0 var(--accent); padding-left: 6px; }
 .ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; cursor: grab; }
 .ly-fxhead:active { cursor: grabbing; }
 .ly-fxname { color: var(--amber); font-size: var(--fs-body); }
@@ -570,17 +574,17 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); color: var(
   flex: 0 0 var(--layer-w); box-sizing: border-box; display: flex; flex-direction: column; gap: 0;
   background: var(--panel-2); border: none; border-right: 1px solid var(--line); border-radius: 0; padding: 0;
 }
-.lh-body { display: flex; gap: 6px; flex: 1 1 auto; padding: 4px; }
-.lh-op { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* Head body = four equal quarters (B · S · ✕ · opacity), filling the height. */
+.lh-body { display: flex; gap: 2px; flex: 1 1 auto; padding: 4px; align-items: stretch; }
+.lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
+.lh-op { display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
 .lh-op-range {
   writing-mode: vertical-lr; direction: rtl;
-  width: 12px; height: 64px; accent-color: var(--green);
+  width: 14px; flex: 1 1 auto; min-height: 24px; margin: 0 auto; accent-color: var(--green);
 }
-.lh-ctrls { display: flex; flex-wrap: nowrap; gap: 0; flex: 1 1 auto; align-content: flex-start; }
-.lh-ctrls > button + button { margin-left: -1px; }
 .lh-clear {
-  width: var(--row-h); height: var(--row-h); flex: 0 0 var(--row-h); padding: 0; border-radius: 0;
+  padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--muted); border-color: var(--line);
 }
@@ -590,9 +594,11 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); color: var(
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
   border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
 }
+/* Layer name bar — matches .clip-label-bar exactly (same padding/type) so the
+   layer label and clip labels share one baseline across the deck row. */
 .lh-name {
   background: var(--surface-2); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-body);
-  text-align: left; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 4px 6px;
+  text-align: left; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 4px 7px;
   font-family: var(--sans); box-sizing: border-box; width: 100%;
 }
 .lh-name:focus { outline: none; border-color: var(--accent); }

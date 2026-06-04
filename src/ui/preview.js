@@ -2,9 +2,13 @@ import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
 import { chainOffset } from '../model/chains.js';
 import {
-  setFixtureTransform, isPolylineFixture,
+  setFixtureTransform, isPolylineFixture, snap90, transformFromPoints,
   setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex,
 } from '../model/fixture-transform.js';
+
+// Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
+// (so draw() and hitTest() — which use different pixel scales — agree).
+const ROTATE_KNOB = 0.06;
 
 // Virtual-fixture preview: draws each fixture's resampled points onto a 2D
 // overlay canvas, colored by the latest sampled RGB. Hardware-free dev view.
@@ -110,6 +114,22 @@ export function createPreview(canvasEl, opts = {}) {
       ctx.arc(cx, cy, dotR + (selected ? 5 : 3), 0, Math.PI * 2);
       ctx.fillStyle = selected ? 'rgba(232,178,127,.3)' : 'rgba(92,200,255,.25)'; ctx.fill();
       ctx.strokeStyle = stroke; ctx.stroke();
+
+      // Rotate knob — only for a SINGLE selected bar. A short stem from the
+      // centre out along the perpendicular (normalized units) to a grab circle.
+      const single = selected && (!selectedIds.has || selectedIds.size === 1);
+      if (single) {
+        const a0 = eps[0], a1 = eps[eps.length - 1];
+        const cxN = (a0[0] + a1[0]) / 2, cyN = (a0[1] + a1[1]) / 2;
+        const adx = a1[0] - a0[0], ady = a1[1] - a0[1], adl = Math.hypot(adx, ady) || 1;
+        const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W;
+        const kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(knx, kny);
+        ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath(); ctx.arc(knx, kny, 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(20,20,24,.92)'; ctx.fill();
+        ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
+      }
       if (showLabels) drawLabel(f, cx, cy - 10, selected, W, Hh);
     }
   }
@@ -160,6 +180,20 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const show = getShow();
     const [px, py, rw, rh] = localPx(ev);
     const fixtures = show.fixtures ?? [];
+    // Rotate knob (a single selected bar) wins over everything — test it first.
+    const sel = getSelected?.();
+    const selId = sel ? (sel.has ? (sel.size === 1 ? [...sel][0] : null) : sel) : null;
+    if (selId) {
+      const f = fixtures.find((x) => x.id === selId);
+      if (f && !isPolylineFixture(f.input)) {
+        const pts = f.input.points;
+        const a0 = pts[0], a1 = pts[pts.length - 1];
+        const cxN = (a0[0] + a1[0]) / 2, cyN = (a0[1] + a1[1]) / 2;
+        const adx = a1[0] - a0[0], ady = a1[1] - a0[1], adl = Math.hypot(adx, ady) || 1;
+        const kx = (cxN + (-ady / adl) * ROTATE_KNOB) * rw, ky = (cyN + (adx / adl) * ROTATE_KNOB) * rh;
+        if (Math.hypot(px - kx, py - ky) <= vtxR) return { fxId: selId, rotate: true };
+      }
+    }
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
       const pts = f.input.points;
@@ -196,7 +230,9 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const show = getShow();
     const cv = show.composition?.canvas || { w: 1280, h: 720 };
 
-    if (hit.vertex != null) {
+    if (hit.rotate) {
+      dragState = { kind: 'rotate', id: hit.fxId, cv };
+    } else if (hit.vertex != null) {
       dragState = { kind: 'vertex', id: hit.fxId, index: hit.vertex };
     } else {
       // Whole-fixture move — group with the selection if part of a multi-select.
@@ -220,7 +256,16 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   canvasEl.addEventListener('pointermove', (ev) => {
     if (!enabled || !dragState) return;
     let next = getShow();
-    if (dragState.kind === 'vertex') {
+    if (dragState.kind === 'rotate') {
+      // Angle from the bar centre to the cursor (canvas-px metric, matches the
+      // model's rotation). The knob sits on the perpendicular, so subtract 90°.
+      const f = next.fixtures.find((x) => x.id === dragState.id);
+      const tf = f?.input?.transform || transformFromPoints(f?.input?.points, dragState.cv);
+      const [pxc, pyc] = canvasPx(ev, dragState.cv);
+      let rot = Math.atan2(pyc - tf.y, pxc - tf.x) * 180 / Math.PI - 90;
+      if (ev.shiftKey) rot = snap90(rot);          // Shift → snap to 90°
+      next = setFixtureTransform(next, dragState.id, { rotation: rot });
+    } else if (dragState.kind === 'vertex') {
       const [nx, ny] = norm(ev);
       next = setFixtureVertex(next, dragState.id, dragState.index, nx, ny);
     } else {

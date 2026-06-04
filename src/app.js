@@ -13,7 +13,7 @@ import {
   prefixedDefaults, normalizeComposition, makeClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setCompositionOpacity,
 } from './model/layers.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, snap90, flipFixture } from './model/fixture-transform.js';
 import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChains } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
@@ -103,7 +103,35 @@ void main(){ frag = texture(uTex, uv); }`;
 const screenProg = program(gl, SCREEN_FS);
 const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
+// --- Undo / redo history (Cmd+Z · Cmd+Shift+Z) -----------------------------
+// The show is immutable (commits produce new objects), so a snapshot is just the
+// previous reference. Rapid edits (a slider drag) coalesce into ONE entry so an
+// undo step maps to a user action, not a tick.
+const undoStack = [];
+const redoStack = [];
+let undoLastAt = 0;
+let undoSuppress = false;
+function snapshotForUndo(prev) {
+  if (undoSuppress || !prev) return;
+  const now = performance.now();
+  if (now - undoLastAt < 500 && undoStack.length) { undoLastAt = now; return; }   // coalesce a drag
+  undoStack.push(prev);
+  if (undoStack.length > 120) undoStack.shift();
+  redoStack.length = 0;          // a fresh edit invalidates redo
+  undoLastAt = now;
+}
+function restoreShow(s) {
+  undoSuppress = true;
+  rebuild(s);
+  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay(); syncMasterFader();
+  undoSuppress = false;
+  undoLastAt = 0;
+}
+function undo() { if (undoStack.length) { redoStack.push(show); restoreShow(undoStack.pop()); } }
+function redo() { if (redoStack.length) { undoStack.push(show); restoreShow(redoStack.pop()); } }
+
 function rebuild(next) {
+  snapshotForUndo(show);   // capture the pre-change state for undo
   // Geometry path: ensure fixtures' derived sample points are in sync with their
   // pixel-space transforms + the current canvas before building the sampler.
   show = syncShowFixtures(next);
@@ -136,6 +164,7 @@ function recomputeHiddenSpans() {
 // and persist it — NO sampler/route/bridge rebuild (that's expensive and only
 // fixture/device GEOMETRY changes require it).
 function setComposition(next) {
+  snapshotForUndo(show);   // capture the pre-change state for undo (coalesced)
   show = next;
   saveShow(show);
 }
@@ -313,31 +342,10 @@ if (previewCanvas) {
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures | chains | devices
-const addFixtureBtn = document.getElementById('add-fixture');
 const snapToggle = document.getElementById('snap-cb');
 snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
-
-function addFixtureCentered() {
-  const next = structuredClone(show);
-  const id = `f${next.fixtures.length + 1}`;
-  const devId = next.devices[0]?.id ?? '';
-  // Offset must be contiguous-from-0 PER DEVICE (validate()): take the running
-  // end of the chosen device's fixtures.
-  const off = next.fixtures
-    .filter((x) => x.output?.deviceId === devId)
-    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
-  const px = 150;
-  const c = next.composition?.canvas || { w: 1280, h: 720 };
-  next.fixtures.push({
-    id, name: id, pixelCount: px, colorOrder: 'GRB',
-    output: { deviceId: devId, pixelOffset: off, pixelCount: px },
-    input: { transform: { x: c.w / 2, y: c.h / 2, w: c.w * 0.6, h: 8, rotation: 0 }, samples: px },
-  });
-  selectedFixtureIds = new Set([id]);
-  rebuild(next); panel.refresh(); renderOutput();
-}
-addFixtureBtn?.addEventListener('click', addFixtureCentered);
+// Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
 // A px number field (commits on change) for the selected fixture's transform.
 function txField(label, value, onCommit) {
@@ -346,18 +354,24 @@ function txField(label, value, onCommit) {
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
 
-// Position editor for one selected fixture (inlined under its row).
+// Position editor for one selected fixture (inlined under its row): x/y/length/
+// rotation° fields + a rotate-90° / flip button row.
 function positionEditor(sel) {
   const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
-  const setT = (patch) => {
-    const next = setFixtureTransform(show, sel.id, patch);
-    saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
-  };
+  const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
+  const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
   return oel('div', { className: 'output-edit' }, [
     oel('div', { className: 'output-grid' }, [
       txField('x', tf.x, (v) => setT({ x: v })),
       txField('y', tf.y, (v) => setT({ y: v })),
+      txField('length', tf.w, (v) => setT({ w: v })),
       txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
+    ]),
+    oel('div', { className: 'dir-btns out-transform' }, [
+      oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
+        onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
+      oel('button', { className: 'dir-btn', textContent: '⇄ flip', title: 'flip pixel direction (which end is pixel 0)',
+        onclick: () => apply(flipFixture(show, sel.id)) }),
     ]),
   ]);
 }
@@ -410,6 +424,10 @@ function renderOutput() {
   }
 
   // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
+  if (!fixtures.length) {
+    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no fixtures yet — design them in the Fixtures tab, then place them here' }));
+    return;
+  }
   for (const f of fixtures) {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     const name = oel('span', { textContent: f.name || f.id });
@@ -539,6 +557,15 @@ tabsEl?.addEventListener('click', (ev) => {
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
+// Cmd/Ctrl+Z = undo · Cmd/Ctrl+Shift+Z = redo. Ignored while typing in a field
+// (so the input does its own native text undo).
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+  if (typingIn(e.target)) return;
+  e.preventDefault();
+  if (e.shiftKey) redo(); else undo();
+});
+
 // Show/hide all GUI to view the canvas full-screen — via the 'h' key OR the
 // top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
 // always a way back). Tab is intentionally NOT bound (too easy to hit).
@@ -574,7 +601,9 @@ document.addEventListener('keydown', (e) => {
   const t = e.target;
   if (typingIn(t)) return;
   if (view.activeTab === 'composition') {
-    layerPanel.deleteActiveClip(); e.preventDefault();
+    // A selected effect deletes first; otherwise the selected clip.
+    if (!layerPanel.deleteSelectedEffect?.()) layerPanel.deleteActiveClip();
+    e.preventDefault();
   } else if (selectedFixtureIds.size) {
     const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
     selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
