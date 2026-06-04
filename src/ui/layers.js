@@ -685,17 +685,25 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
     box.append(el('div', { className: 'clip-editor-head' }, [name]));
 
-    // Autopilot (Resolume-style): play-through of the clip deck as a timeline.
-    // Always loops (transport.loop defaults true) — no toggle needed.
+    // Autopilot (Resolume-style): play-through of the clip deck with a direction
+    // (off / ▶ forward / ◀ backward / ⤨ shuffle) + a loop toggle.
     if (transport) {
-      const playing = transport.isPlaying();
+      const dir = transport.getDirection?.() ?? (transport.isPlaying() ? 'forward' : 'off');
       box.append(Section('Autopilot', 'autopilot', (b) => {
-        b.append(el('div', { className: 'autopilot' }, [
-          el('button', {
-            className: 'transport-play' + (playing ? ' is-playing' : ''),
-            textContent: playing ? '■ stop' : '▶ play',
-            onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
-          }),
+        const dirBtn = (d, glyph, title) => el('button', {
+          className: 'dir-btn' + (dir === d ? ' on' : ''), textContent: glyph, title,
+          onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
+        });
+        b.append(field('direction', el('div', { className: 'dir-btns' }, [
+          dirBtn('backward', '◀', 'play backward'),
+          dirBtn('off', '■', 'stop'),
+          dirBtn('forward', '▶', 'play forward'),
+          dirBtn('shuffle', '⤨', 'shuffle'),
+        ])));
+        const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop?.() ?? true });
+        loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
+        b.append(el('label', { className: 'fx-field bool-row' }, [
+          el('span', { className: 'ly-plabel', textContent: 'loop' }), loopCb,
         ]));
       }));
     }

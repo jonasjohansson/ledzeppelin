@@ -208,11 +208,14 @@ let lastTs = 0, t0 = 0;
 let pulseTrigSecs = []; // seconds of recent ⚡ triggers (up to 8 stack as beams)
 const nowSec = () => (lastTs - t0) / 1000;
 const transport = {
-  playing: false, loop: true, startTs: 0,
-  isPlaying() { return this.playing; },
+  direction: 'off',   // 'off' | 'forward' | 'backward' | 'shuffle'
+  loop: true, startTs: 0, _shuffle: null,
+  isPlaying() { return this.direction !== 'off'; },
+  getDirection() { return this.direction; },
+  setDirection(d) { this.direction = d; this.startTs = lastTs; this._shuffle = null; },
   getLoop() { return this.loop; },
   setLoop(b) { this.loop = !!b; },
-  toggle() { this.playing = !this.playing; if (this.playing) this.startTs = lastTs; },
+  toggle() { this.setDirection(this.direction === 'off' ? 'forward' : 'off'); },
   fire() { pulseTrigSecs.push(nowSec()); if (pulseTrigSecs.length > 8) pulseTrigSecs = pulseTrigSecs.slice(-8); },
   // Restart the animation timer: clock back to 0 (Timeline sweeps, pulse autofire),
   // clear pending pulse triggers, and reset the compositor's integrated phase
@@ -736,12 +739,25 @@ function loop(ts) {
     // render a shallow-cloned layer with that activeClipId (the compositor's
     // crossfade picks up the change). Otherwise render the show's layers as-is.
     let renderLayers = show.composition?.layers || [];
-    if (transport.playing && renderLayers.length) {
+    if (transport.isPlaying() && renderLayers.length) {
       const base = renderLayers[0];
-      const ph = playheadClip(base.clips || [], ts - transport.startTs, transport.loop);
+      const clips = base.clips || [];
+      // Order the walk by direction: forward, backward (reversed), or a stable
+      // per-session shuffle.
+      let order = clips;
+      if (transport.direction === 'backward') order = [...clips].reverse();
+      else if (transport.direction === 'shuffle') {
+        if (!transport._shuffle || transport._shuffle.length !== clips.length) {
+          const idx = clips.map((_, i) => i);
+          for (let i = idx.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [idx[i], idx[j]] = [idx[j], idx[i]]; }
+          transport._shuffle = idx;
+        }
+        order = transport._shuffle.map((i) => clips[i]);
+      }
+      const ph = playheadClip(order, ts - transport.startTs, transport.loop);
       if (ph) {
         renderLayers = [{ ...base, activeClipId: ph.clip.id }, ...renderLayers.slice(1)];
-        layerPanel.setPlayhead(ph.index);
+        layerPanel.setPlayhead(clips.findIndex((c) => c.id === ph.clip.id));   // real deck index
       }
     }
     // Per-parameter animations run on a free-running clock (Timeline) or off the
