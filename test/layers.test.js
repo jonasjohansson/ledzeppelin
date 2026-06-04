@@ -127,8 +127,8 @@ test('makeClip seeds prefixed generator params, empty effects', () => {
   assert.equal(typeof c.name, 'string');
 });
 
-// --- addLayer creates a one-clip active layer of the new shape ---
-test('addLayer creates a one-clip active new-shape layer', () => {
+// --- addLayer creates an EMPTY new-shape layer, inserted at the bottom ---
+test('addLayer creates an empty new-shape layer (bottom of stack)', () => {
   const show = freshShow();
   const next = addLayer(show);
   assert.equal(show.composition.layers.length, 0);   // immutable
@@ -139,14 +139,32 @@ test('addLayer creates a one-clip active new-shape layer', () => {
   assert.equal(layer.transitionMs, 500);
   assert.deepEqual(layer.effects, []);
   assert.deepEqual(layer.params, {});
-  assert.equal(layer.clips.length, 1);
-  assert.equal(layer.activeClipId, layer.clips[0].id);
-  assert.equal(layer.clips[0].generator, 'line');
+  assert.deepEqual(layer.clips, []);          // EMPTY — no clips
+  assert.equal(layer.activeClipId, null);     // nothing active
 });
+
+// adding a second layer prepends it (new layer goes UNDERNEATH = array index 0)
+test('addLayer prepends (new layer at the bottom)', () => {
+  let show = freshShow();
+  show = addLayer(show);
+  const firstId = show.composition.layers[0].id;
+  show = addLayer(show);
+  assert.equal(show.composition.layers.length, 2);
+  assert.equal(show.composition.layers[1].id, firstId);   // original pushed up
+});
+
+// Helper: a layer holding one active clip (clip ops fixtures use this, since
+// addLayer now makes an EMPTY layer).
+function deckShow(gen = 'line') {
+  const base = freshShow();
+  const withLayer = addLayer(base);
+  const lid = withLayer.composition.layers[0].id;
+  return addClip(withLayer, lid, gen);
+}
 
 // --- addClip / removeClip / setActiveClip ---
 test('addClip appends; becomes active if none was active', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addClip(show, lid, 'gradient');
   const layer = show.composition.layers[0];
@@ -157,7 +175,7 @@ test('addClip appends; becomes active if none was active', () => {
 });
 
 test('addClip becomes active when layer had no active clip', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   let lid = show.composition.layers[0].id;
   // force no active clip
   show = setActiveClip(show, lid, null);
@@ -167,7 +185,7 @@ test('addClip becomes active when layer had no active clip', () => {
 });
 
 test('removeClip reassigns activeClipId when removing the active clip', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addClip(show, lid, 'gradient');
   const activeId = show.composition.layers[0].activeClipId;
@@ -179,7 +197,7 @@ test('removeClip reassigns activeClipId when removing the active clip', () => {
 });
 
 test('removeClip on last clip → activeClipId null, no crash', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const onlyId = show.composition.layers[0].clips[0].id;
   show = removeClip(show, lid, onlyId);
@@ -189,7 +207,7 @@ test('removeClip on last clip → activeClipId null, no crash', () => {
 });
 
 test('setActiveClip sets the target', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addClip(show, lid, 'gradient');
   const target = show.composition.layers[0].clips[1].id;
@@ -198,7 +216,7 @@ test('setActiveClip sets the target', () => {
 });
 
 test('moveClip reorders within the deck, bounds-safe', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addClip(show, lid, 'gradient');
   show = addClip(show, lid, 'solid');
@@ -212,7 +230,7 @@ test('moveClip reorders within the deck, bounds-safe', () => {
 
 // --- changeClipGenerator ---
 test('changeClipGenerator resets generator params, keeps clip effect params', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const cid = show.composition.layers[0].clips[0].id;
   show = addClipEffect(show, lid, cid, 'displace');
@@ -227,7 +245,7 @@ test('changeClipGenerator resets generator params, keeps clip effect params', ()
 
 // --- clip effect chain ---
 test('addClipEffect seeds defaults; removeClipEffect drops orphan params', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const cid = show.composition.layers[0].clips[0].id;
   show = addClipEffect(show, lid, cid, 'displace');
@@ -239,7 +257,7 @@ test('addClipEffect seeds defaults; removeClipEffect drops orphan params', () =>
 });
 
 test('removeClipEffect keeps params when a duplicate effect remains', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const cid = show.composition.layers[0].clips[0].id;
   show = addClipEffect(show, lid, cid, 'displace');
@@ -250,7 +268,7 @@ test('removeClipEffect keeps params when a duplicate effect remains', () => {
 });
 
 test('moveClipEffect reorders the clip chain, bounds-safe', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const cid = show.composition.layers[0].clips[0].id;
   show = addClipEffect(show, lid, cid, 'displace');
@@ -262,7 +280,7 @@ test('moveClipEffect reorders the clip chain, bounds-safe', () => {
 
 // --- layer-level effects, independent of clip params ---
 test('layer effect helpers operate on layer.effects/layer.params', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addLayerEffect(show, lid, 'displace');
   assert.deepEqual(show.composition.layers[0].effects, ['displace']);
@@ -275,7 +293,7 @@ test('layer effect helpers operate on layer.effects/layer.params', () => {
 });
 
 test('layer displace and clip displace keep separate values (no collision)', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const cid = show.composition.layers[0].clips[0].id;
   show = addClipEffect(show, lid, cid, 'displace');
@@ -287,7 +305,7 @@ test('layer displace and clip displace keep separate values (no collision)', () 
 });
 
 test('moveLayerEffect reorders the layer chain, bounds-safe', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addLayerEffect(show, lid, 'displace');
   show = addLayerEffect(show, lid, 'repeat');
@@ -298,7 +316,7 @@ test('moveLayerEffect reorders the layer chain, bounds-safe', () => {
 
 // --- layer lifecycle: remove / move / patch ---
 test('removeLayer / moveLayer are immutable and clamp', () => {
-  let show = addLayer(addLayer(addLayer(freshShow())));
+  let show = addLayer(addLayer(deckShow()));
   const ids = show.composition.layers.map((l) => l.id);
   const rm = removeLayer(show, ids[1]);
   assert.deepEqual(rm.composition.layers.map((l) => l.id), [ids[0], ids[2]]);
@@ -310,7 +328,7 @@ test('removeLayer / moveLayer are immutable and clamp', () => {
 });
 
 test('patchLayer patches blend/opacity/name/transitionMs immutably', () => {
-  let show = addLayer(freshShow());
+  let show = deckShow();
   const lid = show.composition.layers[0].id;
   const p = patchLayer(show, lid, { opacity: 0.5, transitionMs: 250, name: 'foo' });
   assert.equal(p.composition.layers[0].opacity, 0.5);

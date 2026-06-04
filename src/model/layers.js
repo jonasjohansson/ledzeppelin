@@ -290,6 +290,25 @@ export function removeClip(show, layerId, clipId) {
   });
 }
 
+// Duplicate a clip: a deep-ish copy (new id, "<name> copy") inserted right after
+// the original in the same layer. Returns the new clip id via the 2nd arg holder.
+export function duplicateClip(show, layerId, clipId) {
+  return updateLayer(show, layerId, (layer) => {
+    const clips = layer.clips || [];
+    const idx = clips.findIndex((c) => c.id === clipId);
+    if (idx < 0) return layer;
+    const src = clips[idx];
+    const newId = uniqueId('c', allClipIds(show.composition?.layers || []));
+    const copy = {
+      ...src, id: newId, name: `${src.name || src.id} copy`,
+      params: { ...(src.params || {}) }, effects: [...(src.effects || [])],
+      ...(src.anim ? { anim: { ...src.anim } } : {}),
+      ...(src.transform ? { transform: { ...src.transform } } : {}),
+    };
+    return { ...layer, clips: [...clips.slice(0, idx + 1), copy, ...clips.slice(idx + 1)] };
+  });
+}
+
 // Reorder a clip within the deck. `delta` is a signed step (e.g. -1/+1).
 // Out-of-range → unchanged (same show reference).
 export function moveClip(show, layerId, clipId, delta) {
@@ -377,6 +396,16 @@ export function setClipTransform(show, layerId, clipId, patch) {
 export function setClipOpacity(show, layerId, clipId, value) {
   const v = Math.max(0, Math.min(1, Number(value)));
   return updateClip(show, layerId, clipId, (clip) => ({ ...clip, opacity: v }));
+}
+
+// Reset a clip's TRANSFORM group: identity transform, full opacity, and clear
+// any transform (tf.*) animations. Used by the Transform section's group reset.
+export function resetClipTransform(show, layerId, clipId) {
+  return updateClip(show, layerId, clipId, (clip) => {
+    const anim = { ...(clip.anim || {}) };
+    for (const k of Object.keys(anim)) if (k.startsWith('tf.')) delete anim[k];
+    return { ...clip, transform: normTransform({ x: 0, y: 0, scale: 1, rotation: 0 }), opacity: 1, anim };
+  });
 }
 
 // Set a clip's transport hold duration (ms, floored at 0).
@@ -471,13 +500,17 @@ export function makeLayer(id, clipId = 'c1') {
 export function addLayer(show) {
   const layers = show.composition?.layers || [];
   const id = uniqueId('l', layers.map((l) => l.id));
-  const clipId = uniqueId('c', allClipIds(layers));   // unique across the whole show
   const maxN = layers.reduce((m, l) => {
     const match = /(\d+)\s*$/.exec(l.name || '');
     return match ? Math.max(m, Number(match[1])) : m;
   }, 0);
-  const layer = { ...makeLayer(id, clipId), name: `Layer ${maxN + 1}` };
-  return { ...show, composition: { ...show.composition, layers: [...layers, layer] } };
+  // New layer starts EMPTY (no clips, nothing active) and goes UNDERNEATH the
+  // stack — the deck renders array-end as the TOP row, so prepend = bottom.
+  const layer = {
+    id, name: `Layer ${maxN + 1}`, blend: 'add', opacity: 1, transitionMs: TRANSITION_MS,
+    clips: [], activeClipId: null, effects: [], params: {},
+  };
+  return { ...show, composition: { ...show.composition, layers: [layer, ...layers] } };
 }
 
 // Remove the layer with id `layerId`. Unknown id → unchanged.

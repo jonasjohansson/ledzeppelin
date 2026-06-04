@@ -502,8 +502,7 @@ const renderOutputList = renderOutput; // back-compat alias
 const view = { activeTab: 'composition' };
 const tabsEl = document.getElementById('tabs');
 const deckbarEl = document.getElementById('deckbar');
-const inspectorColEl = document.getElementById('inspector-col');
-const libraryColEl = document.getElementById('library-col');
+const inspectorColEl = document.getElementById('inspector-col');   // library now docks inside this
 const outputViewEl = document.getElementById('output-view');
 const fixturesViewEl = document.getElementById('fixtures-view');
 
@@ -519,7 +518,6 @@ function applyView() {
 
   if (deckbarEl) deckbarEl.hidden = !onComposition;
   if (inspectorColEl) inspectorColEl.hidden = !onComposition;
-  if (libraryColEl) libraryColEl.hidden = !onComposition;
   if (outputViewEl) outputViewEl.hidden = !onOutput;
   if (fixturesViewEl) fixturesViewEl.hidden = !onFixtures;
 

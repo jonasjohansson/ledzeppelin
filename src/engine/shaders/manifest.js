@@ -184,6 +184,41 @@ void main(){
   frag = texture(uTex, uv);
 }`;
 
+// Cascade (the in-visual twin of the fixture-level chains/stagger): split the
+// perpendicular axis into N bands and DELAY each band along the travel axis by
+// order*offset, so a TRAVELLING pattern (Pulse/Chase/Wave) arrives band-by-band
+// — a staircase cascade. A pure texture op (no clock): shifting the sample point
+// backwards along travel is equivalent to a time delay for moving content, which
+// is exactly the trick chains.js uses at sample time. `offset` is in UV units of
+// the travel axis (effective delay ~= offset / source speed), NOT milliseconds.
+// `horizontal` picks the SPLIT axis (matches Segmenter: 0=split x, 1=split y);
+// travel is then the other axis. Default splits y (bands = stacked rows) so a
+// default x-travelling Pulse cascades out of the box.
+const CASCADE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+uniform float count;       // number of bands (parts) to split into
+uniform float offset;      // per-band shift along travel (UV units)
+uniform float horizontal;  // 0 = split x (bands are columns), 1 = split y (rows)
+uniform float reverse;     // flip the cascade direction
+uniform float falloff;     // 0..1 dim later bands (a fading tail across parts)
+uniform float wrap;        // wrap the travel coord instead of going dark off-edge
+void main(){
+  float n = max(1.0, floor(count + 0.5));
+  float perp = (horizontal < 0.5) ? uv.x : uv.y;          // split axis
+  float band = floor(clamp(perp, 0.0, 0.999999) * n);
+  float order = (reverse < 0.5) ? band : (n - 1.0 - band);
+  float shift = order * offset;
+  float tc = (horizontal < 0.5) ? uv.y : uv.x;            // travel coord (other axis)
+  tc -= shift;
+  if (wrap > 0.5) { tc = fract(tc); }
+  else if (tc < 0.0 || tc > 1.0) { frag = vec4(0.0); return; }
+  vec2 suv = (horizontal < 0.5) ? vec2(uv.x, tc) : vec2(tc, uv.y);
+  vec4 c = texture(uTex, suv);
+  float fade = 1.0 - falloff * (order / max(1.0, n - 1.0));
+  frag = vec4(c.rgb * fade, c.a);
+}`;
+
 // Hue rotate — colour over time. Rotates RGB around the grey (1,1,1) axis
 // (Rodrigues). `shift` is a static offset (0..1 = full wheel); `speed` auto-
 // cycles via uT, so dropping this on a clip or the composition gives a colour
@@ -359,6 +394,17 @@ export const REGISTRY = {
       { key: 'horizontal', type: 'bool', default: false },
     ],
   },
+  cascade: {
+    name: 'cascade', type: 'effect', src: CASCADE,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 100, default: 8, step: 1 },
+      { key: 'offset', type: 'float', min: 0, max: 0.5, default: 0.08 },
+      { key: 'horizontal', type: 'bool', default: true },
+      { key: 'reverse', type: 'bool', default: false },
+      { key: 'falloff', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'wrap', type: 'bool', default: false },
+    ],
+  },
   hue: {
     name: 'hue', type: 'effect', src: HUE,
     params: [
@@ -433,7 +479,7 @@ const LABELS = {
   chase: 'Chase', wave: 'Wave',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
-  segmenter: 'Segmenter', hue: 'Hue', colorize: 'Colorize',
+  segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Color', brightcontrast: 'Brightness/Contrast', saturation: 'Saturation',
   gamma: 'Gamma', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
 };

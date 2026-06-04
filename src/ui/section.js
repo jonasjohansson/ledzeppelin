@@ -16,23 +16,38 @@ const el = (tag, props = {}, kids = []) => {
 // Keys listed here render OPEN on first paint; everything else starts collapsed.
 // Membership is toggled live as the user opens/closes a section.
 export const SEC_OPEN = new Set([
-  // Composition inspector
-  'transport', 'transform', 'effects', 'autopilot', 'layer-comp', 'comp-fx',
+  // Composition inspector (clip)
+  'playback', 'source', 'transform', 'effects',
+  // Composition inspector (layer / composition)
+  'autopilot', 'layer-comp', 'layer-effects', 'comp-fx',
   // Fixtures / Output tabs
   'devices', 'fixtures', 'position', 'chains', 'routing', 'identity',
 ]);
 
-export function Section(title, key, build) {
-  const sec = el('div', { className: 'insp-sec' + (SEC_OPEN.has(key) ? ' is-open' : '') });
+// Section(title, key, build, onReset?, locked?). When onReset is given, a small
+// ↺ shows in the header (on hover) that resets the group. When `locked` is true
+// the section is forced open and can't be collapsed (no toggle) — e.g. an empty
+// Effects group, where collapsing would hide the only "drop effect" target.
+export function Section(title, key, build, onReset, locked) {
+  const open = locked || SEC_OPEN.has(key);
+  const sec = el('div', { className: 'insp-sec' + (open ? ' is-open' : '') + (locked ? ' is-locked' : '') });
   sec.dataset.sec = key;
-  const head = el('button', { className: 'insp-sec-head', type: 'button' }, [
+  // A div (not a button) so the reset button can nest inside the header.
+  const head = el('div', { className: 'insp-sec-head' }, [
     el('span', { className: 'insp-tri' }),
     el('span', { className: 'insp-sec-title', textContent: title.toUpperCase() }),
   ]);
-  head.addEventListener('click', () => {
+  if (!locked) head.addEventListener('click', () => {
     if (SEC_OPEN.has(key)) SEC_OPEN.delete(key); else SEC_OPEN.add(key);
     sec.classList.toggle('is-open');
   });
+  if (onReset) {
+    const rst = el('button', {
+      className: 'insp-sec-reset', type: 'button', textContent: '↺', title: 'reset this group',
+    });
+    rst.addEventListener('click', (e) => { e.stopPropagation(); onReset(); });
+    head.append(rst);
+  }
   const body = el('div', { className: 'insp-sec-body' });
   build(body);
   sec.append(head, body);

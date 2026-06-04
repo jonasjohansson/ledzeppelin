@@ -38,9 +38,17 @@
      the semantic chrome/data split survives if we ever re-introduce a true sans. */
   --sans: var(--ui-font);
   --fs-micro:10px; --fs-body:11px; --fs-ctrl:12px; --fs-title:13px; --fs-glyph:15px;
-  --fw-reg:400; --fw-med:600;
+  --fw-reg:400; --fw-med:400;   /* single weight — no bold in the UI text */
   --lh-tight:1.2; --lh-ctrl:1.4; --lh-ui:1.45;
   --ls-caps:.1em; --ls-ui:.04em;
+  /* Layout / control dimensions — shared tokens so components stay in sync
+     (no stray hardcoded px). Change one place, every consumer follows. */
+  --radius:3px; --radius-sm:2px;
+  --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
+  --clip-w:96px;     /* clip-cell width */
+  --row-h:22px;      /* param row height + square B/S/✕ buttons */
+  --col-label:84px;  /* param label column */
+  --col-val:44px;    /* param value / readout column */
 }
 html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
 /* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
@@ -95,7 +103,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-eye.off { color: var(--faint); }
 .output-row {
   display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; font-size: var(--fs-ctrl);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); font-size: var(--fs-ctrl);
 }
 .output-row { cursor: pointer; }
 .output-row span:first-child { flex: 1 1 auto; color: var(--text); }
@@ -107,12 +115,12 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
 .output-grid .fx-field input {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
 }
 
 /* Fixture chains (stagger) — ordered groups in the Output view. */
 .chains { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
-.chain-card { border: 1px solid var(--border-2); border-radius: 3px; padding: 7px; margin: 6px 0; background: var(--surface); }
+.chain-card { border: 1px solid var(--border-2); border-radius: var(--radius); padding: 7px; margin: 6px 0; background: var(--surface); }
 .chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .chain-name { color: var(--cyan); font-size: var(--fs-ctrl); flex: 1 1 auto; }
 .chain-fire { padding: 0 7px; line-height: var(--lh-ctrl); min-width: 0; color: var(--amber); border-color: var(--line); }
@@ -121,7 +129,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .chain-member .chain-mname { flex: 1 1 auto; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chain-member button { padding: 0 5px; line-height: var(--lh-ctrl); min-width: 0; font-size: var(--fs-micro); }
 .chain-member button:disabled { opacity: .3; }
-.chain-idx { flex: 0 0 auto; width: 16px; text-align: center; color: var(--bg); background: var(--cyan); border-radius: 3px; font-size: var(--fs-micro); line-height: var(--lh-ctrl); }
+.chain-idx { flex: 0 0 auto; width: 16px; text-align: center; color: var(--bg); background: var(--cyan); border-radius: var(--radius); font-size: var(--fs-micro); line-height: var(--lh-ctrl); }
 .chain-axis { margin-left: auto; }
 
 /* Full-bleed canvas background: fixed behind everything, centred + letterboxed
@@ -163,11 +171,12 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent; }
-#deckbar, #inspector-col, #library-col, #output-view, #fixtures-view { pointer-events: auto; }
+#deckbar, #inspector-col, #output-view, #fixtures-view { pointer-events: auto; }
 /* Side panels dock to full height with internal scroll (scrollbars hidden). */
 /* Side panels dock flush; -1px overlaps each left neighbour's border into a
    single shared hairline (no doubled 2px seam) — the packed-grid look. */
-#inspector-col, #library-col, #output-view, #fixtures-view { overflow-y: auto; align-self: stretch; margin-left: -1px; }
+#inspector-col, #output-view, #fixtures-view { align-self: stretch; margin-left: -1px; }
+#output-view, #fixtures-view { overflow-y: auto; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
@@ -178,8 +187,15 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   padding: var(--s3);
   box-sizing: border-box;
 }
-#inspector-col { flex: 0 0 300px; max-height: calc(100vh - 52px); overflow-y: auto; }
-#library-col   { flex: 0 0 186px; max-height: calc(100vh - 52px); overflow-y: auto; }
+/* Inspector column: tabs on top, a SCROLLING panes area, and the Sources/Effects
+   library docked at the bottom (no separate library column — there aren't many). */
+#inspector-col { flex: 0 0 332px; max-height: calc(100vh - 52px); display: flex; flex-direction: column; overflow: hidden; }
+#insp-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#library {
+  flex: 0 0 auto; max-height: 42%; overflow-y: auto;
+  border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
+  padding: var(--s2) var(--s3) var(--s3);
+}
 #output-view   { flex: 0 0 360px; max-height: calc(100vh - 52px); overflow-y: auto; }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
@@ -194,8 +210,9 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
   height: 42px; padding: 0 10px 0 0;   /* flush left — tabs align with the now edge-to-edge deck */
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-/* The first tab (Composition) lines its text up with the layer column below. */
-.tabs .tab:first-child { padding-left: 4px; }
+/* The first tab (Composition) spans the layer-head column width (128px) so its
+   right edge aligns with where the clips begin — tabs read as columns. */
+.tabs .tab:first-child { flex: 0 0 var(--layer-w); box-sizing: border-box; justify-content: flex-start; padding: 0 0 0 4px; }
 #globals { display: inline-flex; align-items: center; gap: 14px; }
 .g-fader { display: inline-flex; align-items: center; gap: 6px; font: var(--fs-body) var(--sans); color: var(--muted); }
 .g-fader input[type=range] { width: 88px; accent-color: var(--accent); }
@@ -220,7 +237,7 @@ body.gui-hidden #show-ui { display: block; }
 .lh-clickable { cursor: pointer; }
 .lh-clickable:hover { border-color: var(--line-2); }
 .lh-tog {
-  width: 22px; height: 22px; flex: 0 0 22px; padding: 0; border-radius: 0;
+  width: var(--row-h); height: var(--row-h); flex: 0 0 var(--row-h); padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: var(--fs-micro); font-weight: var(--fw-med);
   color: var(--faint); background: var(--field-bg); border: 1px solid var(--line);
@@ -275,6 +292,18 @@ body.gui-hidden #show-ui { display: block; }
   transition: transform .12s;
 }
 .insp-sec.is-open .insp-tri { transform: rotate(90deg); }
+/* Locked-open section (e.g. an empty Effects group): no collapse affordance. */
+.insp-sec.is-locked .insp-sec-head { cursor: default; }
+.insp-sec.is-locked .insp-sec-head:hover { background: none; }
+.insp-sec.is-locked .insp-tri { visibility: hidden; }
+/* Per-group reset — faint, revealed on header hover, pushed to the right. */
+.insp-sec-reset {
+  margin-left: auto; flex: 0 0 auto; padding: 0 4px; min-width: 0; line-height: 1;
+  background: none; border: none; border-radius: var(--radius-sm); color: var(--faint);
+  font-size: var(--fs-body); cursor: pointer; opacity: 0; transition: opacity .1s;
+}
+.insp-sec-head:hover .insp-sec-reset { opacity: 1; }
+.insp-sec-reset:hover { color: var(--text); background: var(--hover); }
 .insp-sec-body { display: none; padding: 2px 0 6px; }
 .insp-sec.is-open .insp-sec-body { display: block; }
 /* Subtle table separation so a run of rows reads as a ledger (Resolume-like). */
@@ -301,18 +330,18 @@ body.gui-hidden #show-ui { display: block; }
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
 /* Shared horizontal row module: label left (fixed column) · value right. */
-.fx-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: 22px; font-size: var(--fs-body); color: var(--muted); }
-.fx-field > span:first-child { flex: 0 0 84px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
+.fx-field > span:first-child { flex: 0 0 var(--col-label); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-field > input, .fx-field > select { flex: 1 1 auto; width: auto; }
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
 }
 .fx-field select { font-family: var(--sans); }   /* selects are chrome, not data → sans */
 
 button {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: 3px; padding: 4px 8px; cursor: pointer; font: var(--fs-ctrl) var(--sans);
+  border-radius: var(--radius); padding: 4px 8px; cursor: pointer; font: var(--fs-ctrl) var(--sans);
 }
 button:hover { background: var(--hover); border-color: var(--line-2); }
 /* No blue browser focus rings on controls (keyboard focus shows on the thumb). */
@@ -323,7 +352,7 @@ input[type=range]:focus-visible, select:focus-visible { outline: 1px solid var(-
 input[type=checkbox] {
   appearance: none; -webkit-appearance: none; margin: 0;
   width: 14px; height: 14px; flex: 0 0 auto; vertical-align: middle;
-  border: 1px solid var(--line-2); border-radius: 3px; background: var(--field-bg);
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
   cursor: pointer; position: relative;
 }
 input[type=checkbox]:hover { border-color: var(--line-2); }
@@ -353,7 +382,7 @@ input[type=checkbox]:checked::after {
 .imp-autofill { display: flex; gap: 6px; margin: 4px 0; }
 .imp-base {
   flex: 1 1 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--mono); box-sizing: border-box;
+  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); box-sizing: border-box;
 }
 .imp-row { grid-template-columns: 2fr 1fr; }
 .imp-apply { color: var(--green); border-color: var(--line); }
@@ -376,7 +405,7 @@ input[type=checkbox]:checked::after {
 /* Per-parameter animation: a cog opens Basic/Timeline/Audio (Resolume-style). */
 .anim-param { display: flex; flex-direction: column; gap: 4px; padding: 0; }
 /* Header row of an animated param: name · live value (fills) · cog at far right. */
-.anim-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.anim-head { display: flex; align-items: center; gap: 8px; min-height: var(--row-h); }
 .anim-head .ly-readout { flex: 1 1 auto; text-align: right; min-width: 38px; }
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
@@ -394,20 +423,20 @@ input[type=checkbox]:checked::after {
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; flex-wrap: wrap; }
 .anim-ctrls select {
   flex: 0 0 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: 3px; padding: 2px 4px; font: var(--fs-micro) var(--sans);
+  border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans);
 }
 .anim-mini { display: flex; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--faint); }
 .anim-mini span { white-space: nowrap; }
 .anim-num {
   width: 42px; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: 3px; padding: 1px 3px; font: var(--fs-micro) var(--mono); box-sizing: border-box;
+  border-radius: var(--radius); padding: 1px 3px; font: var(--fs-micro) var(--mono); box-sizing: border-box;
 }
 /* Dual-handle in/out range track for an animated param (Resolume-style). Two
    overlaid native sliders share one track; the thumbs are draggable, a fill spans
    in→out, and a green marker shows the live animated value. */
 .range-track { position: relative; width: 100%; min-width: 0; height: 18px; }
-.range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: 2px; }
-.range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: 2px; pointer-events: none; }
+.range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius-sm); }
+.range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: var(--radius-sm); pointer-events: none; }
 .range-track .anim-live { position: absolute; top: 50%; left: 0; width: 2px; height: 13px; margin-left: -1px; transform: translateY(-50%); background: var(--green); border-radius: 1px; pointer-events: none; }
 .range-track input[type=range] {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0;
@@ -416,10 +445,10 @@ input[type=checkbox]:checked::after {
 .range-track input[type=range]::-webkit-slider-runnable-track { background: none; border: none; }
 .range-track input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: ew-resize;
-  width: 11px; height: 14px; border-radius: 2px; background: var(--accent); border: 1px solid var(--bg);
+  width: 11px; height: 14px; border-radius: var(--radius-sm); background: var(--accent); border: 1px solid var(--bg);
 }
 .range-track input[type=range]::-moz-range-thumb {
-  pointer-events: auto; cursor: ew-resize; width: 11px; height: 14px; border-radius: 2px;
+  pointer-events: auto; cursor: ew-resize; width: 11px; height: 14px; border-radius: var(--radius-sm);
   background: var(--accent); border: 1px solid var(--bg);
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
@@ -442,14 +471,22 @@ input[type=checkbox]:checked::after {
 .dir-btn.on { color: var(--text); background: var(--hover); border-color: var(--line-2); }
 
 /* Bool param: label left, checkbox right (matches the slider rows). */
-.bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+.bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--row-h); }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
 
 /* Compact single-row param: name left · value · slider fills (Resolume-style).
    One module shared with .fx-field: 84px label column, 44px value column. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: 22px; }
-.ly-plabel { flex: 0 0 84px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { flex: 0 0 44px; min-width: 44px; text-align: right; }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
+.ly-plabel { flex: 0 0 var(--col-label); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-row .ly-readout { flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+/* Editable readout: a borderless number field that reads as plain text until you
+   hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
+input.ly-readout {
+  font: inherit; box-sizing: border-box; background: transparent; color: var(--readout);
+  border: none; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: text;
+}
+input.ly-readout:hover { background: var(--field-bg); }
+input.ly-readout:focus { outline: none; background: var(--field-bg); color: var(--text); }
 .ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
@@ -462,7 +499,7 @@ input[type=checkbox]:checked::after {
 .fx-menu-btn { padding: 0 7px; line-height: var(--lh-ctrl); font-size: var(--fs-glyph); min-width: 0; }
 .fx-menu {
   position: absolute; right: 0; top: 100%; margin-top: 3px; z-index: 20;
-  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius);
   padding: 3px; min-width: 126px; display: flex; flex-direction: column; gap: 1px;
   box-shadow: 0 6px 16px rgba(0,0,0,.5);
 }
@@ -475,14 +512,14 @@ input[type=checkbox]:checked::after {
 .ly-addfx { margin-top: 4px; }
 .ly-addfx select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: 3px; padding: 3px 5px; font: var(--fs-ctrl) var(--sans); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--sans); width: 100%; box-sizing: border-box;
 }
 
 /* Layer name as an inline editable field in the header. */
 .ly-nameedit {
   flex: 1 1 auto; min-width: 0; margin-right: 6px;
   background: var(--field-bg); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-ctrl);
-  border: 1px solid transparent; border-radius: 3px; padding: 2px 5px;
+  border: 1px solid transparent; border-radius: var(--radius); padding: 2px 5px;
   font-family: var(--sans); box-sizing: border-box;
 }
 .ly-nameedit:hover { border-color: var(--field-border); }
@@ -530,7 +567,7 @@ input[type=checkbox]:checked::after {
 .deck-layer.is-sel .lh-name { background: var(--accent); color: #07151f; }
 .layer-head-box.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .layer-head-box {
-  flex: 0 0 128px; box-sizing: border-box; display: flex; flex-direction: column; gap: 0;
+  flex: 0 0 var(--layer-w); box-sizing: border-box; display: flex; flex-direction: column; gap: 0;
   background: var(--panel-2); border: none; border-right: 1px solid var(--line); border-radius: 0; padding: 0;
 }
 .lh-body { display: flex; gap: 6px; flex: 1 1 auto; padding: 4px; }
@@ -543,7 +580,7 @@ input[type=checkbox]:checked::after {
 .lh-ctrls { display: flex; flex-wrap: nowrap; gap: 0; flex: 1 1 auto; align-content: flex-start; }
 .lh-ctrls > button + button { margin-left: -1px; }
 .lh-clear {
-  width: 22px; height: 22px; flex: 0 0 22px; padding: 0; border-radius: 0;
+  width: var(--row-h); height: var(--row-h); flex: 0 0 var(--row-h); padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--muted); border-color: var(--line);
 }
@@ -551,7 +588,7 @@ input[type=checkbox]:checked::after {
 .lh-blend-label { color: var(--muted); margin-top: 2px; }   /* size/caps/tracking from the shared header recipe */
 .lh-ctrls select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: 3px; padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
 }
 .lh-name {
   background: var(--surface-2); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-body);
@@ -588,7 +625,7 @@ input[type=checkbox]:checked::after {
 }
 .clip-fxcount {
   position: absolute; top: 3px; right: 4px; font-size: var(--fs-micro); color: var(--amber);
-  background: rgba(0,0,0,.6); padding: 0 4px; border-radius: 3px;
+  background: rgba(0,0,0,.6); padding: 0 4px; border-radius: var(--radius);
 }
 /* SELECTED (single click, edit target) = a colour FILL on the label bar.
    LIVE/ACTIVE (double click, playing) = a colour OUTLINE around the cell.
@@ -604,10 +641,10 @@ input[type=checkbox]:checked::after {
 
 /* Library item: thumbnail + label (sources), label-only (effects). */
 .lib-item { display: flex; align-items: center; gap: 7px; }
-.lib-thumb { width: 30px; height: 19px; flex: 0 0 auto; object-fit: cover; border-radius: 3px; border: 1px solid var(--line); }
+.lib-thumb { width: 30px; height: 19px; flex: 0 0 auto; object-fit: cover; border-radius: var(--radius); border: 1px solid var(--line); }
 .lib-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clip-cell {
-  position: relative; flex: 0 0 auto; width: 96px;
+  position: relative; flex: 0 0 auto; width: var(--clip-w);
   background: var(--surface); border: 1px solid var(--field-border); border-radius: 0;
   overflow: hidden; cursor: pointer; user-select: none; display: flex; flex-direction: column;
   transition: border-color .12s, box-shadow .12s;
@@ -620,7 +657,7 @@ input[type=checkbox]:checked::after {
 .clip-add:hover { background: var(--surface); }
 .clip-add select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: 3px; padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
 }
 
 /* --- Single-layer composer (deck + draggable Sources/Effects rail) --- */
@@ -637,7 +674,7 @@ input[type=checkbox]:checked::after {
 .lib-list { display: flex; flex-direction: column; gap: 2px; }
 .lib-item {
   font-size: var(--fs-body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: 2px; padding: 3px 7px; cursor: grab; user-select: none;
+  border-radius: var(--radius-sm); padding: 3px 7px; cursor: grab; user-select: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .lib-item:hover { background: var(--hover); border-color: var(--line-2); }
@@ -653,7 +690,7 @@ input[type=checkbox]:checked::after {
 }
 .composer-drop {
   grid-column: 1 / -1; text-align: center; font-size: var(--fs-body); color: var(--faint);
-  border: 1px dashed var(--field-border); border-radius: 3px; padding: 8px; margin-top: 4px;
+  border: 1px dashed var(--field-border); border-radius: var(--radius); padding: 8px; margin-top: 4px;
 }
 .comp-fx { margin-top: 8px; }   /* section provides its own top hairline */
 

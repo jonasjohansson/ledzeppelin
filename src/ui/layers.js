@@ -22,10 +22,10 @@ import {
   generatorNames, effectNames, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
-  addClip, addVideoClip, removeClip, moveClip, setActiveClip, changeClipGenerator,
+  addClip, addVideoClip, removeClip, moveClip, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
-  setClipTransform, setClipOpacity, setClipDuration,
+  setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
   setClipAnim, setLayerAnim, patchLayer,
   addLayer, removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
@@ -76,27 +76,59 @@ const fmtLive = (v) => {
 // A range slider with a live numeric readout, writing back on every input.
 const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride) => {
   const step = stepOverride ?? ((max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1);
-  const out = el('span', { className: 'ly-readout', textContent: fmt(value) });
+  // Editable readout: click the number to TYPE a value (no spinner arrows), or
+  // drag the slider. Both edit the same value and keep each other in sync.
+  const out = el('input', {
+    className: 'ly-readout ly-readout-edit', type: 'text', inputMode: 'decimal',
+    spellcheck: false, value: fmt(value), title: 'click to type a value',
+  });
   const range = el('input', {
     type: 'range', min: String(min), max: String(max),
     step: String(step), value: String(value ?? 0),
   });
   range.addEventListener('input', () => {
     const v = Number(range.value);
-    out.textContent = fmt(v);
+    out.value = fmt(v);
     onInput(v);
   });
-  // Right-click resets to the default value.
+  // Accept ONLY a number as you type: digits, one '.', and a leading '-' (only
+  // when the range can be negative). Strips anything else (incl. pasted text)
+  // live and keeps the caret put.
+  const allowNeg = min < 0;
+  out.addEventListener('input', () => {
+    const before = out.value;
+    let s = before.replace(allowNeg ? /[^0-9.-]/g : /[^0-9.]/g, '');
+    if (allowNeg) { const neg = s.startsWith('-'); s = (neg ? '-' : '') + s.replace(/-/g, ''); }
+    const dot = s.indexOf('.');
+    if (dot !== -1) s = s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
+    if (s !== before) {
+      const pos = Math.max(0, (out.selectionStart || 0) - (before.length - s.length));
+      out.value = s;
+      try { out.setSelectionRange(pos, pos); } catch { /* detached */ }
+    }
+  });
+  // Typed value: parse + clamp on commit (Enter / blur); revert garbage.
+  out.addEventListener('focus', () => out.select());
+  out.addEventListener('keydown', (e) => { if (e.key === 'Enter') out.blur(); });
+  out.addEventListener('change', () => {
+    const v = Number(out.value);
+    if (Number.isFinite(v)) {
+      const c = Math.min(max, Math.max(min, v));
+      range.value = String(c); out.value = fmt(c); onInput(c);
+    } else { out.value = fmt(Number(range.value)); }
+  });
+  // Right-click the slider resets to the default value.
   if (defaultValue != null) {
     range.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       range.value = String(defaultValue);
-      out.textContent = fmt(defaultValue);
+      out.value = fmt(defaultValue);
       onInput(defaultValue);
     });
   }
   // Single row: name left, value, slider fills the rest (Resolume-style, compact).
-  const row = el('label', { className: 'fx-field ly-param ly-row' + (defaultValue != null ? ' resettable' : '') }, [
+  // A <div> (not <label>) so clicking the name doesn't grab the number field.
+  const row = el('div', { className: 'fx-field ly-param ly-row' + (defaultValue != null ? ' resettable' : '') }, [
     el('span', { className: 'ly-plabel', textContent: label }), out, range,
   ]);
   return row;
@@ -341,7 +373,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
     if (insp) {
       const r = insp.querySelector('input[type=range]'); if (r) r.value = String(v);
-      const o = insp.querySelector('.ly-readout'); if (o) o.textContent = fmt(v);
+      const o = insp.querySelector('.ly-readout');
+      if (o && document.activeElement !== o) { if (o.tagName === 'INPUT') o.value = fmt(v); else o.textContent = fmt(v); }
     }
   }
 
@@ -364,7 +397,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // (for effects) remove. Shared by effect rows and the clip preset control, so
   // sources and effects manage saved looks the same way. `kind` selects the
   // preset namespace ('effect' | 'source'); pass onRemove only for effects.
-  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove }) {
+  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove, onDuplicate, resetLabel = 'reset' }) {
     const wrap = el('div', { className: 'fx-menu-wrap' });
     const menu = el('div', { className: 'fx-menu', hidden: true });
     const close = () => { menu.hidden = true; };
@@ -382,7 +415,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const pn = window.prompt(`Save ${presetName} preset as:`);
       if (pn && pn.trim()) { savePreset(kind, presetName, pn.trim(), getParams()); render(); }
     }));
-    menu.append(item('reset', () => onReset()));        // commits → re-renders
+    if (onDuplicate) menu.append(item('duplicate', () => onDuplicate()));
+    menu.append(item(resetLabel, () => onReset()));        // commits → re-renders
     if (onRemove) menu.append(item('remove', () => onRemove(), 'fx-menu-danger'));
     const btn = el('button', { className: 'fx-menu-btn', textContent: '⋯', title: onRemove ? 'effect options' : 'preset options' });
     btn.onclick = (e) => {
@@ -454,8 +488,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const inspLayer = layers.find((L) => L.id === selectedLayerId) || selLayer;
     layerEl.append(layerSettings(inspLayer, inspLayer.id));
 
-    // --- COMPOSITION inspector: composition FX (top layer's output chain) ----
-    compEl.append(compositionEffects(layers[layers.length - 1], layers[layers.length - 1].id));
+    // Layer effects now live in the LAYER inspector (per selected layer), so the
+    // Composition tab is just composition/canvas settings — no duplicate FX here.
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());
@@ -557,6 +591,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           selectThis();
           commit(changeClipGenerator(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'effect') {
+          selectThis();   // dropping an effect also selects the clip you dropped on
           commit(addClipEffect(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
           // Reorder: move the dragged clip to this clip's position.
@@ -631,12 +666,28 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       b.append(opacityRow);
       b.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
         (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
-    }));
+    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1, transitionMs: 500 }))));
+
+    // Layer effect chain (applied to the whole layer's output, after its active
+    // clip + that clip's effects). Locked open while empty so the drop target stays.
+    const layerFx = layer.effects || [];
+    box.append(Section('Effects', 'layer-effects', (b) => {
+      for (let fx = 0; fx < layerFx.length; fx++) b.append(layerEffectBlock(id, fx, layerFx));
+      const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
+      makeDropTarget(dropZone, (payload) => {
+        if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
+      });
+      b.append(dropZone);
+    }, undefined, layerFx.length === 0));
+
     // Delete this layer (only when more than one exists — keep at least one).
     if ((show().composition?.layers || []).length > 1) {
       box.append(el('button', {
         className: 'fx-del-link', textContent: 'delete layer',
-        onclick: () => { selectedLayerId = null; commit(removeLayer(show(), id)); },
+        onclick: () => {
+          if (!window.confirm(`Delete "${layer.name ?? 'layer'}" and its clips?`)) return;
+          selectedLayerId = null; commit(removeLayer(show(), id));
+        },
       }));
     }
     return box;
@@ -743,10 +794,22 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const clipHead = el('div', { className: 'clip-editor-head' }, [nameInput]);
     if (gen && gen.params.length) {
       clipHead.append(fxMenu({
-        kind: 'source', presetName: gen.name,
+        kind: 'source', presetName: gen.name, resetLabel: 'reset all',
         getParams: () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
         applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
-        onReset: () => commit(changeClipGenerator(show(), id, clip.id, clip.generator)),
+        onDuplicate: () => {
+          const next = duplicateClip(show(), id, clip.id);
+          const layer = next.composition.layers.find((l) => l.id === id);
+          const dup = layer.clips[layer.clips.findIndex((c) => c.id === clip.id) + 1];
+          if (dup) { selectedClipId = dup.id; onClipSelect?.(); }
+          commit(next);
+        },
+        // "reset all" here resets the clip: source params + transform + opacity.
+        onReset: () => {
+          let s = changeClipGenerator(show(), id, clip.id, clip.generator);
+          s = resetClipTransform(s, id, clip.id);
+          commit(s);
+        },
       }));
     }
     box.append(clipHead);
@@ -759,11 +822,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }));
     }
 
-    // Transport: how long the timeline transport holds this slot + source params.
-    box.append(Section('Transport', 'transport', (b) => {
+    // Playback: how long the layer's autopilot dwells on this clip.
+    box.append(Section('Playback', 'playback', (b) => {
       b.append(sliderField('duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
         (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
-      if (gen && gen.params.length) {
+    }, () => commit(setClipDuration(show(), id, clip.id, 4000))));
+
+    // Source: the generator's own look params (auto-generated from the manifest).
+    if (gen && gen.params.length) {
+      box.append(Section('Source', 'source', (b) => {
         for (const p of gen.params) {
           const key = gen.name + '.' + p.key;
           b.append(animatableParam({
@@ -772,8 +839,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
             onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
           }));
         }
-      }
-    }));
+      }, () => commit(changeClipGenerator(show(), id, clip.id, clip.generator))));
+    }
 
     // Transform + opacity (the clip's placement on the canvas) — all animatable
     // (Timeline/Audio) via the cog, like the source params. Anim keyed `tf.*`.
@@ -790,18 +857,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       tfParam('scale', 'scale', 0, 3, 1, t.scale ?? 1, (v) => setClipTransform(show(), id, clip.id, { scale: v }));
       tfParam('rotation', 'rotation', -180, 180, 0, t.rotation ?? 0, (v) => setClipTransform(show(), id, clip.id, { rotation: v }));
       tfParam('opacity', 'opacity', 0, 1, 1, clip.opacity ?? 1, (v) => setClipOpacity(show(), id, clip.id, v));
-    }));
+    }, () => commit(resetClipTransform(show(), id, clip.id))));
 
-    // Effect chain.
+    // Effect chain. Locked open while empty so the drop target stays reachable
+    // (collapsing an empty Effects group would hide the only way to add one).
+    const clipFx = clip.effects || [];
     box.append(Section('Effects', 'effects', (b) => {
-      const fxs = clip.effects || [];
-      for (let fx = 0; fx < fxs.length; fx++) b.append(clipEffectBlock(id, clip, fx, fxs));
+      for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
       const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
       makeDropTarget(dropZone, (payload) => {
         if (payload.kind === 'effect') commit(addClipEffect(show(), id, clip.id, payload.name));
       });
       b.append(dropZone);
-    }));
+    }, undefined, clipFx.length === 0));
     return box;
   }
 
@@ -947,7 +1015,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function deleteActiveClip() {
     const l = layerOfClip(selectedClipId) || topLayer();
     const target = selectedClipId || l?.activeClipId;
-    if (l && target) commit(removeClip(show(), l.id, target));
+    if (!l || !target) return;
+    // Keep a clip selected: hop to the next clip (or the previous if it was last).
+    const clips = l.clips || [];
+    const i = clips.findIndex((c) => c.id === target);
+    selectedClipId = clips[i + 1]?.id ?? clips[i - 1]?.id ?? null;
+    commit(removeClip(show(), l.id, target));
   }
 
   render();

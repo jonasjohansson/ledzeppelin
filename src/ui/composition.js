@@ -60,8 +60,8 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
     root.textContent = '';
     draft = currentCanvas();
 
-    root.append(el('div', { className: 'fx-title', textContent: 'composition' }));
-    // (Master opacity now lives in the top-bar globals, not here.)
+    // (Title omitted — the COMPOSITION tab already names this view; master
+    //  opacity lives in the top-bar globals.)
 
     // --- Width / height fields (reflect the draft) ---
     const mkNum = (value, onInput) => {
