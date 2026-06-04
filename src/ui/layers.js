@@ -742,16 +742,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       window.addEventListener('pointerup', restore);
     });
     opCol.append(opOut, opRange);
-    body.append(opCol);
 
-    // B (bypass) · S (solo) · ✕ (clear). stopPropagation so they don't also
-    // trigger the layer-select click on the head.
-    const ctrls = el('div', { className: 'lh-ctrls' });
+    // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
+    // stopPropagation so the buttons don't also fire the layer-select click.
     const tog = (label, on, title, fn) => el('button', {
       className: 'lh-tog' + (on ? ' on' : ''), textContent: label, title,
       onclick: (e) => { e.stopPropagation(); fn(); },
     });
-    ctrls.append(
+    body.append(
       tog('B', !!layer.bypass, layer.bypass ? 'un-bypass layer' : 'bypass (mute) this layer',
         () => commit(patchLayer(show(), id, { bypass: !layer.bypass }))),
       tog('S', !!layer.solo, layer.solo ? 'un-solo layer' : 'solo this layer',
@@ -760,8 +758,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
         onclick: (e) => { e.stopPropagation(); commit(setActiveClip(show(), id, null)); },
       }),
+      opCol,
     );
-    body.append(ctrls);
     head.append(body);
 
     // (Blend mode lives only in the contextual Layer inspector — not the head.)
