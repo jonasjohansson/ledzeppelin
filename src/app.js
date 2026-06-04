@@ -13,7 +13,7 @@ import {
   prefixedDefaults, normalizeComposition, makeClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setCompositionOpacity,
 } from './model/layers.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, snap90, flipFixture } from './model/fixture-transform.js';
 import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChains } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
@@ -346,18 +346,24 @@ function txField(label, value, onCommit) {
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
 
-// Position editor for one selected fixture (inlined under its row).
+// Position editor for one selected fixture (inlined under its row): x/y/length/
+// rotation° fields + a rotate-90° / flip button row.
 function positionEditor(sel) {
   const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
-  const setT = (patch) => {
-    const next = setFixtureTransform(show, sel.id, patch);
-    saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
-  };
+  const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
+  const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
   return oel('div', { className: 'output-edit' }, [
     oel('div', { className: 'output-grid' }, [
       txField('x', tf.x, (v) => setT({ x: v })),
       txField('y', tf.y, (v) => setT({ y: v })),
+      txField('length', tf.w, (v) => setT({ w: v })),
       txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
+    ]),
+    oel('div', { className: 'dir-btns out-transform' }, [
+      oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
+        onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
+      oel('button', { className: 'dir-btn', textContent: '⇄ flip', title: 'flip pixel direction (which end is pixel 0)',
+        onclick: () => apply(flipFixture(show, sel.id)) }),
     ]),
   ]);
 }

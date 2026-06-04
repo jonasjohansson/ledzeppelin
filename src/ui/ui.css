@@ -321,6 +321,7 @@ body.gui-hidden #show-ui { display: block; }
 .fx-detail { margin-top: 2px; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
+.out-transform { margin-top: 4px; }   /* rotate-90° / flip button row in the Output editor */
 .fx-del-link {
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;

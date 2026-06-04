@@ -36,7 +36,10 @@ export function buildPipelineInputs(show) {
     const segments = [];     // device-local pixel ranges, each with its colorOrder
     let devLocal = 0;
     for (const f of fs) {
-      const pts = samplePoints(f.input.points, f.input.samples);
+      // FLIP = reverse pixel direction (which physical end is pixel 0). Applied
+      // at sample time so the canonical input.points stay put (no double-reverse).
+      const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
+      const pts = samplePoints(basePts, f.input.samples);
       // Chain stagger: shift this fixture's sample position by its chain offset so
       // a travelling source cascades across the run (no-op when not chained).
       const [ox, oy] = chainOffset(show, f.id);

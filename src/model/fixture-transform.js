@@ -148,6 +148,16 @@ export function syncShowFixtures(show) {
   return { ...show, fixtures: show.fixtures.map((f) => syncFixtureGeometry(f, canvas)) };
 }
 
+// Snap a rotation (degrees) to the nearest 90° increment, normalized to [0,360).
+export const snap90 = (deg) => ((Math.round((Number(deg) || 0) / 90) * 90) % 360 + 360) % 360;
+
+// FLIP a fixture: toggle its pixel DIRECTION (which physical end is pixel 0).
+// A reverse of the sample walk (applied in pipeline.js), NOT a geometry mirror —
+// the bar/run stays exactly where it is on the canvas.
+export function flipFixture(show, fxId) {
+  return mapFixture(show, fxId, (f) => ({ ...f, input: { ...f.input, reversed: !f.input?.reversed } }));
+}
+
 // Patch one fixture's transform (merge) and recompute its derived points.
 export function setFixtureTransform(show, fxId, patch) {
   const canvas = show.composition?.canvas;
