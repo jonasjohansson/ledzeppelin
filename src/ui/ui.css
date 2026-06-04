@@ -48,8 +48,9 @@
   --clip-w:96px;     /* clip-cell width */
   --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) */
   --row-h:22px;      /* param row height + square B/S/✕ buttons */
-  --col-label:84px;  /* param label column */
+  --col-label:84px;  /* param label column (fixed-width fields) */
   --col-val:44px;    /* param value / readout column */
+  --slider-w:120px;  /* fixed slider width — matte-style: label fills left, value far right */
 }
 html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
 /* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
@@ -270,26 +271,27 @@ body.gui-hidden #show-ui { display: block; }
   font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans);
   letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
 }
-.fx-pts { grid-column: 1 / -1; margin: 12px 0 4px; }
+/* matte-style section header: accent caps with an accent-tinted underline rule. */
+.fx-pts { grid-column: 1 / -1; margin: 12px 0 5px; color: var(--accent);
+  padding-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
 .fx-pts:first-child { margin-top: 0; }
+.fx-section { color: var(--accent); padding-bottom: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
 
-/* Collapsible inspector sections (Resolume-style disclosure groups). Flush,
-   hairline-separated; the header is a full-width click target with a triangle. */
-.insp-sec { border-top: 1px solid var(--line); }
+/* Collapsible inspector sections — accent header + an accent-tinted rule under it. */
 .insp-sec:first-child { border-top: none; }
 .insp-sec-head {
   display: flex; align-items: center; gap: 6px; width: 100%; height: 24px;
-  padding: 0 2px; background: none; border: none; border-radius: 0; cursor: pointer;
+  padding: 0 2px 4px; background: none; border: none; border-radius: 0; cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); margin-bottom: 4px;
 }
-.insp-sec-head:hover { background: var(--hover); }
 .insp-sec-title {
   font: var(--fw-med) var(--fs-micro)/1 var(--sans); letter-spacing: var(--ls-caps);
-  text-transform: uppercase; color: var(--faint);
+  text-transform: uppercase; color: var(--accent);
 }
-.insp-sec-head:hover .insp-sec-title { color: var(--muted); }
 .insp-tri {
   width: 0; height: 0; flex: 0 0 auto;
-  border-left: 4px solid var(--faint); border-top: 3px solid transparent; border-bottom: 3px solid transparent;
+  border-left: 4px solid var(--accent); border-top: 3px solid transparent; border-bottom: 3px solid transparent;
   transition: transform .12s;
 }
 .insp-sec.is-open .insp-tri { transform: rotate(90deg); }
@@ -333,7 +335,7 @@ body.gui-hidden #show-ui { display: block; }
 
 /* Shared horizontal row module: label left (fixed column) · value right. */
 .fx-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
-.fx-field > span:first-child { flex: 0 0 var(--col-label); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-field > span:first-child { flex: 1 1 auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-field > input, .fx-field > select { flex: 1 1 auto; width: auto; }
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
@@ -408,7 +410,7 @@ input[type=checkbox]:checked::after {
 .anim-param { display: flex; flex-direction: column; gap: 4px; padding: 0; }
 /* Header row of an animated param: name · live value (fills) · cog at far right. */
 .anim-head { display: flex; align-items: center; gap: 8px; min-height: var(--row-h); }
-.anim-head .ly-readout { flex: 1 1 auto; text-align: right; min-width: 38px; }
+.anim-head .ly-readout { flex: 0 0 var(--col-val); text-align: right; min-width: var(--col-val); }
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
 .anim-cog {
@@ -476,11 +478,11 @@ input[type=checkbox]:checked::after {
 .bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--row-h); }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
 
-/* Compact single-row param: name left · value · slider fills (Resolume-style).
-   One module shared with .fx-field: 84px label column, 44px value column. */
+/* Matte-style param row: label fills the LEFT, then a fixed slider, then the
+   value on the FAR RIGHT (flex `order` reorders the DOM [label, value, slider]). */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
-.ly-plabel { flex: 0 0 var(--col-label); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ly-row .ly-readout { order: 2; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
 /* Editable readout: a borderless number field that reads as plain text until you
    hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
@@ -490,7 +492,7 @@ input.ly-readout {
   border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: text;
 }
 input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); }
-.ly-row input[type=range] { flex: 1 1 auto; width: auto; min-width: 40px; }
+.ly-row input[type=range] { order: 1; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
 /* Selected effect (click its header) — Backspace deletes it. */
