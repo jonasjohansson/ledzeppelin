@@ -11,7 +11,7 @@
 //
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { clampCanvasSize, setShowAudioGain } from '../model/layers.js';
+import { clampCanvasSize, setShowAudioGain, setCompositionTransition } from '../model/layers.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -96,6 +96,22 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
         render();
       },
     }));
+
+    // --- Crossfade (global): how long a clip change fades, across ALL layers. ---
+    const xf = getShow().composition?.transitionMs ?? 500;
+    const xfOut = el('span', { className: 'ly-readout', textContent: String(Math.round(xf)) });
+    const xfRange = el('input', { type: 'range', min: '0', max: '5000', step: '10', value: String(xf) });
+    xfRange.addEventListener('input', () => {
+      xfOut.textContent = String(Math.round(Number(xfRange.value)));
+      setShow?.(setCompositionTransition(getShow(), Number(xfRange.value)));
+    });
+    xfRange.addEventListener('contextmenu', (e) => { e.preventDefault(); xfRange.value = '500'; xfOut.textContent = '500'; setShow?.(setCompositionTransition(getShow(), 500)); });
+    root.append(el('div', { className: 'fx-pts', textContent: 'crossfade' }));
+    root.append(el('div', { className: 'fx-card' }, [
+      el('label', { className: 'fx-field ly-param ly-row resettable' }, [
+        el('span', { className: 'ly-plabel', textContent: 'time (ms)' }), xfOut, xfRange,
+      ]),
+    ]));
 
     // --- Audio input (general config): global gain on the mic before it drives
     //     Audio-mode params. ×0 mutes, ×1 unity, up to ×8 to boost quiet input. ---

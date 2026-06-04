@@ -86,6 +86,13 @@ export function setCompositionOpacity(show, opacity) {
   return { ...show, composition: { ...comp, opacity: Number.isFinite(o) ? o : 1 } };
 }
 
+// GLOBAL crossfade time (ms) — one transition for every layer's clip changes.
+export function setCompositionTransition(show, ms) {
+  const comp = show.composition || {};
+  const v = Math.max(0, Math.round(Number(ms) || 0));
+  return { ...show, composition: { ...comp, transitionMs: Number.isFinite(v) ? v : TRANSITION_MS } };
+}
+
 // Global gain applied to the audio input before it drives Audio-mode params.
 export function setShowAudioGain(show, gain) {
   const comp = show.composition || {};

@@ -669,9 +669,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
       opacityRow.dataset.opacityLayer = id;
       b.append(opacityRow);
-      b.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
-        (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
-    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1, transitionMs: 500 }))));
+      // (crossfade is now a GLOBAL setting in the Composition tab.)
+    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1 }))));
 
     // Layer effect chain (applied to the whole layer's output, after its active
     // clip + that clip's effects). Locked open while empty so the drop target stays.
