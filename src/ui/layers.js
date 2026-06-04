@@ -769,16 +769,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
     const body = el('div', { className: 'lh-body' });
 
-    // Vertical opacity fader.
+    // Vertical opacity fader (no numeric readout — the slider IS the value).
     const opCol = el('div', { className: 'lh-op' });
-    const opOut = el('span', { className: 'lh-op-val', textContent: pct(layer.opacity ?? 1) });
     const opRange = el('input', {
       type: 'range', min: '0', max: '1', step: '0.001', value: String(layer.opacity ?? 1),
       className: 'lh-op-range', title: 'layer opacity',
     });
     opRange.addEventListener('input', () => {
       const v = Number(opRange.value);
-      opOut.textContent = pct(v);
       commitLive(patchLayer(show(), id, { opacity: v }));
       syncLayerOpacity(id, v);
     });
@@ -791,7 +789,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const restore = () => { head.draggable = canReorder; window.removeEventListener('pointerup', restore); };
       window.addEventListener('pointerup', restore);
     });
-    opCol.append(opOut, opRange);
+    opCol.append(opRange);
 
     // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
     // stopPropagation so the buttons don't also fire the layer-select click.
@@ -814,11 +812,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
     // (Blend mode lives only in the contextual Layer inspector — not the head.)
 
-    // Layer name bar (Resolume highlights the active layer's name bar).
-    const name = el('input', { className: 'lh-name', value: layer.name ?? 'Layer 1', title: 'layer name' });
-    name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
-    name.addEventListener('click', (e) => e.stopPropagation());
-    head.append(name);
+    // Layer name bar — a static label (rename in the Layer inspector). Clicking
+    // it selects the layer like the rest of the head.
+    head.append(el('div', { className: 'lh-name', textContent: layer.name ?? 'Layer 1' }));
     return head;
   }
 
