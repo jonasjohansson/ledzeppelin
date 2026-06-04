@@ -25,6 +25,8 @@ import {
   addClip, addVideoClip, removeClip, moveClip, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
+  addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
+  setCompositionParam, mergeCompositionParams, setCompositionAnim,
   setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
   setClipAnim, setLayerAnim, patchLayer,
   addLayer, removeLayer, moveLayer,
@@ -492,29 +494,65 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const inspLayer = layers.find((L) => L.id === selectedLayerId) || selLayer;
     layerEl.append(layerSettings(inspLayer, inspLayer.id));
 
-    // Layer effects now live in the LAYER inspector (per selected layer), so the
-    // Composition tab is just composition/canvas settings — no duplicate FX here.
+    // COMPOSITION effects (3rd tier) — applied to the final composite of ALL
+    // layers. Lives at the bottom of the Composition tab (#insp-compfx).
+    compEl.append(compositionFx());
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());
   }
 
-  // Composition-level effect chain: effects applied to the WHOLE composition
-  // (the single layer's output), AFTER the active clip + its own effects. Use
-  // these for global colour-over-time, segmenting, etc. Drop an effect on the
-  // zone, or reorder/remove with the per-block controls.
-  function compositionEffects(layer, id) {
+  // Composition effect chain — applied to the WHOLE composite (all layers), after
+  // each layer's own chain. Edits composition.effects / composition.params.
+  function compositionFx() {
+    const comp = getShow().composition || {};
+    const fxs = comp.effects || [];
     const box = el('div', { className: 'comp-fx' });
-    box.append(Section('Composition FX', 'comp-fx', (b) => {
-      const fxs = layer.effects || [];
-      for (let fx = 0; fx < fxs.length; fx++) b.append(layerEffectBlock(id, fx, fxs));
+    box.append(Section('Effects', 'comp-fx', (b) => {
+      for (let fx = 0; fx < fxs.length; fx++) b.append(compEffectBlock(fx, fxs));
       const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
       makeDropTarget(dropZone, (payload) => {
-        if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
+        if (payload.kind === 'effect') commit(addCompositionEffect(show(), payload.name));
       });
       b.append(dropZone);
-    }));
+    }, undefined, fxs.length === 0));
     return box;
+  }
+
+  // One composition effect block — drag-reorder + click-to-select + "⋯" menu.
+  function compEffectBlock(fx, effects) {
+    const name = effects[fx];
+    const entry = getEntry(name);
+    const comp = getShow().composition || {};
+    const block = el('div', { className: 'ly-fx ly-fx-layer' + (fxSel('comp', null, undefined, fx) ? ' is-sel' : '') });
+    makeDropTarget(block, (payload) => {
+      if (payload.kind === 'fx-comp' && payload.index !== fx) commit(moveCompositionEffect(show(), payload.index, fx - payload.index));
+    });
+    const head = el('div', { className: 'ly-fxhead', draggable: true }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
+    ]);
+    head.addEventListener('dragstart', (e) => { drag = { kind: 'fx-comp', index: fx }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx'); });
+    head.addEventListener('dragend', () => { drag = null; });
+    head.addEventListener('click', () => { selectedEffect = { scope: 'comp', layerId: null, clipId: undefined, index: fx }; render(); });
+    head.append(fxMenu({
+      presetName: entry?.name || name,
+      getParams: () => paramsForPrefix(getShow().composition?.params, name),
+      applyParams: (p) => commit(mergeCompositionParams(show(), p)),
+      onReset: () => commit(mergeCompositionParams(show(), prefixedDefaults(name))),
+      onRemove: () => commit(removeCompositionEffect(show(), fx)),
+    }));
+    block.append(head);
+    if (entry) {
+      for (const p of entry.params) {
+        const key = entry.name + '.' + p.key;
+        block.append(animatableParam({
+          key, p, value: comp.params?.[key], anim: comp.anim?.[key],
+          onValue: (v) => commitLive(setCompositionParam(show(), key, v)),
+          onAnim: (spec) => commit(setCompositionAnim(show(), key, spec)),
+        }));
+      }
+    }
+    return block;
   }
 
   // One composition (layer) effect block — drag-reorder + "⋯" menu. Params write
@@ -647,17 +685,25 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
     box.append(el('div', { className: 'clip-editor-head' }, [name]));
 
-    // Autopilot (Resolume-style): play-through of the clip deck as a timeline.
-    // Always loops (transport.loop defaults true) — no toggle needed.
+    // Autopilot (Resolume-style): play-through of the clip deck with a direction
+    // (off / ▶ forward / ◀ backward / ⤨ shuffle) + a loop toggle.
     if (transport) {
-      const playing = transport.isPlaying();
+      const dir = transport.getDirection?.() ?? (transport.isPlaying() ? 'forward' : 'off');
       box.append(Section('Autopilot', 'autopilot', (b) => {
-        b.append(el('div', { className: 'autopilot' }, [
-          el('button', {
-            className: 'transport-play' + (playing ? ' is-playing' : ''),
-            textContent: playing ? '■ stop' : '▶ play',
-            onclick: () => { transport.toggle(); if (!transport.isPlaying()) setPlayhead(-1); render(); },
-          }),
+        const dirBtn = (d, glyph, title) => el('button', {
+          className: 'dir-btn' + (dir === d ? ' on' : ''), textContent: glyph, title,
+          onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
+        });
+        b.append(field('direction', el('div', { className: 'dir-btns' }, [
+          dirBtn('backward', '◀', 'play backward'),
+          dirBtn('off', '■', 'stop'),
+          dirBtn('forward', '▶', 'play forward'),
+          dirBtn('shuffle', '⤨', 'shuffle'),
+        ])));
+        const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop?.() ?? true });
+        loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
+        b.append(el('label', { className: 'fx-field bool-row' }, [
+          el('span', { className: 'ly-plabel', textContent: 'loop' }), loopCb,
         ]));
       }));
     }
@@ -669,9 +715,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
       opacityRow.dataset.opacityLayer = id;
       b.append(opacityRow);
-      b.append(sliderField('crossfade', layer.transitionMs ?? 500, 0, 5000,
-        (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500));
-    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1, transitionMs: 500 }))));
+      // (crossfade is now a GLOBAL setting in the Composition tab.)
+    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1 }))));
 
     // Layer effect chain (applied to the whole layer's output, after its active
     // clip + that clip's effects). Locked open while empty so the drop target stays.
@@ -1023,7 +1068,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (!s) return false;
     selectedEffect = null;
     if (s.scope === 'clip') commit(removeClipEffect(show(), s.layerId, s.clipId, s.index));
-    else commit(removeLayerEffect(show(), s.layerId, s.index));
+    else if (s.scope === 'layer') commit(removeLayerEffect(show(), s.layerId, s.index));
+    else commit(removeCompositionEffect(show(), s.index));
     return true;
   }
 

@@ -92,6 +92,24 @@ void main(){
   frag = vec4(vec3(s), 1.0);
 }`;
 
+// Sine — a fully definable sine field with frequency MODULATION. The base wave
+// runs along `angle`; a second sine (modFreq · modAmt) bends its phase for an
+// FM warble. `speed` scrolls it (via uPhase, phase-continuous), `sharp` crisps
+// the crests, `amp` scales brightness. modAmt 0 ⇒ a clean sine.
+const SINE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float freq; uniform float angle; uniform float phase; uniform float amp;
+uniform float modFreq; uniform float modAmt; uniform float sharp; uniform float uPhase;
+void main(){
+  float a = radians(angle);
+  float coord = uv.x*cos(a) + uv.y*sin(a);
+  float m = sin(coord * modFreq * 6.2831853) * modAmt;                    // FM modulator
+  float w = sin((coord * freq + m - uPhase) * 6.2831853 + phase * 6.2831853);
+  float v = (w * 0.5 + 0.5) * amp;
+  v = pow(clamp(v, 0.0, 1.0), mix(1.0, 5.0, clamp(sharp, 0.0, 1.0)));
+  frag = vec4(vec3(v), 1.0);
+}`;
+
 // Checkered test source — set resolution in cols × rows (after Resolume's
 // Checkered). Alternating black/white cells; the go-to pattern for verifying the
 // fixture mapping over the installation.
@@ -203,12 +221,17 @@ uniform float horizontal;  // 0 = split x (bands are columns), 1 = split y (rows
 uniform float reverse;     // flip the cascade direction
 uniform float falloff;     // 0..1 dim later bands (a fading tail across parts)
 uniform float wrap;        // wrap the travel coord instead of going dark off-edge
+uniform float wave;        // 0 = linear staircase; >0 = offsets follow a sine (cycles across the bands)
 void main(){
   float n = max(1.0, floor(count + 0.5));
   float perp = (horizontal < 0.5) ? uv.x : uv.y;          // split axis
   float band = floor(clamp(perp, 0.0, 0.999999) * n);
   float order = (reverse < 0.5) ? band : (n - 1.0 - band);
-  float shift = order * offset;
+  float t = order / max(1.0, n - 1.0);                    // 0..1 across the bands
+  // Linear ramp, OR (wave>0) a sine so the per-band delay rises and falls.
+  float shift = (wave > 0.0)
+    ? (sin(t * 6.2831853 * wave) * 0.5 + 0.5) * (n - 1.0) * offset
+    : order * offset;
   float tc = (horizontal < 0.5) ? uv.y : uv.x;            // travel coord (other axis)
   tc -= shift;
   if (wrap > 0.5) { tc = fract(tc); }
@@ -342,6 +365,19 @@ export const REGISTRY = {
       { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
     ],
   },
+  sine: {
+    name: 'sine', type: 'generator', src: SINE,
+    params: [
+      { key: 'freq', type: 'float', min: 0.25, max: 16, default: 3 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
+      { key: 'phase', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'amp', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'modFreq', type: 'float', min: 0, max: 8, default: 0 },
+      { key: 'modAmt', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'sharp', type: 'float', min: 0, max: 1, default: 0 },
+    ],
+  },
   checkers: {
     name: 'checkers', type: 'generator', src: CHECKERS,
     params: [
@@ -403,6 +439,7 @@ export const REGISTRY = {
       { key: 'reverse', type: 'bool', default: false },
       { key: 'falloff', type: 'float', min: 0, max: 1, default: 0 },
       { key: 'wrap', type: 'bool', default: false },
+      { key: 'wave', type: 'float', min: 0, max: 8, default: 0 },
     ],
   },
   hue: {
@@ -476,7 +513,7 @@ export function hexToRgb(hex) {
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Solid Color', kelvin: 'White (Kelvin)',
-  chase: 'Chase', wave: 'Wave',
+  chase: 'Chase', wave: 'Wave', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',

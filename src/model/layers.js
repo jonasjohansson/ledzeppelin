@@ -86,6 +86,13 @@ export function setCompositionOpacity(show, opacity) {
   return { ...show, composition: { ...comp, opacity: Number.isFinite(o) ? o : 1 } };
 }
 
+// GLOBAL crossfade time (ms) — one transition for every layer's clip changes.
+export function setCompositionTransition(show, ms) {
+  const comp = show.composition || {};
+  const v = Math.max(0, Math.round(Number(ms) || 0));
+  return { ...show, composition: { ...comp, transitionMs: Number.isFinite(v) ? v : TRANSITION_MS } };
+}
+
 // Global gain applied to the audio input before it drives Audio-mode params.
 export function setShowAudioGain(show, gain) {
   const comp = show.composition || {};
@@ -543,6 +550,44 @@ export function patchLayer(show, layerId, patch) {
 export function setLayerParam(show, layerId, key, value) {
   return updateLayer(show, layerId, (layer) =>
     ({ ...layer, params: { ...layer.params, [key]: value } }));
+}
+
+// --- COMPOSITION effects (the 3rd FX tier): applied to the FINAL composite of
+//     all layers, after each layer's own chain. Stored on composition.effects /
+//     composition.params (namespaced), mirroring the clip/layer chains. ---
+const updateComp = (show, fn) => ({ ...show, composition: fn(show.composition || {}) });
+export function addCompositionEffect(show, name) {
+  return updateComp(show, (c) => ({ ...c, effects: [...(c.effects || []), name], params: { ...c.params, ...prefixedDefaults(name) } }));
+}
+export function removeCompositionEffect(show, fxIndex) {
+  return updateComp(show, (c) => {
+    const effects = (c.effects || []).slice();
+    if (fxIndex < 0 || fxIndex >= effects.length) return c;
+    const [removed] = effects.splice(fxIndex, 1);
+    return { ...c, effects, params: dropParams(c.params, removed, effects) };
+  });
+}
+export function moveCompositionEffect(show, fxIndex, delta) {
+  return updateComp(show, (c) => {
+    const effects = (c.effects || []).slice();
+    const to = fxIndex + delta;
+    if (fxIndex < 0 || fxIndex >= effects.length || to < 0 || to >= effects.length) return c;
+    const [item] = effects.splice(fxIndex, 1); effects.splice(to, 0, item);
+    return { ...c, effects };
+  });
+}
+export function setCompositionParam(show, key, value) {
+  return updateComp(show, (c) => ({ ...c, params: { ...c.params, [key]: value } }));
+}
+export function mergeCompositionParams(show, patch) {
+  return updateComp(show, (c) => ({ ...c, params: { ...c.params, ...patch } }));
+}
+export function setCompositionAnim(show, key, spec) {
+  return updateComp(show, (c) => {
+    const anim = { ...(c.anim || {}) };
+    if (spec) anim[key] = spec; else delete anim[key];
+    return { ...c, anim };
+  });
 }
 
 // Append a LAYER effect and seed its default params on layer.params.

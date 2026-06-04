@@ -275,7 +275,7 @@ export function makeCompositor(gl, w, h) {
   //   - progress === 1 ⇒ no crossfade, render only toClip
   //   - progress  < 1 ⇒ crossfade fromClip→toClip by progress
   // fromClip may be null (snap), toClip may be null (nothing to show).
-  function resolveTransition(layer, timeSec) {
+  function resolveTransition(layer, timeSec, globalTransitionMs) {
     const target = layer.activeClipId ?? null;
     let st = layerState.get(layer.id);
 
@@ -308,7 +308,10 @@ export function makeCompositor(gl, w, h) {
       return { fromClip: null, toClip, progress: 1 };
     }
 
-    const progress = transitionProgress(timeSec, tr.startT, layer.transitionMs);
+    // Crossfade time is now a GLOBAL composition setting (one fade for all
+    // layers); fall back to a per-layer value, then 500ms, for old shows.
+    const transitionMs = globalTransitionMs ?? layer.transitionMs ?? 500;
+    const progress = transitionProgress(timeSec, tr.startT, transitionMs);
     if (progress >= 1) {
       st.displayed = tr.toClipId;
       st.transition = null;
@@ -358,7 +361,7 @@ export function makeCompositor(gl, w, h) {
       if (layer.bypass) continue;
       if (anySolo && !layer.solo) continue;
 
-      const { fromClip, toClip, progress } = resolveTransition(layer, timeSec);
+      const { fromClip, toClip, progress } = resolveTransition(layer, timeSec, frameEnv.transitionMs);
 
       // Determine the layer's BASE texture (pre-layer-effects), held in fromHold/toHold.
       // base.tex is what we feed into the layer-effects chain.
@@ -431,6 +434,23 @@ export function makeCompositor(gl, w, h) {
       if (uOp !== null) gl.uniform1f(uOp, (layer.opacity == null ? 1 : Number(layer.opacity)) * master);
       drawFullscreen(gl);
       gl.disable(gl.BLEND);
+    }
+
+    // COMPOSITION effects (3rd tier): run the chain on the FULL composite (accum),
+    // ping-ponging via the layer scratch targets, then blit the result back into
+    // accum so the output `tex` carries the post-composite look.
+    const compFx = (frameEnv.compositionEffects || []).filter((n) => {
+      const e = getEntry(n); return e && e.type === 'effect';
+    });
+    if (compFx.length) {
+      let cur = layerA, other = layerB;
+      blitInto(accum.tex, cur, 1);
+      compFx.forEach((name, i) => {
+        const fx = getEntry(name);
+        runEntry(fx, frameEnv.compositionParams || {}, other, cur.tex, timeSec, 'comp:fx' + i);
+        const tmp = cur; cur = other; other = tmp;
+      });
+      blitInto(cur.tex, accum, 1);
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

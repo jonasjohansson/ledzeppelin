@@ -11,7 +11,8 @@
 //
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
-import { clampCanvasSize, setShowAudioGain } from '../model/layers.js';
+import { clampCanvasSize, setShowAudioGain, setCompositionTransition } from '../model/layers.js';
+import { THEME_TOKENS, tokenValue, setToken, resetTheme } from './theme.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -46,7 +47,7 @@ function aspectLabel(w, h) {
 // createCompositionPanel({ getShow, setSize, setShow })
 //   setShow(s): composition-only persist (no rebuild) — used for the crossfade,
 //   which is a composition-global setting living on the single layer.
-export function createCompositionPanel({ getShow, setSize, setShow }) {
+export function createCompositionPanel({ getShow, setSize, setShow, loadComposition }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
 
   // Working draft of the fields (not yet applied). Seeded from the show.
@@ -97,6 +98,22 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
       },
     }));
 
+    // --- Crossfade (global): how long a clip change fades, across ALL layers. ---
+    const xf = getShow().composition?.transitionMs ?? 500;
+    const xfOut = el('span', { className: 'ly-readout', textContent: String(Math.round(xf)) });
+    const xfRange = el('input', { type: 'range', min: '0', max: '5000', step: '10', value: String(xf) });
+    xfRange.addEventListener('input', () => {
+      xfOut.textContent = String(Math.round(Number(xfRange.value)));
+      setShow?.(setCompositionTransition(getShow(), Number(xfRange.value)));
+    });
+    xfRange.addEventListener('contextmenu', (e) => { e.preventDefault(); xfRange.value = '500'; xfOut.textContent = '500'; setShow?.(setCompositionTransition(getShow(), 500)); });
+    root.append(el('div', { className: 'fx-pts', textContent: 'crossfade' }));
+    root.append(el('div', { className: 'fx-card' }, [
+      el('label', { className: 'fx-field ly-param ly-row resettable' }, [
+        el('span', { className: 'ly-plabel', textContent: 'time (ms)' }), xfOut, xfRange,
+      ]),
+    ]));
+
     // --- Audio input (general config): global gain on the mic before it drives
     //     Audio-mode params. ×0 mutes, ×1 unity, up to ×8 to boost quiet input. ---
     const gain = getShow().composition?.audioGain ?? 1;
@@ -110,6 +127,45 @@ export function createCompositionPanel({ getShow, setSize, setShow }) {
       e.preventDefault(); gRange.value = '1'; gOut.textContent = '×1.00';
       setShow?.(setShowAudioGain(getShow(), 1));
     });
+    // --- Save / load the COMPOSITION (visuals only — keeps the fixture patch). ---
+    root.append(el('div', { className: 'fx-pts', textContent: 'composition file' }));
+    const io = el('div', { className: 'fx-io' });
+    io.append(el('button', {
+      textContent: 'save composition',
+      onclick: () => {
+        const comp = getShow().composition || {};
+        const blob = new Blob([JSON.stringify(comp, null, 2)], { type: 'application/json' });
+        const a = el('a', { href: URL.createObjectURL(blob), download: 'composition.json' });
+        a.click(); URL.revokeObjectURL(a.href);
+      },
+    }));
+    const compFileIn = el('input', { type: 'file', accept: '.json,application/json' });
+    compFileIn.style.display = 'none';
+    compFileIn.addEventListener('change', async () => {
+      const file = compFileIn.files[0];
+      if (!file) return;
+      try { loadComposition?.(JSON.parse(await file.text())); }
+      catch (e) { window.alert(`load failed: ${e.message}`); }
+      compFileIn.value = '';
+    });
+    io.append(el('button', { textContent: 'load composition', onclick: () => compFileIn.click() }), compFileIn);
+    root.append(io);
+
+    // --- GUI colours (live theme): each picker writes a CSS token immediately
+    //     and persists it; the whole UI updates as you drag. ---
+    root.append(el('div', { className: 'fx-pts', textContent: 'gui colors' }));
+    const colorGrid = el('div', { className: 'fx-card cmp-grid' });
+    for (const [label, varName] of THEME_TOKENS) {
+      const picker = el('input', { type: 'color', value: tokenValue(varName) });
+      picker.addEventListener('input', () => setToken(varName, picker.value));
+      colorGrid.append(field(label, picker));
+    }
+    root.append(colorGrid);
+    root.append(el('button', {
+      className: 'fx-del-link', textContent: 'reset colors',
+      onclick: () => { resetTheme(); render(); },
+    }));
+
     root.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
     root.append(el('div', { className: 'fx-card' }, [
       el('label', { className: 'fx-field ly-param ly-row resettable' }, [
