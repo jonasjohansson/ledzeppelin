@@ -436,6 +436,23 @@ export function makeCompositor(gl, w, h) {
       gl.disable(gl.BLEND);
     }
 
+    // COMPOSITION effects (3rd tier): run the chain on the FULL composite (accum),
+    // ping-ponging via the layer scratch targets, then blit the result back into
+    // accum so the output `tex` carries the post-composite look.
+    const compFx = (frameEnv.compositionEffects || []).filter((n) => {
+      const e = getEntry(n); return e && e.type === 'effect';
+    });
+    if (compFx.length) {
+      let cur = layerA, other = layerB;
+      blitInto(accum.tex, cur, 1);
+      compFx.forEach((name, i) => {
+        const fx = getEntry(name);
+        runEntry(fx, frameEnv.compositionParams || {}, other, cur.tex, timeSec, 'comp:fx' + i);
+        const tmp = cur; cur = other; other = tmp;
+      });
+      blitInto(cur.tex, accum, 1);
+    }
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 

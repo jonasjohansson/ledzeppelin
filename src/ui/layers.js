@@ -25,6 +25,8 @@ import {
   addClip, addVideoClip, removeClip, moveClip, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
+  addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
+  setCompositionParam, mergeCompositionParams, setCompositionAnim,
   setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
   setClipAnim, setLayerAnim, patchLayer,
   addLayer, removeLayer, moveLayer,
@@ -492,29 +494,65 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const inspLayer = layers.find((L) => L.id === selectedLayerId) || selLayer;
     layerEl.append(layerSettings(inspLayer, inspLayer.id));
 
-    // Layer effects now live in the LAYER inspector (per selected layer), so the
-    // Composition tab is just composition/canvas settings — no duplicate FX here.
+    // COMPOSITION effects (3rd tier) — applied to the final composite of ALL
+    // layers. Lives at the bottom of the Composition tab (#insp-compfx).
+    compEl.append(compositionFx());
 
     // --- LIBRARY region: draggable Sources + Effects -------------------------
     libraryEl.append(composerRail());
   }
 
-  // Composition-level effect chain: effects applied to the WHOLE composition
-  // (the single layer's output), AFTER the active clip + its own effects. Use
-  // these for global colour-over-time, segmenting, etc. Drop an effect on the
-  // zone, or reorder/remove with the per-block controls.
-  function compositionEffects(layer, id) {
+  // Composition effect chain — applied to the WHOLE composite (all layers), after
+  // each layer's own chain. Edits composition.effects / composition.params.
+  function compositionFx() {
+    const comp = getShow().composition || {};
+    const fxs = comp.effects || [];
     const box = el('div', { className: 'comp-fx' });
-    box.append(Section('Composition FX', 'comp-fx', (b) => {
-      const fxs = layer.effects || [];
-      for (let fx = 0; fx < fxs.length; fx++) b.append(layerEffectBlock(id, fx, fxs));
+    box.append(Section('Effects', 'comp-fx', (b) => {
+      for (let fx = 0; fx < fxs.length; fx++) b.append(compEffectBlock(fx, fxs));
       const dropZone = el('div', { className: 'composer-drop', textContent: '▸ drop effect here' });
       makeDropTarget(dropZone, (payload) => {
-        if (payload.kind === 'effect') commit(addLayerEffect(show(), id, payload.name));
+        if (payload.kind === 'effect') commit(addCompositionEffect(show(), payload.name));
       });
       b.append(dropZone);
-    }));
+    }, undefined, fxs.length === 0));
     return box;
+  }
+
+  // One composition effect block — drag-reorder + click-to-select + "⋯" menu.
+  function compEffectBlock(fx, effects) {
+    const name = effects[fx];
+    const entry = getEntry(name);
+    const comp = getShow().composition || {};
+    const block = el('div', { className: 'ly-fx ly-fx-layer' + (fxSel('comp', null, undefined, fx) ? ' is-sel' : '') });
+    makeDropTarget(block, (payload) => {
+      if (payload.kind === 'fx-comp' && payload.index !== fx) commit(moveCompositionEffect(show(), payload.index, fx - payload.index));
+    });
+    const head = el('div', { className: 'ly-fxhead', draggable: true }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${labelOf(name)}` }),
+    ]);
+    head.addEventListener('dragstart', (e) => { drag = { kind: 'fx-comp', index: fx }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx'); });
+    head.addEventListener('dragend', () => { drag = null; });
+    head.addEventListener('click', () => { selectedEffect = { scope: 'comp', layerId: null, clipId: undefined, index: fx }; render(); });
+    head.append(fxMenu({
+      presetName: entry?.name || name,
+      getParams: () => paramsForPrefix(getShow().composition?.params, name),
+      applyParams: (p) => commit(mergeCompositionParams(show(), p)),
+      onReset: () => commit(mergeCompositionParams(show(), prefixedDefaults(name))),
+      onRemove: () => commit(removeCompositionEffect(show(), fx)),
+    }));
+    block.append(head);
+    if (entry) {
+      for (const p of entry.params) {
+        const key = entry.name + '.' + p.key;
+        block.append(animatableParam({
+          key, p, value: comp.params?.[key], anim: comp.anim?.[key],
+          onValue: (v) => commitLive(setCompositionParam(show(), key, v)),
+          onAnim: (spec) => commit(setCompositionAnim(show(), key, spec)),
+        }));
+      }
+    }
+    return block;
   }
 
   // One composition (layer) effect block — drag-reorder + "⋯" menu. Params write
@@ -1022,7 +1060,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (!s) return false;
     selectedEffect = null;
     if (s.scope === 'clip') commit(removeClipEffect(show(), s.layerId, s.clipId, s.index));
-    else commit(removeLayerEffect(show(), s.layerId, s.index));
+    else if (s.scope === 'layer') commit(removeLayerEffect(show(), s.layerId, s.index));
+    else commit(removeCompositionEffect(show(), s.index));
     return true;
   }
 

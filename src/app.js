@@ -759,7 +759,10 @@ function loop(ts) {
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
     const masterOpacity = show.composition?.opacity ?? 1;
     const transitionMs = show.composition?.transitionMs ?? 500;   // GLOBAL crossfade (all layers)
-    compositor.render(renderLayers, t, { trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs });
+    compositor.render(renderLayers, t, {
+      trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs,
+      compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
+    });
 
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
