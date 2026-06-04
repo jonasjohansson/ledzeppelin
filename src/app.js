@@ -18,6 +18,9 @@ import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChain
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
+import { applyTheme } from './ui/theme.js';
+
+applyTheme();   // restore any saved GUI-colour overrides before the UI paints
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');

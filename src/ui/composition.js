@@ -12,6 +12,7 @@
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
 import { clampCanvasSize, setShowAudioGain, setCompositionTransition } from '../model/layers.js';
+import { THEME_TOKENS, tokenValue, setToken, resetTheme } from './theme.js';
 
 const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
@@ -149,6 +150,21 @@ export function createCompositionPanel({ getShow, setSize, setShow, loadComposit
     });
     io.append(el('button', { textContent: 'load composition', onclick: () => compFileIn.click() }), compFileIn);
     root.append(io);
+
+    // --- GUI colours (live theme): each picker writes a CSS token immediately
+    //     and persists it; the whole UI updates as you drag. ---
+    root.append(el('div', { className: 'fx-pts', textContent: 'gui colors' }));
+    const colorGrid = el('div', { className: 'fx-card cmp-grid' });
+    for (const [label, varName] of THEME_TOKENS) {
+      const picker = el('input', { type: 'color', value: tokenValue(varName) });
+      picker.addEventListener('input', () => setToken(varName, picker.value));
+      colorGrid.append(field(label, picker));
+    }
+    root.append(colorGrid);
+    root.append(el('button', {
+      className: 'fx-del-link', textContent: 'reset colors',
+      onclick: () => { resetTheme(); render(); },
+    }));
 
     root.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
     root.append(el('div', { className: 'fx-card' }, [
