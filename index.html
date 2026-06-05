@@ -15,19 +15,12 @@ canvas{display:block}
 <body>
 <div id="hud">booting…</div>
 <button id="show-ui" title="show the UI (H)">▸ show UI</button>
-<!-- Bottom-left cluster floating over the canvas: the fixtures-overlay toggle
-     (show/hide the draggable rectangles, decoupled from any tab) + hide UI. -->
+<!-- Bottom-left cluster floating over the canvas (no top bar): the fixtures
+     overlay toggle, settings, and hide UI. -->
 <div id="corner-controls">
   <button id="overlay-toggle" title="show/hide fixtures on the canvas">▢ fixtures</button>
+  <button id="g-settings" class="g-btn" title="settings">⚙ settings</button>
   <button id="g-hide" class="g-btn" title="hide all UI (H)">hide UI</button>
-</div>
-<div id="topbar">
-  <!-- No workspace tabs: the deck + inspectors + Output/Fixtures are all columns
-       on one screen. Chrome only, right-aligned. -->
-  <!-- Top-bar chrome: just settings (hide UI moved to the bottom-left cluster). -->
-  <div id="globals">
-    <button id="g-settings" class="g-btn" title="settings">⚙ settings</button>
-  </div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
      letterboxed to the composition aspect; the UI panels float over it. -->
@@ -43,48 +36,49 @@ canvas{display:block}
     <section id="deckbar" class="panel"></section>
   </div>
 
-  <!-- COMPOSITION view: inspector column (Clip | Composition sub-tabs) + library -->
-  <aside id="inspector-col" class="panel">
-    <div id="insp-tabs" class="subtabs">
-      <button class="subtab subtab-active" data-itab="clip">Clip</button>
-      <button class="subtab" data-itab="layer">Layer</button>
-      <button class="subtab" data-itab="composition">Composition</button>
+  <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
+       Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
+       Devices routing. Only one section shows at a time (more canvas room). -->
+  <aside id="side" class="panel">
+    <div id="section-switch" class="section-switch">
+      <button class="section-tab section-active" data-section="design">Design</button>
+      <button class="section-tab" data-section="output">Output</button>
     </div>
-    <div id="insp-panes">
-      <div id="insp-clip"></div>
-      <div id="insp-layer" hidden></div>
-      <div id="insp-composition" hidden>
-        <div id="comp-settings"></div>
-        <div id="insp-compfx"></div>
-      </div>
-    </div>
-    <!-- Sources / Effects library docked at the bottom of the inspector. -->
-    <div id="library"></div>
-  </aside>
 
-  <!-- OUTPUT / FIXTURES column: a 2-tab column to the right of the inspector.
-       Output = place/map fixtures on the canvas; Fixtures = design + devices +
-       import. Both always reachable (no top-level tab switch). -->
-  <aside id="io-col" class="panel">
-    <div class="subtabs" id="io-tabs">
-      <button class="subtab subtab-active" data-iotab="output">Output</button>
-      <button class="subtab" data-iotab="fixtures">Fixtures</button>
-    </div>
-    <div id="io-panes">
-      <div id="io-output">
-        <div class="subtabs subtabs-sub" id="output-tabs">
-          <button class="subtab subtab-active" data-otab="fixtures">fixtures</button>
-          <button class="subtab" data-otab="chains">chains</button>
-          <button class="subtab" data-otab="devices">devices</button>
+    <!-- DESIGN -->
+    <div id="design-pane">
+      <div id="insp-tabs" class="subtabs">
+        <button class="subtab subtab-active" data-itab="clip">Clip</button>
+        <button class="subtab" data-itab="layer">Layer</button>
+        <button class="subtab" data-itab="composition">Composition</button>
+      </div>
+      <div id="insp-panes">
+        <div id="insp-clip"></div>
+        <div id="insp-layer" hidden></div>
+        <div id="insp-composition" hidden>
+          <div id="comp-settings"></div>
+          <div id="insp-compfx"></div>
         </div>
-        <div class="output-tools">
+      </div>
+      <!-- Sources / Effects library docked at the bottom of the inspector. -->
+      <div id="library"></div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div id="output-pane" hidden>
+      <div class="subtabs" id="io-tabs">
+        <button class="subtab subtab-active" data-otab="fixtures">Fixtures</button>
+        <button class="subtab" data-otab="chains">Chains</button>
+        <button class="subtab" data-otab="devices">Devices</button>
+      </div>
+      <div id="io-body">
+        <div class="output-tools" id="io-tools">
           <label class="snap-toggle"><input type="checkbox" id="snap-cb"> snap</label>
-          <span class="seg-hint">place &amp; adjust — design fixtures in the Fixtures tab · drag to move · knob/⟳ rotate · ⇄ flip · ←↑↓→ nudge</span>
+          <span class="seg-hint">place &amp; adjust — drag to move · knob/⟳ rotate · ⇄ flip · ←↑↓→ nudge</span>
         </div>
         <div id="output-list"></div>
-      </div>
-      <div id="io-fixtures" hidden>
-        <div id="fixtures-panels"></div>
+        <div id="fixtures-design"></div>
+        <div id="devices-design"></div>
       </div>
     </div>
   </aside>

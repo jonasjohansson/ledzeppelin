@@ -308,10 +308,14 @@ function applyComposition(comp) {
 //                 drag fixtures to position them.
 //   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
-const fixturesPanels = document.getElementById('fixtures-panels');
 compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
-fixturesPanels?.append(importPanel.el);
-fixturesPanels?.append(panel.el);
+// Fixtures tab = the design editor + Kagora import (placement list is the
+// output-list above). Devices tab = the device editor.
+const fixturesDesignEl = document.getElementById('fixtures-design');
+const devicesDesignEl = document.getElementById('devices-design');
+fixturesDesignEl?.append(panel.fixturesEl);
+fixturesDesignEl?.append(importPanel.el);
+devicesDesignEl?.append(panel.devicesEl);
 document.getElementById('settings-panel')?.append(settingsPanel.el);
 
 // (Output selection + snap state are declared earlier, above the Settings panel.)
@@ -577,21 +581,6 @@ function setOverlay(v) {
 }
 overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 
-// Output / Fixtures column sub-tabs (top level of that column).
-const ioTabsEl = document.getElementById('io-tabs');
-const ioPanes = {
-  output: document.getElementById('io-output'),
-  fixtures: document.getElementById('io-fixtures'),
-};
-function setIoTab(which) {
-  ioTabsEl?.querySelectorAll('.subtab').forEach((x) =>
-    x.classList.toggle('subtab-active', x.dataset.iotab === which));
-  for (const [k, pane] of Object.entries(ioPanes)) if (pane) pane.hidden = k !== which;
-}
-ioTabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.subtab');
-  if (b) setIoTab(b.dataset.iotab);
-});
 
 // --- Settings dialog: a modal opened from the top-bar gear. Refreshes on open
 //     so it reads live snap/theme/gain state. ---
@@ -692,12 +681,22 @@ inspTabsEl?.addEventListener('click', (ev) => {
   if (b) setInspectorTab(b.dataset.itab);
 });
 
-// Output sub-tabs (Fixtures | Chains | Devices).
-const outputTabsEl = document.getElementById('output-tabs');
+// IO column tabs — a single flat row: Fixtures · Chains · Devices.
+//   Fixtures = snap tools + placement list (output-list) + design + import.
+//   Chains   = chains list (output-list).
+//   Devices  = device editor (devicesEl).
+const outputTabsEl = document.getElementById('io-tabs');
+const ioToolsEl = document.getElementById('io-tools');
 function setOutputTab(which) {
   outputTab = which;
   outputTabsEl?.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.otab === which));
+  const onFixtures = which === 'fixtures';
+  const onDevices = which === 'devices';
+  if (ioToolsEl) ioToolsEl.hidden = !onFixtures;
+  if (fixturesDesignEl) fixturesDesignEl.hidden = !onFixtures;
+  if (devicesDesignEl) devicesDesignEl.hidden = !onDevices;
+  if (outputListEl) outputListEl.hidden = onDevices;   // Devices uses the device editor instead
   renderOutput();
 }
 outputTabsEl?.addEventListener('click', (ev) => {
@@ -705,12 +704,28 @@ outputTabsEl?.addEventListener('click', (ev) => {
   if (b) setOutputTab(b.dataset.otab);
 });
 
-// Initial layout: Output column on its Output tab, the fixture overlay SHOWN by
+// --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
+//     Output (Fixtures/Chains/Devices). Only one shows at a time. ---
+const sectionSwitchEl = document.getElementById('section-switch');
+const designPaneEl = document.getElementById('design-pane');
+const outputPaneEl = document.getElementById('output-pane');
+function setSection(which) {
+  sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
+    x.classList.toggle('section-active', x.dataset.section === which));
+  if (designPaneEl) designPaneEl.hidden = which !== 'design';
+  if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
+}
+sectionSwitchEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.section-tab');
+  if (b) setSection(b.dataset.section);
+});
+
+// Initial layout: Design section, IO column on its Fixtures tab, overlay SHOWN by
 // default (you see your fixture layout on load; the canvas toggle hides it for a
-// clean composite preview), and the output list populated.
-setIoTab('output');
+// clean composite preview).
+setSection('design');
+setOutputTab('fixtures');
 setOverlay(true);
-renderOutput();
 
 // --- Video clips: a <video> element + GL texture per video clip (runtime only;
 // the show stores only the object URL). syncVideos() reconciles the map with the

@@ -90,9 +90,8 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   border-radius: 0; padding: 5px 0; font: var(--fw-med) var(--fs-ctrl) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
-.subtab:hover { color: var(--text); }
-/* Active tab: brighter text + a NEUTRAL underline (no accent colour). */
-.subtab-active { color: var(--text); border-bottom-color: var(--text); background: transparent; }
+/* Active tab: brighter text only — no underline, no hover effects. */
+.subtab-active { color: var(--text); background: transparent; }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -112,7 +111,6 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-row span:first-child { flex: 1 1 auto; color: var(--text); }
 .output-dev { color: var(--cyan); font-size: var(--fs-micro); }
 .output-row .ly-rmfx { padding: 0 6px; line-height: var(--lh-ctrl); }
-.output-row:hover { border-color: var(--line-2); }
 .output-row.selected { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 .output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
@@ -168,17 +166,16 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 #layout {
   position: relative; z-index: 1; display: flex; gap: 0;
   align-items: stretch; padding: 0; box-sizing: border-box;
-  height: calc(100vh - 42px - 24px); pointer-events: none;   /* between the header (42) and footer (24) */
+  height: calc(100vh - 24px); pointer-events: none;   /* full height above the footer HUD (24); no top bar */
 }
 #left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent; }
-#deckbar, #inspector-col, #io-col { pointer-events: auto; }
-/* Side panels dock to full height with internal scroll (scrollbars hidden). */
-/* Side panels dock flush; -1px overlaps each left neighbour's border into a
-   single shared hairline (no doubled 2px seam) — the packed-grid look. */
-#inspector-col, #io-col { align-self: stretch; margin-left: -1px; }
+#deckbar, #side { pointer-events: auto; }
+/* The right panel docks flush; -1px overlaps the deck's border into one shared
+   hairline (no doubled 2px seam) — the packed-grid look. */
+#side { align-self: stretch; margin-left: -1px; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
@@ -189,44 +186,35 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   padding: var(--s3);
   box-sizing: border-box;
 }
-/* Inspector column: tabs on top, a SCROLLING panes area, and the Sources/Effects
-   library docked at the bottom (no separate library column — there aren't many). */
-#inspector-col { flex: 0 0 332px; max-height: calc(100vh - 52px); display: flex; flex-direction: column; overflow: hidden; }
-#insp-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The single right panel: a DESIGN|OUTPUT switch on top, then whichever section
+   is active. Each pane is a flex column with its own scrolling body. */
+#side { flex: 0 0 332px; max-height: calc(100vh - 24px); display: flex; flex-direction: column; overflow: hidden; }
+#design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#insp-panes, #io-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;
   border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
   padding: var(--s2) var(--s3) var(--s3);
 }
-/* Output / Fixtures column — tabs on top, a SCROLLING panes area below (mirrors
-   the inspector column). Always visible, docked to the right of the inspector. */
-#io-col { flex: 0 0 320px; max-height: calc(100vh - 52px); display: flex; flex-direction: column; overflow: hidden; }
-#io-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-/* The nested Output sub-tabs (fixtures|chains|devices) read as a quieter second
-   level than the column's Output|Fixtures tabs. */
-.subtabs-sub { font-size: var(--fs-micro); }
-.subtabs-sub .subtab { padding-top: 4px; padding-bottom: 4px; }
+/* Top-level section switch (Design | Output) — a segmented control: the active
+   section reads as a filled segment (distinct from the text-only sub-tabs). */
+.section-switch { display: flex; flex: 0 0 auto; border-bottom: 1px solid var(--line); margin-bottom: var(--s3); }
+.section-tab {
+  flex: 1 1 0; text-align: center; background: transparent; color: var(--muted);
+  border: none; border-radius: 0; padding: 8px 0; cursor: pointer;
+  font: var(--fw-med) var(--fs-ctrl) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
+}
+.section-tab.section-active { color: var(--text); background: var(--panel-2); }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
 /* 'h' / Tab hides all GUI to view the canvas full-screen. */
-body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display: none; }
+body.gui-hidden #layout, body.gui-hidden #hud { display: none; }
 
-/* Top bar: a SOLID structural header strip (application chrome), tabs left,
-   global tweaks right. */
-#topbar {
-  position: relative; z-index: 2; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px;
-  height: 42px; padding: 0 10px 0 0;   /* flush left — tabs align with the now edge-to-edge deck */
-  background: var(--panel); border-bottom: 1px solid var(--line);
-}
-/* Tab-less top bar: chrome only, kept to the right. */
-#globals { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
-.g-val { color: var(--readout); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+/* No top bar — chrome lives in the bottom-left corner cluster. */
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
   padding: 5px 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
-.g-btn:hover { color: var(--text); border-color: var(--line-2); }
 /* "show UI" pill — only visible while the GUI is hidden, so there's always a way back. */
 /* "show UI" sits where the "hide UI" button was (top-right), so toggling is in
    the same spot. */
@@ -235,7 +223,6 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   padding: 5px 12px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
 }
-#show-ui:hover { color: var(--text); }
 body.gui-hidden #show-ui { display: block; }
 
 /* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
@@ -249,13 +236,11 @@ body.gui-hidden #show-ui { display: block; }
   padding: 5px 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-#corner-controls button:hover { color: var(--text); border-color: var(--readout); }
 #overlay-toggle.on { color: var(--accent); border-color: var(--accent); }
 body.gui-hidden #corner-controls { display: none; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }
-.lh-clickable:hover { border-color: var(--line-2); }
 .lh-tog {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -347,7 +332,6 @@ body.gui-hidden #corner-controls { display: none; }
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
 }
-.fx-del-link:hover { color: var(--danger); }
 /* Fixtures panel scrolls within the viewport for big shows (scrollbar hidden). */
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
@@ -365,7 +349,6 @@ button {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
   border-radius: var(--radius); padding: 4px 8px; cursor: pointer; font: var(--fs-ctrl) var(--sans);
 }
-button:hover { background: var(--hover); border-color: var(--line-2); }
 /* No blue browser focus rings on controls (keyboard focus shows on the thumb). */
 input[type=range]:focus, button:focus, select:focus { outline: none; }
 input[type=range]:focus-visible, select:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }
@@ -377,7 +360,6 @@ input[type=checkbox] {
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
   cursor: pointer; position: relative;
 }
-input[type=checkbox]:hover { border-color: var(--line-2); }
 input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
 input[type=checkbox]:checked::after {
   content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px;
@@ -551,7 +533,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .fx-menu-label { font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 1px; text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .fx-menu-item { background: none; border: none; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: var(--fs-body); color: var(--text); }
-.fx-menu-item:hover { background: var(--surface-hover); border: none; }
 .fx-menu-danger { color: var(--danger); }
 .ly-rmfx { color: var(--danger); border-color: var(--line); }
 .ly-addfx { margin-top: 4px; }
@@ -567,7 +548,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   border: 1px solid transparent; border-radius: var(--radius); padding: 2px 5px;
   font-family: var(--sans); box-sizing: border-box;
 }
-.ly-nameedit:hover { border-color: var(--field-border); }
 .ly-nameedit:focus { border-color: var(--accent); outline: none; background: var(--panel); }
 
 /* FX section labels: clip FX vs layer FX colour-coded to read the param split. */
@@ -631,7 +611,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--muted); border-color: var(--line);
 }
-.lh-clear:hover { color: var(--danger); border-color: var(--line-2); }
 .lh-blend-label { color: var(--muted); margin-top: 2px; }   /* size/caps/tracking from the shared header recipe */
 .lh-ctrls select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -660,9 +639,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   display: flex; align-items: center; justify-content: center;
   border-style: dashed; border-color: var(--line); background: var(--surface); opacity: .6;
 }
-.clip-empty:hover { opacity: 1; border-color: var(--accent); }
 .clip-empty-plus { font-size: var(--fs-glyph); color: var(--faint); line-height: 1; }
-.clip-empty:hover .clip-empty-plus { color: var(--accent); }
 
 /* Clip slot: thumbnail on top, a label bar UNDERNEATH (Resolume-style). */
 .clip-thumbwrap { position: relative; flex: 1 1 auto; min-height: 48px; width: 100%; background: #000; }
@@ -704,12 +681,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   overflow: hidden; cursor: pointer; user-select: none; display: flex; flex-direction: column;
   transition: border-color .12s, box-shadow .12s;
 }
-.clip-cell:hover { border-color: var(--line-2); }
 .clip-add {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; cursor: default; border-style: dashed;
 }
-.clip-add:hover { background: var(--surface); }
 .clip-add select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
   border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
@@ -732,10 +707,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   border-radius: var(--radius-sm); padding: 3px 7px; cursor: grab; user-select: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.lib-item:hover { background: var(--hover); border-color: var(--line-2); }
 .lib-item:active { cursor: grabbing; }
 .lib-video { color: var(--green); border-style: dashed; justify-content: center; cursor: pointer; margin-top: 3px; }
-.lib-video:hover { border-color: var(--green); background: rgba(93,209,163,.08); }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {
@@ -757,7 +730,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .transport-loop { display: flex; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--muted); }
 .transport-loop input { width: auto; accent-color: var(--accent); }
 .transport-fire { padding: 2px 10px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--amber); border-color: var(--line); }
-.transport-fire:hover { background: rgba(232,178,127,.12); border-color: var(--amber); }
 .transport-fire:active { background: rgba(232,178,127,.28); }
 
 /* Playhead highlight: the slot the transport is currently on. */
@@ -781,7 +753,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   grid-column: 1 / -1; width: 100%; margin: 2px 0 4px; font-weight: var(--fw-med);
   color: var(--amber); border-color: var(--line);
 }
-.clip-trigger:hover { background: rgba(232,178,127,.14); border-color: var(--amber); }
 .clip-trigger:active { background: rgba(232,178,127,.3); }
 
 /* --- Settings: a traditional modal preferences dialog ---------------------- */
@@ -802,7 +773,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   background: none; border: none; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
   padding: 3px 7px; border-radius: var(--radius-sm);
 }
-.modal-close:hover { color: var(--text); background: var(--hover); }
 /* Symmetric breath, aligned with the head padding. */
 .modal-body { overflow-y: auto; padding: 14px 16px 16px; }
 
@@ -831,7 +801,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   flex: 0 0 auto; width: 46px; height: 22px; display: block; overflow: hidden;
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
 }
-.swatch:hover { border-color: var(--line); }
 .swatch input[type=color] {
   width: 100%; height: 100%; padding: 0; margin: 0; border: none; background: none; cursor: pointer;
 }

@@ -72,7 +72,10 @@ const field = (label, control) =>
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
 export function createFixturePanel({ getShow, setShow }) {
-  const root = el('div', { className: 'fx-panel' });
+  // Two independently-mountable halves so the flat IO column can place the
+  // Devices editor and the Fixtures (design) editor in separate tabs.
+  const devicesBox = el('div', { className: 'fx-panel' });
+  const fixturesBox = el('div', { className: 'fx-panel' });
   let selDeviceId = null;   // master-detail: which device/fixture's editor is open
   let selFixtureId = null;
 
@@ -183,15 +186,14 @@ export function createFixturePanel({ getShow, setShow }) {
 
   function render() {
     const show = getShow();
-    root.textContent = '';
+    devicesBox.textContent = '';
+    fixturesBox.textContent = '';
 
     const v = validate(show);
-    root.append(el('div', { className: 'fx-title', textContent: 'show editor' }));
-
-    // --- Validation banner ---
+    // --- Validation banner (whole show) — sits atop the Fixtures editor ---
     const banner = el('div', { className: v.ok ? 'fx-ok' : 'fx-err' });
     banner.textContent = v.ok ? 'valid' : v.errors.join(' · ');
-    root.append(banner);
+    fixturesBox.append(banner);
 
     // Compact selectable row (master): name + a couple of badges. Clicking opens
     // its editor below. Reuses the Output tab's list styling.
@@ -210,7 +212,7 @@ export function createFixturePanel({ getShow, setShow }) {
 
     // --- Devices (collapsible: selectable list → inline editor under the row) ---
     if (!show.devices.some((d) => d.id === selDeviceId)) selDeviceId = show.devices[0]?.id ?? null;
-    root.append(Section('Devices', 'devices', (b) => {
+    devicesBox.append(Section('Devices', 'devices', (b) => {
       const devList = el('div', { className: 'fx-list' });
       for (const d of show.devices) {
         devList.append(listRow(d.name || d.id, [d.ip || 'no ip', d.colorOrder || 'GRB', `${devicePixels(d.id)} px`],
@@ -236,7 +238,7 @@ export function createFixturePanel({ getShow, setShow }) {
 
     // --- Fixtures (collapsible: selectable list → inline editor under the row) ---
     if (!show.fixtures.some((f) => f.id === selFixtureId)) selFixtureId = show.fixtures[0]?.id ?? null;
-    root.append(Section('Fixtures', 'fixtures', (b) => {
+    fixturesBox.append(Section('Fixtures', 'fixtures', (b) => {
       const fxList = el('div', { className: 'fx-list' });
       for (const f of show.fixtures) {
         const o = f.output || {};
@@ -275,9 +277,9 @@ export function createFixturePanel({ getShow, setShow }) {
       fileIn.value = '';
     });
     io.append(el('button', { textContent: 'load (file)', onclick: () => fileIn.click() }), fileIn);
-    root.append(io);
+    fixturesBox.append(io);
   }
 
   render();
-  return { el: root, refresh: render };
+  return { devicesEl: devicesBox, fixturesEl: fixturesBox, refresh: render };
 }
