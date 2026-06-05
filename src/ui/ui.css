@@ -91,7 +91,8 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .subtab:hover { color: var(--text); }
-.subtab-active { color: var(--text); border-bottom-color: var(--accent); background: transparent; }
+/* Active tab: brighter text + a NEUTRAL underline (no accent colour). */
+.subtab-active { color: var(--text); border-bottom-color: var(--text); background: transparent; }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -173,12 +174,11 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent; }
-#deckbar, #inspector-col, #output-view, #fixtures-view { pointer-events: auto; }
+#deckbar, #inspector-col, #io-col { pointer-events: auto; }
 /* Side panels dock to full height with internal scroll (scrollbars hidden). */
 /* Side panels dock flush; -1px overlaps each left neighbour's border into a
    single shared hairline (no doubled 2px seam) — the packed-grid look. */
-#inspector-col, #output-view, #fixtures-view { align-self: stretch; margin-left: -1px; }
-#output-view, #fixtures-view { overflow-y: auto; }
+#inspector-col, #io-col { align-self: stretch; margin-left: -1px; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
@@ -198,7 +198,14 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
   padding: var(--s2) var(--s3) var(--s3);
 }
-#output-view   { flex: 0 0 360px; max-height: calc(100vh - 52px); overflow-y: auto; }
+/* Output / Fixtures column — tabs on top, a SCROLLING panes area below (mirrors
+   the inspector column). Always visible, docked to the right of the inspector. */
+#io-col { flex: 0 0 320px; max-height: calc(100vh - 52px); display: flex; flex-direction: column; overflow: hidden; }
+#io-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The nested Output sub-tabs (fixtures|chains|devices) read as a quieter second
+   level than the column's Output|Fixtures tabs. */
+.subtabs-sub { font-size: var(--fs-micro); }
+.subtabs-sub .subtab { padding-top: 4px; padding-bottom: 4px; }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
 /* 'h' / Tab hides all GUI to view the canvas full-screen. */
@@ -212,10 +219,8 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
   height: 42px; padding: 0 10px 0 0;   /* flush left — tabs align with the now edge-to-edge deck */
   background: var(--panel); border-bottom: 1px solid var(--line);
 }
-/* The first tab (Composition) spans the layer-head column width (128px) so its
-   right edge aligns with where the clips begin — tabs read as columns. */
-.tabs .tab:first-child { flex: 0 0 var(--layer-w); box-sizing: border-box; justify-content: flex-start; padding: 0 0 0 4px; }
-#globals { display: inline-flex; align-items: center; gap: 14px; }
+/* Tab-less top bar: chrome only, kept to the right. */
+#globals { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; }
 .g-val { color: var(--readout); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
@@ -232,6 +237,21 @@ body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display
 }
 #show-ui:hover { color: var(--text); }
 body.gui-hidden #show-ui { display: block; }
+
+/* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
+   overlay toggle + hide UI. Decoupled from any tab. */
+#corner-controls {
+  position: fixed; left: 10px; bottom: 30px; z-index: 5; pointer-events: auto;
+  display: inline-flex; gap: 6px;
+}
+#corner-controls button {
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
+  padding: 5px 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+#corner-controls button:hover { color: var(--text); border-color: var(--readout); }
+#overlay-toggle.on { color: var(--accent); border-color: var(--accent); }
+body.gui-hidden #corner-controls { display: none; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }
@@ -583,46 +603,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Multi-layer stack: flush rows, thin separators (flat Resolume grid). */
 .deck-layers { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-top: none; }
 .deck-addlayer { margin-top: 4px; align-self: flex-start; color: var(--green); }
-
-/* COMPOSITION GROUP — the parent node wrapping the layer stack. A left bracket
-   (accent rail) ties the head to the layers nested beneath it. */
-.deck-group { position: relative; display: flex; flex-direction: column; padding-left: 8px; }
-.deck-group::before {
-  content: ''; position: absolute; left: 0; top: 9px; bottom: 0; width: 2px;
-  background: var(--line-2); border-radius: 1px;
-}
-.deck-group.is-sel::before { background: var(--accent); }
-.group-head-box {
-  display: flex; align-items: center; gap: 10px; box-sizing: border-box;
-  padding: 5px 6px 5px 8px; background: var(--panel-2);
-  border: 1px solid var(--line); border-bottom: none; cursor: pointer;
-}
-.group-head-box:hover { background: var(--surface-2); }
-.deck-group.is-sel .group-head-box { box-shadow: inset 2px 0 0 var(--accent); }
-.gh-body { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
-.gh-title {
-  color: var(--muted); font-size: var(--fs-micro); font-weight: var(--fw-med);
-  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; flex: 0 0 auto;
-}
-.deck-group.is-sel .gh-title { color: var(--accent); }
-.gh-op { flex: 1 1 auto; min-width: 60px; display: flex; align-items: center; }
-.gh-op-range {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 14px;
-  background: transparent; cursor: pointer; accent-color: var(--green);
-}
-.gh-op-range::-webkit-slider-runnable-track {
-  height: 4px; border-radius: var(--radius-sm);
-  background: linear-gradient(to right, var(--green) var(--fill, 100%), var(--line-2) var(--fill, 100%));
-}
-.gh-op-range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
-  background: var(--green); border: 2px solid var(--bg);
-}
-.gh-op-range::-moz-range-track { height: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
-.gh-op-range::-moz-range-progress { height: 4px; border-radius: var(--radius-sm); background: var(--green); }
-.gh-op-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--green); }
-.gh-op-val { flex: 0 0 auto; font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
-.gh-addlayer { flex: 0 0 auto; margin: 0; }
 .lh-blend {
   width: 100%; margin-top: 3px; box-sizing: border-box;
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -823,16 +803,55 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   padding: 3px 7px; border-radius: var(--radius-sm);
 }
 .modal-close:hover { color: var(--text); background: var(--hover); }
-.modal-body { overflow-y: auto; padding: 6px 16px 18px; }
+/* Symmetric breath, aligned with the head padding. */
+.modal-body { overflow-y: auto; padding: 14px 16px 16px; }
 
-/* Settings page: roomier than the inspector rail — section headers split by a
-   hairline, full (un-truncated) labels, colour pickers in two comfortable cols. */
+/* Settings page: the inspector rail mounted in a dialog. Section wrappers drive
+   ALL inter-section spacing; headers carry only their global accent underline;
+   rows fall back to the canonical row height + ledger seams. */
 .settings-panel.fx-panel { gap: 0; }
-.settings-panel .fx-pts { border-top: 1px solid var(--line); margin: 14px 0 7px; padding-top: 14px; }
-.settings-panel .fx-pts:first-child { border-top: none; margin-top: 4px; padding-top: 0; }
-.settings-panel .fx-field { min-height: 30px; }
-.settings-panel .fx-field > span:first-child { white-space: normal; overflow: visible; text-overflow: clip; flex: 0 0 40%; }
-.settings-panel .cmp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 18px; row-gap: 2px; }
-.settings-panel .cmp-grid .fx-field > span:first-child { flex: 1 1 auto; }
-.settings-panel .cmp-grid input[type=color] { flex: 0 0 64px; }
-.settings-panel .fx-io { margin-top: 12px; }
+.settings-panel .set-sec { margin: 0 0 18px; }
+.settings-panel .set-sec:last-child { margin-bottom: 0; }
+.settings-panel .fx-pts { margin: 0 0 8px; }
+.settings-panel .set-body { display: flex; flex-direction: column; }
+.settings-panel .set-body > .fx-field { min-height: var(--row-h); padding: 4px 0; }
+.settings-panel .set-body > .fx-field + .fx-field {
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+
+/* Colour grid: an even two-column swatch grid (the swatch governs width). */
+.settings-panel .cmp-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px; row-gap: 6px;
+}
+.settings-panel .cmp-grid > .fx-field + .fx-field { border-top: none; }   /* grid, not a list */
+.settings-panel .swatch-field > span:first-child { flex: 1 1 auto; }
+/* Swatch chip — the native well reads as a flat colour tile. */
+.swatch {
+  flex: 0 0 auto; width: 46px; height: 22px; display: block; overflow: hidden;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
+}
+.swatch:hover { border-color: var(--line); }
+.swatch input[type=color] {
+  width: 100%; height: 100%; padding: 0; margin: 0; border: none; background: none; cursor: pointer;
+}
+.swatch input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch input[type=color]::-webkit-color-swatch { border: none; border-radius: 0; }
+.swatch input[type=color]::-moz-color-swatch { border: none; }
+
+/* Number fields align their right edge to the slider / checkbox rail above. */
+.settings-panel .num-field > span:first-child { flex: 1 1 auto; }
+.settings-panel .num-field input[type=number] {
+  flex: 0 0 var(--slider-w); width: var(--slider-w); text-align: right;
+}
+
+/* Section footer (e.g. 'reset colors') — right-aligned under a hairline. */
+.settings-panel .set-foot {
+  display: flex; justify-content: flex-end; padding-top: 8px; margin-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.settings-panel .set-foot .fx-del-link { grid-column: auto; padding: 0; }
+
+/* File I/O — equal-width docked pair. */
+.settings-panel .set-io { display: flex; gap: var(--s4); margin-top: 2px; }
+.settings-panel .set-io button { flex: 1 1 0; }

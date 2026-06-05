@@ -233,7 +233,6 @@ const layerPanel = createLayerPanel({
   thumbnails,
   onClipSelect: () => setInspectorTab('clip'), // clicking a clip focuses the Clip inspector
   onLayerSelect: () => setInspectorTab('layer'), // clicking the layer rectangle focuses the Layer inspector
-  onGroupSelect: () => setInspectorTab('composition'), // clicking the composition group focuses the Composition inspector
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -561,42 +560,41 @@ function renderChains() {
 }
 const renderOutputList = renderOutput; // back-compat alias
 
-// Runtime UI view state (NOT persisted). applyView only toggles DOM visibility,
-// the preview overlay, and drag interactivity — the render/sampler/output run
-// regardless of which tab is shown.
-const view = { activeTab: 'composition' };
-const tabsEl = document.getElementById('tabs');
-const deckbarEl = document.getElementById('deckbar');
-const inspectorColEl = document.getElementById('inspector-col');   // library now docks inside this
-const outputViewEl = document.getElementById('output-view');
-const fixturesViewEl = document.getElementById('fixtures-view');
-
-function applyView() {
-  const tab = view.activeTab;
-  const onComposition = tab === 'composition';
-  const onOutput = tab === 'output';
-  const onFixtures = tab === 'fixtures';
-
-  tabsEl?.querySelectorAll('.tab').forEach((b) => {
-    b.classList.toggle('tab-active', b.dataset.tab === tab);
-  });
-
-  if (deckbarEl) deckbarEl.hidden = !onComposition;
-  if (inspectorColEl) inspectorColEl.hidden = !onComposition;
-  if (outputViewEl) outputViewEl.hidden = !onOutput;
-  if (fixturesViewEl) fixturesViewEl.hidden = !onFixtures;
-
-  // Fixture overlay shows on Output + Fixtures (so you see/position fixtures),
-  // hidden on Composition for a clean composite. Drag is enabled wherever the
-  // overlay shows.
-  const overlay = onOutput || onFixtures;
-  if (previewCanvas) previewCanvas.style.display = overlay ? '' : 'none';
-  dragHandle?.setEnabled(overlay);
-  if (overlay) renderOutputList();
+// --- Workspace layout: there are NO top-level tabs. The deck, the Clip/Layer/
+//     Composition inspector, and the Output/Fixtures column are all visible at
+//     once. The fixture overlay (draggable rectangles on the canvas) is a
+//     separate toggle, decoupled from any tab. ---
+let overlayVisible = false;   // are the fixture rectangles shown over the composite?
+const overlayToggleBtn = document.getElementById('overlay-toggle');
+function setOverlay(v) {
+  overlayVisible = !!v;
+  if (previewCanvas) previewCanvas.style.display = overlayVisible ? '' : 'none';
+  dragHandle?.setEnabled(overlayVisible);
+  overlayToggleBtn?.classList.toggle('on', overlayVisible);
+  if (overlayToggleBtn) overlayToggleBtn.textContent = (overlayVisible ? '▣' : '▢') + ' fixtures';
+  if (overlayVisible) renderOutput();
+  redrawOverlay();
 }
+overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 
-// --- Settings dialog: a modal opened from the top-bar gear (not a workspace
-//     tab). Refreshes on open so it reads live snap/theme/gain state. ---
+// Output / Fixtures column sub-tabs (top level of that column).
+const ioTabsEl = document.getElementById('io-tabs');
+const ioPanes = {
+  output: document.getElementById('io-output'),
+  fixtures: document.getElementById('io-fixtures'),
+};
+function setIoTab(which) {
+  ioTabsEl?.querySelectorAll('.subtab').forEach((x) =>
+    x.classList.toggle('subtab-active', x.dataset.iotab === which));
+  for (const [k, pane] of Object.entries(ioPanes)) if (pane) pane.hidden = k !== which;
+}
+ioTabsEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.subtab');
+  if (b) setIoTab(b.dataset.iotab);
+});
+
+// --- Settings dialog: a modal opened from the top-bar gear. Refreshes on open
+//     so it reads live snap/theme/gain state. ---
 const settingsModal = document.getElementById('settings-modal');
 function openSettings() { settingsPanel.refresh(); if (settingsModal) settingsModal.hidden = false; }
 function closeSettings() { if (settingsModal) settingsModal.hidden = true; }
@@ -604,13 +602,6 @@ document.getElementById('g-settings')?.addEventListener('click', openSettings);
 settingsModal?.addEventListener('click', (e) => { if (e.target.dataset.close !== undefined) closeSettings(); });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && settingsModal && !settingsModal.hidden) { closeSettings(); e.preventDefault(); }
-});
-
-tabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.tab');
-  if (!b) return;
-  view.activeTab = b.dataset.tab;
-  applyView();
 });
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
@@ -634,9 +625,8 @@ document.addEventListener('keydown', (e) => {
   toggleGui();
 });
 
-// --- Top-bar chrome: reset timer · hide UI. (Master opacity now lives on the
-//     Composition GROUP head in the deck — see layers.js groupHead.) ---
-document.getElementById('g-reset')?.addEventListener('click', () => transport.reset());
+// --- Chrome: hide / show UI. (Master opacity lives in the Composition inspector
+//     tab; the timer-reset button was removed.) ---
 document.getElementById('g-hide')?.addEventListener('click', toggleGui);
 document.getElementById('show-ui')?.addEventListener('click', toggleGui);
 
@@ -646,22 +636,26 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   const t = e.target;
   if (typingIn(t)) return;
-  if (view.activeTab === 'composition') {
+  // With everything on one screen, the fixture overlay being visible (mapping
+  // mode) + a selected fixture is the signal to delete fixtures; otherwise the
+  // Delete acts on the composition (effect → layer → clip).
+  if (overlayVisible && selectedFixtureIds.size) {
+    const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
+    selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
+  } else {
     // Delete priority: a selected effect, else a selected layer, else the clip.
     // (Clicking a layer clears the clip selection, so a layer is the delete
     // target only when no clip is selected.)
     if (!layerPanel.deleteSelectedEffect?.() && !layerPanel.deleteSelectedLayer?.()) layerPanel.deleteActiveClip();
     e.preventDefault();
-  } else if (selectedFixtureIds.size) {
-    const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
-    selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
   }
 });
 
-// Arrow-key nudge on Output: move the selected fixture(s) by 1px (10px with
-// Shift). Same commit path as a canvas drag. Ignored while typing in a field.
+// Arrow-key nudge: move the selected fixture(s) by 1px (10px with Shift). Same
+// commit path as a canvas drag. Only while the fixture overlay is up (mapping
+// mode) with a selection; ignored while typing in a field.
 document.addEventListener('keydown', (e) => {
-  if (view.activeTab !== 'output' || !selectedFixtureIds.size) return;
+  if (!overlayVisible || !selectedFixtureIds.size) return;
   if (typingIn(e.target)) return;
   const step = e.shiftKey ? 10 : 1;
   let dx = 0; let dy = 0;
@@ -711,7 +705,12 @@ outputTabsEl?.addEventListener('click', (ev) => {
   if (b) setOutputTab(b.dataset.otab);
 });
 
-applyView();
+// Initial layout: Output column on its Output tab, the fixture overlay SHOWN by
+// default (you see your fixture layout on load; the canvas toggle hides it for a
+// clean composite preview), and the output list populated.
+setIoTab('output');
+setOverlay(true);
+renderOutput();
 
 // --- Video clips: a <video> element + GL texture per video clip (runtime only;
 // the show stores only the object URL). syncVideos() reconciles the map with the
