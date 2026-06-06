@@ -129,10 +129,7 @@ export function createPreview(canvasEl, opts = {}) {
           const idx = (span.start + hw) * 4;
           if (idx + 2 <= rgba.length - 1) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
         }
-        // Floor each channel to a dim value so an OFF pixel still reads as a faint
-        // cell (the strip shows its pixel grid even over black); lit content lights
-        // it brighter. Preview-only — the wall output uses the true rgba.
-        return `rgb(${Math.max(r, 20)},${Math.max(g, 20)},${Math.max(b, 24)})`;
+        return `rgb(${r},${g},${b})`;   // true sampled colour; off pixels stay dark
       };
       const sx = (i) => (pts[i][0] + ox) * W, sy = (i) => (pts[i][1] + oy) * Hh;
       ctx.save();
