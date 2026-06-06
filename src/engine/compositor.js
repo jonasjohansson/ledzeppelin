@@ -288,7 +288,10 @@ export function makeCompositor(gl, w, h) {
     // Start a transition if the target changed and we're not already heading there.
     if (target !== st.displayed &&
         (!st.transition || st.transition.toClipId !== target)) {
-      st.transition = { fromClipId: st.displayed, toClipId: target, startT: timeSec };
+      // Clearing (eject → null) is INSTANT — a clear should kill the layer
+      // immediately, not fade out over the crossfade time. Clip→clip still fades.
+      if (target === null) { st.displayed = null; st.transition = null; }
+      else st.transition = { fromClipId: st.displayed, toClipId: target, startT: timeSec };
     }
     // If a transition's target no longer matches the layer's target, retarget.
     // (Handles re-trigger mid-fade: settle is keyed off the current target below.)

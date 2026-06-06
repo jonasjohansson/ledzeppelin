@@ -16,10 +16,12 @@ uniform float uPhase;   // integrated speed·time — continuous across speed ch
 uniform float amp;
 void main(){
   float a = radians(angle);
-  float coord = uv.x*cos(a) + uv.y*sin(a);
-  // pos is the BASE position; the line sweeps around it. speed=0 ⇒ static.
-  float sweptPos = pos + amp * sin(uPhase);
-  float d = abs(coord - sweptPos);
+  // Signed distance from the CANVAS CENTRE along the line normal, so changing
+  // the angle pivots the line about the centre (not a corner).
+  float coord = (uv.x - 0.5) * cos(a) + (uv.y - 0.5) * sin(a);
+  // pos is the BASE position (0.5 = centre); the line sweeps ±amp around it.
+  float target = (pos - 0.5) + amp * sin(uPhase);
+  float d = abs(coord - target);
   float v = smoothstep(width, 0.0, d);
   frag = vec4(vec3(v), 1.0);
 }`;
@@ -165,6 +167,40 @@ void main(){
   frag = vec4(vec3(v), 1.0);
 }`;
 
+// Radial — a triggerable ring that expands FROM THE CENTRE outward: the in-the-
+// round twin of Pulse. A centred fixture layout sampling this lights middle-out.
+// Self-animates when autoFire is on (loops on uT); otherwise each ⚡ fires an
+// independent ring (uTrigs stack, brightest wins). `count` tiles concentric
+// rings; `aspect` (canvas w/h, default 16:9) keeps rings circular; centerX/Y move
+// the origin. (No resolution uniform reaches generators, so aspect is a param.)
+const RADIAL = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT; uniform float uTrigs[8]; uniform int uTrigCount;
+uniform float speed; uniform float width; uniform float softness;
+uniform float count; uniform float aspect; uniform float centerX; uniform float centerY;
+uniform float autoFire;
+float radius(){
+  vec2 p = uv - vec2(centerX, centerY);
+  p.x *= max(aspect, 1e-4);                       // undo canvas stretch => circular
+  float norm = length(vec2(0.5 * max(aspect, 1e-4), 0.5));
+  return length(p) / max(norm, 1e-4);             // ~0 at centre, ~1 at the corner
+}
+float ringAt(float prog, float r){
+  float n = max(1.0, count);
+  float rr = fract(r * n), edge = fract(prog * n);
+  float d = edge - rr; if (d < 0.0) d += 1.0;     // distance inside the expanding edge
+  if (prog > 1.0 + width) return 0.0;
+  float w = max(1e-4, width);
+  if (d > w) return 0.0;
+  return pow(1.0 - d / w, mix(1.0, 4.0, clamp(softness, 0.0, 1.0)));
+}
+void main(){
+  float r = radius(), sp = max(0.0001, speed), v = 0.0;
+  if (autoFire > 0.5) { v = ringAt(fract(uT * sp), r); }
+  else { for (int i = 0; i < 8; i++) { if (i >= uTrigCount) break; v = max(v, ringAt(uTrigs[i] * sp, r)); } }
+  frag = vec4(vec3(v), 1.0);
+}`;
+
 const DISPLACE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float amt; uniform float uT;
@@ -294,8 +330,9 @@ uniform sampler2D uTex; uniform float level;
 void main(){ vec4 c=texture(uTex,uv); float l=dot(c.rgb,vec3(0.299,0.587,0.114));
   frag=vec4(vec3(step(level,l)), c.a); }`;
 
-// Color — one effect bundling the common level setters (gamma → brightness →
-// contrast → saturation), so you don't stack four separate effects.
+// Grade — one effect bundling the common level setters (gamma → brightness →
+// contrast → saturation), so you don't stack four separate effects. (Internal
+// key stays 'color' so saved compositions keep their 'color.*' params.)
 const COLOR = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex;
@@ -319,9 +356,10 @@ export const REGISTRY = {
       { key: 'width', type: 'float', min: 0, max: 0.5, default: 0.08 },
       { key: 'angle', type: 'float', min: 0, max: 360, default: 90 },
       { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
-      // amp + (line half-width) must stay ≤ 0.5 so the swept line never clips the
-      // canvas edge: 0.4 + 0.08 = 0.48 → reaches near the edges, stays inside.
-      { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.4 },
+      // amp 0.5 sweeps the centre-anchored line edge-to-edge (reaches top & bottom
+      // at angle 90); the half-width spills slightly past the edge at the extremes,
+      // which is wanted so the edge LEDs fully light.
+      { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.5 },
     ],
   },
   gradient: {
@@ -403,6 +441,19 @@ export const REGISTRY = {
       { key: 'autoFire', type: 'bool', default: false },
     ],
   },
+  radial: {
+    name: 'radial', type: 'generator', src: RADIAL, triggerable: true,
+    params: [
+      { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'width', type: 'float', min: 0.01, max: 1, default: 0.25 },
+      { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'count', type: 'float', min: 1, max: 8, default: 1, step: 1 },
+      { key: 'aspect', type: 'float', min: 0.1, max: 4, default: 1.7778 },
+      { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'autoFire', type: 'bool', default: true },
+    ],
+  },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -458,21 +509,6 @@ export const REGISTRY = {
       { key: 'gamma', type: 'float', min: 0.1, max: 3, default: 1 },
     ],
   },
-  brightcontrast: {
-    name: 'brightcontrast', type: 'effect', src: BRIGHTCONTRAST,
-    params: [
-      { key: 'brightness', type: 'float', min: 0, max: 3, default: 1 },
-      { key: 'contrast', type: 'float', min: 0, max: 3, default: 1 },
-    ],
-  },
-  saturation: {
-    name: 'saturation', type: 'effect', src: SATURATION,
-    params: [{ key: 'amount', type: 'float', min: 0, max: 3, default: 1 }],
-  },
-  gamma: {
-    name: 'gamma', type: 'effect', src: GAMMA,
-    params: [{ key: 'gamma', type: 'float', min: 0.1, max: 3, default: 1 }],
-  },
   invert: {
     name: 'invert', type: 'effect', src: INVERT,
     params: [{ key: 'amount', type: 'float', min: 0, max: 1, default: 1 }],
@@ -514,11 +550,10 @@ export function hexToRgb(hex) {
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Solid Color', kelvin: 'White (Kelvin)',
   chase: 'Chase', wave: 'Wave', sine: 'Sine',
-  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', video: 'Video',
+  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
-  color: 'Color', brightcontrast: 'Brightness/Contrast', saturation: 'Saturation',
-  gamma: 'Gamma', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
+  color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);

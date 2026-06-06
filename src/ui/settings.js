@@ -12,17 +12,7 @@
 //   snap: { enabled(), setEnabled(b), grid(), setGrid(n), dist(), setDist(n) }
 
 import { setShowAudioGain, setCompositionTransition } from '../model/layers.js';
-import { THEME_TOKENS, tokenValue, setToken, resetTheme } from './theme.js';
-
-const el = (tag, props = {}, kids = []) => {
-  const n = document.createElement(tag);
-  Object.assign(n, props);
-  for (const k of kids) n.append(k);
-  return n;
-};
-
-const field = (label, control, cls = '') =>
-  el('label', { className: 'fx-field' + (cls ? ' ' + cls : '') }, [el('span', { textContent: label }), control]);
+import { el, field } from './dom.js';
 
 // A titled section: an accent-underline header + a row body. All inter-row and
 // inter-section rhythm lives in CSS (.set-sec / .set-body), not inline here.
@@ -41,22 +31,7 @@ export function createSettingsPanel({ getShow, setShow, loadComposition, snap })
   function render() {
     root.textContent = '';
 
-    // --- Appearance: live GUI theme. Each picker writes a CSS token immediately
-    //     and persists it; the whole UI updates as you drag. Pickers are flat
-    //     swatch chips (the raw OS well reads as a colour tile). ---
-    const colorGrid = el('div', { className: 'set-body cmp-grid' });
-    for (const [label, varName] of THEME_TOKENS) {
-      const picker = el('input', { type: 'color', value: tokenValue(varName) });
-      picker.addEventListener('input', () => setToken(varName, picker.value));
-      colorGrid.append(field(label, el('span', { className: 'swatch' }, [picker]), 'swatch-field'));
-    }
-    root.append(el('div', { className: 'set-sec' }, [
-      el('div', { className: 'fx-pts', textContent: 'appearance' }),
-      colorGrid,
-      el('div', { className: 'set-foot' }, [
-        el('button', { className: 'fx-del-link', textContent: 'reset colors', onclick: () => { resetTheme(); render(); } }),
-      ]),
-    ]));
+    // (Appearance/theme pickers removed — the app ships one curated base design.)
 
     // --- Audio input: global gain on the mic before it drives Audio-mode params.
     //     ×0 mutes, ×1 unity, up to ×8 to boost quiet input. ---

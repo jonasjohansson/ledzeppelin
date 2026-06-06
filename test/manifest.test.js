@@ -18,7 +18,7 @@ test('color params expose hex-string defaults', () => {
 });
 
 test('defaultParams(line) returns the expected defaults', () => {
-  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.4 });
+  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.5 });
 });
 
 test('defaultParams of an unknown name is empty', () => {
@@ -26,9 +26,9 @@ test('defaultParams of an unknown name is empty', () => {
 });
 
 test('registry contains the expected generators and effects', () => {
-  assert.deepEqual(generatorNames().sort(), ['chase', 'checkers', 'gradient', 'grid', 'kelvin', 'line', 'pulse', 'sine', 'solid', 'wave']);
+  assert.deepEqual(generatorNames().sort(), ['chase', 'checkers', 'gradient', 'grid', 'kelvin', 'line', 'pulse', 'radial', 'sine', 'solid', 'wave']);
   assert.deepEqual(effectNames().sort(),
-    ['brightcontrast', 'cascade', 'color', 'colorize', 'displace', 'gamma', 'hue', 'invert', 'repeat', 'rgb', 'saturation', 'segmenter', 'strobe', 'threshold']);
+    ['cascade', 'color', 'colorize', 'displace', 'hue', 'invert', 'repeat', 'rgb', 'segmenter', 'strobe', 'threshold']);
   for (const name of ['line', 'gradient', 'solid', 'kelvin', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize']) {
     const e = REGISTRY[name];
     assert.ok(e, `${name} missing`);

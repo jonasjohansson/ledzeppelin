@@ -45,16 +45,18 @@ test('single device still yields byteStart 0', () => {
   assert.equal(route[0].byteStart, 0);
 });
 
-test('a fixture colorOrder overrides the device default in its segment', () => {
+test('the device colorOrder is authoritative for every segment on it', () => {
+  // Colour order is a CONTROLLER setting, so the device's order wins even when a
+  // fixture carries its own (cached from its type) — see pipeline.js.
   let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
-  s = addFixture(s, { id: 'a', name: 'a', pixelCount: 2, colorOrder: 'GRB',
+  s = addFixture(s, { id: 'a', name: 'a', pixelCount: 2, colorOrder: 'RGB',
     output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 2 }, input: { points: [[0, 0], [0, 1]], samples: 2 } });
-  s = addFixture(s, { id: 'b', name: 'b', pixelCount: 2, colorOrder: 'RGB',   // different chip on same controller
+  s = addFixture(s, { id: 'b', name: 'b', pixelCount: 2, colorOrder: 'BGR',
     output: { deviceId: 'c1', pixelOffset: 2, pixelCount: 2 }, input: { points: [[1, 0], [1, 1]], samples: 2 } });
   const { route } = buildPipelineInputs(s);
   assert.deepEqual(route[0].segments, [
     { start: 0, count: 2, colorOrder: 'GRB' },
-    { start: 2, count: 2, colorOrder: 'RGB' },
+    { start: 2, count: 2, colorOrder: 'GRB' },
   ]);
 });
 

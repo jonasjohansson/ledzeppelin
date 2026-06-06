@@ -10,17 +10,22 @@
 canvas{display:block}
 /* Status bar: a solid footer strip (application chrome). Mono face mirrors --ui-font;
    inline because this <style> runs before ui.css defines the token. */
-#hud{position:fixed;bottom:0;left:0;right:0;height:24px;display:flex;align-items:center;gap:16px;padding:0 12px;z-index:6;pointer-events:none;color:#9aa2ac;background:#181a1f;border-top:1px solid #2d3139;font:11px "Spline Sans Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}</style>
+#hud{display:flex;align-items:center;gap:14px;padding:0 4px;color:var(--muted);font:11px var(--mono,"Spline Sans Mono",ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
-<div id="hud">booting…</div>
-<button id="show-ui" title="show the UI (H)">▸ show UI</button>
-<!-- Bottom-left cluster floating over the canvas (no top bar): the fixtures
-     overlay toggle, settings, and hide UI. -->
+<!-- Hidden file input for Settings › Open show. -->
+<input id="open-show-file" type="file" accept=".json,application/json" style="display:none">
+<!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI
+     toggles, the zoom pill (appended at runtime), then the live telemetry inline. -->
 <div id="corner-controls">
+  <!-- Hide/show UI is FIRST so it keeps the same far-left spot whether or not the
+       rest of the cluster is visible (it's the only control shown while hidden). -->
+  <button id="g-hide" class="g-btn" title="hide all UI (H)">Hide UI</button>
+  <button id="menu-file" class="g-btn" title="project file actions">File</button>
+  <button id="menu-audio" class="g-btn" title="audio input">Audio</button>
   <button id="overlay-toggle" title="show/hide fixtures on the canvas">▢ fixtures</button>
-  <button id="g-settings" class="g-btn" title="settings">⚙ settings</button>
-  <button id="g-hide" class="g-btn" title="hide all UI (H)">hide UI</button>
+  <button id="snap-btn" title="snap fixtures to each other & the grid">▢ snap</button>
+  <div id="hud">booting…</div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
      letterboxed to the composition aspect; the UI panels float over it. -->
@@ -35,6 +40,11 @@ canvas{display:block}
   <div id="left">
     <section id="deckbar" class="panel"></section>
   </div>
+
+  <!-- INSPECTOR: the selected item's editor in Output (fixture position / device
+       settings / library model). Sits just left of the right panel so it reads as
+       part of the right-hand controls. Empty + hidden otherwise. -->
+  <aside id="output-inspector" class="panel" hidden></aside>
 
   <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
        Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
@@ -67,35 +77,23 @@ canvas{display:block}
     <!-- OUTPUT -->
     <div id="output-pane" hidden>
       <div class="subtabs" id="io-tabs">
+        <!-- data-otab keys are internal (kept stable); labels are user-facing.
+             "Inventory" = the catalog of models, distinct from Design's Sources shelf. -->
         <button class="subtab subtab-active" data-otab="fixtures">Fixtures</button>
-        <button class="subtab" data-otab="chains">Chains</button>
         <button class="subtab" data-otab="devices">Devices</button>
+        <button class="subtab" data-otab="library">Inventory</button>
       </div>
       <div id="io-body">
-        <div class="output-tools" id="io-tools">
-          <label class="snap-toggle"><input type="checkbox" id="snap-cb"> snap</label>
-          <span class="seg-hint">place &amp; adjust — drag to move · knob/⟳ rotate · ⇄ flip · ←↑↓→ nudge</span>
-        </div>
+        <!-- Fixtures tab: the placement / wiring list. -->
         <div id="output-list"></div>
-        <div id="fixtures-design"></div>
+        <!-- Devices tab: the actual controller instances (name / ip / model). -->
         <div id="devices-design"></div>
+        <!-- Library tab: the catalog of models — controller types + fixture types. -->
+        <div id="library-design"></div>
       </div>
     </div>
   </aside>
 
-</div>
-
-<!-- SETTINGS: a traditional preferences DIALOG (opened from the top-bar gear),
-     centred over a dimmed backdrop — app-wide prefs, not a workspace tab. -->
-<div id="settings-modal" class="modal" hidden>
-  <div class="modal-backdrop" data-close></div>
-  <div class="modal-card" role="dialog" aria-label="Settings" aria-modal="true">
-    <div class="modal-head">
-      <span class="modal-title">Settings</span>
-      <button id="settings-close" class="modal-close" title="close (Esc)" data-close>✕</button>
-    </div>
-    <div id="settings-panel" class="modal-body"></div>
-  </div>
 </div>
 <script type="module" src="./src/app.js"></script></body>
 </html>

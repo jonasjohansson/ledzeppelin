@@ -29,10 +29,17 @@ function orderDeviceBytes(slice, d) {
   return out;
 }
 
+// Temporarily stop streaming DDP to a controller so its (realtime-starved) HTTP
+// server can answer config/identify requests. Keyed by ip → unix-ms expiry.
+const suppressUntil = new Map();
+export function suppressOutput(ip, ms = 6000) { suppressUntil.set(ip, Date.now() + ms); }
+
 // devices: [{ ip, port=4048, colorOrder, byteStart, byteEnd, segments? }]
 export function sendFrame(rgb, devices) {
   seq = (seq + 1) & 0x0f;
   for (const d of devices) {
+    const until = suppressUntil.get(d.ip);
+    if (until && until > Date.now()) continue;   // paused for a control op
     const slice = rgb.subarray(d.byteStart, d.byteEnd);
     const ordered = orderDeviceBytes(slice, d);
     const lut = deviceLut(d);

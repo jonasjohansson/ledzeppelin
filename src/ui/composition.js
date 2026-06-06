@@ -12,30 +12,13 @@
 // Just two free fields (width/height) + a readout; Apply commits via setSize.
 
 import { clampCanvasSize } from '../model/layers.js';
-
-const el = (tag, props = {}, kids = []) => {
-  const n = document.createElement(tag);
-  Object.assign(n, props);
-  for (const k of kids) n.append(k);
-  return n;
-};
-
-const field = (label, control) =>
-  el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
-
-// gcd-based aspect string (e.g. 1280×720 → "16:9"). Falls back to "—" on 0.
-function aspectLabel(w, h) {
-  if (!(w > 0) || !(h > 0)) return '—';
-  const g = (a, b) => (b ? g(b, a % b) : a);
-  const d = g(Math.round(w), Math.round(h));
-  return `${Math.round(w) / d}:${Math.round(h) / d}`;
-}
+import { el, field } from './dom.js';
 
 // createCompositionPanel({ getShow, setSize })
 //   Canvas resolution only. Composition-global preferences (crossfade, audio
 //   gain, theme, file I/O) moved to the global Settings panel; master opacity
 //   moved to the Composition group head + its inspector.
-export function createCompositionPanel({ getShow, setSize }) {
+export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTitle }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
 
   // Working draft of the fields (not yet applied). Seeded from the show.
@@ -49,8 +32,12 @@ export function createCompositionPanel({ getShow, setSize }) {
     root.textContent = '';
     draft = currentCanvas();
 
-    // (Title omitted — the COMPOSITION tab already names this view; master
-    //  opacity lives in the top-bar globals.)
+    // --- Title — names the composition; saved with it (commits on blur/enter). ---
+    if (setTitle) {
+      const title = el('input', { type: 'text', placeholder: 'untitled', value: getShow().composition?.title || '' });
+      title.addEventListener('change', () => setTitle(title.value.trim()));
+      root.append(el('div', { className: 'fx-card cmp-grid' }, [field('Title', title)]));
+    }
 
     // --- Width / height fields (reflect the draft) ---
     const mkNum = (value, onInput) => {
@@ -58,23 +45,14 @@ export function createCompositionPanel({ getShow, setSize }) {
       i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
       return i;
     };
-    const wInput = mkNum(draft.w, (x) => { draft = { ...draft, w: x }; updateReadout(); });
-    const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; updateReadout(); });
+    const wInput = mkNum(draft.w, (x) => { draft = { ...draft, w: x }; });
+    const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; });
 
     const grid = el('div', { className: 'fx-card cmp-grid' }, [
       field('Width', wInput),
       field('Height', hInput),
     ]);
     root.append(grid);
-
-    // --- Readout (clamped draft size + aspect) ---
-    const readout = el('div', { className: 'cmp-readout' });
-    const updateReadout = () => {
-      const c = clampCanvasSize(draft.w, draft.h);
-      readout.textContent = `${c.w} × ${c.h}  ·  ${aspectLabel(c.w, c.h)}`;
-    };
-    updateReadout();
-    root.append(readout);
 
     // --- Apply ---
     root.append(el('button', {
@@ -85,6 +63,16 @@ export function createCompositionPanel({ getShow, setSize }) {
         render();
       },
     }));
+
+    // --- Fit to fixtures (fluid canvas — let the strips decide the size) ---
+    if (fitToFixtures) {
+      root.append(el('button', {
+        className: 'fx-add cmp-fit', textContent: 'fit to fixtures',
+        title: 'resize the canvas to exactly contain the placed fixtures',
+        onclick: () => { fitToFixtures(); render(); },
+      }));
+    }
+    // (Crossfade is now a PER-LAYER setting in the Layer inspector — default 500.)
   }
 
   render();
