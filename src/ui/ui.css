@@ -117,7 +117,12 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
 
 /* --- Output mapping: fixture list --- */
-.output-tools { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+.output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 6px 0 10px; }
+.output-tools select {
+  width: 100%; box-sizing: border-box; background: var(--field-bg); color: var(--text);
+  border: 1px solid var(--field-border); border-radius: var(--radius);
+  padding: 5px 7px; font: var(--fs-body) var(--sans); cursor: pointer;
+}
 #add-fixture { color: var(--green); border-color: var(--line); }
 .snap-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--fs-body); color: var(--muted); cursor: pointer; }
 .snap-toggle input { width: auto; accent-color: var(--accent); }

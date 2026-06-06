@@ -171,14 +171,15 @@ void main(){
 // round twin of Pulse. A centred fixture layout sampling this lights middle-out.
 // Self-animates when autoFire is on (loops on uT); otherwise each ⚡ fires an
 // independent ring (uTrigs stack, brightest wins). `count` tiles concentric
-// rings; `aspect` (canvas w/h, default 16:9) keeps rings circular; centerX/Y move
-// the origin. (No resolution uniform reaches generators, so aspect is a param.)
+// rings; the `aspect` uniform is injected by the compositor as the live canvas
+// w/h so rings stay circular on any canvas; centerX/Y move the origin; reverse
+// makes rings travel inward.
 const RADIAL = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uT; uniform float uTrigs[8]; uniform int uTrigCount;
 uniform float speed; uniform float width; uniform float softness;
 uniform float count; uniform float aspect; uniform float centerX; uniform float centerY;
-uniform float autoFire;
+uniform float autoFire; uniform float reverse;
 float radius(){
   vec2 p = uv - vec2(centerX, centerY);
   p.x *= max(aspect, 1e-4);                       // undo canvas stretch => circular
@@ -187,7 +188,9 @@ float radius(){
 }
 float ringAt(float prog, float r){
   float n = max(1.0, count);
-  float rr = fract(r * n), edge = fract(prog * n);
+  float rr = fract(r * n);
+  // reverse ⇒ rings travel INWARD (radius shrinks as prog grows) instead of out.
+  float edge = fract((reverse > 0.5 ? -prog : prog) * n);
   float d = edge - rr; if (d < 0.0) d += 1.0;     // distance inside the expanding edge
   if (prog > 1.0 + width) return 0.0;
   float w = max(1e-4, width);
@@ -448,9 +451,9 @@ export const REGISTRY = {
       { key: 'width', type: 'float', min: 0.01, max: 1, default: 0.25 },
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'count', type: 'float', min: 1, max: 8, default: 1, step: 1 },
-      { key: 'aspect', type: 'float', min: 0.1, max: 4, default: 1.7778 },
       { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'reverse', type: 'bool', default: false },
       { key: 'autoFire', type: 'bool', default: true },
     ],
   },

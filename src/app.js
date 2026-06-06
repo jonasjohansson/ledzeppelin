@@ -630,16 +630,20 @@ function addInstance(typeId) {
   let n = next.fixtures.length + 1, id;
   do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
   const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  // Default = a thin VERTICAL strip: thickness (width) 10 px, run (height) = the
-  // pixel count, 1px/LED — so 96/m × 10m = 960 px tall. (w is the sample-run axis;
-  // rotation 90° stands it up → AABB 10 wide × pixelCount tall.)
-  const transform = { x: cv.w / 2, y: cv.h / 2, w: t.pixelCount, h: 10, rotation: 90 };
+  // Drop new strips at the TOP-LEFT (cascaded so successive adds don't fully
+  // overlap) so they're easy to spot, and leave them UNASSIGNED (no device) — they
+  // land in the "Unassigned" group until you wire them to an output. A thin
+  // VERTICAL strip: thickness 10 px, run = pixel count (rotation 90° stands it up).
+  const k = next.fixtures.length;
+  const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 10, rotation: 90 };
   next.fixtures.push({
     id, typeId: t.id,
-    output: { deviceId: next.devices[0]?.id ?? '', port: 1, pixelOffset: 0, pixelCount: t.pixelCount },
+    output: { deviceId: '', port: 1, pixelOffset: 0, pixelCount: t.pixelCount },
     input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
   });
   selectedFixtureIds = new Set([id]);
+  expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
+  setOverlay(true);   // reveal the canvas overlay so the new strip is visible
   saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
 }
 
@@ -751,21 +755,24 @@ function renderOutput() {
     g.items.push({ f, i });
   });
   const swatch = (color) => { const s = oel('span', { className: 'out-swatch' }); s.style.background = color; return s; };
+  // Unassigned fixtures (no device) sort to the TOP so freshly-added strips are
+  // obvious and easy to find before you wire them.
+  devOrder.sort((a, b) => (a.deviceId === '' ? 0 : 1) - (b.deviceId === '' ? 0 : 1));
 
   for (const dg of devOrder) {
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
-    const devName = gdev?.name || dg.deviceId || '—';
+    const devName = gdev?.name || dg.deviceId || 'Unassigned';
     const devFx = dg.groups.reduce((m, g) => m + g.items.length, 0);
     const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const hasSel = dg.groups.some((g) => g.items.some((it) => selectedFixtureIds.has(it.f.id)));
-    const devOpen = expandedDevices.has(dg.deviceId) || hasSel;
+    const devOpen = expandedDevices.has(dg.deviceId);   // caret is authoritative; selecting a fixture adds it to the set (auto-reveal) but you can still collapse
     // Controller header. Clicking the NAME selects every fixture on the device;
     // clicking elsewhere on the header expands/collapses it.
     const devNameEl = oel('span', { className: 'out-group-dev', textContent: devName, title: `select all fixtures on ${devName}` });
     devNameEl.onclick = (ev) => {
       ev.stopPropagation();
+      expandedDevices.add(dg.deviceId);   // selecting all reveals the group
       selectedFixtureIds = new Set(show.fixtures.filter((f) => (f.output?.deviceId || '') === dg.deviceId).map((f) => f.id));
       renderOutput(); redrawOverlay();
     };
@@ -784,7 +791,7 @@ function renderOutput() {
       if (singleOut) { for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i)); continue; }
       const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
       const over = gcap > 0 && totalPx > gcap;
-      const collapsed = !expandedGroups.has(g.key) && !g.items.some((it) => selectedFixtureIds.has(it.f.id));
+      const collapsed = !expandedGroups.has(g.key);
       const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · output ${g.port}` }, [
         oel('span', { className: 'out-caret', textContent: collapsed ? '▸' : '▾' }),
         swatch(runColor(g.deviceId, g.port)),

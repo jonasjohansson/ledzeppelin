@@ -140,6 +140,11 @@ export function makeCompositor(gl, w, h) {
       if (p.type === 'color') { const [r, g, b] = hexToRgb(v); gl.uniform3f(l, r, g, b); }
       else gl.uniform1f(l, Number(v));
     }
+    // aspect — inject the REAL canvas aspect (w/h) so radial-type generators stay
+    // circular on any canvas shape (overrides any stale param value).
+    const uAspectGen = loc(c, 'aspect');
+    if (uAspectGen !== null) gl.uniform1f(uAspectGen, w / Math.max(1, h));
+
     // uT (seconds) — always try; only set if the shader declares it.
     const uT = loc(c, 'uT');
     if (uT !== null) gl.uniform1f(uT, timeSec);

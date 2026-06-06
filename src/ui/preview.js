@@ -47,7 +47,10 @@ export function createPreview(canvasEl, opts = {}) {
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
     const dpr = window.devicePixelRatio || 1;
-    const k = Math.max(1, Math.min(viewZoom * dpr, 6));
+    // Raise the backing resolution with zoom for crisp overlay, bounded so the
+    // backing never exceeds ~8192 px on its long side (GPU/canvas limit).
+    const maxK = Math.max(2, 8192 / Math.max(1, BASE_W, BASE_H));
+    const k = Math.max(1, Math.min(viewZoom * dpr, maxK));
     const w = Math.round(BASE_W * k), h = Math.round(BASE_H * k);
     if (canvasEl.width !== w) { canvasEl.width = w; canvasEl.height = h; }
   }
@@ -120,30 +123,38 @@ export function createPreview(canvasEl, opts = {}) {
       const count = pts.length;
       const thick = Math.max(2, Number(f.input?.transform?.h) || 8);
       const colAt = (i) => {
-        let r = 14, g = 14, b = 18;              // unlit: near-black so lit pixels pop
+        let r = 0, g = 0, b = 0;
         if (rgba) {
           const hw = reversed ? count - 1 - i : i;   // honor flip (pixel-0 end)
           const idx = (span.start + hw) * 4;
           if (idx + 2 <= rgba.length - 1) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
         }
-        return `rgb(${r},${g},${b})`;
+        // Floor each channel to a dim value so an OFF pixel still reads as a faint
+        // cell (the strip shows its pixel grid even over black); lit content lights
+        // it brighter. Preview-only — the wall output uses the true rgba.
+        return `rgb(${Math.max(r, 20)},${Math.max(g, 20)},${Math.max(b, 24)})`;
       };
       const sx = (i) => (pts[i][0] + ox) * W, sy = (i) => (pts[i][1] + oy) * Hh;
       ctx.save();
       if (count >= 1) {
-        // Cell side = the pixel pitch along the strip (so cells tile), capped by the
-        // strip thickness; rotate the square to the strip's own angle.
+        // Each LED is a RECTANGLE that fills the strip: pitch ALONG the run × the
+        // strip thickness ACROSS it, rotated to the strip's angle. So the lit strip
+        // is a solid band of per-pixel colour (the composite reads ON the strip),
+        // not a thin dotted line.
         const ex = (f.input.points[f.input.points.length - 1] || [0, 0]), e0 = (f.input.points[0] || [0, 0]);
         const ang = Math.atan2((ex[1] - e0[1]) * Hh, (ex[0] - e0[0]) * W);
         const pitch = count >= 2 ? Math.hypot(sx(1) - sx(0), sy(1) - sy(0)) : thick;
-        const cell = Math.max(1.5, Math.min(thick, pitch * 1.08));
-        const half = cell / 2;
+        // Each LED is its own rectangle with a hairline gap on every side, so the
+        // strip reads as a grid of defined pixels (Resolume-style), not a solid bar.
+        const gap = Math.min(2, Math.max(0.4, pitch * 0.18));
+        const along = Math.max(1, pitch - gap);
+        const across = Math.max(2, thick - gap);     // fill the thickness, minus the gap
         for (let i = 0; i < count; i++) {
           ctx.save();
           ctx.translate(sx(i), sy(i));
           ctx.rotate(ang);
           ctx.fillStyle = colAt(i);
-          ctx.fillRect(-half, -half, cell, cell);
+          ctx.fillRect(-along / 2, -across / 2, along, across);
           ctx.restore();
         }
       }
