@@ -35,26 +35,61 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
   const prog = program(gl, SAMPLE_FS);
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
-  const out = new Uint8Array(W * H * 4);
+  const byteLen = W * H * 4;
+  const out = new Uint8Array(byteLen);
+  const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
+
+  // ASYNC READBACK via double-buffered Pixel-Pack Buffers: `readPixels` into a PBO
+  // is non-blocking, and we fetch the PREVIOUS frame's PBO (already finished) — so
+  // the CPU never stalls waiting on the GPU. Costs +1 frame of latency (~24ms at
+  // 42fps, imperceptible for LED output). A fence guards the read; if the GPU is
+  // momentarily behind we reuse the last good frame rather than block.
+  const pbos = [gl.createBuffer(), gl.createBuffer()];
+  for (const b of pbos) { gl.bindBuffer(gl.PIXEL_PACK_BUFFER, b); gl.bufferData(gl.PIXEL_PACK_BUFFER, byteLen, gl.STREAM_READ); }
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  const fences = [null, null];
+  let widx = 0, primed = false, lastValid = null;
+
   return { n,
     dispose() {
       gl.deleteTexture(map);
       gl.deleteTexture(target.tex);
       gl.deleteFramebuffer(target.fbo);
       gl.deleteProgram(prog);
+      for (const b of pbos) gl.deleteBuffer(b);
+      for (const s of fences) if (s) gl.deleteSync(s);
     },
     sample(canvasTex) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
-    gl.viewport(0, 0, W, H);
-    gl.useProgram(prog);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, canvasTex);
-    gl.uniform1i(locCanvas, 0);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, map);
-    gl.uniform1i(locMap, 1);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, out);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    // Row-major readback is already in linear LED order; trim the grid padding.
-    return (W * H === n) ? out : out.subarray(0, n * 4);
-  }};
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+      gl.viewport(0, 0, W, H);
+      gl.useProgram(prog);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, canvasTex);
+      gl.uniform1i(locCanvas, 0);
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, map);
+      gl.uniform1i(locMap, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+      // Kick off this frame's readback into the write-PBO (async).
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[widx]);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // 0 = offset into bound PBO ⇒ async
+      if (fences[widx]) gl.deleteSync(fences[widx]);
+      fences[widx] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Fetch the OTHER PBO (last frame's, already complete) if its fence signaled.
+      const ridx = widx ^ 1;
+      widx = ridx;
+      if (primed && fences[ridx]) {
+        const s = gl.clientWaitSync(fences[ridx], 0, 0);
+        if (s === gl.ALREADY_SIGNALED || s === gl.CONDITION_SATISFIED) {
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[ridx]);
+          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          lastValid = trim(out);
+        }
+      }
+      primed = true;
+      return lastValid;   // null on the first frame(s); app.js guards on falsy
+    } };
 }

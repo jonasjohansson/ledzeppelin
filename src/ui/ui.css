@@ -207,6 +207,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 #stageinner canvas#stage { display: block; width: 100vw; height: auto; }
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Vector chrome layer over the lights canvas — stays sharp under the zoom/pan
+   transform (SVG re-rasterizes, unlike the canvas bitmap). Non-interactive so the
+   #preview canvas keeps the pointer hit-testing. */
+#ovl { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
 /* The panels overlay the canvas: the container passes clicks through to the
    canvas, the panels themselves capture them. */

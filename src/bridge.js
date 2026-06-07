@@ -39,12 +39,18 @@ export function connectBridge(route) {
   };
   open();
 
+  let rgbBuf = null;   // reused RGB frame buffer (re-alloc only when LED count changes)
   return {
     send(rgba) {
       if (!ws || ws.readyState !== 1) return;
-      const n = rgba.length / 4; const rgb = new Uint8Array(n * 3);
-      for (let i = 0; i < n; i++) { rgb[i * 3] = rgba[i * 4]; rgb[i * 3 + 1] = rgba[i * 4 + 1]; rgb[i * 3 + 2] = rgba[i * 4 + 2]; }
-      ws.send(rgb);
+      const n = rgba.length / 4;
+      // Backpressure: only the LATEST frame matters for the wall, so if the socket
+      // is already backed up (slow daemon / congested link) drop this frame rather
+      // than queue it — keeps output latency bounded instead of growing without end.
+      if (ws.bufferedAmount > n * 3 * 2) return;
+      if (!rgbBuf || rgbBuf.length !== n * 3) rgbBuf = new Uint8Array(n * 3);
+      for (let i = 0; i < n; i++) { rgbBuf[i * 3] = rgba[i * 4]; rgbBuf[i * 3 + 1] = rgba[i * 4 + 1]; rgbBuf[i * 3 + 2] = rgba[i * 4 + 2]; }
+      ws.send(rgbBuf);
     },
     // Live route update over the EXISTING socket — no teardown/reconnect blip
     // (the daemon just reassigns its route). Used on every geometry edit.

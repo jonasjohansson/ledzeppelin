@@ -210,7 +210,7 @@ function setCanvasSize(w, h) {
 const previewCanvas = document.getElementById('preview');
 // Match the overlay's internal resolution to the stage so it doesn't distort.
 if (previewCanvas) { previewCanvas.width = canvas.width; previewCanvas.height = canvas.height; }
-const preview = previewCanvas ? createPreview(previewCanvas) : null;
+const preview = previewCanvas ? createPreview(previewCanvas, { svg: document.getElementById('ovl') }) : null;
 
 const panel = createFixturePanel({
   getShow: () => show,
@@ -467,6 +467,21 @@ const outputInspectorEl = document.getElementById('output-inspector');   // left
 let outputTab = 'fixtures';   // Output sub-tab: fixtures | devices | library
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
+// Controller-colour tint for the UI (preview chrome + placement-list swatches).
+// Toggled from the corner "▢ color" button; persisted. Default ON.
+let controllerTint = (() => { try { return localStorage.getItem('lz.tint') !== '0'; } catch { return true; } })();
+const colorBtn = document.getElementById('color-btn');
+function setControllerTint(on) {
+  controllerTint = !!on;
+  try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
+  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+  preview?.setColorTint?.(controllerTint);
+  renderOutput(); redrawOverlay();
+}
+colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
+// Initial sync (preview exists; the startup renderOutput reads controllerTint).
+if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+preview?.setColorTint?.(controllerTint);
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');
@@ -743,7 +758,11 @@ function renderOutput() {
   // GROUP the placement list by CONTROLLER → output. Two levels: a controller
   // header (collapsible), and under it each output (a chain, in wiring order).
   // Colour ties to the canvas — a base hue per controller, a tint per output.
-  const { runColor, deviceColor } = controllerColorMap(show);
+  const cmap = controllerColorMap(show);
+  // Controller-tint toggle (corner button): off ⇒ one neutral grey for all swatches.
+  const NEUTRAL = 'rgba(150,156,166,.85)';
+  const runColor = (d, p) => (controllerTint ? cmap.runColor(d, p) : NEUTRAL);
+  const deviceColor = (d) => (controllerTint ? cmap.deviceColor(d) : NEUTRAL);
   const devOrder = []; const devMap = new Map();
   fixtures.forEach((f, i) => {
     const did = f.output?.deviceId || '';
@@ -818,9 +837,11 @@ const renderOutputList = renderOutput; // back-compat alias
 //     separate toggle, decoupled from any tab. ---
 let overlayVisible = false;   // are the fixture rectangles shown over the composite?
 const overlayToggleBtn = document.getElementById('overlay-toggle');
+const ovlSvg = document.getElementById('ovl');
 function setOverlay(v) {
   overlayVisible = !!v;
   if (previewCanvas) previewCanvas.style.display = overlayVisible ? '' : 'none';
+  if (ovlSvg) ovlSvg.style.display = overlayVisible ? '' : 'none';   // hide the SVG chrome too
   dragHandle?.setEnabled(overlayVisible);
   overlayToggleBtn?.classList.toggle('on', overlayVisible);
   if (overlayToggleBtn) overlayToggleBtn.textContent = (overlayVisible ? '▣' : '▢') + ' fixtures';
@@ -1178,8 +1199,16 @@ const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
 rebuild(show);
 
 let frames = 0, last = 0;
+// Cap the heavy pipeline (composite → sample → DDP → preview) to WLED's ~42fps
+// ceiling — no point rendering/sending faster than the wall can show. The
+// accumulator auto-disables when we're compute-bound (frameDue catches up to ts),
+// so it never drops frames we could otherwise have made.
+const OUTPUT_FPS = 42, FRAME_INTERVAL = 1000 / OUTPUT_FPS;
+let frameDue = 0;
 function loop(ts) {
   if (!t0) t0 = ts;
+  if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
+  frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
   lastTs = ts;
   const t = (ts - t0) / 1000;
   syncVideos(); uploadVideos();
@@ -1256,7 +1285,9 @@ function loop(ts) {
     }
     // The composition-group "B" mutes all layers (bypass), so a master block reads
     // here naturally — muted layers composite to black, which samples/sends dark.
-    preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
+    // Skip the overlay draw entirely when it's hidden (its canvas is display:none) —
+    // no point spending CPU drawing thousands of LEDs you can't see.
+    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

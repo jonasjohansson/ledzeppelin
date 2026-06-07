@@ -29,13 +29,21 @@ let dragHint = null;
 
 export function createPreview(canvasEl, opts = {}) {
   const ctx = canvasEl.getContext('2d');
+  const svg = opts.svg || null;   // vector chrome layer (footprints/arrows/handles/labels)
   const dotR = opts.dotRadius ?? 4;
   const showLabels = opts.labels ?? true;
   let BASE_W = canvasEl.width || 1280, BASE_H = canvasEl.height || 720;
+  // Match the SVG viewBox to the composition size NOW (the HTML default is only a
+  // placeholder) so the vector chrome shares the canvas's coordinate space at load,
+  // not just after a resize.
+  if (svg) svg.setAttribute('viewBox', `0 0 ${BASE_W} ${BASE_H}`);
   // Update the logical drawing size when the COMPOSITION canvas aspect changes,
-  // so the overlay maps uniformly (no stretch) and zoom stays crisp.
+  // so the overlay maps uniformly (no stretch). Both the lights canvas and the SVG
+  // chrome work in this 0..BASE space.
   function setBaseSize(w, h) {
     if (w > 0) BASE_W = w; if (h > 0) BASE_H = h;
+    if (svg) svg.setAttribute('viewBox', `0 0 ${BASE_W} ${BASE_H}`);
+    chromeKey = null;   // force a chrome rebuild at the new size
     setRenderScale(viewZoom);
   }
 
@@ -44,13 +52,44 @@ export function createPreview(canvasEl, opts = {}) {
   // All draw code stays in BASE_W×BASE_H logical space; draw() maps it to the
   // backing via setTransform. Capped so the canvas never gets pathologically big.
   let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
+  let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
+  function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // SVG chrome rebuild cache — rebuild only when the show ref or this key changes.
+  let chromeShow = null, chromeKey = null;
+
+  // --- Per-frame cost savers --------------------------------------------------
+  // Pipeline geometry only changes on EDITS (new show object), not every frame, so
+  // cache it keyed by the show reference instead of rebuilding sample points /
+  // run colours / spans 60×/s.
+  let piCache = null;
+  function pipelineFor(show) {
+    if (piCache && piCache.show === show) return piCache;
+    const { fixtureOrder, spans } = buildPipelineInputs(show);
+    const samplePts = fixtureOrder.map((f) => samplePoints(f.input.points, f.input.samples));
+    const { runColor } = controllerColorMap(show);
+    const chainColors = {};
+    for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
+    piCache = { show, fixtureOrder, spans, samplePts, chainColors };
+    return piCache;
+  }
+  // A reusable 1×N offscreen for blitting a whole strip in ONE drawImage (vs a
+  // fillRect + colour-string per LED). Grows to the next power of two as needed.
+  let stripCv = null, stripCtx = null, stripImg = null, stripCap = 0;
+  function ensureStrip(n) {
+    if (n <= stripCap) return;
+    stripCap = Math.max(128, 1 << Math.ceil(Math.log2(n)));
+    stripCv = document.createElement('canvas'); stripCv.width = stripCap; stripCv.height = 1;
+    stripCtx = stripCv.getContext('2d');
+    stripImg = stripCtx.createImageData(stripCap, 1);
+  }
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
-    const dpr = window.devicePixelRatio || 1;
-    // Raise the backing resolution with zoom for crisp overlay, bounded so the
-    // backing never exceeds ~8192 px on its long side (GPU/canvas limit).
-    const maxK = Math.max(2, 8192 / Math.max(1, BASE_W, BASE_H));
-    const k = Math.max(1, Math.min(viewZoom * dpr, maxK));
+    // The lights canvas no longer needs to scale with zoom — the crisp chrome is on
+    // the SVG layer, and the LED cells tolerate CSS upscaling. So keep a FIXED
+    // backing (~composition × dpr, capped) → zooming never balloons it (no lag).
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const areaK = Math.sqrt(6_000_000 / Math.max(1, BASE_W * BASE_H));
+    const k = Math.max(1, Math.min(dpr, areaK));
     const w = Math.round(BASE_W * k), h = Math.round(BASE_H * k);
     if (canvasEl.width !== w) { canvasEl.width = w; canvasEl.height = h; }
   }
@@ -59,240 +98,96 @@ export function createPreview(canvasEl, opts = {}) {
 
   function draw(show, rgba, selectedIds = null, snapGrid = 0, guides = null, marquee = null) {
     const W = BASE_W, Hh = BASE_H;                 // logical drawing space
-    const ck = 1 / viewZoom;                        // chrome scale: line widths, dashes, handles, arrows, labels
+    // Chrome scale — constant SCREEN size at zoom ≤ 1, receding when zoomed in so a
+    // dense rig doesn't crowd. Used by the SVG chrome layer (and the canvas drag-tag).
+    const ck = viewZoom <= 1 ? 1 / viewZoom : 1 / Math.pow(viewZoom, 1.35);
     ctx.setTransform(canvasEl.width / BASE_W, 0, 0, canvasEl.height / BASE_H, 0, 0);
-    // Transparent overlay: the live composite (WebGL stage) shows THROUGH.
-    ctx.clearRect(0, 0, W, Hh);
-    if (snapGrid > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,.09)'; ctx.lineWidth = ck;
-      for (let x = 0; x <= W; x += snapGrid) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, Hh); ctx.stroke(); }
-      for (let y = 0; y <= Hh; y += snapGrid) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
-    }
-    if (guides && guides.length) {
-      ctx.strokeStyle = 'rgba(232,178,127,.85)'; ctx.lineWidth = ck;
-      for (const g of guides) {
-        ctx.beginPath();
-        if (g.axis === 'x') { ctx.moveTo(g.v + 0.5, 0); ctx.lineTo(g.v + 0.5, Hh); }
-        else { ctx.moveTo(0, g.v + 0.5); ctx.lineTo(W, g.v + 0.5); }
-        ctx.stroke();
+    ctx.clearRect(0, 0, W, Hh);   // transparent — the WebGL stage shows through
+
+    // ---- Vector CHROME → SVG. Rebuilt only when geometry / selection / zoom /
+    //      guides / marquee change (NOT per frame — the lit pixels below redraw
+    //      every frame, the chrome doesn't). Crisp at any zoom (SVG re-rasterizes). ----
+    if (svg) {
+      const selKey = selectedIds ? [...selectedIds].join(',') : '';
+      const gKey = guides ? guides.map((g) => g.axis + Math.round(g.v)).join('|') : '';
+      const mKey = marquee ? `${marquee.x0.toFixed(3)},${marquee.y0.toFixed(3)},${marquee.x1.toFixed(3)},${marquee.y1.toFixed(3)}` : '';
+      const key = `${selKey}|${viewZoom}|${snapGrid}|${gKey}|${mKey}`;
+      if (show !== chromeShow || key !== chromeKey) {
+        chromeShow = show; chromeKey = key;
+        svg.innerHTML = buildChrome(show, selectedIds, snapGrid, guides, marquee, ck);
       }
     }
     if (!show || !show.fixtures?.length) return;
 
-    const { fixtureOrder, spans } = buildPipelineInputs(show);
+    // Cached pipeline geometry (rebuilt only when the show object changes). The
+    // LIGHTS pass below uses only fixtureOrder/spans/samplePts; colours/selection
+    // are the SVG chrome's concern (buildChrome).
+    const { fixtureOrder, spans, samplePts } = pipelineFor(show);
 
-    // Colour by CONTROLLER: every fixture on a device shares that device's hue,
-    // and each output is a lightness tint of it — so you read "same controller"
-    // by colour and "which output" by shade (shared with the placement list).
-    const { runColor } = controllerColorMap(show);
-    const chainColors = {};
-    for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
-    // The run key of the selection, if any → its chain is "focused" (labels shown).
-    const selFx = selectedIds && show.fixtures.find((f) => isSelected(selectedIds, f.id));
-    const focusKey = selFx ? runKey(selFx) : null;
+    // Viewport cull bounds: the overlay canvas is CSS-scaled, so map the window
+    // rect back into canvas-logical pixels. Fixtures whose footprint falls fully
+    // outside (plus a small margin) are skipped — the big win when zoomed in.
+    const vr = canvasEl.getBoundingClientRect();
+    const Lx = W / (vr.width || 1), Ly = Hh / (vr.height || 1);
+    const vx0 = -vr.left * Lx - 24, vx1 = (window.innerWidth - vr.left) * Lx + 24;
+    const vy0 = -vr.top * Ly - 24, vy1 = (window.innerHeight - vr.top) * Ly + 24;
 
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
-      if (f.hidden) {
-        // Hidden fixtures still draw as a faint GHOST line so they stay visible AND
-        // clickable on canvas (the hit-test includes them) — otherwise they could
-        // only be un-hidden from the list. No per-pixel light, no handles.
-        const P = f.input.points;
-        if (P && P.length) {
-          const onSel = isSelected(selectedIds, f.id);
-          ctx.save();
-          ctx.strokeStyle = onSel ? 'rgba(232,178,127,.55)' : 'rgba(150,156,166,.28)';
-          ctx.setLineDash([4 * ck, 4 * ck]); ctx.lineWidth = (onSel ? 1.5 : 1.25) * ck;
-          ctx.beginPath();
-          ctx.moveTo(P[0][0] * W, P[0][1] * Hh);
-          for (let k = 1; k < P.length; k++) ctx.lineTo(P[k][0] * W, P[k][1] * Hh);
-          ctx.stroke();
-          ctx.restore();
-        }
-        continue;
+      // Cull off-screen fixtures (footprint AABB vs the visible region).
+      const P0 = f.input.points;
+      if (P0 && P0.length) {
+        let nx = 1, ny = 1, xx = 0, xy = 0;
+        for (const p of P0) { if (p[0] < nx) nx = p[0]; if (p[0] > xx) xx = p[0]; if (p[1] < ny) ny = p[1]; if (p[1] > xy) xy = p[1]; }
+        if (xx * W < vx0 || nx * W > vx1 || xy * Hh < vy0 || ny * Hh > vy1) continue;
       }
-      const fIdx = show.fixtures.indexOf(f);   // number matches the side-panel lists
+      if (f.hidden) continue;   // hidden → no lights; its ghost outline is drawn on the SVG chrome
       const span = spans[fi];
-      const pts = samplePoints(f.input.points, f.input.samples);
+      const pts = samplePts[fi];               // cached resampled points
       const [ox, oy] = chainOffset(show, f.id);   // dots show WHERE it samples (cascade)
-
-      // Discrete LED CELLS (Resolume-style): every pixel is a little square lit by
-      // its own sampled RGB, so the underlying graphic reads ON the strip — lit
-      // pixels glow, unlit ones stay near-black. Cells are oriented along the strip.
-      const reversed = !!f.input.reversed;       // which geometric end is pixel 0
+      const reversed = !!f.input.reversed;        // which geometric end is pixel 0
       const count = pts.length;
       const thick = Math.max(2, Number(f.input?.transform?.h) || 8);
-      const colAt = (i) => {
-        let r = 0, g = 0, b = 0;
-        if (rgba) {
-          const hw = reversed ? count - 1 - i : i;   // honor flip (pixel-0 end)
-          const idx = (span.start + hw) * 4;
-          if (idx + 2 <= rgba.length - 1) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
-        }
-        return `rgb(${r},${g},${b})`;   // true sampled colour; off pixels stay dark
-      };
       const sx = (i) => (pts[i][0] + ox) * W, sy = (i) => (pts[i][1] + oy) * Hh;
-      ctx.save();
-      if (count >= 1) {
-        // Each LED is a RECTANGLE that fills the strip: pitch ALONG the run × the
-        // strip thickness ACROSS it, rotated to the strip's angle. So the lit strip
-        // is a solid band of per-pixel colour (the composite reads ON the strip),
-        // not a thin dotted line.
-        const ex = (f.input.points[f.input.points.length - 1] || [0, 0]), e0 = (f.input.points[0] || [0, 0]);
-        const ang = Math.atan2((ex[1] - e0[1]) * Hh, (ex[0] - e0[0]) * W);
-        const pitch = count >= 2 ? Math.hypot(sx(1) - sx(0), sy(1) - sy(0)) : thick;
-        // Each LED is its own rectangle with a hairline gap on every side, so the
-        // strip reads as a grid of defined pixels (Resolume-style), not a solid bar.
-        const gap = Math.min(2, Math.max(0.4, pitch * 0.18));
-        const along = Math.max(1, pitch - gap);
-        const across = Math.max(2, thick - gap);     // fill the thickness, minus the gap
-        for (let i = 0; i < count; i++) {
+
+      // Light the strip from the sampled composite. A straight BAR blits its whole
+      // pixel row in ONE drawImage (cheap); a bent polyline falls back to a square
+      // per LED. The lit composite reads ON the strip; off pixels stay dark.
+      if (count >= 1 && rgba) {
+        if (!isPolylineFixture(f.input) && count >= 2) {
+          ensureStrip(count);
+          const d = stripImg.data;
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * 4;
+            if (si + 2 <= rgba.length - 1) { d[di] = rgba[si]; d[di + 1] = rgba[si + 1]; d[di + 2] = rgba[si + 2]; }
+            else { d[di] = d[di + 1] = d[di + 2] = 0; }
+            d[di + 3] = 255;
+          }
+          stripCtx.putImageData(stripImg, 0, 0);
+          const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
+          const len = Math.hypot(bx - ax, by - ay) || 1;
+          const ang = Math.atan2(by - ay, bx - ax);
+          const halfCell = len / (2 * (count - 1));
           ctx.save();
-          ctx.translate(sx(i), sy(i));
-          ctx.rotate(ang);
-          ctx.fillStyle = colAt(i);
-          ctx.fillRect(-along / 2, -across / 2, along, across);
+          ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
+          ctx.translate(ax, ay); ctx.rotate(ang);
+          ctx.drawImage(stripCv, 0, 0, count, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
           ctx.restore();
+        } else {
+          const cell = Math.max(2, thick);
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
+            let r = 0, g = 0, b = 0;
+            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(sx(i) - cell / 2, sy(i) - cell / 2, cell, cell);
+          }
         }
       }
-      ctx.restore();
 
-      const selected = isSelected(selectedIds, f.id);
-      const stroke = selected ? '#e8b27f' : (chainColors[runKey(f)] || '#5cc8ff');
-      const eps = f.input.points;
-      // Label LOD: only the selection, its whole chain, or (nothing selected) when
-      // the strip is big enough on screen — so 120 labels don't pile up.
-      const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
-      const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
-
-      if (isPolylineFixture(f.input)) {
-        // Footprint: dashed when unselected (Resolume-style), solid when selected.
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(eps[0][0] * W, eps[0][1] * Hh);
-        for (let i = 1; i < eps.length; i++) ctx.lineTo(eps[i][0] * W, eps[i][1] * Hh);
-        ctx.strokeStyle = stroke; ctx.lineWidth = (selected ? 2 : 1) * ck;
-        if (!selected) ctx.setLineDash([5 * ck, 4 * ck]);
-        ctx.stroke();
-        ctx.restore();
-        // Square handle at every vertex (uniform; direction is shown by the arrow).
-        for (let i = 0; i < eps.length; i++) {
-          const hx = eps[i][0] * W, hy = eps[i][1] * Hh;
-          const s = (selected ? 4 : 3) * ck;
-          ctx.beginPath(); ctx.rect(hx - s, hy - s, s * 2, s * 2);
-          ctx.fillStyle = 'rgba(20,20,24,.85)';
-          ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 1.25 * ck; ctx.stroke();
-        }
-        // Direction arrow at the pixel-0 end (honours reversed).
-        const L = eps.length - 1;
-        const a0 = reversed ? eps[L] : eps[0], a1 = reversed ? eps[L - 1] : eps[1];
-        drawDirArrow(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke);
-        if (showLabels && showLbl) drawLabel(f, fIdx, eps[0][0] * W, eps[0][1] * Hh - 10, selected, W, Hh);
-        continue;
-      }
-
-      // BAR: a rotated rectangle (w×h) with a centre handle.
-      const ax = eps[0][0] * W, ay = eps[0][1] * Hh;
-      const bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
-      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-      const perpX = -dy / len, perpY = dx / len;
-      const cv = show.composition?.canvas || { w: W, h: Hh };
-      const halfThick = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
-      ctx.beginPath();
-      ctx.moveTo(ax + perpX * halfThick, ay + perpY * halfThick);
-      ctx.lineTo(bx + perpX * halfThick, by + perpY * halfThick);
-      ctx.lineTo(bx - perpX * halfThick, by - perpY * halfThick);
-      ctx.lineTo(ax - perpX * halfThick, ay - perpY * halfThick);
-      ctx.closePath();
-      ctx.save();
-      ctx.strokeStyle = stroke; ctx.lineWidth = (selected ? 2 : 1) * ck;
-      if (!selected) ctx.setLineDash([5 * ck, 4 * ck]);    // dashed unselected, solid selected
-      ctx.stroke();
-      ctx.restore();
-      // Direction arrow at the pixel-0 end (honours reversed): pixel 0 is the
-      // 'a' end normally, the 'b' end when reversed.
-      if (reversed) drawDirArrow(bx, by, ax, ay, stroke, halfThick);
-      else drawDirArrow(ax, ay, bx, by, stroke, halfThick);
-
-      const cx = (ax + bx) / 2, cy = (ay + by) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, (dotR + (selected ? 4 : 2)) * ck, 0, Math.PI * 2);
-      ctx.fillStyle = selected ? 'rgba(232,178,127,.3)' : 'rgba(92,200,255,.25)'; ctx.fill();
-      ctx.strokeStyle = stroke; ctx.lineWidth = ck; ctx.stroke();
-
-      // Rotate knob — only for a SINGLE selected bar. A short stem from the
-      // centre out along the perpendicular (normalized units) to a grab circle.
-      const single = selected && (!selectedIds.has || selectedIds.size === 1);
-      if (single) {
-        // Corner resize handles (length + thickness) at the rectangle corners.
-        const corners = [
-          [ax + perpX * halfThick, ay + perpY * halfThick],
-          [bx + perpX * halfThick, by + perpY * halfThick],
-          [bx - perpX * halfThick, by - perpY * halfThick],
-          [ax - perpX * halfThick, ay - perpY * halfThick],
-        ];
-        const hs = 3 * ck;
-        for (const [hx, hy] of corners) {
-          ctx.beginPath(); ctx.rect(hx - hs, hy - hs, hs * 2, hs * 2);
-          ctx.fillStyle = 'rgba(20,20,24,.92)'; ctx.fill();
-          ctx.strokeStyle = stroke; ctx.lineWidth = 1.5 * ck; ctx.stroke();
-        }
-        const a0 = eps[0], a1 = eps[eps.length - 1];
-        const cxN = (a0[0] + a1[0]) / 2, cyN = (a0[1] + a1[1]) / 2;
-        const adx = a1[0] - a0[0], ady = a1[1] - a0[1], adl = Math.hypot(adx, ady) || 1;
-        const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W;
-        const kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(knx, kny);
-        ctx.strokeStyle = stroke; ctx.lineWidth = ck; ctx.stroke();
-        ctx.beginPath(); ctx.arc(knx, kny, 5 * ck, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(20,20,24,.92)'; ctx.fill();
-        ctx.strokeStyle = stroke; ctx.lineWidth = 1.5 * ck; ctx.stroke();
-      }
-      if (showLabels && showLbl) drawLabel(f, fIdx, cx, cy - 10, selected, W, Hh);
     }
-
-    // --- CHAIN pass: a connector from each member's OUTPUT end to the next
-    //     member's INPUT end (the real daisy-chain wiring) + a bounding box
-    //     around the chain whose member is selected. ---
-    // 'in' = pixel-0 end, 'out' = last-pixel end (both honour input.reversed).
-    const endOf = (f, which) => {
-      const p = f.input?.points || []; if (!p.length) return [0, 0];
-      const rev = !!f.input.reversed;
-      const e = (which === 'in') === !rev ? p[0] : p[p.length - 1];
-      return [e[0] * W, e[1] * Hh];
-    };
-    for (const ch of runsOf(show)) {
-      if (ch.members.length < 2) continue;
-      const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean);
-      if (members.length < 2) continue;
-      ctx.save();
-      const col = chainColors[ch.key] || 'rgba(180,140,255,.7)';
-      ctx.strokeStyle = col;
-      // Each hop: dashed line out-end(i) → in-end(i+1), arrowhead at the input.
-      for (let i = 0; i < members.length - 1; i++) {
-        const [ax, ay] = endOf(members[i], 'out');
-        const [bx, by] = endOf(members[i + 1], 'in');
-        ctx.setLineDash([5 * ck, 4 * ck]); ctx.lineWidth = 1.25 * ck;
-        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-        ctx.setLineDash([]);
-        drawDirArrow(bx, by, bx + (bx - ax), by + (by - ay), col);   // flow into the next input
-      }
-      // A small ring at the chain origin (first member's input = the controller).
-      const [ox0, oy0] = endOf(members[0], 'in');
-      ctx.lineWidth = 1.25 * ck; ctx.beginPath(); ctx.arc(ox0, oy0, 5 * ck, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
-    }
-
-    // Rubber-band selection box (drawn on top of everything).
-    if (marquee) {
-      const x = marquee.x0 * W, y = marquee.y0 * Hh;
-      const w = (marquee.x1 - marquee.x0) * W, h = (marquee.y1 - marquee.y0) * Hh;
-      ctx.save();
-      ctx.fillStyle = 'rgba(140,200,255,.12)'; ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = 'rgba(140,200,255,.9)'; ctx.lineWidth = ck; ctx.setLineDash([4 * ck, 3 * ck]);
-      ctx.strokeRect(x, y, w, h);
-      ctx.restore();
-    }
+    // (Fixture footprints, handles, arrows, labels, chain wiring, snap grid/guides
+    //  and the marquee are all drawn on the SVG chrome layer — see buildChrome.)
 
     // Numeric value tag at the cursor while dragging/rotating/scaling — so you read
     // the value where you're working, not in a sidebar.
@@ -313,40 +208,132 @@ export function createPreview(canvasEl, opts = {}) {
     }
   }
 
-  // A small filled arrowhead at the pixel-0 end (p0) pointing along the run
-  // (toward p1) — makes direction / flip (input.reversed) visible at a glance.
-  // `thick` (half the bar's thickness, in canvas px) scales the arrow WITH the
-  // fixture so a bigger strip gets a bigger arrow; omitted → a constant screen
-  // size (used for thin polylines that have no width). A screen-space floor keeps
-  // tiny fixtures' arrows visible.
-  function drawDirArrow(p0x, p0y, p1x, p1y, color, thick) {
+  // --- SVG chrome string builders (same 0..BASE coords as the lights canvas) ----
+  const nz = (n) => Math.round(n * 100) / 100;                 // trim coordinate noise
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rectS = (x, y, w, h, stroke, sw) =>
+    `<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(20,20,24,.9)" stroke="${stroke}" stroke-width="${nz(sw)}"/>`;
+  // Filled arrowhead at p0 pointing toward p1 (direction / pixel-0). `thick` scales
+  // it with a bar's thickness; omitted ⇒ constant screen size.
+  const arrowS = (p0x, p0y, p1x, p1y, color, thick, ck) => {
     const dx = p1x - p0x, dy = p1y - p0y, len = Math.hypot(dx, dy) || 1;
-    const ux = dx / len, uy = dy / len, px = -uy, py = ux;   // unit + perpendicular
-    const ck = 1 / viewZoom;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
     const tip = thick != null ? Math.max(8 * ck, thick * 1.9) : 9 * ck;
     const wide = thick != null ? Math.max(4 * ck, thick * 1.0) : 4.5 * ck;
-    ctx.beginPath();
-    ctx.moveTo(p0x + ux * tip, p0y + uy * tip);                       // tip into the run
-    ctx.lineTo(p0x + px * wide, p0y + py * wide);                     // base corners at p0
-    ctx.lineTo(p0x - px * wide, p0y - py * wide);
-    ctx.closePath();
-    ctx.fillStyle = color; ctx.fill();
+    return `<polygon points="${nz(p0x + ux * tip)},${nz(p0y + uy * tip)} ${nz(p0x + px * wide)},${nz(p0y + py * wide)} ${nz(p0x - px * wide)},${nz(p0y - py * wide)}" fill="${color}"/>`;
+  };
+  const labelS = (text, cx, cy, selected, ck) => {
+    const fs = 11 * ck, fill = selected ? '#e8b27f' : 'rgba(205,210,218,.92)';
+    return `<text x="${nz(cx)}" y="${nz(cy)}" font-size="${nz(fs)}" font-family="'Spline Sans Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="${fill}" stroke="rgba(0,0,0,.7)" stroke-width="${nz(1.6 * ck)}" stroke-linejoin="round" paint-order="stroke">${esc(text)}</text>`;
+  };
+
+  // Build the whole vector chrome as one SVG markup string. Mirrors the old canvas
+  // chrome exactly, in the same logical coords; rebuilt only on change (see draw).
+  function buildChrome(show, selectedIds, snapGrid, guides, marquee, ck) {
+    const W = BASE_W, Hh = BASE_H;
+    const p = [];
+    const ln = (x1, y1, x2, y2, stroke, w, dash) =>
+      p.push(`<line x1="${nz(x1)}" y1="${nz(y1)}" x2="${nz(x2)}" y2="${nz(y2)}" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+    const poly = (epspts, stroke, w, dash) =>
+      p.push(`<polyline points="${epspts.map((e) => `${nz(e[0] * W)},${nz(e[1] * Hh)}`).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+    // Dash unit: CONSTANT screen size (1/zoom, NOT the dampened ck), with generous
+    // lengths so dashes stay readable lines when zoomed in instead of shrinking to
+    // dots. Strokes still use the dampened `ck` to read as hairlines.
+    const du = 1 / viewZoom;
+    const DASH = `${nz(9 * du)} ${nz(5 * du)}`;
+
+    if (snapGrid > 0) {
+      for (let x = 0; x <= W; x += snapGrid) ln(x, 0, x, Hh, 'rgba(255,255,255,.09)', ck);
+      for (let y = 0; y <= Hh; y += snapGrid) ln(0, y, W, y, 'rgba(255,255,255,.09)', ck);
+    }
+    if (guides) for (const g of guides) {
+      if (g.axis === 'x') ln(g.v, 0, g.v, Hh, 'rgba(232,178,127,.85)', ck);
+      else ln(0, g.v, W, g.v, 'rgba(232,178,127,.85)', ck);
+    }
+
+    if (show && show.fixtures?.length) {
+      const { fixtureOrder, chainColors } = pipelineFor(show);
+      const dim = (c) => (colorTint ? c : 'rgba(150,156,166,.85)');
+      const selFx = selectedIds && show.fixtures.find((f) => isSelected(selectedIds, f.id));
+      const focusKey = selFx ? runKey(selFx) : null;
+      for (const f of fixtureOrder) {
+        const eps = f.input.points; if (!eps || !eps.length) continue;
+        const reversed = !!f.input.reversed;
+        if (f.hidden) {                                  // faint ghost outline
+          const onSel = isSelected(selectedIds, f.id);
+          poly(eps, onSel ? 'rgba(232,178,127,.55)' : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
+          continue;
+        }
+        const selected = isSelected(selectedIds, f.id);
+        const stroke = selected ? '#e8b27f' : dim(chainColors[runKey(f)] || 'rgba(150,156,166,.6)');
+        const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
+        const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
+        if (!selected && runKey(f) !== focusKey && lblLen * viewZoom < 13) continue;   // LOD: tiny → no chrome
+        const fIdx = show.fixtures.indexOf(f);
+        const dash = selected ? null : DASH;
+
+        if (isPolylineFixture(f.input)) {
+          poly(eps, stroke, ck, dash);
+          if (selected) for (const e of eps) { const hx = e[0] * W, hy = e[1] * Hh, s = 4 * ck; p.push(rectS(hx - s, hy - s, s * 2, s * 2, stroke, 1.25 * ck)); }
+          const L = eps.length - 1, a0 = reversed ? eps[L] : eps[0], a1 = reversed ? eps[L - 1] : eps[1];
+          p.push(arrowS(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke, null, ck));
+          if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), eps[0][0] * W, eps[0][1] * Hh - 10, selected, ck));
+          continue;
+        }
+
+        // BAR: rotated rectangle (the 4 outer corners).
+        const ax = eps[0][0] * W, ay = eps[0][1] * Hh, bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
+        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, perpX = -dy / len, perpY = dx / len;
+        const cv = show.composition?.canvas || { w: W, h: Hh };
+        const ht = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
+        const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
+        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="none" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+        if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck));
+        const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+        if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="rgba(232,178,127,.3)" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
+        const single = selected && (!selectedIds.has || selectedIds.size === 1);
+        if (single) {
+          for (const c of [c1, c2, c3, c4]) p.push(rectS(c[0] - 3 * ck, c[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
+          const e0 = eps[0], e1 = eps[eps.length - 1], cxN = (e0[0] + e1[0]) / 2, cyN = (e0[1] + e1[1]) / 2;
+          const adx = e1[0] - e0[0], ady = e1[1] - e0[1], adl = Math.hypot(adx, ady) || 1;
+          const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W, kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
+          ln(cx, cy, knx, kny, stroke, ck);
+          p.push(`<circle cx="${nz(knx)}" cy="${nz(kny)}" r="${nz(5 * ck)}" fill="rgba(20,20,24,.92)" stroke="${stroke}" stroke-width="${nz(1.5 * ck)}"/>`);
+        }
+        if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), cx, cy - 10, selected, ck));
+      }
+
+      // Chain wiring: out-end(i) → in-end(i+1) per hop, arrow at the input, ring at origin.
+      const endOf = (f, which) => {
+        const pp = f.input?.points || []; if (!pp.length) return [0, 0];
+        const rev = !!f.input.reversed;
+        const e = (which === 'in') === !rev ? pp[0] : pp[pp.length - 1];
+        return [e[0] * W, e[1] * Hh];
+      };
+      for (const ch of runsOf(show)) {
+        if (ch.members.length < 2) continue;
+        const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean);
+        if (members.length < 2) continue;
+        const col = dim(chainColors[ch.key] || 'rgba(150,156,166,.45)');
+        for (let i = 0; i < members.length - 1; i++) {
+          const [ax, ay] = endOf(members[i], 'out');
+          const [bx, by] = endOf(members[i + 1], 'in');
+          ln(ax, ay, bx, by, col, 1.25 * ck, DASH);
+          p.push(arrowS(bx, by, bx + (bx - ax), by + (by - ay), col, null, ck));
+        }
+        const [ox0, oy0] = endOf(members[0], 'in');
+        p.push(`<circle cx="${nz(ox0)}" cy="${nz(oy0)}" r="${nz(5 * ck)}" fill="none" stroke="${col}" stroke-width="${nz(1.25 * ck)}"/>`);
+      }
+    }
+
+    if (marquee) {
+      const x = marquee.x0 * W, y = marquee.y0 * Hh, w = (marquee.x1 - marquee.x0) * W, h = (marquee.y1 - marquee.y0) * Hh;
+      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(232,163,92,.10)" stroke="rgba(232,163,92,.85)" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
+    }
+    return p.join('');
   }
 
-  function drawLabel(f, index, cx, cy, selected, W, Hh) {
-    const label = fixtureLabel(f, index);
-    const ck = 1 / viewZoom, fs = 11 * ck;     // constant SCREEN text size at any zoom
-    ctx.font = `${fs}px "Spline Sans Mono", ui-monospace, Menlo, monospace`;
-    const tw = ctx.measureText(label).width;
-    const lx = Math.max(3, Math.min(W - tw - 3, cx - tw / 2));
-    const ly = Math.max(fs + 1, Math.min(Hh - 4, cy));
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(lx - 3 * ck, ly - fs, tw + 6 * ck, fs + 4 * ck);
-    ctx.fillStyle = selected ? '#e8b27f' : '#8fd6e8';
-    ctx.fillText(label, lx, ly);
-  }
-
-  return { draw, setRenderScale, setBaseSize };
+  return { draw, setRenderScale, setBaseSize, setColorTint };
 }
 
 // Drag-placement on the Output overlay:

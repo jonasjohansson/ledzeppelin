@@ -25,6 +25,7 @@ canvas{display:block}
   <button id="menu-audio" class="g-btn" title="audio input">Audio</button>
   <button id="overlay-toggle" title="show/hide fixtures on the canvas">▢ fixtures</button>
   <button id="snap-btn" title="snap fixtures to each other & the grid">▢ snap</button>
+  <button id="color-btn" title="tint fixtures by controller colour">▢ color</button>
   <div id="hud">booting…</div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
@@ -33,6 +34,10 @@ canvas{display:block}
   <div id="stageinner">
     <canvas id="stage"></canvas>
     <canvas id="preview" width="1280" height="720"></canvas>
+    <!-- Vector chrome (fixture outlines, arrows, handles, labels). Crisp at any
+         zoom (rides the same transform); pointer-events off so the canvas keeps
+         hit-testing. -->
+    <svg id="ovl" viewBox="0 0 1280 720" preserveAspectRatio="none"></svg>
   </div>
 </div>
 <div id="layout">

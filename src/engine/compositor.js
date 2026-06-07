@@ -27,6 +27,10 @@
 import { program, makeTarget, drawFullscreen } from './gl.js';
 import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.js';
 
+// Reused scratch for the uTrigs uniform (consumed synchronously each runEntry call,
+// so a single shared buffer avoids a per-effect, per-frame allocation).
+const TRIG_SCRATCH = new Float32Array(8);
+
 const BLIT_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float opacity;
@@ -170,7 +174,7 @@ export function makeCompositor(gl, w, h) {
     // most recent up-to-8 triggers stack as independent beams.
     const uTrigs = loc(c, 'uTrigs[0]');
     if (uTrigs !== null) {
-      const arr = new Float32Array(8).fill(1e6);
+      const arr = TRIG_SCRATCH; arr.fill(1e6);
       const trigs = frameEnv.trigSecs || [];
       const n = Math.min(trigs.length, 8);
       for (let i = 0; i < n; i++) arr[i] = timeSec - trigs[trigs.length - n + i];

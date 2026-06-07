@@ -67,27 +67,35 @@ export async function pushConfig(ip, outs = []) {
   // Pause the DDP stream so WLED's HTTP server (starved while packets flood in)
   // can actually answer the cfg GET/POST. Wait long enough for the packet flood to
   // fully clear and the ESP's web server to catch up before the first request.
+  // 12s is the SAFETY CAP (covers the GET+POST fetch timeouts); the `finally`
+  // resumes output shortly after the push actually finishes, so a live-show config
+  // push blacks the controller out only for as long as the write takes (+brief
+  // settle), not a fixed 12s.
   suppressOutput(ip, 12000);
   await new Promise((r) => setTimeout(r, 700));
-  const cfg = await wledFetch(ip, '/json/cfg');
-  const ins = cfg?.hw?.led?.ins;
-  if (!Array.isArray(ins) || !ins.length) throw new Error('device reports no LED outputs');
-  let applied = 0, start = 0;
-  for (let i = 0; i < ins.length; i++) {
-    const o = outs[i];
-    if (o) {
-      if (Number.isFinite(o.len)) ins[i].len = Math.max(0, Math.round(o.len));
-      if (o.order != null && COL_ORDER_CODE[o.order] != null) ins[i].order = COL_ORDER_CODE[o.order];
-      applied++;
+  try {
+    const cfg = await wledFetch(ip, '/json/cfg');
+    const ins = cfg?.hw?.led?.ins;
+    if (!Array.isArray(ins) || !ins.length) throw new Error('device reports no LED outputs');
+    let applied = 0, start = 0;
+    for (let i = 0; i < ins.length; i++) {
+      const o = outs[i];
+      if (o) {
+        if (Number.isFinite(o.len)) ins[i].len = Math.max(0, Math.round(o.len));
+        if (o.order != null && COL_ORDER_CODE[o.order] != null) ins[i].order = COL_ORDER_CODE[o.order];
+        applied++;
+      }
+      ins[i].start = start;
+      start += ins[i].len || 0;
     }
-    ins[i].start = start;
-    start += ins[i].len || 0;
+    await wledFetch(ip, '/json/cfg', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ hw: { led: { total: start, ins } } }),
+    });
+    return { applied, outputs: ins.length, total: start };
+  } finally {
+    suppressOutput(ip, 800);   // push done (ok or fail) → resume DDP after a short settle
   }
-  await wledFetch(ip, '/json/cfg', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ hw: { led: { total: start, ins } } }),
-  });
-  return { applied, outputs: ins.length, total: start };
 }
 
 export async function scanSubnet({ timeoutMs = 1200, concurrency = 48 } = {}) {
