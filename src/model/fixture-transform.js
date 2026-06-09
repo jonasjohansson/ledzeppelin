@@ -68,6 +68,21 @@ export function isPolylineFixture(input) {
   return input?.mode === 'polyline' || (input?.mode !== 'bar' && n > 2);
 }
 
+// Auto fixture identity for the lists/canvas: a 1-based number ("#1", "#2", …).
+// The internal `id` stays the stable routing handle (chains/selection); users no
+// longer type it. Pass the fixture's index in the patch; falls back to id.
+export function fixtureLabel(f, index) {
+  return index != null ? `#${index + 1}` : (f?.name || f?.id || '');
+}
+
+// The DDP pixel range a fixture targets on its device, zero-padded ("000–288").
+const pad3 = (n) => String(Math.max(0, Math.round(Number(n) || 0))).padStart(3, '0');
+export function fixtureRange(f) {
+  const o = f?.output || {};
+  const off = o.pixelOffset ?? 0;
+  return `${pad3(off)}–${pad3(off + (o.pixelCount ?? 0))}`;
+}
+
 // Ensure a fixture has valid geometry + a fresh derived `points` cache for the
 // given canvas. Bar mode keeps a transform (recomputed on canvas resize);
 // polyline mode keeps its normalized points as-is. Pure — returns a new fixture.
@@ -146,6 +161,62 @@ export function syncShowFixtures(show) {
   if (!show || !Array.isArray(show.fixtures)) return show;
   const canvas = show.composition?.canvas;
   return { ...show, fixtures: show.fixtures.map((f) => syncFixtureGeometry(f, canvas)) };
+}
+
+// FIT the composition canvas to the fixtures' footprint — a "fluid" canvas that
+// is decided by the LED strips rather than a fixed aspect. We're mapping lights,
+// not framing video, so the canvas just has to CONTAIN every strip.
+//
+// Footprints come from each fixture's normalized `points` (× the current canvas),
+// so the result is independent of how the fixtures were authored. The fitted
+// canvas keeps that bounding box's exact aspect, scaled so its long axis ≈
+// `target` px (enough render detail), with `pad` px of breathing room on every
+// side. Fixtures are remapped so they stay put visually. Pure — returns a new
+// show (or the same show unchanged if there are no fixtures with geometry).
+export function fitCanvasToFixtures(show, { target = 1280, pad = 24 } = {}) {
+  const fixtures = show?.fixtures || [];
+  const cv = canvasOf(show?.composition?.canvas);
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
+  for (const f of fixtures) {
+    const pts = (Array.isArray(f.input?.points) ? f.input.points : [])
+      .map((p) => [(Number(p?.[0]) || 0) * cv.w, (Number(p?.[1]) || 0) * cv.h]);
+    if (!pts.length) continue;
+    if (!isPolylineFixture(f.input) && pts.length >= 2) {
+      // Bar: expand to the rectangle's OUTER corners (centerline ± half-thickness)
+      // so the canvas contains the strip's full footprint, not just its spine.
+      const [ax, ay] = pts[0], [bx, by] = pts[pts.length - 1];
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      const hx = -dy / len, hy = dx / len, ht = (Number(f.input?.transform?.h) || 0) / 2;
+      for (const [cx, cy] of [[ax, ay], [bx, by]]) { ext(cx + hx * ht, cy + hy * ht); ext(cx - hx * ht, cy - hy * ht); }
+    } else {
+      for (const [px, py] of pts) ext(px, py);
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return show; // nothing placed
+  const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY);
+  const scale = target / Math.max(spanX, spanY);
+  const newW = Math.round(spanX * scale + pad * 2);
+  const newH = Math.round(spanY * scale + pad * 2);
+  const newCanvas = { w: newW, h: newH };
+  // Map a current-canvas normalized point → fitted normalized point.
+  const remap = (p) => {
+    const px = (Number(p?.[0]) || 0) * cv.w, py = (Number(p?.[1]) || 0) * cv.h;
+    return [((px - minX) * scale + pad) / newW, ((py - minY) * scale + pad) / newH];
+  };
+  const out = fixtures.map((f) => {
+    const pts = (Array.isArray(f.input?.points) ? f.input.points : []).map(remap);
+    if (isPolylineFixture(f.input)) {
+      return { ...f, input: { ...f.input, mode: 'polyline', points: pts.length >= 2 ? pts : f.input.points } };
+    }
+    const transform = transformFromPoints(pts, newCanvas);
+    // Preserve the bar's thickness proportionally (transformFromPoints resets it
+    // to a default), so fitting doesn't flatten thick strips.
+    const origH = Number(f.input?.transform?.h);
+    if (Number.isFinite(origH) && origH > 0) transform.h = origH * scale;
+    return { ...f, input: { ...f.input, mode: 'bar', transform, points: pointsFromTransform(transform, newCanvas) } };
+  });
+  return { ...show, composition: { ...(show.composition || {}), canvas: newCanvas }, fixtures: out };
 }
 
 // Snap a rotation (degrees) to the nearest `step`° increment, normalized to [0,360).

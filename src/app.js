@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -9,18 +9,18 @@ import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
+import { Slider } from './ui/controls.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setCompositionOpacity,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, snap90, flipFixture } from './model/fixture-transform.js';
-import { addChain, removeChain, patchChain, moveChainMember, chainOf, pruneChains } from './model/chains.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures } from './model/fixture-transform.js';
+import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
-import { applyTheme } from './ui/theme.js';
-
-applyTheme();   // restore any saved GUI-colour overrides before the UI paints
+// Appearance/theme overrides removed — the app ships one curated base design
+// (the :root tokens in ui.css). No saved colour overrides are applied.
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -32,22 +32,27 @@ const thumbnails = renderSourceThumbnails(gl);
 // --- Default show: one device, two fixtures (single-device M2 target). ---
 function defaultShow() {
   let show = emptyShow();
-  show = addDevice(show, { id: 'c1', name: 'DQ1', ip: '127.0.0.1', colorOrder: 'GRB', port: 4048 });
-  show = addFixture(show, {
-    id: 'f1', name: 'f1', pixelCount: 150, colorOrder: 'GRB',
-    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 150 },
-    input: { points: [[0.05, 0.30], [0.95, 0.30]], samples: 150 },
-  });
-  show = addFixture(show, {
-    id: 'f2', name: 'f2', pixelCount: 150, colorOrder: 'GRB',
-    output: { deviceId: 'c1', pixelOffset: 150, pixelCount: 150 },
-    input: { points: [[0.05, 0.70], [0.95, 0.70]], samples: 150 },
-  });
-  // One working composition layer (NEW clip schema) so the first run shows the
-  // line. The single active clip carries the line generator + its prefixed
-  // manifest defaults; with default speed=1/amp=0.45 the line self-animates
-  // in-shader via uT. Layer-level effects/params start empty.
-  const clip = { ...makeClip('line', undefined, 'c1'), params: prefixedDefaults('line') };
+  const cv = show.composition.canvas;        // 1280×720
+  // Bench QuinLED (WLED), RGB passthrough. One controller for the first run.
+  show = addDevice(show, { id: 'c1', name: 'DQ1', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
+  // ONE definition, placed as a centred FAN of instances radiating from the
+  // middle — a Kagora-like centred layout (the real rig is centred on origin) so
+  // a radial source lights from the centre OUTWARD. All share the one definition.
+  show.fixtureTypes = [{ id: 't1', name: '1.6m · 96px', ledsPerMeter: 60, meters: 1.6, pixelCount: 96, colorOrder: 'RGB' }];
+  const N = 8, run = 230, mid = 160, ccx = cv.w / 2, ccy = cv.h / 2;
+  for (let i = 0; i < N; i++) {
+    const deg = i * (360 / N), a = deg * Math.PI / 180;
+    const transform = { x: ccx + Math.cos(a) * mid, y: ccy + Math.sin(a) * mid, w: run, h: 10, rotation: deg };
+    show = addFixture(show, {
+      id: `f${i + 1}`, typeId: 't1',
+      output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 96 },
+      input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: 96 },
+    });
+  }
+  show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
+  // A radial ripple expanding from the centre — the fan lights middle-out on the
+  // first frame (autoFire loops on uT). Prefixed manifest defaults.
+  const clip = { ...makeClip('radial', undefined, 'r1'), params: prefixedDefaults('radial') };
   show.composition.layers = [
     { id: 'l1', name: 'Layer 1', blend: 'add', opacity: 1,
       clips: [clip], activeClipId: clip.id,
@@ -76,9 +81,9 @@ function initialShow() {
   }
 }
 
-// Sync fixture geometry on load: ensure every fixture has a pixel-space
-// transform + freshly-derived normalized points for the current canvas.
-let show = syncShowFixtures(initialShow());
+// On load: migrate legacy flat fixtures into definitions + instances (so the
+// Library shows definitions immediately), then sync fixture geometry.
+let show = syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())));
 
 // --- Canvas resolution (composition.canvas drives source render + stage) ---
 // The canvas resolution affects ONLY the source render targets + on-screen
@@ -125,8 +130,17 @@ function snapshotForUndo(prev) {
 }
 function restoreShow(s) {
   undoSuppress = true;
+  // Restore the stage resolution too, so undo/redo of a canvas-size change (e.g.
+  // Fit to fixtures) fully reverts — not just the data.
+  const c = s?.composition?.canvas;
+  if (c && (c.w !== canvas.width || c.h !== canvas.height)) {
+    canvas.width = c.w; canvas.height = c.h;
+    if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+    preview?.setBaseSize?.(c.w, c.h);
+    compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+  }
   rebuild(s);
-  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay(); syncMasterFader();
+  panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
   undoSuppress = false;
   undoLastAt = 0;
 }
@@ -135,9 +149,10 @@ function redo() { if (redoStack.length) { undoStack.push(show); restoreShow(redo
 
 function rebuild(next) {
   snapshotForUndo(show);   // capture the pre-change state for undo
-  // Geometry path: ensure fixtures' derived sample points are in sync with their
-  // pixel-space transforms + the current canvas before building the sampler.
-  show = syncShowFixtures(next);
+  // 1) sync each instance's cached spec from its TYPE (so a definition edit fans
+  //    out to all its placed copies), 2) auto-pack pixel offsets contiguous per
+  //    device, 3) sync derived sample points to transforms + canvas.
+  show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
   const { sampleUVs, route, spans } = buildPipelineInputs(show);
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
@@ -183,6 +198,7 @@ function setCanvasSize(w, h) {
   const c = next.composition.canvas;
   canvas.width = c.w; canvas.height = c.h;
   if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+  preview?.setBaseSize?.(c.w, c.h);   // keep the overlay's logical size in step (no stretch)
   compositor.dispose();
   compositor = makeCompositor(gl, c.w, c.h);
   rebuild(next);          // syncs fixtures to the new canvas + rebuilds sampler
@@ -194,11 +210,13 @@ function setCanvasSize(w, h) {
 const previewCanvas = document.getElementById('preview');
 // Match the overlay's internal resolution to the stage so it doesn't distort.
 if (previewCanvas) { previewCanvas.width = canvas.width; previewCanvas.height = canvas.height; }
-const preview = previewCanvas ? createPreview(previewCanvas) : null;
+const preview = previewCanvas ? createPreview(previewCanvas, { svg: document.getElementById('ovl') }) : null;
 
 const panel = createFixturePanel({
   getShow: () => show,
   setShow: (next) => rebuild(next),
+  // A device/model row was clicked or edited → refresh the left inspector.
+  onSelect: () => updateInspector(),
 });
 // Timeline transport: plays the clip deck left→right, holding each clip for its
 // durationMs, looping. It only drives RENDERING (derives the active clip per
@@ -230,8 +248,9 @@ const layerPanel = createLayerPanel({
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
   thumbnails,
-  onClipSelect: () => setInspectorTab('clip'), // clicking a clip focuses the Clip inspector
-  onLayerSelect: () => setInspectorTab('layer'), // clicking the layer rectangle focuses the Layer inspector
+  onClipSelect: () => { setSection('design'); setInspectorTab('clip'); }, // jump to Design › Clip to tweak it
+  onLayerSelect: () => { setSection('design'); setInspectorTab('layer'); }, // jump to Design › Layer
+  onCompositionSelect: () => { setSection('design'); setInspectorTab('composition'); }, // jump to Design › Composition
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -245,17 +264,61 @@ const layerPanel = createLayerPanel({
 // re-renders the fixtures + layers panels against the new show.
 const importPanel = createImportPanel({
   getShow: () => show,
-  applyShow: (next) => rebuild(next),
-  onApplied: () => { panel.refresh(); layerPanel.refresh(); },
+  applyShow: (next) => {
+    // Adopt the imported composition canvas (it matches the rig's aspect, so the
+    // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
+    const c = next.composition?.canvas || { w: 1280, h: 720 };
+    const cur = show.composition?.canvas;
+    if (c.w !== cur?.w || c.h !== cur?.h) {
+      canvas.width = c.w; canvas.height = c.h;
+      if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+      preview?.setBaseSize?.(c.w, c.h);
+      compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+    }
+    rebuild(next);
+  },
+  onApplied: () => {
+    // Full UI refresh — a (re)import replaces every device + fixture, so the
+    // placement list and canvas overlay must redraw, and any selection of
+    // now-gone fixtures must clear (else the Output list looks unchanged).
+    selectedFixtureIds.clear();
+    panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.();
+    renderOutput(); redrawOverlay();
+  },
 });
 // Composition (canvas resolution) is composition-global, so it sits at the top
 // of the editor, above Import/Layers/Fixtures.
 const compositionPanel = createCompositionPanel({
   getShow: () => show,
   setSize: (w, h) => setCanvasSize(w, h),
-  setShow: (next) => setComposition(next), // crossfade: composition-only persist
-  loadComposition: (comp) => applyComposition(comp),
+  fitToFixtures: () => fitToFixtures(),   // hoisted fn decl defined later in this module
+  setTitle: (t) => { setComposition({ ...show, composition: { ...show.composition, title: t } }); layerPanel.refresh(); },   // reflect in the deck's composition-group header now
 });
+// Output selection + snap state. Declared here (before the Settings panel, whose
+// initial render reads snap state) to avoid a temporal-dead-zone access.
+let selectedFixtureIds = new Set();
+let SNAP_GRID = 20;     // grid step (px) fixtures snap to when not aligning to a neighbour
+let SNAP_DIST = 10;     // px tolerance for aligning to another fixture / centre
+let snapEnabled = false;
+let snapGuides = [];    // alignment guide lines to draw during a snapped drag
+let marqueeRect = null; // active rubber-band selection box (normalized), or null
+let marqueeBase = new Set();   // selection to keep when a Shift-marquee is additive
+
+// Fixtures whose footprint (normalized bbox) intersects a marquee rect.
+function fixturesInRect(r) {
+  const ids = [];
+  for (const f of show.fixtures || []) {
+    const pts = f.input?.points; if (!pts?.length) continue;
+    let minx = 1, miny = 1, maxx = 0, maxy = 0;
+    for (const [u, v] of pts) { minx = Math.min(minx, u); maxx = Math.max(maxx, u); miny = Math.min(miny, v); maxy = Math.max(maxy, v); }
+    if (maxx >= r.x0 && minx <= r.x1 && maxy >= r.y0 && miny <= r.y1) ids.push(f.id);
+  }
+  return ids;
+}
+// Global Settings panel — app-wide preferences (theme, audio gain, crossfade,
+// snap, composition file I/O). Mounts into its own top-level Settings view.
+// (Settings panel removed — its items live in the bottom-corner File/Audio menus
+//  + the Composition subtab. Snap is the corner toggle; grid/dist keep defaults.)
 
 // Replace the whole composition (layers/clips/effects/canvas) from a loaded file,
 // keeping devices/fixtures. Resizes the stage + recreates the compositor for the
@@ -267,7 +330,7 @@ function applyComposition(comp) {
   if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
   compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
   saveShow(next); rebuild(next);
-  layerPanel.refresh(); panel.refresh(); compositionPanel.refresh(); renderOutput(); redrawOverlay(); syncMasterFader();
+  layerPanel.refresh(); panel.refresh(); compositionPanel.refresh(); renderOutput(); redrawOverlay();
 }
 // --- Resolume-style shell routing ----------------------------------------
 // Panels are CONSTRUCTED ONCE and mounted into fixed regions; switching
@@ -287,63 +350,91 @@ function applyComposition(comp) {
 //                 drag fixtures to position them.
 //   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
-const fixturesPanels = document.getElementById('fixtures-panels');
 compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
-fixturesPanels?.append(importPanel.el);
-fixturesPanels?.append(panel.el);
+// Fixtures tab = the design editor + Kagora import (placement list is the
+// output-list above). Devices tab = the device editor.
+const devicesDesignEl = document.getElementById('devices-design');
+const libraryDesignEl = document.getElementById('library-design');
+devicesDesignEl?.append(panel.devicesEl);          // Devices tab — instances
+libraryDesignEl?.append(panel.libraryEl);          // Library tab — model catalog
+libraryDesignEl?.append(importPanel.el);           // + Kagora import
 
-// Output selection: a SET of selected fixtures (multi-select), and snapping.
-let selectedFixtureIds = new Set();
-const SNAP_GRID = 20;
-const SNAP_DIST = 10;   // px tolerance for aligning to another fixture / centre
-let snapEnabled = false;
-let snapGuides = [];    // alignment guide lines to draw during a snapped drag
+// (Output selection + snap state are declared earlier, above the Settings panel.)
 
 // Snap a proposed CENTRE (x,y) for fixture `fid`: align its left/centre/right
 // EDGES (and top/centre/bottom) to other fixtures' edges/centres and the canvas
 // edges/centre — so fixtures sit neatly next to each other. Records guide lines;
 // falls back to the grid on any axis that didn't snap.
+// Axis-aligned half-extents of a fixture's (possibly ROTATED) footprint — so a
+// vertical bar (rotation 90/270°) snaps by its real height, not its raw width.
+function fixtureAABB(t) {
+  const a = (Number(t?.rotation) || 0) * Math.PI / 180;
+  const c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+  const hw = (Number(t?.w) || 0) / 2, hh = (Number(t?.h) || 0) / 2;
+  return [c * hw + s * hh, s * hw + c * hh];     // [halfWidth, halfHeight]
+}
 function snapPoint(x, y, fid, excludeIds) {
   snapGuides = [];
   if (!snapEnabled) return [x, y];
   const ex = new Set(excludeIds || []);
   const cv = show.composition?.canvas || { w: 1280, h: 720 };
-  const me = show.fixtures.find((f) => f.id === fid)?.input?.transform || { w: 0, h: 0 };
-  const hw = (me.w || 0) / 2, hh = (me.h || 0) / 2;
-  // Target edge/centre lines on each axis (canvas + every other fixture).
+  const [mhw, mhh] = fixtureAABB(show.fixtures.find((f) => f.id === fid)?.input?.transform);
+  // PRIMARY targets: every OTHER fixture's edges + centre (so strips align corner
+  // -to-corner / edge-to-edge), plus the canvas edges/centre.
   const xT = [0, cv.w / 2, cv.w], yT = [0, cv.h / 2, cv.h];
   for (const f of show.fixtures || []) {
     if (ex.has(f.id)) continue;
     const t = f.input?.transform; if (!t) continue;
-    xT.push(t.x - t.w / 2, t.x, t.x + t.w / 2);
-    yT.push(t.y - t.h / 2, t.y, t.y + t.h / 2);
+    const [hw, hh] = fixtureAABB(t);
+    xT.push(t.x - hw, t.x, t.x + hw);
+    yT.push(t.y - hh, t.y, t.y + hh);
   }
-  // The dragged fixture's own left/centre/right (and top/centre/bottom) offsets.
+  // Align the dragged fixture's own left/centre/right (top/centre/bottom) edges.
   let sx = x, sy = y, bestX = SNAP_DIST, bestY = SNAP_DIST, gx = null, gy = null;
-  for (const off of [-hw, 0, hw]) for (const tx of xT) {
+  for (const off of [-mhw, 0, mhw]) for (const tx of xT) {
     const d = Math.abs((x + off) - tx); if (d < bestX) { bestX = d; sx = tx - off; gx = tx; }
   }
-  for (const off of [-hh, 0, hh]) for (const ty of yT) {
+  for (const off of [-mhh, 0, mhh]) for (const ty of yT) {
     const d = Math.abs((y + off) - ty); if (d < bestY) { bestY = d; sy = ty - off; gy = ty; }
   }
-  if (gx !== null) snapGuides.push({ axis: 'x', v: gx }); else sx = Math.round(x / SNAP_GRID) * SNAP_GRID;
-  if (gy !== null) snapGuides.push({ axis: 'y', v: gy }); else sy = Math.round(y / SNAP_GRID) * SNAP_GRID;
+  // SECONDARY: the grid is only a soft fallback — snap to it only when no
+  // fixture/canvas line caught AND the cursor is already near a grid line, so
+  // movement stays free elsewhere ("primarily snap to fixtures").
+  if (gx !== null) snapGuides.push({ axis: 'x', v: gx });
+  else { const g = Math.round(x / SNAP_GRID) * SNAP_GRID; if (Math.abs(x - g) <= SNAP_DIST) sx = g; }
+  if (gy !== null) snapGuides.push({ axis: 'y', v: gy });
+  else { const g = Math.round(y / SNAP_GRID) * SNAP_GRID; if (Math.abs(y - g) <= SNAP_DIST) sy = g; }
   return [sx, sy];
 }
-const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);
+const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
 // Update the selection from a click. shift = toggle; clicking an already-selected
 // fixture keeps the group (so it can be dragged); a new one selects just it.
-function selectFixture(fxId, ev) {
+function selectFixture(fxId, ev, opts = {}) {
   if (ev && ev.shiftKey) {
     if (fxId == null) return;
     if (selectedFixtureIds.has(fxId)) selectedFixtureIds.delete(fxId); else selectedFixtureIds.add(fxId);
   } else if (fxId == null) {
     selectedFixtureIds.clear();
-  } else if (!selectedFixtureIds.has(fxId)) {
+  } else if (opts.isolate || !selectedFixtureIds.has(fxId)) {
+    // isolate = a LIST click → always select just this fixture, even if it was
+    // part of a multi-selection. (On the CANVAS, clicking an already-selected
+    // fixture keeps the group so it can be dragged together.)
     selectedFixtureIds = new Set([fxId]);
   }
+  // Picking a single fixture (not a shift multi-select / empty click) jumps
+  // straight to its editor — to the Output › Fixtures view, opened on that
+  // fixture — so selecting on the canvas or placement list shows its properties.
+  if (fxId != null && !(ev && ev.shiftKey)) {
+    setSection('output');
+    setOutputTab('fixtures');
+    const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
+    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
+    panel.selectFixture?.(fxId);
+  }
   renderOutput(); redrawOverlay();
+  // Scroll the picked fixture's row into view in the placement list.
+  if (fxId != null) outputListEl?.querySelector(`.output-row[data-fxid="${fxId}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 let dragHandle = null;
@@ -355,15 +446,52 @@ if (previewCanvas) {
     onEdit: (next) => { show = next; redrawOverlay(); },         // live, no rebuild churn
     onCommit: (next) => { snapGuides = []; saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
     snap: snapPoint,
+    // Rubber-band select: keep the prior selection only when Shift-additive.
+    onMarqueeStart: (additive) => {
+      marqueeBase = additive ? new Set(selectedFixtureIds) : new Set();
+      if (!additive) { selectedFixtureIds = new Set(); renderOutput(); redrawOverlay(); }   // empty click clears
+    },
+    onMarquee: (rect) => {
+      marqueeRect = rect;
+      selectedFixtureIds = new Set([...marqueeBase, ...fixturesInRect(rect)]);
+      renderOutput(); redrawOverlay();
+    },
+    onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
   });
 }
 
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
-let outputTab = 'fixtures';   // Output sub-tab: fixtures | chains | devices
-const snapToggle = document.getElementById('snap-cb');
-snapToggle?.addEventListener('change', () => { snapEnabled = snapToggle.checked; redrawOverlay(); });
+const outputInspectorEl = document.getElementById('output-inspector');   // left sidebar — selected item's editor
+let outputTab = 'fixtures';   // Output sub-tab: fixtures | devices | library
+const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
+const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
+// Controller-colour tint for the UI (preview chrome + placement-list swatches).
+// Toggled from the corner "▢ color" button; persisted. Default ON.
+let controllerTint = (() => { try { return localStorage.getItem('lz.tint') !== '0'; } catch { return true; } })();
+const colorBtn = document.getElementById('color-btn');
+function setControllerTint(on) {
+  controllerTint = !!on;
+  try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
+  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+  preview?.setColorTint?.(controllerTint);
+  renderOutput(); redrawOverlay();
+}
+colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
+// Initial sync (preview exists; the startup renderOutput reads controllerTint).
+if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+preview?.setColorTint?.(controllerTint);
+// Snap toggle: a viewport corner button (mirrored by the Settings panel).
+// setSnapEnabled keeps both in step.
+const snapBtn = document.getElementById('snap-btn');
+function setSnapEnabled(v) {
+  snapEnabled = !!v;
+  if (snapBtn) { snapBtn.classList.toggle('on', snapEnabled); snapBtn.textContent = (snapEnabled ? '▣' : '▢') + ' snap'; }
+  redrawOverlay();
+}
+// (snap button opens a settings menu — enabled toggle + grid/distance — wired in
+//  the corner-menu section below, alongside File/Audio.)
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
@@ -374,84 +502,238 @@ function txField(label, value, onCommit) {
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
 
-// Position editor for one selected fixture (inlined under its row): x/y/length/
-// rotation° fields + a rotate-90° / flip button row.
+// Placement + PATCH editor for one selected fixture (inlined under its row):
+// canvas transform (x/y/length/height/rotation, rotate-90/flip) PLUS the patch —
+// which device it's wired to + its (auto-packed) pixel range. The physical strip
+// itself (LEDs/m, colour) is defined in the Library tab.
 function positionEditor(sel) {
   const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
   const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
   const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
+  // A chain's device + output belong to the whole run, set by its HEAD (the first
+  // fixture); later members inherit it and can't change it. Moving the head moves
+  // every member together.
+  const ch = chainOf(show, sel.id);
+  const isHead = !ch || ch.index === 0;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const moveRun = (patch) => {
+    const key = runKeyOf(sel);
+    const next = structuredClone(show);
+    for (const f of next.fixtures) if (runKeyOf(f) === key) Object.assign(f.output, patch);
+    apply(next);
+  };
+  // Device picker (which controller the chain HEAD is wired to). Locked downstream.
+  const devSel = oel('select');
+  for (const d of show.devices) {
+    const o = oel('option', { value: d.id, textContent: `${d.name || d.id} (${d.id})` });
+    if (d.id === sel.output?.deviceId) o.selected = true;
+    devSel.append(o);
+  }
+  devSel.disabled = !isHead;
+  if (!isHead) devSel.title = 'set by the chain — edit the first fixture in the chain';
+  devSel.addEventListener('change', () => moveRun({ deviceId: devSel.value }));
+  // Output/port picker — limited to the device's actual outputs. Locked downstream.
+  const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
+  const nOut = Math.max(1, Math.round(dev?.outputs ?? 4));
+  const portSel = oel('select');
+  for (let p = 1; p <= nOut; p++) {
+    const o = oel('option', { value: String(p), textContent: `output ${p}` });
+    if (p === (sel.output?.port ?? 1)) o.selected = true;
+    portSel.append(o);
+  }
+  portSel.disabled = !isHead;
+  portSel.addEventListener('change', () => moveRun({ port: Number(portSel.value) }));
   return oel('div', { className: 'output-edit' }, [
+    oel('div', { className: 'fx-pts', textContent: 'geometry' }),
     oel('div', { className: 'output-grid' }, [
-      txField('x', tf.x, (v) => setT({ x: v })),
-      txField('y', tf.y, (v) => setT({ y: v })),
-      txField('length', tf.w, (v) => setT({ w: v })),
-      txField('rotation°', tf.rotation, (v) => setT({ rotation: v })),
+      txField('X', tf.x, (v) => setT({ x: v })),
+      txField('Y', tf.y, (v) => setT({ y: v })),
+      txField('Length', tf.w, (v) => setT({ w: v })),
+      txField('Height', tf.h, (v) => setT({ h: v })),
+      txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
     ]),
     oel('div', { className: 'dir-btns out-transform' }, [
       oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
         onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
-      oel('button', { className: 'dir-btn', textContent: '⇄ flip', title: 'flip pixel direction (which end is pixel 0)',
+      oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ flip',
+        title: 'reverse pixel direction (which end is pixel 0) — the canvas arrow points at pixel 0',
         onclick: () => apply(flipFixture(show, sel.id)) }),
     ]),
+    // PATCH: controller + output/port (= the daisy-chain it's on) + the pixel
+    // range it lands on (offset auto-packed per device, ports in order).
+    oel('div', { className: 'fx-pts', textContent: 'patch' }),
+    oel('div', { className: 'output-grid' }, [
+      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
+      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
+      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
+    ]),
+    // CHAIN status — is this fixture daisy-chained, and where in the run.
+    chainStatusRow(sel),
   ]);
 }
 
-// "chain selected (stagger)" action shown when 2+ fixtures are selected.
+const applyShow = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
+
+// Wiring for the selected fixture: its INPUT comes FROM another fixture's output
+// (or straight from the controller = first on its output), and its OUTPUT goes TO
+// the next fixture. Picking a "from" fixture moves this one onto that fixture's
+// output, right after it — the node-graph edge. "to" is the derived successor.
+function chainStatusRow(sel) {
+  const ch = chainOf(show, sel.id);
+  const idxOf = (id) => show.fixtures.findIndex((x) => x.id === id);
+  const nameOf = (id) => { const i = idxOf(id); return i >= 0 ? fixtureLabel(show.fixtures[i], i) : id; };
+  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '?'}·o${f?.output?.port ?? 1})`; };
+  const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
+  const devName = dev?.name || dev?.id || 'controller';
+  // Pixel load + capacity on this fixture's output (0 max = unlimited).
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const key = runKeyOf(sel);
+  const runPx = show.fixtures.filter((f) => runKeyOf(f) === key).reduce((m, f) => m + (f.pixelCount || 0), 0);
+  const cap = Number(dev?.maxPerOutput) || 0;
+  const full = cap > 0 && runPx >= cap;
+  // FROM picker: the controller (=first on its output) + every other fixture.
+  const fromSel = oel('select');
+  fromSel.append(oel('option', { value: '', textContent: `${devName} (controller)` }));
+  for (const f of show.fixtures) if (f.id !== sel.id) fromSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
+  fromSel.value = ch && ch.index > 0 ? ch.members[ch.index - 1] : '';
+  fromSel.addEventListener('change', () => applyShow(fromSel.value ? wireAfter(show, sel.id, fromSel.value) : wireFirst(show, sel.id)));
+  // TO picker: which fixture follows this one. Greyed when the output is FULL
+  // (can't drive more pixels on a single output → end of chain).
+  const next = ch && ch.index < ch.members.length - 1 ? ch.members[ch.index + 1] : null;
+  const toSel = oel('select');
+  toSel.append(oel('option', { value: '', textContent: full ? '— end (output full)' : '— end of chain' }));
+  for (const f of show.fixtures) if (f.id !== sel.id) toSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
+  toSel.value = next || '';
+  toSel.disabled = full && !next;
+  if (full) toSel.title = `${devName} output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
+  const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
+  return oel('div', {}, [
+    oel('div', { className: 'fx-pts' + (full ? ' fx-err' : ''), textContent: (ch ? `⛓ ${ch.name} · ${ch.index + 1}/${ch.members.length}` : '⋈ first on its output') + capTxt }),
+    oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input ←' }), fromSel]),
+    oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output →' }), toSel]),
+  ]);
+}
+
+// Multi-select action: put the selected fixtures on ONE shared output (a fresh
+// port on the first one's device) so they become a chain.
 function chainSelectedAction() {
   return oel('div', { className: 'output-edit' }, [
     oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
     oel('button', {
-      className: 'fx-add', textContent: '⛓ chain selected (stagger)',
+      className: 'fx-add', textContent: '⛓ chain (same output)',
       onclick: () => {
-        const next = addChain(show, [...selectedFixtureIds]);
-        saveShow(next); rebuild(next); renderOutput(); redrawOverlay();
+        const ids = [...selectedFixtureIds];
+        const first = show.fixtures.find((f) => f.id === ids[0]); if (!first) return;
+        const devId = first.output?.deviceId || '';
+        const port = freePort(show, devId);
+        const next = structuredClone(show);
+        for (const f of next.fixtures) if (selectedFixtureIds.has(f.id)) { f.output.deviceId = devId; f.output.port = port; }
+        applyShow(next);
       },
     }),
   ]);
 }
 
-// Read-only per-device routing overview (the Devices sub-tab) — pixel + fixture
-// totals per controller. A natural home for live health pills later.
-function renderDeviceSummary() {
-  const devs = show.devices || [];
-  if (!devs.length) {
-    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no devices — add them in the Fixtures tab' }));
-    return;
+// Place a new INSTANCE of a definition on the canvas. Spec is cached from the
+// type on rebuild (syncFixtureTypes); the offset auto-packs. Default on-canvas
+// width = the definition's pixel count, clamped (1px/LED, cosmetic).
+function addInstance(typeId) {
+  const next = structuredClone(show);
+  const t = (next.fixtureTypes || []).find((x) => x.id === typeId) || next.fixtureTypes?.[0];
+  if (!t) return;
+  let n = next.fixtures.length + 1, id;
+  do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
+  const cv = next.composition?.canvas || { w: 1280, h: 720 };
+  // Drop new strips at the TOP-LEFT (cascaded so successive adds don't fully
+  // overlap) so they're easy to spot, and leave them UNASSIGNED (no device) — they
+  // land in the "Unassigned" group until you wire them to an output. A thin
+  // VERTICAL strip: thickness 10 px, run = pixel count (rotation 90° stands it up).
+  const k = next.fixtures.length;
+  const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 10, rotation: 90 };
+  next.fixtures.push({
+    id, typeId: t.id,
+    output: { deviceId: '', port: 1, pixelOffset: 0, pixelCount: t.pixelCount },
+    input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
+  });
+  selectedFixtureIds = new Set([id]);
+  expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
+  setOverlay(true);   // reveal the canvas overlay so the new strip is visible
+  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+// "+ fixture" control for the placement list: pick a definition to place. The
+// definitions themselves are created/edited in the Library tab.
+function addFixtureControl() {
+  const wrap = oel('div', { className: 'output-tools' });
+  const types = show.fixtureTypes || [];
+  if (!types.length) {
+    wrap.append(oel('span', { className: 'seg-hint', textContent: 'define a fixture type in the Inventory tab first' }));
+    return wrap;
   }
-  for (const d of devs) {
-    const fxs = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === d.id);
-    const px = fxs.reduce((m, f) => m + (f.pixelCount || 0), 0);
-    outputListEl.append(oel('div', { className: 'output-row' }, [
-      oel('span', { textContent: d.name || d.id }),
-      oel('span', { className: 'output-dev', textContent: d.ip || 'no ip' }),
-      oel('span', { className: 'fx-badge', textContent: `${px} px` }),
-      oel('span', { className: 'fx-badge', textContent: `${fxs.length} fx` }),
-    ]));
+  const sel = oel('select');
+  for (const t of types) sel.append(oel('option', { value: t.id, textContent: `${t.name} · ${t.pixelCount}px` }));
+  wrap.append(oel('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addInstance(sel.value) }), sel);
+  return wrap;
+}
+
+// Confirm before deleting fixture(s) — it re-packs pixel ranges, and removing a
+// chained fixture changes that whole output's wiring/addressing.
+function confirmDeleteFixtures(ids) {
+  const items = (show.fixtures || []).filter((f) => ids.includes(f.id));
+  if (!items.length) return false;
+  let msg;
+  if (items.length === 1) {
+    const f = items[0], ch = chainOf(show, f.id);
+    msg = `Delete ${fixtureLabel(f, show.fixtures.indexOf(f))}?`
+      + (ch ? `\n\nIt's chained on ${ch.name} (${ch.members.length} fixtures) — removing it re-wires that chain and re-packs its pixels.` : '');
+  } else {
+    const chained = items.filter((f) => chainOf(show, f.id)).length;
+    msg = `Delete ${items.length} fixtures?` + (chained ? `\n\n${chained} are chained — this re-wires their outputs and re-packs pixels.` : '');
   }
+  return window.confirm(msg);
+}
+
+// The LEFT sidebar editor: shows the selected item's properties for the active
+// Output tab — a fixture's position (Fixtures), a device's settings (Devices),
+// or a model/definition (Library). Hidden when nothing's selected / not Output.
+function updateInspector() {
+  if (!outputInspectorEl) return;
+  let detail = null;
+  if (outputPaneEl && !outputPaneEl.hidden) {
+    if (outputTab === 'fixtures') {
+      if (selectedFixtureIds.size === 1) {
+        const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
+        if (f) detail = positionEditor(f);
+      }
+    } else if (outputTab === 'devices') detail = panel.deviceDetailEl?.();
+    else if (outputTab === 'library') detail = panel.libraryDetailEl?.();
+  }
+  outputInspectorEl.textContent = '';
+  if (detail) { outputInspectorEl.append(detail); outputInspectorEl.hidden = false; }
+  else outputInspectorEl.hidden = true;
 }
 
 function renderOutput() {
+  updateInspector();
   if (!outputListEl) return;
   outputListEl.textContent = '';
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
 
-  if (outputTab === 'devices') { renderDeviceSummary(); return; }
-  if (outputTab === 'chains') {
-    if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
-    renderChains();
-    return;
-  }
+  if (outputTab === 'library') return;   // Library uses the device + fixture editors, not the placement list
 
   // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
   if (!fixtures.length) {
-    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no fixtures yet — design them in the Fixtures tab, then place them here' }));
+    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no fixtures placed yet — pick a definition to add' }));
+    outputListEl.append(addFixtureControl());
     return;
   }
-  for (const f of fixtures) {
+  const fixtureRow = (f, i) => {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
-    const name = oel('span', { textContent: f.name || f.id });
-    const dev = oel('span', { className: 'output-dev', textContent: f.output?.deviceId || '—' });
+    row.dataset.fxid = f.id;
+    const name = oel('span', { textContent: fixtureLabel(f, i) });
+    const rng = oel('span', { className: 'fx-badge', textContent: fixtureRange(f) });
     const eye = oel('button', {
       className: 'output-eye' + (f.hidden ? ' off' : ''), textContent: f.hidden ? '◌' : '●',
       title: f.hidden ? 'show fixture' : 'hide fixture',
@@ -464,120 +746,141 @@ function renderOutput() {
     const del = oel('button', { textContent: '✕', className: 'ly-rmfx', title: 'remove fixture' });
     del.onclick = (e) => {
       e.stopPropagation();
+      if (!confirmDeleteFixtures([f.id])) return;
       let n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => x.id !== f.id);
-      n = pruneChains(n);   // keep chain stagger indices correct after a deletion
+      n = pruneChains(n);
       selectedFixtureIds.delete(f.id); rebuild(n); panel.refresh(); renderOutput();
     };
-    row.onclick = (e) => selectFixture(f.id, e);
-    row.append(name, dev, eye, del);
-    outputListEl.append(row);
-    // Inline the position editor directly under the singly-selected fixture.
-    if (selectedFixtureIds.size === 1 && selectedFixtureIds.has(f.id)) outputListEl.append(positionEditor(f));
+    row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture
+    row.append(name, rng, eye, del);
+    return row;
+  };
+  // GROUP the placement list by CONTROLLER → output. Two levels: a controller
+  // header (collapsible), and under it each output (a chain, in wiring order).
+  // Colour ties to the canvas — a base hue per controller, a tint per output.
+  const cmap = controllerColorMap(show);
+  // Controller-tint toggle (corner button): off ⇒ one neutral grey for all swatches.
+  const NEUTRAL = 'rgba(150,156,166,.85)';
+  const runColor = (d, p) => (controllerTint ? cmap.runColor(d, p) : NEUTRAL);
+  const deviceColor = (d) => (controllerTint ? cmap.deviceColor(d) : NEUTRAL);
+  const devOrder = []; const devMap = new Map();
+  fixtures.forEach((f, i) => {
+    const did = f.output?.deviceId || '';
+    let dg = devMap.get(did);
+    if (!dg) { dg = { deviceId: did, groups: [], gmap: new Map() }; devMap.set(did, dg); devOrder.push(dg); }
+    const port = f.output?.port ?? 1, key = `${did}:${port}`;
+    let g = dg.gmap.get(key);
+    if (!g) { g = { key, deviceId: did, port, items: [] }; dg.gmap.set(key, g); dg.groups.push(g); }
+    g.items.push({ f, i });
+  });
+  const swatch = (color) => { const s = oel('span', { className: 'out-swatch' }); s.style.background = color; return s; };
+  // Unassigned fixtures (no device) sort to the TOP so freshly-added strips are
+  // obvious and easy to find before you wire them.
+  devOrder.sort((a, b) => (a.deviceId === '' ? 0 : 1) - (b.deviceId === '' ? 0 : 1));
+
+  for (const dg of devOrder) {
+    const gdev = show.devices.find((d) => d.id === dg.deviceId);
+    const devName = gdev?.name || dg.deviceId || 'Unassigned';
+    const devFx = dg.groups.reduce((m, g) => m + g.items.length, 0);
+    const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
+    const gcap = Number(gdev?.maxPerOutput) || 0;
+    const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
+    const devOpen = expandedDevices.has(dg.deviceId);   // caret is authoritative; selecting a fixture adds it to the set (auto-reveal) but you can still collapse
+    // Controller header. Clicking the NAME selects every fixture on the device;
+    // clicking elsewhere on the header expands/collapses it.
+    const devNameEl = oel('span', { className: 'out-group-dev', textContent: devName, title: `select all fixtures on ${devName}` });
+    devNameEl.onclick = (ev) => {
+      ev.stopPropagation();
+      expandedDevices.add(dg.deviceId);   // selecting all reveals the group
+      selectedFixtureIds = new Set(show.fixtures.filter((f) => (f.output?.deviceId || '') === dg.deviceId).map((f) => f.id));
+      renderOutput(); redrawOverlay();
+    };
+    const dhead = oel('div', { className: 'out-group out-dev', title: devName }, [
+      oel('span', { className: 'out-caret', textContent: devOpen ? '▾' : '▸' }),
+      swatch(deviceColor(dg.deviceId)),
+      devNameEl,
+      oel('span', { className: 'fx-badge' + (devOver ? ' out-over' : ''), textContent: `${dg.groups.length} out · ${devFx} fx · ${devPx}px${devOver ? ' ⚠' : ''}` }),
+    ]);
+    dhead.onclick = () => { expandedDevices.has(dg.deviceId) ? expandedDevices.delete(dg.deviceId) : expandedDevices.add(dg.deviceId); renderOutput(); };
+    outputListEl.append(dhead);
+    if (!devOpen) continue;
+
+    const singleOut = dg.groups.length === 1;   // one output → skip the redundant "out N" sub-header
+    for (const g of dg.groups) {
+      if (singleOut) { for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i)); continue; }
+      const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
+      const over = gcap > 0 && totalPx > gcap;
+      const collapsed = !expandedGroups.has(g.key);
+      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · output ${g.port}` }, [
+        oel('span', { className: 'out-caret', textContent: collapsed ? '▸' : '▾' }),
+        swatch(runColor(g.deviceId, g.port)),
+        oel('span', { className: 'out-group-port', textContent: `out ${g.port}` }),
+        oel('span', { className: 'fx-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${totalPx}${gcap > 0 ? '/' + gcap : ''}px${over ? ' ⚠' : ''}` }),
+      ]);
+      if (g.items.length > 1) ohead.append(oel('span', { className: 'fx-badge out-chain', textContent: '⛓ chain' }));
+      ohead.onclick = () => { expandedGroups.has(g.key) ? expandedGroups.delete(g.key) : expandedGroups.add(g.key); renderOutput(); };
+      outputListEl.append(ohead);
+      if (collapsed) continue;
+      for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i));   // editor is in the left sidebar
+    }
   }
 
+  outputListEl.append(addFixtureControl());
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
 }
 
-// Chains: ordered fixture groups with a stagger offset (cascade a pulse). Each
-// card: members (reorderable), a stagger slider, an axis toggle, and delete.
-function renderChains() {
-  const chains = show.chains || [];
-  if (!chains.length) return;
-  const commit = (next) => { saveShow(next); rebuild(next); renderOutput(); redrawOverlay(); };
-  const fxName = (id) => (show.fixtures.find((f) => f.id === id)?.name || id);
-
-  const wrap = oel('div', { className: 'chains' }, [oel('div', { className: 'fx-pts', textContent: 'chains (stagger)' })]);
-  for (const c of chains) {
-    const card = oel('div', { className: 'chain-card' });
-    const head = oel('div', { className: 'chain-head' }, [
-      oel('span', { className: 'chain-name', textContent: c.name }),
-      oel('button', { className: 'chain-fire', textContent: '⚡', title: 'fire a pulse to preview the stagger', onclick: () => transport.fire() }),
-      oel('button', { className: 'ly-rmfx', textContent: '✕', title: 'remove chain', onclick: () => commit(removeChain(show, c.id)) }),
-    ]);
-    card.append(head);
-
-    // Ordered members — index drives the stagger; ▲▼ reorder, ✕ removes one.
-    const list = oel('div', { className: 'chain-members' });
-    c.members.forEach((m, i) => {
-      list.append(oel('div', { className: 'chain-member' }, [
-        oel('span', { className: 'chain-idx', textContent: String(i) }),
-        oel('span', { className: 'chain-mname', textContent: fxName(m) }),
-        oel('button', { textContent: '▲', title: 'earlier', disabled: i === 0, onclick: () => commit(moveChainMember(show, c.id, m, -1)) }),
-        oel('button', { textContent: '▼', title: 'later', disabled: i === c.members.length - 1, onclick: () => commit(moveChainMember(show, c.id, m, 1)) }),
-        oel('button', { className: 'ly-rmfx', textContent: '✕', title: 'remove from chain', onclick: () => commit(patchChain(show, c.id, { members: c.members.filter((x) => x !== m) })) }),
-      ]));
-    });
-    card.append(list);
-
-    // Stagger amount (normalized canvas offset per step) + readout.
-    const sOut = oel('span', { className: 'ly-readout', textContent: c.stagger.toFixed(2) });
-    const sRange = oel('input', { type: 'range', min: '-0.5', max: '0.5', step: '0.01', value: String(c.stagger) });
-    const fillS = () => sRange.style.setProperty('--fill', ((Number(sRange.value) + 0.5) / 1 * 100) + '%');
-    fillS();
-    sRange.addEventListener('input', () => { sOut.textContent = Number(sRange.value).toFixed(2); fillS(); });
-    sRange.addEventListener('change', () => commit(patchChain(show, c.id, { stagger: Number(sRange.value) })));
-    sRange.addEventListener('contextmenu', (e) => { e.preventDefault(); commit(patchChain(show, c.id, { stagger: 0.1 })); });
-    card.append(oel('label', { className: 'fx-field ly-param ly-row' }, [
-      oel('span', { className: 'ly-plabel', textContent: 'stagger' }), sOut, sRange,
-    ]));
-
-    // Axis: which way the cascade travels (matches the source's travel axis).
-    const axisBtns = oel('div', { className: 'dir-btns chain-axis' }, ['x', 'y'].map((ax) => oel('button', {
-      className: 'dir-btn' + (c.axis === ax ? ' on' : ''), textContent: ax.toUpperCase(),
-      onclick: () => commit(patchChain(show, c.id, { axis: ax })),
-    })));
-    card.append(oel('label', { className: 'fx-field ly-param ly-row' }, [
-      oel('span', { className: 'ly-plabel', textContent: 'axis' }), axisBtns,
-    ]));
-
-    wrap.append(card);
-  }
-  outputListEl.append(wrap);
-}
 const renderOutputList = renderOutput; // back-compat alias
 
-// Runtime UI view state (NOT persisted). applyView only toggles DOM visibility,
-// the preview overlay, and drag interactivity — the render/sampler/output run
-// regardless of which tab is shown.
-const view = { activeTab: 'composition' };
-const tabsEl = document.getElementById('tabs');
-const deckbarEl = document.getElementById('deckbar');
-const inspectorColEl = document.getElementById('inspector-col');   // library now docks inside this
-const outputViewEl = document.getElementById('output-view');
-const fixturesViewEl = document.getElementById('fixtures-view');
-
-function applyView() {
-  const tab = view.activeTab;
-  const onComposition = tab === 'composition';
-  const onOutput = tab === 'output';
-  const onFixtures = tab === 'fixtures';
-
-  tabsEl?.querySelectorAll('.tab').forEach((b) => {
-    b.classList.toggle('tab-active', b.dataset.tab === tab);
-  });
-
-  if (deckbarEl) deckbarEl.hidden = !onComposition;
-  if (inspectorColEl) inspectorColEl.hidden = !onComposition;
-  if (outputViewEl) outputViewEl.hidden = !onOutput;
-  if (fixturesViewEl) fixturesViewEl.hidden = !onFixtures;
-
-  // Fixture overlay shows on Output + Fixtures (so you see/position fixtures),
-  // hidden on Composition for a clean composite. Drag is enabled wherever the
-  // overlay shows.
-  const overlay = onOutput || onFixtures;
-  if (previewCanvas) previewCanvas.style.display = overlay ? '' : 'none';
-  dragHandle?.setEnabled(overlay);
-  if (overlay) renderOutputList();
+// --- Workspace layout: there are NO top-level tabs. The deck, the Clip/Layer/
+//     Composition inspector, and the Output/Fixtures column are all visible at
+//     once. The fixture overlay (draggable rectangles on the canvas) is a
+//     separate toggle, decoupled from any tab. ---
+let overlayVisible = false;   // are the fixture rectangles shown over the composite?
+const overlayToggleBtn = document.getElementById('overlay-toggle');
+const ovlSvg = document.getElementById('ovl');
+function setOverlay(v) {
+  overlayVisible = !!v;
+  if (previewCanvas) previewCanvas.style.display = overlayVisible ? '' : 'none';
+  if (ovlSvg) ovlSvg.style.display = overlayVisible ? '' : 'none';   // hide the SVG chrome too
+  dragHandle?.setEnabled(overlayVisible);
+  overlayToggleBtn?.classList.toggle('on', overlayVisible);
+  if (overlayToggleBtn) overlayToggleBtn.textContent = (overlayVisible ? '▣' : '▢') + ' fixtures';
+  if (snapBtn) snapBtn.disabled = !overlayVisible;   // snap only matters while dragging fixtures (overlay on)
+  if (overlayVisible) renderOutput();
+  redrawOverlay();
 }
+overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 
-tabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.tab');
-  if (!b) return;
-  view.activeTab = b.dataset.tab;
-  applyView();
-});
+// Blackout: a live-performance master that holds ALL output dark (sends zeros) while
+// the preview keeps playing, so you can cue without lighting the wall. Off by default.
+// (Blackout state + setBlackout are declared above the layer panel — see there.
+//  Toggled from the composition-group "B"; the corner button was removed.)
+
+// (Play/transport UI and the keyboard cheat-sheet were removed — not needed.)
+
+
+// (Settings is the third top-level tab now — see setSection; its file actions
+//  + prefs panel mount into #settings-pane near the end of this module.)
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+// Deselect: clear the fixture selection on Escape, or on a click in empty space —
+// the canvas gap / checkerboard letterbox / page chrome. The canvas itself keeps
+// its own click logic (empty → clear, a fixture → select), and panel clicks are
+// left alone, so those regions are excluded.
+function clearFixtureSelection() {
+  if (!selectedFixtureIds.size) return false;
+  selectedFixtureIds.clear(); renderOutput(); redrawOverlay(); return true;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || typingIn(e.target)) return;
+  if (clearFixtureSelection()) e.preventDefault();
+});
+document.addEventListener('pointerdown', (e) => {
+  if (!selectedFixtureIds.size) return;
+  if (e.target.closest?.('#stageinner, #side, #output-inspector, #deckbar, #corner-controls, #show-ui')) return;
+  clearFixtureSelection();
+});
 
 // Cmd/Ctrl+Z = undo · Cmd/Ctrl+Shift+Z = redo. Ignored while typing in a field
 // (so the input does its own native text undo).
@@ -591,30 +894,23 @@ document.addEventListener('keydown', (e) => {
 // Show/hide all GUI to view the canvas full-screen — via the 'h' key OR the
 // top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
 // always a way back). Tab is intentionally NOT bound (too easy to hit).
-const toggleGui = () => document.body.classList.toggle('gui-hidden');
+let resetView = null;   // set by the zoom IIFE; used by the top menu's View › Reset zoom
+// One button in the corner toggles the whole UI; it stays put (the cluster keeps
+// this button visible while hidden) and just relabels hide ⇄ show.
+const toggleGui = () => {
+  const hidden = document.body.classList.toggle('gui-hidden');
+  const b = document.getElementById('g-hide');
+  if (b) b.textContent = hidden ? 'Show UI' : 'Hide UI';
+};
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'h' && e.key !== 'H') return;
   if (typingIn(e.target)) return;
   toggleGui();
 });
 
-// --- Top-bar global tweaks: master opacity · reset timer · hide UI ---
-const gMaster = document.getElementById('g-master');
-const gMasterVal = document.getElementById('g-master-val');
-function syncMasterFader() {
-  const o = show.composition?.opacity ?? 1;
-  if (gMaster) gMaster.value = String(o);
-  if (gMasterVal) gMasterVal.textContent = `${Math.round(o * 100)}%`;
-}
-gMaster?.addEventListener('input', () => {
-  const v = Number(gMaster.value);
-  if (gMasterVal) gMasterVal.textContent = `${Math.round(v * 100)}%`;
-  setComposition(setCompositionOpacity(show, v));
-});
-document.getElementById('g-reset')?.addEventListener('click', () => transport.reset());
+// --- Chrome: hide / show UI. (Master opacity lives in the Composition inspector
+//     tab; the timer-reset button was removed.) ---
 document.getElementById('g-hide')?.addEventListener('click', toggleGui);
-document.getElementById('show-ui')?.addEventListener('click', toggleGui);
-syncMasterFader();
 
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
@@ -622,21 +918,47 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   const t = e.target;
   if (typingIn(t)) return;
-  if (view.activeTab === 'composition') {
-    // A selected effect deletes first; otherwise the selected clip.
-    if (!layerPanel.deleteSelectedEffect?.()) layerPanel.deleteActiveClip();
+  // On the Devices / Library tabs, ⌫ deletes the selected device / model /
+  // definition (deleteSelected confirms before removing a device).
+  if (!outputPaneEl?.hidden && (outputTab === 'devices' || outputTab === 'library')) {
+    if (panel.deleteSelected?.()) { renderOutput(); redrawOverlay(); }
     e.preventDefault();
-  } else if (selectedFixtureIds.size) {
+    return;
+  }
+  // A SELECTED FIXTURE is the signal to delete fixtures (regardless of the overlay
+  // toggle — gating on it caused a silent no-op / accidental clip-delete). With no
+  // fixture selected, Delete acts on the composition (effect → layer → clip).
+  if (selectedFixtureIds.size) {
+    e.preventDefault();
+    if (!confirmDeleteFixtures([...selectedFixtureIds])) return;
     const n = structuredClone(show); n.fixtures = n.fixtures.filter((x) => !selectedFixtureIds.has(x.id));
-    selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput(); e.preventDefault();
+    selectedFixtureIds.clear(); rebuild(n); panel.refresh(); renderOutput();
+  } else {
+    // Delete priority: a selected effect, else a selected layer, else the clip.
+    // (Clicking a layer clears the clip selection, so a layer is the delete
+    // target only when no clip is selected.)
+    if (!layerPanel.deleteSelectedEffect?.() && !layerPanel.deleteSelectedLayer?.()) layerPanel.deleteActiveClip();
+    e.preventDefault();
   }
 });
 
-// Arrow-key nudge on Output: move the selected fixture(s) by 1px (10px with
-// Shift). Same commit path as a canvas drag. Ignored while typing in a field.
+// ⌘A / Ctrl-A in the Output section selects EVERY fixture (for bulk move /
+// chain / delete). Only fires in Output, and never while typing in a field.
 document.addEventListener('keydown', (e) => {
-  if (view.activeTab !== 'output' || !selectedFixtureIds.size) return;
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'a') return;
+  if (typingIn(e.target) || outputPaneEl?.hidden) return;
+  e.preventDefault();
+  selectedFixtureIds = new Set((show.fixtures || []).map((f) => f.id));
+  renderOutput(); redrawOverlay();
+});
+
+// Arrow-key nudge: move the selected fixture(s) by 1px (10px with Shift). Same
+// commit path as a canvas drag. Only while the fixture overlay is up (mapping
+// mode) with a selection; ignored while typing in a field.
+document.addEventListener('keydown', (e) => {
+  if (!selectedFixtureIds.size) return;   // act on selection, not the overlay toggle
   if (typingIn(e.target)) return;
+  if (!overlayVisible && /^Arrow/.test(e.key)) setOverlay(true);   // reveal so the nudge is visible
   const step = e.shiftKey ? 10 : 1;
   let dx = 0; let dy = 0;
   if (e.key === 'ArrowLeft') dx = -step;
@@ -655,6 +977,123 @@ document.addEventListener('keydown', (e) => {
   saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
 });
 
+// Cmd/Ctrl-C / -V: copy & paste the selected fixture(s) on the Output overlay.
+// Paste appends each copy contiguously in its device's address space (so DDP
+// indices stay valid), nudges it off the original, and selects the new ones.
+// Only active in mapping mode; ignored while typing so it never steals the
+// browser's text copy/paste.
+let fixtureClipboard = [];
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  if (typingIn(e.target)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'c') {
+    if (!selectedFixtureIds.size) return;
+    fixtureClipboard = show.fixtures.filter((f) => selectedFixtureIds.has(f.id)).map((f) => structuredClone(f));
+    e.preventDefault();
+  } else if (k === 'v') {
+    if (!fixtureClipboard.length) return;
+    if (!overlayVisible) setOverlay(true);   // reveal the pasted copies
+    e.preventDefault();
+    const next = structuredClone(show);
+    const devEnd = (devId) => next.fixtures
+      .filter((x) => (x.output?.deviceId || '') === devId)
+      .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
+    const newIds = [];
+    for (const src of fixtureClipboard) {
+      const copy = structuredClone(src);
+      const base = (src.id || 'f').replace(/-copy\d*$/, '');
+      let n = 1; do { copy.id = `${base}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === copy.id));
+      copy.output.pixelOffset = devEnd(copy.output?.deviceId || '');   // contiguous append
+      const tf = copy.input?.transform;
+      if (tf) { tf.x = (tf.x || 0) + 20; tf.y = (tf.y || 0) + 20; }      // nudge off the original
+      else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
+      next.fixtures.push(copy);
+      newIds.push(copy.id);
+    }
+    selectedFixtureIds.clear(); newIds.forEach((id) => selectedFixtureIds.add(id));
+    saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+  }
+});
+
+// --- Stage zoom (scroll-wheel, zoom-to-cursor) + pan. A CSS transform on
+// #stageinner scales BOTH the WebGL stage and the #preview overlay together;
+// because preview.js maps pointer coords via getBoundingClientRect(), dragging
+// and hit-testing stay correct at any zoom with no extra math. Shift+wheel pans
+// vertically (wheel+drag-free); '0' resets. ---
+(() => {
+  const inner = document.getElementById('stageinner');
+  if (!inner) return;
+  let z = 1, panX = 0, panY = 0;
+  const clamp = (v) => Math.max(0.25, Math.min(10, v));
+  // Persist the view (zoom + pan) across reloads.
+  const VIEW_KEY = 'lz.view';
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
+    if (v && Number.isFinite(v.z)) { z = clamp(v.z); panX = Number(v.panX) || 0; panY = Number(v.panY) || 0; }
+  } catch { /* ignore bad/absent storage */ }
+  let saveTimer = null;
+  const persist = () => {
+    if (saveTimer) return;          // throttle: coalesce a drag's many frames into one write
+    saveTimer = setTimeout(() => { saveTimer = null; try { localStorage.setItem(VIEW_KEY, JSON.stringify({ z, panX, panY })); } catch { /* quota/private mode */ } }, 200);
+  };
+  // A reset/zoom-% pill in the corner cluster — appears only when zoomed/panned.
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'g-btn'; resetBtn.title = 'reset view (0)'; resetBtn.textContent = '⤢ 100%';
+  // Insert the zoom pill before the telemetry (#hud) so order reads: …buttons · zoom% · fps.
+  document.getElementById('corner-controls')?.insertBefore(resetBtn, document.getElementById('hud'));
+  const apply = () => {
+    inner.style.transformOrigin = '0 0';
+    inner.style.transform = `translate(${panX}px,${panY}px) scale(${z})`;
+    preview?.setRenderScale?.(z); redrawOverlay();      // re-render overlay crisp at the new zoom
+    // Always-visible zoom readout (click to reset); 'on' accent only when zoomed/panned.
+    const idle = z === 1 && panX === 0 && panY === 0;
+    resetBtn.classList.toggle('on', !idle); resetBtn.textContent = `⤢ ${Math.round(z * 100)}%`;
+    persist();
+  };
+  apply();   // restore the saved view (or the default) on startup
+  const reset = () => { z = 1; panX = 0; panY = 0; apply(); };
+  resetView = reset;          // expose to the top menu (View › Reset zoom)
+  resetBtn.onclick = reset;
+  // Wheel-zoom / Shift-pan work ANYWHERE over the canvas — bound to the window so
+  // they fire over the pasteboard and even when the (transformed) canvas has been
+  // panned out from under the cursor. Skipped over the scrollable chrome so the
+  // sidebar / deck / menus still scroll normally.
+  const overChrome = (t) => t?.closest?.('#side, #deckbar, #output-inspector, #corner-controls, #menu-pop, .pick-pop');
+  window.addEventListener('wheel', (e) => {
+    if (overChrome(e.target)) return;                        // let panels scroll
+    e.preventDefault();
+    if (e.shiftKey) { panX -= e.deltaY; apply(); return; }   // Shift = pan instead of zoom
+    const z2 = clamp(z * Math.exp(-e.deltaY * 0.0015));
+    if (z2 === z) return;
+    const rect = inner.getBoundingClientRect();
+    const lx = (e.clientX - rect.left) / z, ly = (e.clientY - rect.top) / z;   // content point under cursor
+    panX = (e.clientX - lx * z2) - (rect.left - panX);
+    panY = (e.clientY - ly * z2) - (rect.top - panY);
+    z = z2; apply();
+  }, { passive: false });
+  document.addEventListener('keydown', (e) => {
+    if ((e.key === '0' || e.key === ')') && !typingIn(e.target)) { reset(); e.preventDefault(); }
+  });
+
+  // --- HAND pan: MIDDLE-mouse drag to move the view, anywhere on the page. ---
+  let panDrag = null;
+  window.addEventListener('pointerdown', (e) => {
+    if (e.button !== 1) return;                          // middle button only
+    e.preventDefault();
+    panDrag = { x: e.clientX, y: e.clientY };
+    document.body.style.cursor = 'grabbing';
+  }, { capture: true });
+  window.addEventListener('pointermove', (e) => {
+    if (!panDrag) return;
+    panX += e.clientX - panDrag.x; panY += e.clientY - panDrag.y;
+    panDrag.x = e.clientX; panDrag.y = e.clientY; apply();
+  });
+  const endPan = () => { if (!panDrag) return; panDrag = null; document.body.style.cursor = ''; };
+  window.addEventListener('pointerup', endPan);
+  window.addEventListener('pointercancel', endPan);
+})();
+
 // Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.
 const inspTabsEl = document.getElementById('insp-tabs');
 const inspPanes = {
@@ -672,12 +1111,19 @@ inspTabsEl?.addEventListener('click', (ev) => {
   if (b) setInspectorTab(b.dataset.itab);
 });
 
-// Output sub-tabs (Fixtures | Chains | Devices).
-const outputTabsEl = document.getElementById('output-tabs');
+// IO column tabs — a single flat row: Fixtures · Chains · Library.
+//   Fixtures = PLACE them: snap tools + canvas placement list (output-list).
+//   Chains   = chains list (output-list).
+//   Library  = your inventory: Devices (controllers) + Fixtures (definitions).
+const outputTabsEl = document.getElementById('io-tabs');
 function setOutputTab(which) {
   outputTab = which;
   outputTabsEl?.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.otab === which));
+  // Three tabs: Fixtures = placement list · Devices = instances · Library = models.
+  if (outputListEl) outputListEl.hidden = which !== 'fixtures';
+  if (devicesDesignEl) devicesDesignEl.hidden = which !== 'devices';
+  if (libraryDesignEl) libraryDesignEl.hidden = which !== 'library';
   renderOutput();
 }
 outputTabsEl?.addEventListener('click', (ev) => {
@@ -685,7 +1131,29 @@ outputTabsEl?.addEventListener('click', (ev) => {
   if (b) setOutputTab(b.dataset.otab);
 });
 
-applyView();
+// --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
+//     Output (Fixtures/Chains/Devices). Only one shows at a time. ---
+const sectionSwitchEl = document.getElementById('section-switch');
+const designPaneEl = document.getElementById('design-pane');
+const outputPaneEl = document.getElementById('output-pane');
+function setSection(which) {
+  sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
+    x.classList.toggle('section-active', x.dataset.section === which));
+  if (designPaneEl) designPaneEl.hidden = which !== 'design';
+  if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
+  updateInspector();   // left sidebar only shows in Output
+}
+sectionSwitchEl?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.section-tab');
+  if (b) setSection(b.dataset.section);
+});
+
+// Initial layout: Design section, IO column on its Fixtures tab, overlay SHOWN by
+// default (you see your fixture layout on load; the canvas toggle hides it for a
+// clean composite preview).
+setSection('design');
+setOutputTab('fixtures');
+setOverlay(true);
 
 // --- Video clips: a <video> element + GL texture per video clip (runtime only;
 // the show stores only the object URL). syncVideos() reconciles the map with the
@@ -731,8 +1199,16 @@ const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
 rebuild(show);
 
 let frames = 0, last = 0;
+// Cap the heavy pipeline (composite → sample → DDP → preview) to WLED's ~42fps
+// ceiling — no point rendering/sending faster than the wall can show. The
+// accumulator auto-disables when we're compute-bound (frameDue catches up to ts),
+// so it never drops frames we could otherwise have made.
+const OUTPUT_FPS = 42, FRAME_INTERVAL = 1000 / OUTPUT_FPS;
+let frameDue = 0;
 function loop(ts) {
   if (!t0) t0 = ts;
+  if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
+  frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
   lastTs = ts;
   const t = (ts - t0) / 1000;
   syncVideos(); uploadVideos();
@@ -793,9 +1269,10 @@ function loop(ts) {
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
     const masterOpacity = show.composition?.opacity ?? 1;
-    const transitionMs = show.composition?.transitionMs ?? 500;   // GLOBAL crossfade (all layers)
+    // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
+    // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
-      trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs,
+      trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs: undefined,
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
@@ -806,7 +1283,11 @@ function loop(ts) {
       for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
       bridge?.send(lastRGBA);
     }
-    preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides);
+    // The composition-group "B" mutes all layers (bypass), so a master block reads
+    // here naturally — muted layers composite to black, which samples/sends dark.
+    // Skip the overlay draw entirely when it's hidden (its canvas is display:none) —
+    // no point spending CPU drawing thousands of LEDs you can't see.
+    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -827,13 +1308,193 @@ function loop(ts) {
     const nFix = (show.fixtures || []).length;
     const live = bridge?.connected?.();
     const err = bridge?.lastError?.();
-    // Surface the real failure instead of a bare "offline" — a swallowed bad IP
-    // or dead daemon now reads on the status bar (and tints it).
-    const out = live ? 'output live' : `output offline${err ? ` (${err})` : ''}`;
-    hud.classList.toggle('hud-offline', !live);
+    // 3-state output status. Only alarm (amber) when output is actually INTENDED —
+    // i.e. a device has a real IP — but the daemon is unreachable. With no IPs set
+    // (e.g. a fresh Kagora import) it reads a calm "output idle", not a red error.
+    const configured = (show.devices || []).some((d) => d.ip && d.ip.trim());
+    const out = live ? '● output live' : configured ? '◐ output offline — start the daemon' : '○ output idle';
+    hud.classList.toggle('hud-offline', !live && configured);
+    hud.classList.toggle('hud-live', !!live);
+    if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
     hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`;
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// --- Settings tab: project file I/O (New / Save / Load / Import) -----------
+// Apply a whole show (open/import): resize the stage to its canvas if it changed,
+// then rebuild + persist + refresh panels.
+function applyFullShow(next) {
+  const c = next.composition?.canvas || { w: 1280, h: 720 };
+  const cur = show.composition?.canvas;
+  if (c.w !== cur?.w || c.h !== cur?.h) {
+    canvas.width = c.w; canvas.height = c.h;
+    if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+    preview?.setBaseSize?.(c.w, c.h);
+    compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+  }
+  rebuild(next); saveShow(show); panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.(); renderOutput(); redrawOverlay();
+}
+
+// Resize the canvas to fit the placed fixtures (fluid composition — the strips
+// decide the dimensions). No-op with a notice if nothing is placed.
+function fitToFixtures() {
+  if (!show.fixtures?.length) { window.alert('No fixtures placed yet — nothing to fit to.'); return; }
+  applyFullShow(fitCanvasToFixtures(show));
+}
+
+// New project: confirm, then reset to a sensible STARTER — one controller with a
+// single fixture wired to it, lit by a Lines clip. (Not blank, so there's
+// something on screen and a patch to build from.)
+function newProject() {
+  if (!window.confirm('Start a new project? This clears the current one (save first if you want to keep it).')) return;
+  let next = emptyShow();
+  const cv = next.composition.canvas;   // 1280×720
+  next = addDevice(next, { id: 'c1', name: 'Controller 1', ip: '', colorOrder: 'GRB', port: 4048, typeId: 'digquad' });
+  next.fixtureTypes = [{ id: 't1', name: '1m · 60px', ledsPerMeter: 60, meters: 1, pixelCount: 60, colorOrder: 'GRB' }];
+  const transform = { x: cv.w / 2, y: cv.h / 2, w: 240, h: 10, rotation: 0 };
+  next = addFixture(next, {
+    id: 'f1', typeId: 't1',
+    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 60 },
+    input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: 60 },
+  });
+  const clip = { ...makeClip('line', undefined, 'clip1'), params: prefixedDefaults('line') };
+  next.composition.layers = [
+    { id: 'l1', name: 'Layer 1', blend: 'add', opacity: 1, clips: [clip], activeClipId: clip.id, effects: [], params: {}, transitionMs: 500 },
+  ];
+  applyFullShow(normalizeComposition(next));
+}
+
+function saveShowToFile() {
+  const blob = new Blob([JSON.stringify(show, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'project.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+const openShowInput = document.getElementById('open-show-file');
+openShowInput?.addEventListener('change', async () => {
+  const file = openShowInput.files[0]; if (!file) return;
+  try {
+    const loaded = JSON.parse(await file.text());
+    if (!loaded || !Array.isArray(loaded.fixtures) || !loaded.composition) {
+      window.alert(loaded?.instances ? 'That looks like a Kagora file — use “import from Kagora…” in the File menu.' : 'Not a Led Zeppelin project file.');
+    } else {
+      applyFullShow(normalizeComposition(loaded));
+    }
+  } catch (e) { window.alert('Load failed: ' + e.message); }
+  openShowInput.value = '';
+});
+
+// Composition file = just the visuals (canvas + layers/clips/effects), no rig.
+function saveCompositionToFile() {
+  const blob = new Blob([JSON.stringify(show.composition || {}, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'composition.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+const openCompInput = oel('input', { type: 'file', accept: '.json,application/json' });
+openCompInput.style.display = 'none'; document.body.append(openCompInput);
+openCompInput.addEventListener('change', async () => {
+  const file = openCompInput.files[0]; if (!file) return;
+  try { const c = JSON.parse(await file.text()); if (c && (c.layers || c.canvas)) applyComposition(c); else window.alert('Not a composition file.'); }
+  catch (e) { window.alert('Load failed: ' + e.message); }
+  openCompInput.value = '';
+});
+
+// File-actions block at the top of the Settings tab: Save show / Open show /
+// Import from Kagora. (Import jumps to Output › Library and triggers the picker.)
+const settingsFileEl = document.getElementById('settings-file');
+if (settingsFileEl) {
+  settingsFileEl.append(
+    oel('div', { className: 'fx-section', textContent: 'project' }),
+    oel('div', { className: 'fx-io' }, [
+      oel('button', { className: 'fx-add', textContent: 'new project', onclick: newProject }),
+      oel('button', { className: 'fx-add', textContent: 'save…', onclick: saveShowToFile }),
+      oel('button', { className: 'fx-add', textContent: 'load…', onclick: () => openShowInput?.click() }),
+      oel('button', { className: 'fx-add', textContent: 'import from Kagora…',
+        onclick: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } }),
+    ]),
+  );
+}
+
+// ⌘S save / ⌘O open — kept as shortcuts.
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || typingIn(e.target)) return;
+  const k = e.key.toLowerCase();
+  if (k === 's') { e.preventDefault(); saveShowToFile(); }
+  else if (k === 'o') { e.preventDefault(); openShowInput?.click(); }
+});
+
+// --- Corner-cluster dropdown menus (File / Audio) — open UPWARD from the bottom. ---
+const menuPop = oel('div', { id: 'menu-pop', hidden: true });
+document.body.append(menuPop);
+let openMenuBtn = null;
+function closeMenu() { menuPop.hidden = true; openMenuBtn?.classList.remove('open'); openMenuBtn = null; }
+function openMenu(btn, content) {
+  if (openMenuBtn === btn) { closeMenu(); return; }
+  closeMenu();
+  menuPop.textContent = ''; menuPop.append(content); menuPop.hidden = false;
+  const r = btn.getBoundingClientRect();
+  menuPop.style.left = r.left + 'px';
+  menuPop.style.top = Math.max(6, r.top - menuPop.offsetHeight - 4) + 'px';   // above the button
+  btn.classList.add('open'); openMenuBtn = btn;
+}
+const menuList = (items) => {
+  const f = document.createDocumentFragment();
+  for (const it of items) {
+    if (it.sep) { f.append(oel('div', { className: 'menu-sep' })); continue; }
+    const row = oel('div', { className: 'menu-item' }, [oel('span', { textContent: it.label })]);
+    if (it.key) row.append(oel('span', { className: 'menu-key', textContent: it.key }));
+    row.onclick = () => { closeMenu(); it.act?.(); };
+    f.append(row);
+  }
+  return f;
+};
+document.getElementById('menu-file')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  openMenu(e.currentTarget, menuList([
+    { label: 'New project', act: newProject },
+    { label: 'Save…', key: '⌘S', act: saveShowToFile },
+    { label: 'Load…', key: '⌘O', act: () => openShowInput?.click() },
+    { sep: true },
+    { label: 'Import from Kagora…', act: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } },
+    { sep: true },
+    { label: 'Save composition…', act: saveCompositionToFile },
+    { label: 'Load composition…', act: () => openCompInput.click() },
+  ]));
+});
+document.getElementById('menu-audio')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const body = oel('div', { className: 'menu-pad' }, [oel('div', { className: 'menu-title', textContent: 'audio input' })]);
+  body.append(Slider('Gain', show.composition?.audioGain ?? 1, {
+    min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
+    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },
+  }));
+  openMenu(e.currentTarget, body);
+});
+// Snap menu: the on/off toggle + the grid/distance dimensions (which moved out of
+// the removed Settings tab). Snap only bites while placing fixtures, so the button
+// is disabled with the overlay off.
+snapBtn?.addEventListener('click', (e) => {
+  if (snapBtn.disabled) return;
+  e.stopPropagation();
+  const body = oel('div', { className: 'menu-pad' }, [oel('div', { className: 'menu-title', textContent: 'snap' })]);
+  const tog = oel('div', { className: 'menu-item' }, [
+    oel('span', { textContent: 'enabled' }),
+    oel('span', { className: 'menu-key', textContent: snapEnabled ? 'on' : 'off' }),
+  ]);
+  tog.onclick = () => { setSnapEnabled(!snapEnabled); tog.lastChild.textContent = snapEnabled ? 'on' : 'off'; };
+  body.append(tog);
+  body.append(Slider('Grid (px)', SNAP_GRID, {
+    min: 2, max: 100, step: 1, default: 20, commit: 'live',
+    onInput: (v) => { SNAP_GRID = Math.round(v); redrawOverlay(); },
+  }));
+  body.append(Slider('Distance (px)', SNAP_DIST, {
+    min: 1, max: 40, step: 1, default: 10, commit: 'live',
+    onInput: (v) => { SNAP_DIST = Math.round(v); },
+  }));
+  openMenu(snapBtn, body);
+});
+document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });

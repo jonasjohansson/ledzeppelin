@@ -1,112 +1,151 @@
-// Fixture CHAINS — an ordered group of fixtures sharing a staggered sample
-// offset, so a TRAVELLING source (e.g. Pulse) cascades across the run instead of
-// hitting every member at once. This is exactly the Kagora case: 3 strips
-// daisy-chained but sitting side-by-side — chain them and a fired pulse arrives
-// at member 0, then 1, then 2.
+// Fixture CHAINS are DERIVED, not stored. A chain is the set of fixtures sharing
+// a controller OUTPUT — same (deviceId, output port) — taken in WIRING order:
+// their order in show.fixtures IS the daisy-chain order (output→input). That same
+// order drives pixel packing (repackOffsets), so a chain literally IS the physical
+// run on the wire — pixel 0 of member i+1 follows the last pixel of member i.
 //
-// Mechanism (cheap, no per-frame cost): each member m at chain index i gets its
-// sample UVs shifted by `i * stagger` along the chain axis, baked once into the
-// sampler map at build time (see pipeline.js). Shifting WHERE a fixture samples
-// the canvas along the pulse's travel axis is equivalent to a time delay for
-// travelling content — member i reads the pulse `i*stagger` of the canvas later.
-//
-// A fixture belongs to AT MOST one chain. Footprints, pixel counts and DDP
-// indices are untouched — only the sampled canvas position shifts.
-//
-// show.chains: [{ id, name, members: [fixtureId...], stagger, axis: 'x'|'y' }]
+// A run of ≥2 fixtures can carry a STAGGER so a travelling source (e.g. Pulse)
+// cascades across it instead of hitting every member at once: each member m at
+// run index i samples the canvas shifted by `i * stagger` along the chain axis
+// (baked into the sampler map — see pipeline.js). Stagger/axis live PER RUN in
+// `show.chainSettings`, keyed by `${deviceId}:${port}`.
 
-const DEFAULT_STAGGER = 0.1;
+const settingsOf = (show) => (show && typeof show.chainSettings === 'object' && show.chainSettings) || {};
+export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 1}`;
+export const runLabel = (deviceId, port) => `${deviceId || '?'} · port ${port}`;
 
-const chainsOf = (show) => (Array.isArray(show?.chains) ? show.chains : []);
-
-function nextChainId(show) {
-  const used = new Set(chainsOf(show).map((c) => c.id));
-  let i = 1;
-  while (used.has('chain' + i)) i++;
-  return 'chain' + i;
-}
-
-// Create a chain from an ordered list of fixture ids. Members are removed from
-// any other chain first (a fixture is in ≤1 chain). Returns the new show.
-export function addChain(show, memberIds, opts = {}) {
-  const members = [...new Set(memberIds)].filter(Boolean);
-  if (members.length < 2) return show;
-  const id = opts.id || nextChainId(show);
-  // strip these members out of existing chains, then drop any now-tiny chains
-  const existing = chainsOf(show)
-    .map((c) => ({ ...c, members: c.members.filter((m) => !members.includes(m)) }))
-    .filter((c) => c.members.length >= 2);
-  const chain = {
-    id,
-    name: opts.name || id,
-    members,
-    stagger: opts.stagger == null ? DEFAULT_STAGGER : Number(opts.stagger),
-    axis: opts.axis === 'y' ? 'y' : 'x',
-  };
-  return { ...show, chains: [...existing, chain] };
-}
-
-export function removeChain(show, id) {
-  return { ...show, chains: chainsOf(show).filter((c) => c.id !== id) };
-}
-
-// Patch a chain (name / stagger / axis / members). Reordering members reorders
-// the stagger. Returns the new show.
-export function patchChain(show, id, patch) {
-  return {
-    ...show,
-    chains: chainsOf(show).map((c) => {
-      if (c.id !== id) return c;
-      const next = { ...c, ...patch };
-      if (patch.stagger != null) next.stagger = Number(patch.stagger) || 0;
-      if (patch.axis) next.axis = patch.axis === 'y' ? 'y' : 'x';
-      if (patch.members) next.members = [...new Set(patch.members)].filter(Boolean);
-      return next;
-    }),
-  };
-}
-
-// Move a member up/down within its chain (dir -1 = earlier, +1 = later).
-export function moveChainMember(show, id, fixtureId, dir) {
-  return {
-    ...show,
-    chains: chainsOf(show).map((c) => {
-      if (c.id !== id) return c;
-      const members = [...c.members];
-      const i = members.indexOf(fixtureId);
-      const j = i + dir;
-      if (i < 0 || j < 0 || j >= members.length) return c;
-      [members[i], members[j]] = [members[j], members[i]];
-      return { ...c, members };
-    }),
-  };
-}
-
-// The chain containing a fixture, or null.
-export function chainOf(show, fixtureId) {
-  return chainsOf(show).find((c) => c.members.includes(fixtureId)) || null;
-}
-
-// The normalized sample offset [dx, dy] for a fixture (index * stagger along the
-// chain axis), or [0, 0] if it is not in a chain.
-export function chainOffset(show, fixtureId) {
-  for (const c of chainsOf(show)) {
-    const idx = c.members.indexOf(fixtureId);
-    if (idx >= 0) {
-      const s = (Number(c.stagger) || 0) * idx;
-      return c.axis === 'y' ? [0, s] : [s, 0];
-    }
+// All runs: [{ key, deviceId, port, members:[fixtureId… in wiring order], stagger, axis }].
+export function runsOf(show) {
+  const map = new Map();
+  for (const f of show?.fixtures || []) {
+    const key = runKey(f);
+    if (!map.has(key)) map.set(key, { key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members: [] });
+    map.get(key).members.push(f.id);
   }
-  return [0, 0];
+  const cs = settingsOf(show);
+  for (const r of map.values()) { const s = cs[r.key] || {}; r.stagger = Number(s.stagger) || 0; r.axis = s.axis === 'y' ? 'y' : 'x'; }
+  return [...map.values()];
 }
 
-// Drop members that no longer reference a real fixture, and chains left with <2
-// members. Call after deleting fixtures so stagger indices stay correct.
+// Colour identity by CONTROLLER: each device gets a unique base hue (golden-angle
+// over its devices, sorted for stability), and each OUTPUT on that device is a
+// lightness TINT of that hue. So fixtures read as "this controller" by hue and
+// "which output" by shade. Shared by the canvas overlay + the placement list.
+export function controllerColorMap(show) {
+  const fixtures = show?.fixtures || [];
+  const devIds = [...new Set(fixtures.map((f) => f.output?.deviceId || ''))].sort();
+  const hue = new Map(devIds.map((id, i) => [id, (i * 137.508) % 360]));
+  const ports = new Map();   // deviceId -> Set of distinct ports in use
+  for (const f of fixtures) {
+    const d = f.output?.deviceId || '', p = f.output?.port ?? 1;
+    if (!ports.has(d)) ports.set(d, new Set());
+    ports.get(d).add(p);
+  }
+  const portList = (d) => [...(ports.get(d) || [])].sort((a, b) => a - b);
+  const runColor = (deviceId, port) => {
+    const h = (hue.get(deviceId) ?? 210).toFixed(1);
+    const ps = portList(deviceId), n = ps.length || 1, i = Math.max(0, ps.indexOf(port));
+    const l = n > 1 ? 44 + i * (32 / (n - 1)) : 60;   // ramp 44%..76% across the device's outputs
+    return `hsl(${h}, 70%, ${l.toFixed(0)}%)`;
+  };
+  const deviceColor = (deviceId) => `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 70%, 60%)`;
+  return { hue, runColor, deviceColor };
+}
+
+// The run a fixture belongs to — but only when it's an actual CHAIN (≥2 members);
+// else null ("not chained"). Carries the fixture's index within the run.
+export function chainOf(show, fixtureId) {
+  const f = (show?.fixtures || []).find((x) => x.id === fixtureId);
+  if (!f) return null;
+  const key = runKey(f);
+  const members = (show.fixtures || []).filter((x) => runKey(x) === key).map((x) => x.id);
+  if (members.length < 2) return null;
+  const cs = settingsOf(show)[key] || {};
+  return {
+    key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members,
+    index: members.indexOf(fixtureId), stagger: Number(cs.stagger) || 0, axis: cs.axis === 'y' ? 'y' : 'x',
+    name: runLabel(f.output?.deviceId, f.output?.port ?? 1),
+  };
+}
+
+// Sample offset [dx,dy] for a fixture = index_in_run * stagger along the run axis,
+// or [0,0] when it isn't a chain / has no stagger.
+export function chainOffset(show, fixtureId) {
+  const ch = chainOf(show, fixtureId);
+  if (!ch || !ch.stagger) return [0, 0];
+  const s = ch.stagger * ch.index;
+  return ch.axis === 'y' ? [0, s] : [s, 0];
+}
+
+// Set a run's stagger / axis (keyed by device:port). Returns a new show.
+export function setRunStagger(show, key, stagger) {
+  const cs = settingsOf(show);
+  return { ...show, chainSettings: { ...cs, [key]: { ...(cs[key] || {}), stagger: Number(stagger) || 0 } } };
+}
+export function setRunAxis(show, key, axis) {
+  const cs = settingsOf(show);
+  return { ...show, chainSettings: { ...cs, [key]: { ...(cs[key] || {}), axis: axis === 'y' ? 'y' : 'x' } } };
+}
+
+// Reorder a fixture within its run (dir -1 earlier / +1 later) by swapping it in
+// show.fixtures with the adjacent fixture in the SAME run. Order = wiring order =
+// pixel order (after repack). Returns a new show.
+export function moveFixtureInRun(show, fixtureId, dir) {
+  const fixtures = [...(show.fixtures || [])];
+  const i = fixtures.findIndex((f) => f.id === fixtureId);
+  if (i < 0) return show;
+  const key = runKey(fixtures[i]);
+  let j = i + dir;
+  while (j >= 0 && j < fixtures.length && runKey(fixtures[j]) !== key) j += dir;  // skip fixtures on other runs
+  if (j < 0 || j >= fixtures.length) return show;
+  [fixtures[i], fixtures[j]] = [fixtures[j], fixtures[i]];
+  return { ...show, fixtures };
+}
+
+// WIRE fixtureId's input to afterFxId's output: move it onto afterFxId's
+// (device, output) and place it immediately AFTER it in wiring order. This is the
+// "from = afterFxId" node-graph edge. Returns a new show.
+export function wireAfter(show, fixtureId, afterFxId) {
+  if (!fixtureId || !afterFxId || fixtureId === afterFxId) return show;
+  const fixtures = [...(show.fixtures || [])];
+  const ai = fixtures.findIndex((f) => f.id === afterFxId);
+  const fi = fixtures.findIndex((f) => f.id === fixtureId);
+  if (ai < 0 || fi < 0) return show;
+  const after = fixtures[ai];
+  const moved = { ...fixtures[fi], output: { ...fixtures[fi].output, deviceId: after.output?.deviceId, port: after.output?.port ?? 1 } };
+  fixtures.splice(fi, 1);
+  fixtures.splice(fixtures.findIndex((f) => f.id === afterFxId) + 1, 0, moved);   // re-find after the splice
+  return { ...show, fixtures };
+}
+
+// Make fixtureId the FIRST on its output (its input comes straight from the
+// controller — no predecessor). Returns a new show.
+export function wireFirst(show, fixtureId) {
+  const fixtures = [...(show.fixtures || [])];
+  const fi = fixtures.findIndex((f) => f.id === fixtureId);
+  if (fi < 0) return show;
+  const f = fixtures[fi];
+  const key = runKey(f);
+  fixtures.splice(fi, 1);
+  const firstIdx = fixtures.findIndex((x) => runKey(x) === key);
+  fixtures.splice(firstIdx < 0 ? Math.min(fi, fixtures.length) : firstIdx, 0, f);
+  return { ...show, fixtures };
+}
+
+// The next free port number on a device (for "chain these onto their own output").
+export function freePort(show, deviceId) {
+  const used = new Set((show?.fixtures || []).filter((f) => (f.output?.deviceId || '') === deviceId).map((f) => f.output?.port ?? 1));
+  let p = 1; while (used.has(p)) p++; return p;
+}
+
+// Compat: drop the legacy stored `show.chains` list (chains are derived now) +
+// any chainSettings whose run no longer exists. Safe to call repeatedly.
 export function pruneChains(show) {
-  if (!chainsOf(show).length) return show;
-  const live = new Set((show.fixtures || []).map((f) => f.id));
-  const chains = chainsOf(show)
-    .map((c) => ({ ...c, members: c.members.filter((m) => live.has(m)) }))
-    .filter((c) => c.members.length >= 2);
-  return { ...show, chains };
+  if (!show) return show;
+  const live = new Set(runsOf(show).map((r) => r.key));
+  const cs = settingsOf(show);
+  const cleaned = {};
+  for (const k of Object.keys(cs)) if (live.has(k)) cleaned[k] = cs[k];
+  const { chains, ...rest } = show;   // strip legacy field
+  return { ...rest, chainSettings: cleaned };
 }

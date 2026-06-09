@@ -27,6 +27,10 @@
 import { program, makeTarget, drawFullscreen } from './gl.js';
 import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.js';
 
+// Reused scratch for the uTrigs uniform (consumed synchronously each runEntry call,
+// so a single shared buffer avoids a per-effect, per-frame allocation).
+const TRIG_SCRATCH = new Float32Array(8);
+
 const BLIT_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float opacity;
@@ -140,6 +144,11 @@ export function makeCompositor(gl, w, h) {
       if (p.type === 'color') { const [r, g, b] = hexToRgb(v); gl.uniform3f(l, r, g, b); }
       else gl.uniform1f(l, Number(v));
     }
+    // aspect — inject the REAL canvas aspect (w/h) so radial-type generators stay
+    // circular on any canvas shape (overrides any stale param value).
+    const uAspectGen = loc(c, 'aspect');
+    if (uAspectGen !== null) gl.uniform1f(uAspectGen, w / Math.max(1, h));
+
     // uT (seconds) — always try; only set if the shader declares it.
     const uT = loc(c, 'uT');
     if (uT !== null) gl.uniform1f(uT, timeSec);
@@ -165,7 +174,7 @@ export function makeCompositor(gl, w, h) {
     // most recent up-to-8 triggers stack as independent beams.
     const uTrigs = loc(c, 'uTrigs[0]');
     if (uTrigs !== null) {
-      const arr = new Float32Array(8).fill(1e6);
+      const arr = TRIG_SCRATCH; arr.fill(1e6);
       const trigs = frameEnv.trigSecs || [];
       const n = Math.min(trigs.length, 8);
       for (let i = 0; i < n; i++) arr[i] = timeSec - trigs[trigs.length - n + i];
@@ -288,7 +297,10 @@ export function makeCompositor(gl, w, h) {
     // Start a transition if the target changed and we're not already heading there.
     if (target !== st.displayed &&
         (!st.transition || st.transition.toClipId !== target)) {
-      st.transition = { fromClipId: st.displayed, toClipId: target, startT: timeSec };
+      // Clearing (eject → null) is INSTANT — a clear should kill the layer
+      // immediately, not fade out over the crossfade time. Clip→clip still fades.
+      if (target === null) { st.displayed = null; st.transition = null; }
+      else st.transition = { fromClipId: st.displayed, toClipId: target, startT: timeSec };
     }
     // If a transition's target no longer matches the layer's target, retarget.
     // (Handles re-trigger mid-fade: settle is keyed off the current target below.)

@@ -15,21 +15,16 @@ import { importKagora } from '../model/kagora-import.js';
 import { validate } from '../model/show.js';
 import { isValidIPv4, nextIPs } from '../model/ip.js';
 import { saveShow } from './fixtures.js';
+import { el } from './dom.js';
 
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
-
-const el = (tag, props = {}, kids = []) => {
-  const n = document.createElement(tag);
-  Object.assign(n, props);
-  for (const k of kids) n.append(k);
-  return n;
-};
 
 export function createImportPanel({ getShow, applyShow, onApplied }) {
   const root = el('div', { className: 'fx-panel imp-panel' });
 
   // pending: the imported show awaiting IP assignment, or null when idle.
   let pending = null;
+  let openPicker = null;   // set by render() to click the latest file input (for the top menu)
 
   function render() {
     root.textContent = '';
@@ -43,6 +38,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
 
     const fileIn = el('input', { type: 'file', accept: '.json,application/json' });
     fileIn.style.display = 'none';
+    openPicker = () => fileIn.click();
     fileIn.addEventListener('change', async () => {
       const file = fileIn.files[0];
       if (!file) return;
@@ -130,7 +126,13 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
         if (!v.ok) { showError(`validation failed: ${v.errors.join(' · ')}`); return; }
 
         // 3) Commit through the geometry path: persist + rebuild + refresh panels.
-        const next = pending;
+        //    KEEP the current composition's layers/clips, but ADOPT the imported
+        //    CANVAS (it matches the rig's aspect so the layout isn't stretched).
+        const cur = getShow?.();
+        const composition = cur?.composition
+          ? { ...cur.composition, canvas: pending.composition?.canvas ?? cur.composition.canvas }
+          : pending.composition;
+        const next = { ...pending, composition };
         pending = null;
         saveShow(next);
         applyShow(next);   // app.rebuild — recreates sampler/route/bridge
@@ -151,5 +153,6 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
   }
 
   render();
-  return { el: root, refresh: render };
+  // trigger(): open the Kagora file picker from elsewhere (e.g. the top menu).
+  return { el: root, refresh: render, trigger: () => openPicker?.() };
 }

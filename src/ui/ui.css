@@ -12,22 +12,30 @@
   --ui-font: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* --ui-font: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; */
   --mono: var(--ui-font);
-  --bg:#0c0d10; --panel:#181a1f; --panel-2:#202329; --hover:#2a2e36;
-  --line:#2d3139; --line-2:#3c414b;       /* SOLID, crisp borders (was translucent) */
+  /* OCR/disguise: panels are SLIGHTLY TRANSLUCENT near-black so the full-bleed
+     canvas reads underneath (content-first, like Elverket); 1px hairlines define
+     structure — see [[ui-aesthetic-ocr-disguise]]. */
+  --bg:#08090b; --panel:rgba(12,13,17,0.94); --panel-2:rgba(22,24,30,0.94); --hover:rgba(42,46,54,0.95);
+  --panel-solid:#13141a;       /* opaque variant for popovers/menus over the canvas */
+  --line:#262a32; --line-2:#3a3f49;       /* hairline borders */
   --text:#f4f5f7; --muted:#9aa2ac; --faint:#697079;
-  --accent:#5cc8ff;            /* primary (selected / focus)  */
-  --accent-soft:#15212a;       /* selected/active background  */
-  --accent-text:#cfe7ff;       /* text on accent surfaces     */
-  --accent-line:#2a3a44;       /* active tab/border           */
-  --green:#5dd1a3;             /* play / active clip          */
-  --amber:#e8b27f;             /* effects                     */
-  --cyan:#8fd6e8;              /* sources                     */
+  /* WARM MONOCHROME (Jonas): ONE warm accent everywhere — the old blue/green/cyan
+     all collapse to it, so the UI reads as near-black + one warm orange + red for
+     danger. See [[ui-aesthetic-ocr-disguise]]. (Per-controller canvas hues in
+     controllerColorMap are separate — functional fixture identity, kept.) */
+  --accent:#e8a35c;            /* the one warm accent (was blue) */
+  --accent-soft:#241a12;       /* warm selected/active background */
+  --accent-text:#f1d6bb;       /* text on accent surfaces */
+  --accent-line:#3d2e1f;       /* active border */
+  --green:var(--accent);       /* collapsed to the one warm accent */
+  --amber:var(--accent);
+  --cyan:var(--accent);
   --readout:#d7dbe0;           /* numeric readouts — neutral (one step under --text) */
   --danger:#ff6b6b;
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
      row and input shares ONE blue-tinted palette (was a second neutral-gray set
      that made identical controls look mismatched). */
-  --field-bg:#0b0c0f;                 /* recessed input fill (darker than --bg) */
+  --field-bg:#050608;                 /* recessed input fill (darker than --bg) */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -55,6 +63,16 @@
 html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
 /* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
 #hud.hud-offline { color: var(--amber); }
+#hud.hud-live { color: var(--green, #7bd88f); }
+/* Keyboard cheat-sheet overlay (near-black card, hairline, mono keys). */
+#shortcuts-overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
+#shortcuts-overlay[hidden] { display: none; }
+.shortcuts-card { background: var(--panel); border: 1px solid var(--line-2); padding: 16px 18px; min-width: 320px; max-width: 90vw; }
+.shortcuts-title { font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+.shortcuts-grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; align-items: center; }
+.shortcuts-key { font: var(--fs-body) var(--mono); color: var(--text); background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px; justify-self: start; white-space: nowrap; }
+.shortcuts-act { font: var(--fs-body) var(--sans); color: var(--muted); }
+#play-btn.on { color: var(--green); }         /* playing = green TEXT */
 /* No text selection anywhere — this is an app surface, not a document. Editable
    fields keep selection so you can still edit their contents. */
 *{ user-select:none; -webkit-user-select:none; }
@@ -86,18 +104,25 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .subtabs { display: flex; gap: 0; margin-bottom: var(--s3); border-bottom: 1px solid var(--line); }
 .subtab {
   flex: 1 1 0; text-align: center;            /* Clip · Layer · Composition = equal thirds */
-  background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent;
+  background: transparent; color: var(--faint); border: none; border-bottom: 2px solid transparent;
   border-radius: 0; padding: 5px 0; font: var(--fw-med) var(--fs-ctrl) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
-.subtab:hover { color: var(--text); }
-.subtab-active { color: var(--text); border-bottom-color: var(--accent); background: transparent; }
+.subtab:hover { color: var(--muted); }
+/* Active tab: brighter text only — strong contrast vs the dim inactive tabs so the
+   Design › CLIP path is obvious (no underline/fill). */
+.subtab-active { color: var(--text); background: transparent; }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
 
 /* --- Output mapping: fixture list --- */
-.output-tools { display: flex; align-items: center; gap: 10px; margin: 6px 0 10px; flex-wrap: wrap; }
+.output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 6px 0 10px; }
+.output-tools select {
+  width: 100%; box-sizing: border-box; background: var(--field-bg); color: var(--text);
+  border: 1px solid var(--field-border); border-radius: var(--radius);
+  padding: 5px 7px; font: var(--fs-body) var(--sans); cursor: pointer;
+}
 #add-fixture { color: var(--green); border-color: var(--line); }
 .snap-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--fs-body); color: var(--muted); cursor: pointer; }
 .snap-toggle input { width: auto; accent-color: var(--accent); }
@@ -108,17 +133,27 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); font-size: var(--fs-ctrl);
 }
 .output-row { cursor: pointer; }
-.output-row span:first-child { flex: 1 1 auto; color: var(--text); }
+.output-row span:first-of-type { flex: 1 1 auto; color: var(--text); }
+/* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
+   = faint, no-ip = hollow. Stays in the warm-mono palette (no green/blue). */
+.dev-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--faint); }
+.dev-online { background: var(--accent); }
+.dev-offline { background: var(--danger); }
+.dev-check { background: var(--faint); opacity: .6; }
+.dev-noip { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
 .output-dev { color: var(--cyan); font-size: var(--fs-micro); }
 .output-row .ly-rmfx { padding: 0 6px; line-height: var(--lh-ctrl); }
-.output-row:hover { border-color: var(--line-2); }
-.output-row.selected { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
+/* Selected = quiet TEXT emphasis only — no border, no bar, no fill (Jonas: don't
+   use borders/highlights to show focus). The name brightens to the accent. */
+.output-row.selected > span:first-of-type { color: var(--accent); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 .output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
-.output-grid .fx-field input {
-  background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
-  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
-}
+/* Fixtures inputs reuse the shared .fx-field input chrome (same as Design) — no
+   override here, so the two panels match. Hide number-input spinner arrows so a
+   number field reads like the Design readouts (clean, no native chrome). */
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
 
 /* Fixture chains (stagger) — ordered groups in the Output view. */
 .chains { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
@@ -136,10 +171,21 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 
 /* Full-bleed canvas background: fixed behind everything, centred + letterboxed
    to the composition aspect. The UI panels float over it (matte-style). */
+/* Dropdown popover (File / Audio — opened from the bottom-left corner cluster).
+   Solid (not translucent) so it reads over the canvas. Opens UPWARD (JS-placed). */
+#menu-pop { position: fixed; z-index: 40; background: var(--panel-solid); border: 1px solid var(--line-2); min-width: 184px; padding: 5px 0; }
+#menu-pop[hidden] { display: none; }
+#menu-pop .menu-key { color: var(--faint); font: var(--fs-micro) var(--mono); }
+#menu-pop .menu-item { display: flex; justify-content: space-between; gap: 18px; padding: 6px 14px; color: var(--text); font: var(--fs-body) var(--sans); cursor: pointer; white-space: nowrap; }
+#menu-pop .menu-item:hover { background: var(--hover); color: var(--accent); }
+#menu-pop .menu-sep { height: 1px; background: var(--line); margin: 4px 0; }
+#menu-pop .menu-pad { padding: 8px 14px; }   /* control popover body (e.g. Audio gain) */
+#menu-pop .menu-title { font: var(--fw-med) var(--fs-micro) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--faint); padding: 4px 14px 6px; }
+
 /* Matte-style PASTEBOARD: a subtle transparency checker fills the area OUTSIDE
    the canvas (behind every panel). The canvas sits on top as a clean rectangle. */
 #stagewrap {
-  position: fixed; inset: 0;
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
   background-color: #0c0c0f;
@@ -161,24 +207,32 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 #stageinner canvas#stage { display: block; width: 100vw; height: auto; }
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Vector chrome layer over the lights canvas — stays sharp under the zoom/pan
+   transform (SVG re-rasterizes, unlike the canvas bitmap). Non-interactive so the
+   #preview canvas keeps the pointer hit-testing. */
+#ovl { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
 /* The panels overlay the canvas: the container passes clicks through to the
    canvas, the panels themselves capture them. */
 #layout {
   position: relative; z-index: 1; display: flex; gap: 0;
   align-items: stretch; padding: 0; box-sizing: border-box;
-  height: calc(100vh - 42px - 24px); pointer-events: none;   /* between the header (42) and footer (24) */
+  height: 100vh; pointer-events: none;
 }
+/* Inspector: the selected item's editor in Output, docked just LEFT of the right
+   panel (#side) so it reads as part of the right-hand controls. */
+#output-inspector { flex: 0 0 312px; max-height: 100vh; display: flex; flex-direction: column;
+  overflow-y: auto; pointer-events: auto; margin-right: -1px; }
+#output-inspector[hidden] { display: none; }
 #left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
-#deckbar { border: none; border-radius: 0; padding: 0; background: transparent; }
-#deckbar, #inspector-col, #output-view, #fixtures-view { pointer-events: auto; }
-/* Side panels dock to full height with internal scroll (scrollbars hidden). */
-/* Side panels dock flush; -1px overlaps each left neighbour's border into a
-   single shared hairline (no doubled 2px seam) — the packed-grid look. */
-#inspector-col, #output-view, #fixtures-view { align-self: stretch; margin-left: -1px; }
-#output-view, #fixtures-view { overflow-y: auto; }
+#deckbar { border: none; border-radius: 0; padding: 0; background: transparent;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0; }   /* stack the group + "+ layer" below it (not inline) */
+#deckbar, #side { pointer-events: auto; }
+/* The right panel docks flush; -1px overlaps the deck's border into one shared
+   hairline (no doubled 2px seam) — the packed-grid look. */
+#side { align-self: stretch; margin-left: -1px; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
@@ -189,55 +243,66 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   padding: var(--s3);
   box-sizing: border-box;
 }
-/* Inspector column: tabs on top, a SCROLLING panes area, and the Sources/Effects
-   library docked at the bottom (no separate library column — there aren't many). */
-#inspector-col { flex: 0 0 332px; max-height: calc(100vh - 52px); display: flex; flex-direction: column; overflow: hidden; }
-#insp-panes { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The single right panel: a DESIGN|OUTPUT switch on top, then whichever section
+   is active. Each pane is a flex column with its own scrolling body. */
+#side { flex: 0 0 332px; max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+#design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#settings-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }   /* third tab — scrolls as a whole */
+#settings-file { margin-bottom: var(--s3); }
+#settings-file .fx-io { flex-direction: column; align-items: stretch; gap: 4px; }
+#insp-panes, #io-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;
   border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
   padding: var(--s2) var(--s3) var(--s3);
 }
-#output-view   { flex: 0 0 360px; max-height: calc(100vh - 52px); overflow-y: auto; }
+/* Sources/Effects moved to on-demand pickers — the docked shelf is gone, so the
+   container collapses entirely when empty (no stray top hairline / padding). */
+#library:empty { display: none; }
+/* Top-level section switch (Design · Output · Settings) — text-only, like the
+   sub-tabs: the active one is just BRIGHT, the others dim. No fills, no borders,
+   no underline (Jonas: don't use boxes/borders to mark the active thing). The
+   left-aligned row reads as a quiet OCR menu rather than a segmented control. */
+.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding-bottom: 8px; margin-bottom: var(--s3); }
+.section-tab {
+  flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output = 50% each */
+  border: none; border-radius: 0; padding: 4px 0; cursor: pointer;
+  font: var(--fw-med) var(--fs-ctrl) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
+}
+.section-tab:hover { color: var(--muted); }
+.section-tab.section-active { color: var(--text); }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
 /* 'h' / Tab hides all GUI to view the canvas full-screen. */
-body.gui-hidden #layout, body.gui-hidden #topbar, body.gui-hidden #hud { display: none; }
+body.gui-hidden #layout { display: none; }
 
-/* Top bar: a SOLID structural header strip (application chrome), tabs left,
-   global tweaks right. */
-#topbar {
-  position: relative; z-index: 2; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px;
-  height: 42px; padding: 0 10px 0 0;   /* flush left — tabs align with the now edge-to-edge deck */
-  background: var(--panel); border-bottom: 1px solid var(--line);
-}
-/* The first tab (Composition) spans the layer-head column width (128px) so its
-   right edge aligns with where the clips begin — tabs read as columns. */
-.tabs .tab:first-child { flex: 0 0 var(--layer-w); box-sizing: border-box; justify-content: flex-start; padding: 0 0 0 4px; }
-#globals { display: inline-flex; align-items: center; gap: 14px; }
-.g-fader { display: inline-flex; align-items: center; gap: 6px; font: var(--fs-body) var(--sans); color: var(--muted); }
-.g-fader input[type=range] { width: 88px; accent-color: var(--accent); }
-.g-val { color: var(--readout); min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+/* No top bar — chrome lives in the bottom-left corner cluster. */
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
   padding: 5px 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
-.g-btn:hover { color: var(--text); border-color: var(--line-2); }
-/* "show UI" pill — only visible while the GUI is hidden, so there's always a way back. */
-/* "show UI" sits where the "hide UI" button was (top-right), so toggling is in
-   the same spot. */
-#show-ui {
-  position: fixed; top: 8px; right: 10px; z-index: 5; display: none; pointer-events: auto;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
-  padding: 5px 12px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
+/* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
+   overlay toggle + hide UI. Decoupled from any tab. */
+#corner-controls {
+  position: fixed; left: 10px; bottom: 10px; z-index: 5; pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 6px;   /* center, not stretch — buttons keep one intrinsic height whether alone (Show UI) or among taller siblings */
 }
-#show-ui:hover { color: var(--text); }
-body.gui-hidden #show-ui { display: block; }
+/* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
+   the button / shift the cluster. */
+#g-hide { min-width: 74px; text-align: center; }
+#corner-controls button {
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
+  padding: 5px 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+#corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
+#corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
+/* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show
+   toggle (in its usual spot) — everything else hides so the canvas is clear. */
+body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }
-.lh-clickable:hover { border-color: var(--line-2); }
 .lh-tog {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -271,12 +336,12 @@ body.gui-hidden #show-ui { display: block; }
   font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans);
   letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
 }
-/* matte-style section header: accent caps with an accent-tinted underline rule. */
-.fx-pts { grid-column: 1 / -1; margin: 12px 0 5px; color: var(--accent);
-  padding-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+/* TWO header tiers only (consistency): the collapsible Section header below is the
+   single "group header" (accent caps + underline). These inline mini-headers
+   (patch / geometry / wiring / show file …) are the quiet SUB-label tier — faint
+   micro-caps + whitespace, NO accent, NO rule — so they don't compete. */
+.fx-pts { grid-column: 1 / -1; margin: 12px 0 5px; }
 .fx-pts:first-child { margin-top: 0; }
-.fx-section { color: var(--accent); padding-bottom: 4px;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
 
 /* Collapsible inspector sections — accent header + an accent-tinted rule under it. */
 .insp-sec:first-child { border-top: none; }
@@ -307,6 +372,7 @@ body.gui-hidden #show-ui { display: block; }
   font-size: var(--fs-body); cursor: pointer;
 }
 .insp-sec-reset:active { color: var(--text); background: var(--hover); }
+.insp-sec-reset:disabled { opacity: .2; cursor: default; background: none; }
 .insp-sec-body { display: none; padding: 2px 0 6px; }
 .insp-sec.is-open .insp-sec-body { display: block; }
 /* Subtle table separation so a run of rows reads as a ledger (Resolume-like). */
@@ -319,35 +385,97 @@ body.gui-hidden #show-ui { display: block; }
 .fx-list { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
 .fx-badge {
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
-  background: var(--field-bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
+  background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
 .fx-detail { margin-top: 2px; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
+.fx-daemon-hint { font-size: var(--fs-micro); color: var(--amber); padding: 4px 0 6px; margin: 2px 0; line-height: var(--lh-ctrl); }
+.scan-block { display: flex; flex-direction: column; gap: 3px; }
+.scan-row .ctrl-btn { margin-left: auto; }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
 .out-transform { margin-top: 4px; }   /* rotate-90° / flip button row in the Output editor */
 .fx-del-link {
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
 }
-.fx-del-link:hover { color: var(--danger); }
 /* Fixtures panel scrolls within the viewport for big shows (scrollbar hidden). */
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
 /* Shared horizontal row module: label left (fixed column) · value right. */
-.fx-field { display: flex; flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
-.fx-field > span:first-child { flex: 1 1 auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fx-field > input, .fx-field > select { flex: 1 1 auto; width: auto; }
+.fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 26px; font-size: var(--fs-body); color: var(--muted); }
+/* Fixed label column so the name stays readable (text/number inputs otherwise
+   claim their intrinsic width and squeeze the label down to an ellipsis). */
+.fx-field > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-field > input, .fx-field > select { flex: 1 1 0; min-width: 0; width: auto; }
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); padding: 4px 7px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
 }
 .fx-field select { font-family: var(--sans); }   /* selects are chrome, not data → sans */
+/* Derived, non-editable value (e.g. computed pixel count) — reads as data, no field chrome. */
+.fx-field > .fx-readonly { flex: 1 1 0; min-width: 0; color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 3px 5px; }
+/* Placement list grouped by CONTROLLER → output. The controller header is STICKY
+   so you always know which device you're scrolling in; the output sub-headers
+   nest under it (indented, not sticky). A colour swatch on each ties to the
+   canvas (controller hue + per-output tint). */
+.out-group { position: sticky; top: 0; z-index: 2; background: var(--panel);
+  display: flex; align-items: center; gap: 6px; margin: 9px 0 3px; padding: 6px 0 3px; border-top: 1px solid var(--line); cursor: pointer; }
+.out-group:first-child { border-top: none; margin-top: 0; }
+.out-dev .out-group-dev { color: var(--text); font-weight: var(--fw-med); }   /* controller header reads as the heading */
+.out-sub { position: static; margin: 2px 0 2px 14px; padding: 3px 0; border-top: none; }   /* nested output, not sticky */
+.out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+.out-caret { color: var(--faint); font-size: var(--fs-micro); width: 10px; }
+.out-group-dev { flex: 1 1 auto; min-width: 0; color: var(--cyan); font: var(--fs-body) var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.out-group-dev:hover { text-decoration: underline; }
+.out-group-port { flex: 1 1 auto; min-width: 0; color: var(--cyan); font: var(--fs-body) var(--mono); opacity: .8; }
+.out-group .out-chain { color: var(--accent); }
+.out-group .out-over { color: var(--danger); }
+.out-stagger { padding: 2px 0 6px; }
+.out-stagger-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+
+/* Per-device patch ruler — proportional fixture segments over the address space. */
+.patch-bar { display: flex; gap: 1px; height: 18px; margin: 2px 0 6px; border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.patch-seg { flex: 1 1 0; min-width: 2px; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--cyan) 22%, var(--panel-2)); overflow: hidden; }
+.patch-seg:nth-child(even) { background: color-mix(in srgb, var(--cyan) 34%, var(--panel-2)); }
+.patch-seg > span { font: var(--fs-micro) var(--mono); color: var(--text); white-space: nowrap; opacity: .85; }
+
+/* Live controller status line (WLED monitor). */
+.fx-devstatus { font: var(--fs-micro) var(--mono); color: var(--muted); padding: 2px 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-devstatus.is-on { color: var(--green, #7bd88f); }
+.fx-devstatus.is-off { color: var(--amber, #e8b27f); }
+
+/* Controller controls — a button row + a brightness slider. */
+.fx-color { width: 100%; height: 26px; padding: 2px; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; }
+/* Make the swatch fill the control so the colour actually reads. */
+.fx-color::-webkit-color-swatch-wrapper { padding: 0; }
+.fx-color::-webkit-color-swatch { border: none; border-radius: 2px; }
+.fx-color::-moz-color-swatch { border: none; border-radius: 2px; }
+.ctrl-block { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
+/* Controller status as a multi-line key/value list (clear, uses vertical space). */
+.ctrl-stat { margin: 2px 0 6px; }
+.ctrl-stat-row { display: flex; justify-content: space-between; gap: 12px; font: var(--fs-micro) var(--mono); padding: 1px 0; }
+.ctrl-stat-k { color: var(--faint); text-transform: uppercase; letter-spacing: var(--ls-caps); }
+.ctrl-stat-v { color: var(--readout); }
+.ctrl-push { display: flex; flex-direction: column; gap: 3px; }
+.ip-open { flex: 0 0 auto; color: var(--cyan); text-decoration: none; padding: 0 5px; font-size: var(--fs-ctrl); border: 1px solid var(--field-border); border-radius: var(--radius); line-height: var(--lh-ctrl); }
+.ip-open:hover { background: var(--hover); }
+.ctrl-row { display: flex; gap: 5px; }
+.ctrl-btn { flex: 1 1 0; padding: 5px 0; font: var(--fs-body) var(--sans); color: var(--text);
+  text-transform: uppercase; letter-spacing: .06em;
+  background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius); cursor: pointer; }
+.ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.ctrl-btn:active { background: var(--panel-2); }
+.ctrl-btn.is-added { color: var(--accent); border-color: var(--accent-line); opacity: 1; }   /* scan: already added ✓ */
+.ctrl-bri { display: flex; align-items: center; gap: 8px; min-height: var(--row-h); }
+.ctrl-bri > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); font: var(--fs-body) var(--mono); }
+.ctrl-range { flex: 1 1 0; min-width: 0; accent-color: var(--accent); }
+.ctrl-val { flex: 0 0 30px; text-align: right; font: var(--fs-ctrl) var(--mono); color: var(--text); }
 
 button {
   background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2);
   border-radius: var(--radius); padding: 4px 8px; cursor: pointer; font: var(--fs-ctrl) var(--sans);
 }
-button:hover { background: var(--hover); border-color: var(--line-2); }
 /* No blue browser focus rings on controls (keyboard focus shows on the thumb). */
 input[type=range]:focus, button:focus, select:focus { outline: none; }
 input[type=range]:focus-visible, select:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }
@@ -359,14 +487,19 @@ input[type=checkbox] {
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
   cursor: pointer; position: relative;
 }
-input[type=checkbox]:hover { border-color: var(--line-2); }
 input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
 input[type=checkbox]:checked::after {
   content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px;
   border: solid #06121b; border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
 .fx-del { grid-column: 1 / -1; margin-top: 4px; color: var(--danger); border-color: var(--line); }
-.fx-add { align-self: flex-start; }
+/* Primary action button — matches .ctrl-btn (check / save to device): full width,
+   uppercase, hairline. Used for + device / scan network / + controller / apply / fit. */
+.fx-add { width: 100%; padding: 5px 0; font: var(--fs-body) var(--sans); color: var(--text);
+  text-transform: uppercase; letter-spacing: .06em;
+  background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius); cursor: pointer; }
+.fx-add:hover { border-color: var(--accent); color: var(--accent); }
+.fx-add:active { background: var(--panel-2); }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
 
 /* --- Composition (canvas resolution) panel --- */
@@ -374,11 +507,15 @@ input[type=checkbox]:checked::after {
 .cmp-presets { display: flex; flex-wrap: wrap; gap: 4px; }
 .cmp-preset { padding: 3px 8px; }
 .cmp-grid { grid-template-columns: 1fr; margin-top: 4px; }
+/* First card sits right under the subtabs' own border — drop its top rule so the
+   two parallel lines don't read as a doubled separator. */
+.cmp-panel .cmp-grid { border-top: none; padding-top: 0; }
+.cmp-fit { color: var(--text); border-color: var(--line); }
 .cmp-readout {
   font-size: var(--fs-body); color: var(--readout); font-variant-numeric: tabular-nums;
   margin: 2px 0; letter-spacing: 0;
 }
-.cmp-apply { color: var(--green); border-color: var(--line); align-self: flex-start; }
+.cmp-apply { color: var(--green); border-color: var(--line); }
 
 /* --- Kagora import / assign-IP panel --- */
 .imp-panel { margin-bottom: var(--s4); }
@@ -478,11 +615,13 @@ input[type=checkbox]:checked::after {
 .bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--row-h); }
 .bool-row .ly-plabel { flex: 1 1 auto; color: var(--muted); }
 
-/* Matte-style param row: label fills the LEFT, then a fixed slider, then the
-   value on the FAR RIGHT (flex `order` reorders the DOM [label, value, slider]). */
+/* Matte-style param row: label fills the LEFT, then the value, then a fixed
+   slider, and (for animatable params) the contextual cog on the FAR RIGHT.
+   Flex `order` reorders the DOM [label, value, slider, cog]. */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
 .ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { order: 2; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+.ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
+.ly-row .anim-cog-wrap { order: 3; }
 /* Editable readout: a borderless number field that reads as plain text until you
    hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
@@ -495,8 +634,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Param-row slider: a custom track whose ACCENT fill is value-based (--fill set
    in JS) so it reaches the very ends (native ranges inset the fill by half a
    thumb). Small thumb → minimal edge inset. */
+.ly-row input.ly-readout { flex: 0 0 var(--col-val); text-align: right; }   /* fixed value column → sliders align */
 .ly-row input[type=range] {
-  order: 1; flex: 0 0 var(--slider-w); width: var(--slider-w); min-width: 0;
+  order: 2; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
   -webkit-appearance: none; appearance: none; height: 14px; background: transparent; cursor: pointer;
 }
 .ly-row input[type=range]::-webkit-slider-runnable-track {
@@ -513,11 +653,21 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
 /* Selected effect (click its header) — Backspace deletes it. */
-.ly-fx.is-sel .ly-fxname { color: var(--accent); }
-.ly-fx.is-sel { box-shadow: inset 2px 0 0 var(--accent); padding-left: 6px; }
+.ly-fx.is-sel .ly-fxname { color: var(--accent); }   /* selected effect = accent name only, no left bar */
 .ly-fxhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; cursor: grab; }
 .ly-fxhead:active { cursor: grabbing; }
 .ly-fxname { color: var(--amber); font-size: var(--fs-body); }
+
+/* Head options as small inline glyph buttons (save / duplicate / reset / remove),
+   pushed to the right of the clip/effect name. */
+.fx-acts { display: flex; align-items: center; gap: 1px; margin-left: auto; flex: 0 0 auto; }
+.fx-act {
+  padding: 0 5px; line-height: var(--lh-ctrl); font-size: var(--fs-glyph); min-width: 0;
+  background: none; border: none; border-radius: var(--radius-sm); color: var(--faint); cursor: pointer;
+}
+.fx-act:hover { color: var(--accent); }
+.fx-act-danger:hover { color: var(--danger); }
+.fx-acts .fx-menu-wrap { margin-left: 0; }
 
 /* Effect options "⋯" popover menu. */
 .fx-menu-wrap { position: relative; flex: 0 0 auto; }
@@ -531,7 +681,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .fx-menu-label { font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 1px; text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .fx-menu-item { background: none; border: none; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: var(--fs-body); color: var(--text); }
-.fx-menu-item:hover { background: var(--surface-hover); border: none; }
 .fx-menu-danger { color: var(--danger); }
 .ly-rmfx { color: var(--danger); border-color: var(--line); }
 .ly-addfx { margin-top: 4px; }
@@ -547,8 +696,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   border: 1px solid transparent; border-radius: var(--radius); padding: 2px 5px;
   font-family: var(--sans); box-sizing: border-box;
 }
-.ly-nameedit:hover { border-color: var(--field-border); }
-.ly-nameedit:focus { border-color: var(--accent); outline: none; background: var(--panel); }
+.ly-nameedit:focus { border-color: var(--line-2); outline: none; background: var(--panel); }
 
 /* FX section labels: clip FX vs layer FX colour-coded to read the param split. */
 .ly-fxlabel { grid-column: 1 / -1; }
@@ -558,19 +706,33 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .ly-fx-layer { border-color: var(--line); }
 
 /* --- Layer row (control block + horizontal slot row), Resolume-style --- */
-.deck-layer { display: flex; align-items: stretch; gap: 0; margin: 0; }
-.deck-layer + .deck-layer { border-top: 1px solid var(--line); }
-/* Minimised layer (double-click the head): condensed + lower height, still usable
-   — clips collapse to triggerable labels and the tall opacity fader hides. */
-/* Minimised: clips = small thumbnail + bottom label. The layer head MIRRORS a
-   clip cell — B/S/✕ up top, the name as a bottom label bar styled like the clip
-   label, so the layer name and clip names line up on the same baseline. */
-.deck-layer.is-min .clip-cell { min-height: 0; }
-.deck-layer.is-min .clip-thumbwrap { min-height: 0; height: 18px; }
-.deck-layer.is-min .clip-label-bar { padding: 3px 7px; font-size: var(--fs-micro); }
-.deck-layer.is-min .clip-empty { min-height: 38px; }
-.deck-layer.is-min .clip-fxcount { display: none; }
-.deck-layer.is-min .lh-op, .deck-layer.is-min .lh-blend { display: none; }
+/* align-self:flex-start → the row shrinks to its content (head + clip columns)
+   instead of stretching across the panel, so the bottom border stops at the last
+   clip column rather than running out into the pasteboard. */
+.deck-layer { display: flex; align-items: stretch; gap: 0; margin: 0; align-self: flex-start; border-bottom: 1px solid var(--line); }
+/* The composition-group box supplies the outer top/bottom edges, so the first row
+   takes its top line from the header and the last row drops its bottom line (no
+   doubled hairline against the group border). */
+.deck-layer:last-child { border-bottom: none; }
+/* "fx" marker next to a layer / clip name when it carries an effect chain.
+   Inherits the bar's text colour (dimmed) so it stays legible on the accent
+   highlight of a selected row too. */
+.deck-fx { margin-left: 6px; font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: .05em; opacity: .6; }
+/* Composition group — a hairline box that ENCAPSULATES the layer stack: a titled
+   header caps the rows so the layers read as children of the composition. */
+.deck-comp-group { display: inline-block; border: 1px solid var(--line); }
+.deck-comp-head {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px;
+  background: var(--panel-2); border-bottom: 1px solid var(--line);
+}
+.deck-comp-titlewrap { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; cursor: pointer; }
+.deck-comp-title {
+  font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--accent);
+}
+.deck-comp-titlewrap:hover .deck-comp-title { color: var(--accent-text); }
+.deck-comp-head.is-sel { background: var(--accent); }
+.deck-comp-head.is-sel .deck-comp-title { color: #07151f; }
+/* No horizontal row separators — there are no clip grids that need them. */
 .deck-layer.is-min .layer-head-box { flex-direction: column; gap: 0; padding: 0; justify-content: space-between; align-items: stretch; }
 .deck-layer.is-min .lh-body { padding: 4px 6px; }
 .deck-layer.is-min .lh-name {
@@ -581,8 +743,11 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .deck-layer.is-min.is-sel .lh-name { background: var(--accent); color: #07151f; }
 
 /* Multi-layer stack: flush rows, thin separators (flat Resolume grid). */
-.deck-layers { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); }
-.deck-addlayer { margin-top: 4px; align-self: flex-start; color: var(--green); }
+/* Unlimited layers: the stack scrolls once it would exceed the viewport (the
+   "+ layer" button sits below, always reachable). */
+.deck-layers { display: flex; flex-direction: column; gap: 0; border: none;
+  max-height: calc(100vh - 86px); overflow-y: auto; }
+.deck-addlayer { margin-top: 4px; align-self: flex-start; width: auto; padding: 5px 12px; color: var(--green); }
 .lh-blend {
   width: 100%; margin-top: 3px; box-sizing: border-box;
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -611,7 +776,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--muted); border-color: var(--line);
 }
-.lh-clear:hover { color: var(--danger); border-color: var(--line-2); }
 .lh-blend-label { color: var(--muted); margin-top: 2px; }   /* size/caps/tracking from the shared header recipe */
 .lh-ctrls select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -621,10 +785,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    layer label and clip labels share one baseline across the deck row. */
 .lh-name {
   background: var(--surface-2); color: var(--text); font-weight: var(--fw-med); font-size: var(--fs-body);
-  text-align: left; border: none; border-top: 1px solid var(--line); border-radius: 0; padding: 4px 7px;
+  text-align: left; border: none; border-radius: 0; padding: 4px 7px;
   font-family: var(--sans); box-sizing: border-box; width: 100%;
 }
-.lh-name:focus { outline: none; border-color: var(--accent); }
+.lh-name:focus { outline: none; border-color: var(--line-2); }
 
 /* --- Clip slot row: flush, no horizontal gaps (shared borders) --- */
 .clip-deck {
@@ -640,16 +804,14 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   display: flex; align-items: center; justify-content: center;
   border-style: dashed; border-color: var(--line); background: var(--surface); opacity: .6;
 }
-.clip-empty:hover { opacity: 1; border-color: var(--accent); }
 .clip-empty-plus { font-size: var(--fs-glyph); color: var(--faint); line-height: 1; }
-.clip-empty:hover .clip-empty-plus { color: var(--accent); }
 
 /* Clip slot: thumbnail on top, a label bar UNDERNEATH (Resolume-style). */
 .clip-thumbwrap { position: relative; flex: 1 1 auto; min-height: 48px; width: 100%; background: #000; }
 .clip-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
 .clip-label-bar {
   padding: 4px 7px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--text);
-  background: var(--surface-2); border-top: 1px solid var(--line);
+  background: var(--surface-2);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .clip-fxcount {
@@ -680,16 +842,14 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .lib-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clip-cell {
   position: relative; flex: 0 0 auto; width: var(--clip-w); height: var(--clip-h);
-  background: var(--surface); border: 1px solid var(--field-border); border-radius: 0;
+  background: var(--surface); border: 1px solid var(--field-border); border-top: 0; border-bottom: 0; border-radius: 0;
   overflow: hidden; cursor: pointer; user-select: none; display: flex; flex-direction: column;
   transition: border-color .12s, box-shadow .12s;
 }
-.clip-cell:hover { border-color: var(--line-2); }
 .clip-add {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; cursor: default; border-style: dashed;
 }
-.clip-add:hover { background: var(--surface); }
 .clip-add select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
   border-radius: var(--radius); padding: 2px 4px; font: var(--fs-micro) var(--sans); width: 100%; box-sizing: border-box;
@@ -712,10 +872,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   border-radius: var(--radius-sm); padding: 3px 7px; cursor: grab; user-select: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.lib-item:hover { background: var(--hover); border-color: var(--line-2); }
 .lib-item:active { cursor: grabbing; }
 .lib-video { color: var(--green); border-style: dashed; justify-content: center; cursor: pointer; margin-top: 3px; }
-.lib-video:hover { border-color: var(--green); background: rgba(93,209,163,.08); }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {
@@ -727,6 +885,25 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   grid-column: 1 / -1; text-align: center; font-size: var(--fs-body); color: var(--faint);
   border: 1px dashed var(--field-border); border-radius: var(--radius); padding: 8px; margin-top: 4px;
 }
+/* "+ effect" / "+ source" affordance — opens the picker popover. */
+.composer-add {
+  width: 100%; margin-top: 4px; padding: 6px 0; text-align: center;
+  background: none; border: 1px dashed var(--field-border); border-radius: var(--radius);
+  color: var(--faint); font: var(--fs-body) var(--sans); cursor: pointer;
+}
+.composer-add:hover { color: var(--accent); border-color: var(--accent-line); }
+/* Picker popover (sources / effects), anchored to its "+" trigger. */
+.pick-pop {
+  position: fixed; z-index: 50; min-width: 190px; max-height: 60vh; overflow-y: auto;
+  background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: var(--radius);
+  padding: 4px; display: flex; flex-direction: column; gap: 1px; box-shadow: 0 8px 22px rgba(0,0,0,.55);
+}
+.pick-item {
+  display: flex; align-items: center; gap: 8px; padding: 5px 7px; border-radius: var(--radius-sm);
+  font-size: var(--fs-body); color: var(--text); cursor: pointer;
+}
+.pick-item:hover { background: var(--hover); color: var(--accent); }
+.pick-video { color: var(--faint); }
 .comp-fx { margin-top: 8px; }   /* section provides its own top hairline */
 
 /* Transport bar (play-through of the clip timeline). */
@@ -737,7 +914,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .transport-loop { display: flex; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--muted); }
 .transport-loop input { width: auto; accent-color: var(--accent); }
 .transport-fire { padding: 2px 10px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--amber); border-color: var(--line); }
-.transport-fire:hover { background: rgba(232,178,127,.12); border-color: var(--amber); }
 .transport-fire:active { background: rgba(232,178,127,.28); }
 
 /* Playhead highlight: the slot the transport is currently on. */
@@ -756,10 +932,79 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   margin-bottom: 2px; display: flex; align-items: center; gap: 6px;
 }
 .clip-editor-head .ly-nameedit { flex: 1 1 auto; min-width: 0; }
-.ly-fxhead .fx-menu-wrap, .clip-editor-head .fx-menu-wrap { margin-left: auto; }
+.ly-fxhead .fx-acts, .clip-editor-head .fx-acts { margin-left: auto; }
 .clip-trigger {
   grid-column: 1 / -1; width: 100%; margin: 2px 0 4px; font-weight: var(--fw-med);
   color: var(--amber); border-color: var(--line);
 }
-.clip-trigger:hover { background: rgba(232,178,127,.14); border-color: var(--amber); }
 .clip-trigger:active { background: rgba(232,178,127,.3); }
+
+/* --- Settings: a traditional modal preferences dialog ---------------------- */
+.modal { display: none; position: fixed; inset: 0; z-index: 60; align-items: flex-start; justify-content: center; }
+.modal:not([hidden]) { display: flex; }
+.modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+.modal-card {
+  position: relative; margin: 7vh 0; width: min(620px, 92vw); max-height: 86vh;
+  display: flex; flex-direction: column; background: var(--panel);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 18px 60px rgba(0,0,0,.5);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+}
+.modal-title { font-size: var(--fs-title); font-weight: var(--fw-med); color: var(--text); letter-spacing: 0.02em; }
+.modal-close {
+  background: none; border: none; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
+  padding: 3px 7px; border-radius: var(--radius-sm);
+}
+/* Symmetric breath, aligned with the head padding. */
+.modal-body { overflow-y: auto; padding: 14px 16px 16px; }
+
+/* Settings page: the inspector rail mounted in a dialog. Section wrappers drive
+   ALL inter-section spacing; headers carry only their global accent underline;
+   rows fall back to the canonical row height + ledger seams. */
+.settings-panel.fx-panel { gap: 0; }
+.settings-panel .set-sec { margin: 0 0 18px; }
+.settings-panel .set-sec:last-child { margin-bottom: 0; }
+.settings-panel .fx-pts { margin: 0 0 8px; }
+.settings-panel .set-body { display: flex; flex-direction: column; }
+.settings-panel .set-body > .fx-field { min-height: var(--row-h); padding: 4px 0; }
+.settings-panel .set-body > .fx-field + .fx-field {
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+
+/* Colour grid: an even two-column swatch grid (the swatch governs width). */
+.settings-panel .cmp-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 16px; row-gap: 6px;
+}
+.settings-panel .cmp-grid > .fx-field + .fx-field { border-top: none; }   /* grid, not a list */
+.settings-panel .swatch-field > span:first-child { flex: 1 1 auto; }
+/* Swatch chip — the native well reads as a flat colour tile. */
+.swatch {
+  flex: 0 0 auto; width: 46px; height: 22px; display: block; overflow: hidden;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
+}
+.swatch input[type=color] {
+  width: 100%; height: 100%; padding: 0; margin: 0; border: none; background: none; cursor: pointer;
+}
+.swatch input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.swatch input[type=color]::-webkit-color-swatch { border: none; border-radius: 0; }
+.swatch input[type=color]::-moz-color-swatch { border: none; }
+
+/* Number fields align their right edge to the slider / checkbox rail above. */
+.settings-panel .num-field > span:first-child { flex: 1 1 auto; }
+.settings-panel .num-field input[type=number] {
+  flex: 0 0 var(--slider-w); width: var(--slider-w); text-align: right;
+}
+
+/* Section footer (e.g. 'reset colors') — right-aligned under a hairline. */
+.settings-panel .set-foot {
+  display: flex; justify-content: flex-end; padding-top: 8px; margin-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.settings-panel .set-foot .fx-del-link { grid-column: auto; padding: 0; }
+
+/* File I/O — equal-width docked pair. */
+.settings-panel .set-io { display: flex; gap: var(--s4); margin-top: 2px; }
+.settings-panel .set-io button { flex: 1 1 0; }

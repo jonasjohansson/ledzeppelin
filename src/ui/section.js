@@ -6,12 +6,7 @@
 // disturbed. The matching .insp-sec / .insp-sec-head / .insp-tri CSS is in
 // ui.css.
 
-const el = (tag, props = {}, kids = []) => {
-  const n = document.createElement(tag);
-  Object.assign(n, props);
-  for (const k of kids) n.append(k);
-  return n;
-};
+import { el } from './dom.js';
 
 // Keys listed here render OPEN on first paint; everything else starts collapsed.
 // Membership is toggled live as the user opens/closes a section.
@@ -19,16 +14,18 @@ export const SEC_OPEN = new Set([
   // Composition inspector (clip)
   'playback', 'source', 'transform', 'effects',
   // Composition inspector (layer / composition)
-  'autopilot', 'layer-comp', 'layer-effects', 'comp-fx',
+  'autopilot', 'layer-comp', 'layer-effects', 'comp-master', 'comp-fx',
   // Fixtures / Output tabs
   'devices', 'fixtures', 'position', 'chains', 'routing', 'identity',
 ]);
 
-// Section(title, key, build, onReset?, locked?). When onReset is given, a small
-// ↺ shows in the header (on hover) that resets the group. When `locked` is true
-// the section is forced open and can't be collapsed (no toggle) — e.g. an empty
-// Effects group, where collapsing would hide the only "drop effect" target.
-export function Section(title, key, build, onReset, locked) {
+// Section(title, key, build, onReset?, locked?, dirty?). When onReset is given, a
+// small ↺ shows in the header that resets the group; it's disabled (and reads as
+// inert) when `dirty === false`, so the group only offers a reset once something
+// actually differs from its defaults. When `locked` is true the section is forced
+// open and can't be collapsed (no toggle) — e.g. an empty Effects group, where
+// collapsing would hide the only "drop effect" target.
+export function Section(title, key, build, onReset, locked, dirty) {
   const open = locked || SEC_OPEN.has(key);
   const sec = el('div', { className: 'insp-sec' + (open ? ' is-open' : '') + (locked ? ' is-locked' : '') });
   sec.dataset.sec = key;
@@ -42,10 +39,13 @@ export function Section(title, key, build, onReset, locked) {
     sec.classList.toggle('is-open');
   });
   if (onReset) {
+    const canReset = dirty !== false;   // undefined (caller opted out of the check) ⇒ always enabled
     const rst = el('button', {
-      className: 'insp-sec-reset', type: 'button', textContent: '↺', title: 'reset this group',
+      className: 'insp-sec-reset', type: 'button', textContent: '↺',
+      title: canReset ? 'reset this group' : 'nothing to reset',
     });
-    rst.addEventListener('click', (e) => { e.stopPropagation(); onReset(); });
+    rst.disabled = !canReset;
+    rst.addEventListener('click', (e) => { e.stopPropagation(); if (canReset) onReset(); });
     head.append(rst);
   }
   const body = el('div', { className: 'insp-sec-body' });

@@ -1,14 +1,16 @@
 import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
-import { chainOffset } from '../model/chains.js';
+import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
-  setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex,
+  setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel,
 } from '../model/fixture-transform.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
 // (so draw() and hitTest() — which use different pixel scales — agree).
 const ROTATE_KNOB = 0.06;
+// Minimum on-canvas size (px) when corner-resizing a bar, so it can't collapse.
+const MIN_W = 6, MIN_H = 3;
 
 // Virtual-fixture preview: draws each fixture's resampled points onto a 2D
 // overlay canvas, colored by the latest sampled RGB. Hardware-free dev view.
@@ -21,132 +23,317 @@ const ROTATE_KNOB = 0.06;
 // `rgba` is the flat RGBA8 readback from the sampler, ordered by the same
 // fixture concatenation order app.js uses (fixtures sorted by output.pixelOffset
 // ascending). We recompute that ordering via buildPipelineInputs().
+// Transient value tag shown at the cursor during a drag/rotate/scale — set by
+// enableDragPlacement, read by createPreview's draw(). {nx,ny} normalized 0..1.
+let dragHint = null;
+
 export function createPreview(canvasEl, opts = {}) {
   const ctx = canvasEl.getContext('2d');
+  const svg = opts.svg || null;   // vector chrome layer (footprints/arrows/handles/labels)
   const dotR = opts.dotRadius ?? 4;
   const showLabels = opts.labels ?? true;
+  let BASE_W = canvasEl.width || 1280, BASE_H = canvasEl.height || 720;
+  // Match the SVG viewBox to the composition size NOW (the HTML default is only a
+  // placeholder) so the vector chrome shares the canvas's coordinate space at load,
+  // not just after a resize.
+  if (svg) svg.setAttribute('viewBox', `0 0 ${BASE_W} ${BASE_H}`);
+  // Update the logical drawing size when the COMPOSITION canvas aspect changes,
+  // so the overlay maps uniformly (no stretch). Both the lights canvas and the SVG
+  // chrome work in this 0..BASE space.
+  function setBaseSize(w, h) {
+    if (w > 0) BASE_W = w; if (h > 0) BASE_H = h;
+    if (svg) svg.setAttribute('viewBox', `0 0 ${BASE_W} ${BASE_H}`);
+    chromeKey = null;   // force a chrome rebuild at the new size
+    setRenderScale(viewZoom);
+  }
+
+  // Crisp zoom: raise the canvas BACKING resolution as the stage is zoomed in, so
+  // the CSS-scaled overlay renders sharp instead of upscaling a fixed 1280×720.
+  // All draw code stays in BASE_W×BASE_H logical space; draw() maps it to the
+  // backing via setTransform. Capped so the canvas never gets pathologically big.
+  let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
+  let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
+  function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // SVG chrome rebuild cache — rebuild only when the show ref or this key changes.
+  let chromeShow = null, chromeKey = null;
+
+  // --- Per-frame cost savers --------------------------------------------------
+  // Pipeline geometry only changes on EDITS (new show object), not every frame, so
+  // cache it keyed by the show reference instead of rebuilding sample points /
+  // run colours / spans 60×/s.
+  let piCache = null;
+  function pipelineFor(show) {
+    if (piCache && piCache.show === show) return piCache;
+    const { fixtureOrder, spans } = buildPipelineInputs(show);
+    const samplePts = fixtureOrder.map((f) => samplePoints(f.input.points, f.input.samples));
+    const { runColor } = controllerColorMap(show);
+    const chainColors = {};
+    for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
+    piCache = { show, fixtureOrder, spans, samplePts, chainColors };
+    return piCache;
+  }
+  // A reusable 1×N offscreen for blitting a whole strip in ONE drawImage (vs a
+  // fillRect + colour-string per LED). Grows to the next power of two as needed.
+  let stripCv = null, stripCtx = null, stripImg = null, stripCap = 0;
+  function ensureStrip(n) {
+    if (n <= stripCap) return;
+    stripCap = Math.max(128, 1 << Math.ceil(Math.log2(n)));
+    stripCv = document.createElement('canvas'); stripCv.width = stripCap; stripCv.height = 1;
+    stripCtx = stripCv.getContext('2d');
+    stripImg = stripCtx.createImageData(stripCap, 1);
+  }
+  function setRenderScale(zoom) {
+    viewZoom = Math.max(0.25, Number(zoom) || 1);
+    // The lights canvas no longer needs to scale with zoom — the crisp chrome is on
+    // the SVG layer, and the LED cells tolerate CSS upscaling. So keep a FIXED
+    // backing (~composition × dpr, capped) → zooming never balloons it (no lag).
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const areaK = Math.sqrt(6_000_000 / Math.max(1, BASE_W * BASE_H));
+    const k = Math.max(1, Math.min(dpr, areaK));
+    const w = Math.round(BASE_W * k), h = Math.round(BASE_H * k);
+    if (canvasEl.width !== w) { canvasEl.width = w; canvasEl.height = h; }
+  }
 
   const isSelected = (sel, id) => sel && (sel.has ? sel.has(id) : sel === id);
 
-  function draw(show, rgba, selectedIds = null, snapGrid = 0, guides = null) {
-    const W = canvasEl.width, Hh = canvasEl.height;
-    // Transparent overlay: the live composite (WebGL stage) shows THROUGH.
-    ctx.clearRect(0, 0, W, Hh);
-    if (snapGrid > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,.09)'; ctx.lineWidth = 1;
-      for (let x = 0; x <= W; x += snapGrid) { ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, Hh); ctx.stroke(); }
-      for (let y = 0; y <= Hh; y += snapGrid) { ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); ctx.stroke(); }
-    }
-    if (guides && guides.length) {
-      ctx.strokeStyle = 'rgba(232,178,127,.85)'; ctx.lineWidth = 1;
-      for (const g of guides) {
-        ctx.beginPath();
-        if (g.axis === 'x') { ctx.moveTo(g.v + 0.5, 0); ctx.lineTo(g.v + 0.5, Hh); }
-        else { ctx.moveTo(0, g.v + 0.5); ctx.lineTo(W, g.v + 0.5); }
-        ctx.stroke();
+  function draw(show, rgba, selectedIds = null, snapGrid = 0, guides = null, marquee = null) {
+    const W = BASE_W, Hh = BASE_H;                 // logical drawing space
+    // Chrome scale — constant SCREEN size at zoom ≤ 1, receding when zoomed in so a
+    // dense rig doesn't crowd. Used by the SVG chrome layer (and the canvas drag-tag).
+    const ck = viewZoom <= 1 ? 1 / viewZoom : 1 / Math.pow(viewZoom, 1.35);
+    ctx.setTransform(canvasEl.width / BASE_W, 0, 0, canvasEl.height / BASE_H, 0, 0);
+    ctx.clearRect(0, 0, W, Hh);   // transparent — the WebGL stage shows through
+
+    // ---- Vector CHROME → SVG. Rebuilt only when geometry / selection / zoom /
+    //      guides / marquee change (NOT per frame — the lit pixels below redraw
+    //      every frame, the chrome doesn't). Crisp at any zoom (SVG re-rasterizes). ----
+    if (svg) {
+      const selKey = selectedIds ? [...selectedIds].join(',') : '';
+      const gKey = guides ? guides.map((g) => g.axis + Math.round(g.v)).join('|') : '';
+      const mKey = marquee ? `${marquee.x0.toFixed(3)},${marquee.y0.toFixed(3)},${marquee.x1.toFixed(3)},${marquee.y1.toFixed(3)}` : '';
+      const key = `${selKey}|${viewZoom}|${snapGrid}|${gKey}|${mKey}`;
+      if (show !== chromeShow || key !== chromeKey) {
+        chromeShow = show; chromeKey = key;
+        svg.innerHTML = buildChrome(show, selectedIds, snapGrid, guides, marquee, ck);
       }
     }
     if (!show || !show.fixtures?.length) return;
 
-    const { fixtureOrder, spans } = buildPipelineInputs(show);
+    // Cached pipeline geometry (rebuilt only when the show object changes). The
+    // LIGHTS pass below uses only fixtureOrder/spans/samplePts; colours/selection
+    // are the SVG chrome's concern (buildChrome).
+    const { fixtureOrder, spans, samplePts } = pipelineFor(show);
+
+    // Viewport cull bounds: the overlay canvas is CSS-scaled, so map the window
+    // rect back into canvas-logical pixels. Fixtures whose footprint falls fully
+    // outside (plus a small margin) are skipped — the big win when zoomed in.
+    const vr = canvasEl.getBoundingClientRect();
+    const Lx = W / (vr.width || 1), Ly = Hh / (vr.height || 1);
+    const vx0 = -vr.left * Lx - 24, vx1 = (window.innerWidth - vr.left) * Lx + 24;
+    const vy0 = -vr.top * Ly - 24, vy1 = (window.innerHeight - vr.top) * Ly + 24;
 
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
-      if (f.hidden) continue;
+      // Cull off-screen fixtures (footprint AABB vs the visible region).
+      const P0 = f.input.points;
+      if (P0 && P0.length) {
+        let nx = 1, ny = 1, xx = 0, xy = 0;
+        for (const p of P0) { if (p[0] < nx) nx = p[0]; if (p[0] > xx) xx = p[0]; if (p[1] < ny) ny = p[1]; if (p[1] > xy) xy = p[1]; }
+        if (xx * W < vx0 || nx * W > vx1 || xy * Hh < vy0 || ny * Hh > vy1) continue;
+      }
+      if (f.hidden) continue;   // hidden → no lights; its ghost outline is drawn on the SVG chrome
       const span = spans[fi];
-      const pts = samplePoints(f.input.points, f.input.samples);
+      const pts = samplePts[fi];               // cached resampled points
       const [ox, oy] = chainOffset(show, f.id);   // dots show WHERE it samples (cascade)
+      const reversed = !!f.input.reversed;        // which geometric end is pixel 0
+      const count = pts.length;
+      const thick = Math.max(2, Number(f.input?.transform?.h) || 8);
+      const sx = (i) => (pts[i][0] + ox) * W, sy = (i) => (pts[i][1] + oy) * Hh;
 
-      // Sampled pixel dots, colored by the live readback.
-      for (let i = 0; i < pts.length; i++) {
-        const [u, v] = pts[i];
-        const x = (u + ox) * W, y = (v + oy) * Hh;
-        let r = 30, g = 30, b = 30;
-        if (rgba) {
-          const idx = (span.start + i) * 4;
-          if (idx + 2 <= rgba.length - 1) { r = rgba[idx]; g = rgba[idx + 1]; b = rgba[idx + 2]; }
+      // Light the strip from the sampled composite. A straight BAR blits its whole
+      // pixel row in ONE drawImage (cheap); a bent polyline falls back to a square
+      // per LED. The lit composite reads ON the strip; off pixels stay dark.
+      if (count >= 1 && rgba) {
+        if (!isPolylineFixture(f.input) && count >= 2) {
+          ensureStrip(count);
+          const d = stripImg.data;
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * 4;
+            if (si + 2 <= rgba.length - 1) { d[di] = rgba[si]; d[di + 1] = rgba[si + 1]; d[di + 2] = rgba[si + 2]; }
+            else { d[di] = d[di + 1] = d[di + 2] = 0; }
+            d[di + 3] = 255;
+          }
+          stripCtx.putImageData(stripImg, 0, 0);
+          const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
+          const len = Math.hypot(bx - ax, by - ay) || 1;
+          const ang = Math.atan2(by - ay, bx - ax);
+          const halfCell = len / (2 * (count - 1));
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
+          ctx.translate(ax, ay); ctx.rotate(ang);
+          ctx.drawImage(stripCv, 0, 0, count, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
+          ctx.restore();
+        } else {
+          const cell = Math.max(2, thick);
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
+            let r = 0, g = 0, b = 0;
+            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(sx(i) - cell / 2, sy(i) - cell / 2, cell, cell);
+          }
         }
-        ctx.beginPath();
-        ctx.arc(x, y, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fill();
       }
 
-      const selected = isSelected(selectedIds, f.id);
-      const stroke = selected ? '#e8b27f' : '#5cc8ff';
-      const eps = f.input.points;
+    }
+    // (Fixture footprints, handles, arrows, labels, chain wiring, snap grid/guides
+    //  and the marquee are all drawn on the SVG chrome layer — see buildChrome.)
 
-      if (isPolylineFixture(f.input)) {
-        // Footprint: the full polyline + a square handle at every vertex.
-        ctx.beginPath();
-        ctx.moveTo(eps[0][0] * W, eps[0][1] * Hh);
-        for (let i = 1; i < eps.length; i++) ctx.lineTo(eps[i][0] * W, eps[i][1] * Hh);
-        ctx.strokeStyle = stroke; ctx.lineWidth = selected ? 2.5 : 1.5; ctx.stroke();
-        // Mark the START with a filled dot so chain order / direction reads.
-        for (let i = 0; i < eps.length; i++) {
-          const hx = eps[i][0] * W, hy = eps[i][1] * Hh;
-          const s = (selected ? 4 : 3);
-          ctx.beginPath(); ctx.rect(hx - s, hy - s, s * 2, s * 2);
-          ctx.fillStyle = i === 0 ? stroke : 'rgba(20,20,24,.85)';
-          ctx.fill(); ctx.strokeStyle = stroke; ctx.lineWidth = 1.25; ctx.stroke();
-        }
-        if (showLabels) drawLabel(f, eps[0][0] * W, eps[0][1] * Hh - 10, selected, W, Hh);
-        continue;
-      }
-
-      // BAR: a rotated rectangle (w×h) with a centre handle.
-      const ax = eps[0][0] * W, ay = eps[0][1] * Hh;
-      const bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
-      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-      const perpX = -dy / len, perpY = dx / len;
-      const cv = show.composition?.canvas || { w: W, h: Hh };
-      const halfThick = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
-      ctx.beginPath();
-      ctx.moveTo(ax + perpX * halfThick, ay + perpY * halfThick);
-      ctx.lineTo(bx + perpX * halfThick, by + perpY * halfThick);
-      ctx.lineTo(bx - perpX * halfThick, by - perpY * halfThick);
-      ctx.lineTo(ax - perpX * halfThick, ay - perpY * halfThick);
-      ctx.closePath();
-      ctx.strokeStyle = stroke; ctx.lineWidth = selected ? 2.5 : 1.5; ctx.stroke();
-
-      const cx = (ax + bx) / 2, cy = (ay + by) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, dotR + (selected ? 5 : 3), 0, Math.PI * 2);
-      ctx.fillStyle = selected ? 'rgba(232,178,127,.3)' : 'rgba(92,200,255,.25)'; ctx.fill();
-      ctx.strokeStyle = stroke; ctx.stroke();
-
-      // Rotate knob — only for a SINGLE selected bar. A short stem from the
-      // centre out along the perpendicular (normalized units) to a grab circle.
-      const single = selected && (!selectedIds.has || selectedIds.size === 1);
-      if (single) {
-        const a0 = eps[0], a1 = eps[eps.length - 1];
-        const cxN = (a0[0] + a1[0]) / 2, cyN = (a0[1] + a1[1]) / 2;
-        const adx = a1[0] - a0[0], ady = a1[1] - a0[1], adl = Math.hypot(adx, ady) || 1;
-        const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W;
-        const kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(knx, kny);
-        ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
-        ctx.beginPath(); ctx.arc(knx, kny, 5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(20,20,24,.92)'; ctx.fill();
-        ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke();
-      }
-      if (showLabels) drawLabel(f, cx, cy - 10, selected, W, Hh);
+    // Numeric value tag at the cursor while dragging/rotating/scaling — so you read
+    // the value where you're working, not in a sidebar.
+    if (dragHint) {
+      const fs = 11 * ck;
+      ctx.save();
+      ctx.font = `${fs}px "Spline Sans Mono", ui-monospace, Menlo, monospace`;
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(dragHint.text).width;
+      const padX = 5 * ck, bh = 16 * ck;
+      let bx = dragHint.nx * W + 12 * ck, by = dragHint.ny * Hh - 14 * ck;
+      bx = Math.max(2, Math.min(W - tw - padX * 2 - 2, bx));
+      by = Math.max(bh / 2 + 2, Math.min(Hh - bh / 2 - 2, by));
+      ctx.fillStyle = 'rgba(13,14,18,.92)'; ctx.fillRect(bx, by - bh / 2, tw + padX * 2, bh);
+      ctx.strokeStyle = 'rgba(60,65,75,.95)'; ctx.lineWidth = ck; ctx.strokeRect(bx, by - bh / 2, tw + padX * 2, bh);
+      ctx.fillStyle = '#f4f5f7'; ctx.fillText(dragHint.text, bx + padX, by);
+      ctx.restore();
     }
   }
 
-  function drawLabel(f, cx, cy, selected, W, Hh) {
-    const label = f.name || f.id;
-    ctx.font = '11px "Spline Sans Mono", ui-monospace, Menlo, monospace';
-    const tw = ctx.measureText(label).width;
-    const lx = Math.max(3, Math.min(W - tw - 3, cx - tw / 2));
-    const ly = Math.max(12, Math.min(Hh - 4, cy));
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    ctx.fillRect(lx - 3, ly - 11, tw + 6, 15);
-    ctx.fillStyle = selected ? '#e8b27f' : '#8fd6e8';
-    ctx.fillText(label, lx, ly);
+  // --- SVG chrome string builders (same 0..BASE coords as the lights canvas) ----
+  const nz = (n) => Math.round(n * 100) / 100;                 // trim coordinate noise
+  const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rectS = (x, y, w, h, stroke, sw) =>
+    `<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(20,20,24,.9)" stroke="${stroke}" stroke-width="${nz(sw)}"/>`;
+  // Filled arrowhead at p0 pointing toward p1 (direction / pixel-0). `thick` scales
+  // it with a bar's thickness; omitted ⇒ constant screen size.
+  const arrowS = (p0x, p0y, p1x, p1y, color, thick, ck) => {
+    const dx = p1x - p0x, dy = p1y - p0y, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const tip = thick != null ? Math.max(8 * ck, thick * 1.9) : 9 * ck;
+    const wide = thick != null ? Math.max(4 * ck, thick * 1.0) : 4.5 * ck;
+    return `<polygon points="${nz(p0x + ux * tip)},${nz(p0y + uy * tip)} ${nz(p0x + px * wide)},${nz(p0y + py * wide)} ${nz(p0x - px * wide)},${nz(p0y - py * wide)}" fill="${color}"/>`;
+  };
+  const labelS = (text, cx, cy, selected, ck) => {
+    const fs = 11 * ck, fill = selected ? '#e8b27f' : 'rgba(205,210,218,.92)';
+    return `<text x="${nz(cx)}" y="${nz(cy)}" font-size="${nz(fs)}" font-family="'Spline Sans Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="${fill}" stroke="rgba(0,0,0,.7)" stroke-width="${nz(1.6 * ck)}" stroke-linejoin="round" paint-order="stroke">${esc(text)}</text>`;
+  };
+
+  // Build the whole vector chrome as one SVG markup string. Mirrors the old canvas
+  // chrome exactly, in the same logical coords; rebuilt only on change (see draw).
+  function buildChrome(show, selectedIds, snapGrid, guides, marquee, ck) {
+    const W = BASE_W, Hh = BASE_H;
+    const p = [];
+    const ln = (x1, y1, x2, y2, stroke, w, dash) =>
+      p.push(`<line x1="${nz(x1)}" y1="${nz(y1)}" x2="${nz(x2)}" y2="${nz(y2)}" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+    const poly = (epspts, stroke, w, dash) =>
+      p.push(`<polyline points="${epspts.map((e) => `${nz(e[0] * W)},${nz(e[1] * Hh)}`).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+    // Dash unit: CONSTANT screen size (1/zoom, NOT the dampened ck), with generous
+    // lengths so dashes stay readable lines when zoomed in instead of shrinking to
+    // dots. Strokes still use the dampened `ck` to read as hairlines.
+    const du = 1 / viewZoom;
+    const DASH = `${nz(9 * du)} ${nz(5 * du)}`;
+
+    if (snapGrid > 0) {
+      for (let x = 0; x <= W; x += snapGrid) ln(x, 0, x, Hh, 'rgba(255,255,255,.09)', ck);
+      for (let y = 0; y <= Hh; y += snapGrid) ln(0, y, W, y, 'rgba(255,255,255,.09)', ck);
+    }
+    if (guides) for (const g of guides) {
+      if (g.axis === 'x') ln(g.v, 0, g.v, Hh, 'rgba(232,178,127,.85)', ck);
+      else ln(0, g.v, W, g.v, 'rgba(232,178,127,.85)', ck);
+    }
+
+    if (show && show.fixtures?.length) {
+      const { fixtureOrder, chainColors } = pipelineFor(show);
+      const dim = (c) => (colorTint ? c : 'rgba(150,156,166,.85)');
+      const selFx = selectedIds && show.fixtures.find((f) => isSelected(selectedIds, f.id));
+      const focusKey = selFx ? runKey(selFx) : null;
+      for (const f of fixtureOrder) {
+        const eps = f.input.points; if (!eps || !eps.length) continue;
+        const reversed = !!f.input.reversed;
+        if (f.hidden) {                                  // faint ghost outline
+          const onSel = isSelected(selectedIds, f.id);
+          poly(eps, onSel ? 'rgba(232,178,127,.55)' : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
+          continue;
+        }
+        const selected = isSelected(selectedIds, f.id);
+        const stroke = selected ? '#e8b27f' : dim(chainColors[runKey(f)] || 'rgba(150,156,166,.6)');
+        const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
+        const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
+        if (!selected && runKey(f) !== focusKey && lblLen * viewZoom < 13) continue;   // LOD: tiny → no chrome
+        const fIdx = show.fixtures.indexOf(f);
+        const dash = selected ? null : DASH;
+
+        if (isPolylineFixture(f.input)) {
+          poly(eps, stroke, ck, dash);
+          if (selected) for (const e of eps) { const hx = e[0] * W, hy = e[1] * Hh, s = 4 * ck; p.push(rectS(hx - s, hy - s, s * 2, s * 2, stroke, 1.25 * ck)); }
+          const L = eps.length - 1, a0 = reversed ? eps[L] : eps[0], a1 = reversed ? eps[L - 1] : eps[1];
+          p.push(arrowS(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke, null, ck));
+          if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), eps[0][0] * W, eps[0][1] * Hh - 10, selected, ck));
+          continue;
+        }
+
+        // BAR: rotated rectangle (the 4 outer corners).
+        const ax = eps[0][0] * W, ay = eps[0][1] * Hh, bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
+        const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, perpX = -dy / len, perpY = dx / len;
+        const cv = show.composition?.canvas || { w: W, h: Hh };
+        const ht = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
+        const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
+        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="none" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+        if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck));
+        const cx = (ax + bx) / 2, cy = (ay + by) / 2;
+        if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="rgba(232,178,127,.3)" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
+        const single = selected && (!selectedIds.has || selectedIds.size === 1);
+        if (single) {
+          for (const c of [c1, c2, c3, c4]) p.push(rectS(c[0] - 3 * ck, c[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
+          const e0 = eps[0], e1 = eps[eps.length - 1], cxN = (e0[0] + e1[0]) / 2, cyN = (e0[1] + e1[1]) / 2;
+          const adx = e1[0] - e0[0], ady = e1[1] - e0[1], adl = Math.hypot(adx, ady) || 1;
+          const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W, kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
+          ln(cx, cy, knx, kny, stroke, ck);
+          p.push(`<circle cx="${nz(knx)}" cy="${nz(kny)}" r="${nz(5 * ck)}" fill="rgba(20,20,24,.92)" stroke="${stroke}" stroke-width="${nz(1.5 * ck)}"/>`);
+        }
+        if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), cx, cy - 10, selected, ck));
+      }
+
+      // Chain wiring: out-end(i) → in-end(i+1) per hop, arrow at the input, ring at origin.
+      const endOf = (f, which) => {
+        const pp = f.input?.points || []; if (!pp.length) return [0, 0];
+        const rev = !!f.input.reversed;
+        const e = (which === 'in') === !rev ? pp[0] : pp[pp.length - 1];
+        return [e[0] * W, e[1] * Hh];
+      };
+      for (const ch of runsOf(show)) {
+        if (ch.members.length < 2) continue;
+        const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean);
+        if (members.length < 2) continue;
+        const col = dim(chainColors[ch.key] || 'rgba(150,156,166,.45)');
+        for (let i = 0; i < members.length - 1; i++) {
+          const [ax, ay] = endOf(members[i], 'out');
+          const [bx, by] = endOf(members[i + 1], 'in');
+          ln(ax, ay, bx, by, col, 1.25 * ck, DASH);
+          p.push(arrowS(bx, by, bx + (bx - ax), by + (by - ay), col, null, ck));
+        }
+        const [ox0, oy0] = endOf(members[0], 'in');
+        p.push(`<circle cx="${nz(ox0)}" cy="${nz(oy0)}" r="${nz(5 * ck)}" fill="none" stroke="${col}" stroke-width="${nz(1.25 * ck)}"/>`);
+      }
+    }
+
+    if (marquee) {
+      const x = marquee.x0 * W, y = marquee.y0 * Hh, w = (marquee.x1 - marquee.x0) * W, h = (marquee.y1 - marquee.y0) * Hh;
+      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(232,163,92,.10)" stroke="rgba(232,163,92,.85)" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
+    }
+    return p.join('');
   }
 
-  return { draw };
+  return { draw, setRenderScale, setBaseSize, setColorTint };
 }
 
 // Drag-placement on the Output overlay:
@@ -156,7 +343,7 @@ export function createPreview(canvasEl, opts = {}) {
 //   • double-click a segment → insert a vertex (a bar becomes a bendable run)
 //   • right-click a vertex → remove it
 // Edits derive a new show and call onEdit(next) per move; onCommit on release.
-export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap }, opts = {}) {
+export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap, onMarqueeStart, onMarquee, onMarqueeEnd }, opts = {}) {
   const hitR = opts.hitRadius ?? 18;
   const vtxR = opts.vertexRadius ?? 9;
   let dragState = null;
@@ -192,6 +379,19 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const adx = a1[0] - a0[0], ady = a1[1] - a0[1], adl = Math.hypot(adx, ady) || 1;
         const kx = (cxN + (-ady / adl) * ROTATE_KNOB) * rw, ky = (cyN + (adx / adl) * ROTATE_KNOB) * rh;
         if (Math.hypot(px - kx, py - ky) <= vtxR) return { fxId: selId, rotate: true };
+        // Corner resize handles win over the body (but not the rotate knob).
+        const ax = a0[0] * rw, ay = a0[1] * rh, bx = a1[0] * rw, by = a1[1] * rh;
+        const ddx = bx - ax, ddy = by - ay, dl = Math.hypot(ddx, ddy) || 1;
+        const cpx = -ddy / dl, cpy = ddx / dl;
+        const cv = show.composition?.canvas || { w: rw, h: rh };
+        const ht = ((f.input.transform?.h ?? 8) / 2) * (rh / (cv.h || rh));
+        const corners = [
+          [ax + cpx * ht, ay + cpy * ht], [bx + cpx * ht, by + cpy * ht],
+          [bx - cpx * ht, by - cpy * ht], [ax - cpx * ht, ay - cpy * ht],
+        ];
+        for (let c = 0; c < 4; c++) {
+          if (Math.hypot(px - corners[c][0], py - corners[c][1]) <= vtxR) return { fxId: selId, scaleCorner: c };
+        }
       }
     }
     for (let i = fixtures.length - 1; i >= 0; i--) {
@@ -225,13 +425,32 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   canvasEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     const hit = hitTest(ev);
-    onSelect?.(hit ? hit.fxId : null, ev);
-    if (!hit) return;
+    if (!hit) {
+      // Empty canvas → rubber-band marquee select (Shift = add to selection).
+      const [nx, ny] = norm(ev);
+      dragState = { kind: 'marquee', x0: nx, y0: ny, additive: !!ev.shiftKey };
+      onMarqueeStart?.(dragState.additive);
+      canvasEl.setPointerCapture(ev.pointerId); ev.preventDefault();
+      return;
+    }
+    onSelect?.(hit.fxId, ev);
     const show = getShow();
     const cv = show.composition?.canvas || { w: 1280, h: 720 };
 
     if (hit.rotate) {
       dragState = { kind: 'rotate', id: hit.fxId, cv };
+    } else if (hit.scaleCorner != null) {
+      // Resize from the grabbed corner, keeping the OPPOSITE corner pinned and
+      // rotation fixed. Work in the bar's local frame (axis u, perpendicular p).
+      const f = show.fixtures.find((x) => x.id === hit.fxId);
+      const t = f.input.transform || transformFromPoints(f.input.points, cv);
+      const a = (Number(t.rotation) || 0) * Math.PI / 180;
+      const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
+      const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
+      const sgn = [[-1, 1], [1, 1], [1, -1], [-1, -1]];   // corner 0..3 in (u,p)
+      const [su, sp] = sgn[(hit.scaleCorner + 2) % 4];     // opposite corner = anchor
+      const anchor = { x: t.x + ux * su * hw + pxx * sp * hh, y: t.y + uy * su * hw + pyy * sp * hh };
+      dragState = { kind: 'scale', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor };
     } else if (hit.vertex != null) {
       dragState = { kind: 'vertex', id: hit.fxId, index: hit.vertex };
     } else {
@@ -255,7 +474,16 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   canvasEl.addEventListener('pointermove', (ev) => {
     if (!enabled || !dragState) return;
+    if (dragState.kind === 'marquee') {
+      const [nx, ny] = norm(ev);
+      onMarquee?.({
+        x0: Math.min(dragState.x0, nx), y0: Math.min(dragState.y0, ny),
+        x1: Math.max(dragState.x0, nx), y1: Math.max(dragState.y0, ny),
+      }, dragState.additive);
+      return;
+    }
     let next = getShow();
+    let hintText = null;
     if (dragState.kind === 'rotate') {
       // Angle from the bar centre to the cursor (canvas-px metric, matches the
       // model's rotation). The knob sits on the perpendicular, so subtract 90°.
@@ -265,6 +493,20 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       let rot = Math.atan2(pyc - tf.y, pxc - tf.x) * 180 / Math.PI - 90;
       if (ev.shiftKey) rot = snapDeg(rot, 15);     // Shift → snap to 15° increments
       next = setFixtureTransform(next, dragState.id, { rotation: rot });
+      hintText = `${Math.round(((rot % 360) + 360) % 360)}°`;
+    } else if (dragState.kind === 'scale') {
+      // Cursor offset from the pinned anchor, projected onto the bar's axes →
+      // new length (w) and thickness (h); centre stays midway anchor↔cursor.
+      const { ux, uy, pxx, pyy, anchor, id } = dragState;
+      const [cxp, cyp] = canvasPx(ev, dragState.cv);
+      const vx = cxp - anchor.x, vy = cyp - anchor.y;
+      const du = vx * ux + vy * uy, dp = vx * pxx + vy * pyy;
+      const w = Math.max(MIN_W, Math.abs(du)), h = Math.max(MIN_H, Math.abs(dp));
+      next = setFixtureTransform(next, id, {
+        x: anchor.x + ux * (du / 2) + pxx * (dp / 2),
+        y: anchor.y + uy * (du / 2) + pyy * (dp / 2), w, h,
+      });
+      hintText = `${Math.round(w)}×${Math.round(h)} px`;
     } else if (dragState.kind === 'vertex') {
       const [nx, ny] = norm(ev);
       next = setFixtureVertex(next, dragState.id, dragState.index, nx, ny);
@@ -281,17 +523,22 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
           let nx = it.x0 + dxPx, ny = it.y0 + dyPx;
           if (snap) { const s = snap(nx, ny, it.id, draggedIds); nx = s[0]; ny = s[1]; }
           next = setFixtureTransform(next, it.id, { x: nx, y: ny });
+          if (it === dragState.items[0]) hintText = `${Math.round(nx)}, ${Math.round(ny)}`;
         }
       }
     }
+    const [hnx, hny] = norm(ev);
+    dragHint = hintText ? { nx: hnx, ny: hny, text: hintText } : null;
     onEdit?.(next);
   });
 
   function end(ev) {
     if (!dragState) return;
-    dragState = null;
+    const wasMarquee = dragState.kind === 'marquee';
+    dragState = null; dragHint = null;
     try { canvasEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
-    onCommit?.(getShow());
+    if (wasMarquee) onMarqueeEnd?.();        // selection-only — no geometry commit
+    else onCommit?.(getShow());
   }
   canvasEl.addEventListener('pointerup', end);
   canvasEl.addEventListener('pointercancel', end);

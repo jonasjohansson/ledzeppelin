@@ -1,6 +1,6 @@
-import { emptyShow } from './show.js';
+import { emptyShow, makeFixtureType } from './show.js';
 import { normalizeComposition } from './layers.js';
-import { addChain } from './chains.js';
+import { fitCanvasToFixtures } from './fixture-transform.js';
 
 // Import a Kagora preset into a ledzeppelin show.
 //
@@ -144,6 +144,22 @@ export function importKagora(preset) {
   const spanY = maxY - minY || 1;
   const norm = (p) => [(p.x - minX) / spanX, (p.y - minY) / spanY];
 
+  // UNIFORM pixel scale (long axis ≈ 1280). Used both for the canvas size AND for
+  // each straight strip's TRANSFORM, so the layout is locked in pixel space and
+  // never squishes if the canvas is later resized to a different aspect (a bar
+  // fixture's transform is the source of truth; deriving it from per-axis 0..1
+  // points instead would distort on a non-rig-aspect canvas).
+  const scl = 1280 / Math.max(spanX, spanY);
+  const toPx = (p) => [(p.x - minX) * scl, (p.y - minY) * scl];
+  function barTransform(s) {
+    const pts = s.points ?? [];
+    if (pts.length < 2) return { x: 0, y: 0, w: 10, h: 8, rotation: 0 };
+    const [ax, ay] = toPx(pts[0]);
+    const [bx, by] = toPx(pts[pts.length - 1]);
+    return { x: (ax + bx) / 2, y: (ay + by) / 2, w: Math.hypot(bx - ax, by - ay), h: 8,
+      rotation: Math.atan2(by - ay, bx - ax) * 180 / Math.PI };
+  }
+
   function normalizedPoints(s) {
     const pts = s.points ?? [];
     if (pts.length >= 2) return pts.map(norm);
@@ -164,6 +180,41 @@ export function importKagora(preset) {
       colorOrder: colorOrderByDevice.get(c.id) ?? DEFAULT_COLOR_ORDER,
     }));
 
+  // Each daisy-run = one controller OUTPUT (port). Assign a per-device port to
+  // every strip in a run, and record its position in the run (= wiring order).
+  // Chains are now DERIVED from (device, port) + array order — no explicit list.
+  const portByStrip = new Map(), runIndexByStrip = new Map(), portCounter = new Map();
+  daisyRuns.forEach((run) => {
+    const devId = deviceIdByStrip.get(run[0]);
+    const p = (portCounter.get(devId) || 0) + 1; portCounter.set(devId, p);
+    run.forEach((sid, idx) => { portByStrip.set(sid, p); runIndexByStrip.set(sid, idx); });
+  });
+
+  // Fixture TYPES — one per Kagora stripType in use, so imported strips appear in
+  // the Inventory AND keep their real pixel counts. Without a typeId, syncFixtureTypes
+  // would coerce every fixture to its 60px default; here pixelCount is authoritative
+  // from Kagora (meters = px/lpm so makeFixtureType reproduces it exactly).
+  const fixtureTypeByStrip = new Map();
+  const fixtureTypes = [];
+  const seenStripType = new Map();   // stripType id → fixtureType id (dedupe)
+  for (const s of strips) {
+    if (!deviceIdByStrip.has(s.id)) continue;
+    const tid = s.typeId;
+    if (tid == null) continue;
+    if (!seenStripType.has(tid)) {
+      const t = typeById.get(tid);
+      const px = Math.max(1, Math.round(stripPixelCount(s)));
+      const lpm = Math.max(1, Number(t?.ledsPerMeter) || 60);
+      const co = stripColorOrder(s);
+      const ft = makeFixtureType(lpm, px / lpm, co, `kf_${tid}`, t?.name || `${px}px`);
+      ft.pixelCount = px;             // pin to Kagora's exact value (guard rounding)
+      fixtureTypes.push(ft);
+      seenStripType.set(tid, ft.id);
+    }
+    fixtureTypeByStrip.set(s.id, seenStripType.get(tid));
+  }
+  show.fixtureTypes = fixtureTypes;
+
   show.fixtures = strips
     .filter((s) => deviceIdByStrip.has(s.id))
     .map((s) => {
@@ -171,33 +222,41 @@ export function importKagora(preset) {
       return {
         id: s.id,
         name: s.name ?? s.id,
+        typeId: fixtureTypeByStrip.get(s.id),
         pixelCount,
         colorOrder: stripColorOrder(s),
         output: {
           deviceId: deviceIdByStrip.get(s.id),
+          port: portByStrip.get(s.id) ?? 1,
           pixelOffset: offsetByStrip.get(s.id) ?? 0,
           pixelCount,
         },
-        input: {
-          // A Kagora strip's full polyline is preserved — a bent run stays bent
-          // (>2 points ⇒ polyline mode; a straight 2-point strip stays a bar).
-          ...(normalizedPoints(s).length > 2 ? { mode: 'polyline' } : {}),
-          points: normalizedPoints(s),
-          samples: pixelCount,
-        },
+        input: (() => {
+          const np = normalizedPoints(s);
+          // A bent run (>2 points) stays a polyline (normalized points are canonical);
+          // a straight strip becomes a BAR with an explicit uniform-pixel transform.
+          if (np.length > 2) return { mode: 'polyline', points: np, samples: pixelCount };
+          return { mode: 'bar', transform: barTransform(s), points: np, samples: pixelCount };
+        })(),
       };
     });
 
-  // Auto-chain each daisy-chain run (members in data-flow order) so a pulse can
-  // be staggered across it. Start at stagger 0 (no visual change) — the operator
-  // dials it in from the Output → chains panel.
-  let withChains = show;
-  daisyRuns.forEach((run, i) => {
-    withChains = addChain(withChains, run, { stagger: 0, name: `run ${i + 1}` });
-  });
+  // Order fixtures so that within each (device, port) they follow the run's
+  // data-flow order — that array order IS the daisy-chain order (output→input),
+  // which repackOffsets turns into contiguous pixel ranges.
+  const ord = (s) => (runIndexByStrip.has(s.id) ? runIndexByStrip.get(s.id) : 1e6);
+  show.fixtures.sort((a, b) =>
+    (a.output.deviceId < b.output.deviceId ? -1 : a.output.deviceId > b.output.deviceId ? 1 : 0)
+    || (a.output.port - b.output.port) || (ord(a) - ord(b)));
 
   // Guarantee a new-shape (clip schema) composition. The import only sets
   // devices/fixtures; normalizeComposition just ensures canvas + an (empty)
   // clip-shape layers array so downstream code never sees the old shape.
-  return normalizeComposition(withChains);
+  const out = normalizeComposition(show);
+  // Seed the RIG's bounding aspect (same `scl` the transforms use) so the strips'
+  // normalized points map back to proportional pixels …
+  out.composition.canvas = { w: Math.max(2, Math.round(spanX * scl)), h: Math.max(2, Math.round(spanY * scl)) };
+  // … then run Fit-to-fixtures so the canvas hugs the strips' full OUTER footprint
+  // (includes bar thickness + a small margin), exactly as the menu action would.
+  return fitCanvasToFixtures(out);
 }

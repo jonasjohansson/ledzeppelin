@@ -169,7 +169,6 @@ export function normalizeComposition(show) {
         params: layer.params ? { ...layer.params } : {},
         transitionMs: layer.transitionMs ?? TRANSITION_MS,
         ...(layer.anim ? { anim: { ...layer.anim } } : {}),   // preserve layer-FX animations
-        ...(layer.minimized ? { minimized: true } : {}),      // preserve collapsed state
       };
     }
     // OLD shape → one clip carrying the generator/params/effects.

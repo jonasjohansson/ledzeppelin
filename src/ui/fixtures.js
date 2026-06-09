@@ -1,10 +1,23 @@
-import { validate } from '../model/show.js';
-import { setFixtureTransform, transformFromPoints } from '../model/fixture-transform.js';
-import { pruneChains } from '../model/chains.js';
+import { validate, makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount } from '../model/show.js';
+import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
 import { Section } from './section.js';
+import { controllerColorMap } from '../model/chains.js';
+import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
+import { el, field, selectInput } from './dom.js';
+import { Slider } from './controls.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
+const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+// HSL (deg, %, %) → "#rrggbb", so a controller's assigned identity hue can seed
+// its default colour for the <input type=color>.
+const hslToHex = (h, s, l) => {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => { const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return Math.round(255 * c); };
+  return '#' + [f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('');
+};
 
 export function loadShow() {
   try {
@@ -18,26 +31,17 @@ export function saveShow(show) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(show)); } catch { /* quota */ }
 }
 
-const el = (tag, props = {}, kids = []) => {
-  const n = document.createElement(tag);
-  Object.assign(n, props);
-  for (const k of kids) n.append(k);
-  return n;
-};
-
 const numInput = (value, onInput, step = 'any') => {
   const i = el('input', { type: 'number', value: String(value ?? 0), step });
   i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
   return i;
 };
 
-// Commits on `change` (blur / Enter) rather than every keystroke — used for the
-// transform fields whose onInput re-renders the panel (so typing isn't cut off).
-const numInputCommit = (value, onCommit, step = '1') => {
-  const i = el('input', { type: 'number', value: String(value ?? 0), step });
-  i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
-  return i;
-};
+
+// Library / device spec slider. Same control as Design's, but commits on RELEASE
+// (not every drag tick) so the panel isn't rebuilt mid-drag. Thin wrapper over Slider.
+const sliderRow = (label, value, onCommit, min, max, step) =>
+  Slider(label, value, { min, max, onInput: onCommit, step: step ?? ((max - min) <= 2 ? 0.01 : (max - min) <= 60 ? 0.1 : 1), commit: 'release' });
 
 const textInput = (value, onInput) => {
   const i = el('input', { type: 'text', value: value ?? '' });
@@ -53,145 +57,337 @@ const textInputCommit = (value, onCommit) => {
   return i;
 };
 
-const selectInput = (options, value, onInput) => {
-  const s = el('select');
-  for (const o of options) {
-    const opt = el('option', { value: o.value ?? o, textContent: o.label ?? o });
-    if ((o.value ?? o) === value) opt.selected = true;
-    s.append(opt);
-  }
-  s.addEventListener('change', () => onInput(s.value));
-  return s;
-};
 
-const field = (label, control) =>
-  el('label', { className: 'fx-field' }, [el('span', { textContent: label }), control]);
+// Round to 2 decimals for editor display (density/length can be fractional).
+const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
 // createFixturePanel({ getShow, setShow, onChange })
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow }) {
-  const root = el('div', { className: 'fx-panel' });
-  let selDeviceId = null;   // master-detail: which device/fixture's editor is open
-  let selFixtureId = null;
+export function createFixturePanel({ getShow, setShow, onSelect }) {
+  // The Devices + Library tabs render LISTS only; the selected item's editor goes
+  // into the left sidebar (app wires that via deviceDetailEl / libraryDetailEl and
+  // re-renders it on onSelect).
+  const devicesBox = el('div', { className: 'fx-panel' });   // Devices tab — instances
+  const libraryBox = el('div', { className: 'fx-panel' });   // Library tab — controller + fixture models
+  let selDeviceId = null;   // master-detail: which device INSTANCE's editor is open
+  let selTypeId = null;     // which fixture DEFINITION's editor is open
+  let selDevTypeId = null;  // which controller MODEL's editor is open
+  let libSel = 'controller';// which Library list the inspector shows: 'controller' | 'fixture'
+  let lastSel = null;       // 'device' | 'type' | 'devtype' — what ⌫ deletes (last row clicked)
+  let mounted = false;      // suppress onSelect during the initial construction render (app's panel ref isn't ready yet)
+  let scanState = { running: false, result: null, error: null };   // network device scan
+  const deviceStatus = new Map();   // id → last { ok, data|error } from the controller
+  const pushStatus = new Map();     // id → last config-push result text
+  const pinging = new Set();        // ids with an in-flight auto health-check
+  let renderTimer = null;           // coalesce the re-renders that ping results trigger
+  const scheduleRender = () => { if (renderTimer) return; renderTimer = setTimeout(() => { renderTimer = null; render(); }, 80); };
+  // Auto-check every device with an IP whose status we don't know yet, so the
+  // Devices list can show online/offline without opening each one. One-shot per
+  // (id) — the per-device "check" button refreshes a single controller on demand.
+  const autoPing = (devices) => {
+    for (const d of devices) {
+      if (!d.ip || deviceStatus.has(d.id) || pinging.has(d.id)) continue;
+      pinging.add(d.id);
+      getDeviceState(d.ip).then((st) => { pinging.delete(d.id); deviceStatus.set(d.id, st); scheduleRender(); });
+    }
+  };
 
   function commit(next) {
     saveShow(next);
     setShow(next);
-    render();
+    render();   // render() calls onSelect → the sidebar editor refreshes too
   }
 
-  // Running end of a device's DDP address space (offset must stay contiguous
-  // per device — see validate()). Used to append new/duplicated fixtures.
-  const deviceEnd = (show, devId) => show.fixtures
-    .filter((x) => (x.output?.deviceId || '') === devId)
-    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
-
-  // Inline editor for the selected DEVICE (rendered under its list row).
-  function deviceDetail(show, d) {
-    const di = show.devices.indexOf(d);
-    const upd = (patch) => { const next = structuredClone(show); Object.assign(next.devices[di], patch); commit(next); };
-    return el('div', { className: 'fx-card fx-detail' }, [
-      field('id', textInputCommit(d.id, (x) => upd({ id: x }))),
-      field('name', textInputCommit(d.name, (x) => upd({ name: x }))),
-      field('ip', textInputCommit(d.ip, (x) => upd({ ip: x }))),
-      field('color order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
-      field('port', numInputCommit(d.port ?? 4048, (x) => upd({ port: x }))),
-      // Output calibration (LEDs, not preview): perceptual gamma (~2.2 smooths
-      // low-end fades) + a max-brightness cap 0..1.
-      field('gamma', numInputCommit(d.gamma ?? 1, (x) => upd({ gamma: x }), '0.05')),
-      field('max bright', numInputCommit(d.brightness ?? 1, (x) => upd({ brightness: x }), '0.01')),
-      el('button', {
-        className: 'fx-del-link', textContent: 'delete device',
-        onclick: () => { const next = structuredClone(show); next.devices.splice(di, 1); selDeviceId = null; commit(next); },
-      }),
-    ]);
+  // Live status + minimal config pushed to the actual WLED controller (via the
+  // daemon proxy). Read-only monitoring + identify/on/off/brightness — enough to
+  // verify and locate a controller without leaving the app.
+  // Compact "2h 13m" style uptime from WLED's seconds counter.
+  function fmtUptime(sec) {
+    if (!(sec > 0)) return '—';
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${m}m`;
+    return `${m}m`;
   }
 
-  // Inline editor for the selected FIXTURE (DESIGN + routing + SIZE; canvas
-  // PLACEMENT lives in Output). Rendered under its list row.
-  function fixtureDetail(show, f) {
-    const fi = show.fixtures.indexOf(f);
-    const tf = f.input.transform || transformFromPoints(f.input.points, show.composition?.canvas);
-    const deviceOpts = show.devices.map((d) => ({ value: d.id, label: `${d.name} (${d.id})` }));
-    const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtures[fi]); commit(next); };
-    return el('div', { className: 'fx-card fx-detail' }, [
-      field('id', textInputCommit(f.id, (x) => upd((nf) => { nf.id = x; }))),
-      field('name', textInputCommit(f.name, (x) => upd((nf) => { nf.name = x; }))),
-      field('pixel count', numInputCommit(f.pixelCount, (x) => upd((nf) => {
-        nf.pixelCount = x; nf.output.pixelCount = x;       // keep in sync (validate requires match)
-        if (nf.input) nf.input.samples = nf.input.samples || x;
-      }))),
-      field('color order', selectInput(COLOR_ORDERS, f.colorOrder ?? 'GRB', (x) => upd((nf) => { nf.colorOrder = x; }))),
-      field('device', selectInput(deviceOpts.length ? deviceOpts : [{ value: '', label: '(none)' }],
-        f.output.deviceId, (x) => upd((nf) => { nf.output.deviceId = x; }))),
-      field('pixel offset', numInputCommit(f.output.pixelOffset, (x) => upd((nf) => { nf.output.pixelOffset = x; }))),
-      field('samples', numInputCommit(f.input.samples, (x) => upd((nf) => { nf.input.samples = x; }))),
-      el('div', { className: 'fx-pts', textContent: 'size (px)' }),
-      field('width', numInputCommit(Math.round(tf.w), (v) => commit(setFixtureTransform(show, f.id, { w: v })))),
-      field('height', numInputCommit(Math.round(tf.h), (v) => commit(setFixtureTransform(show, f.id, { h: v })))),
-      el('div', { className: 'fx-detail-actions' }, [
-        el('button', { className: 'fx-del-link', textContent: 'duplicate', onclick: () => duplicateFixture(show, f) }),
+  function controllerBlock(d) {
+    const st = deviceStatus.get(d.id);
+    const refresh = async () => { deviceStatus.set(d.id, await getDeviceState(d.ip)); render(); };
+    // Status — multi-line key/value so it reads clearly (we have the vertical room).
+    const statBox = el('div', { className: 'ctrl-stat' });
+    if (!st) statBox.append(el('div', { className: 'fx-devstatus', textContent: '— not checked' }));
+    else if (!st.ok) statBox.append(el('div', { className: 'fx-devstatus is-off', textContent: `⚠ offline · ${st.error}` }));
+    else {
+      const info = st.data.info || {}, s = st.data.state || {}, leds = info.leds || {}, wifi = info.wifi || {};
+      // "stream" confirms our DDP is actually landing: WLED reports realtime mode +
+      // the live source IP while it's receiving frames.
+      const stream = info.live ? `live · ${info.lm || info.lip || 'realtime'}` : 'idle';
+      const pwr = leds.pwr != null ? `${leds.pwr}${leds.maxpwr ? '/' + leds.maxpwr : ''} mA` : '—';
+      const rows = [
+        ['model', `${info.name || 'wled'} · v${info.ver || '?'}`],
+        ['pixels', `${leds.count ?? '?'} px${leds.fps != null ? ' · ' + leds.fps + ' fps' : ''}`],
+        ['stream', stream],
+        ['power', s.on ? `on · master ${s.bri ?? '?'}` : 'off'],
+        ['draw', pwr],
+        ['signal', `${wifi.rssi ?? '?'} dBm`],
+        ['uptime', fmtUptime(info.uptime)],
+      ];
+      for (const [k, v] of rows) statBox.append(el('div', { className: 'ctrl-stat-row' }, [
+        el('span', { className: 'ctrl-stat-k', textContent: k }), el('span', { className: 'ctrl-stat-v', textContent: v }),
+      ]));
+    }
+    // Brightness — scales the DDP output we send to THIS controller (d.brightness,
+    // a 0–1 cap applied per-frame on the daemon). This works during a live show;
+    // WLED's own master-brightness write is ignored while it's in realtime mode.
+    const pct = Math.round((d.brightness ?? 1) * 100);
+    const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range' });
+    const briVal = el('span', { className: 'ctrl-val', textContent: `${pct}%` });
+    slider.addEventListener('input', () => { briVal.textContent = `${slider.value}%`; });
+    slider.addEventListener('change', () => {
+      const show = getShow(); const di = show.devices.indexOf(d);
+      if (di < 0) return;
+      const next = structuredClone(show); next.devices[di].brightness = Number(slider.value) / 100; commit(next);
+    });
+    return el('div', { className: 'ctrl-block' }, [
+      el('div', { className: 'fx-pts', textContent: 'controller' }),
+      el('label', { className: 'ctrl-bri' }, [el('span', { textContent: 'Bright' }), slider, briVal]),
+      saveToDeviceRow(d),
+      // Check + its status readout sit at the bottom (the diagnostics, after the
+      // everyday controls).
+      el('div', { className: 'ctrl-row' }, [
+        el('button', { className: 'ctrl-btn', textContent: 'check', title: 'read status from the controller', onclick: refresh }),
         el('button', {
-          className: 'fx-del-link', textContent: 'delete fixture',
-          onclick: () => {
-            let next = structuredClone(show);
-            next.fixtures.splice(fi, 1);
-            next = pruneChains(next);          // keep chain stagger indices valid
-            selFixtureId = null;
-            commit(next);
+          className: 'ctrl-btn', textContent: 'reboot', title: 'reboot the controller (output to it drops for ~10s)',
+          onclick: async () => {
+            if (!d.ip) { window.alert('Set the controller IP first.'); return; }
+            if (!window.confirm(`Reboot “${d.name || d.id}”?\n\nIt drops off the network for ~10s while it restarts.`)) return;
+            deviceStatus.delete(d.id); render();                 // status goes unknown while it cycles
+            const r = await setDeviceState(d.ip, { rb: true });   // WLED JSON API: reboot
+            if (!r.ok) window.alert(`Reboot failed: ${r.error}`);
           },
         }),
       ]),
+      statBox,
     ]);
   }
 
-  // Append a fresh generic strip (150px GRB bar) on the first device,
-  // contiguous in that device's address space; select it.
-  function newFixture(show) {
-    const next = structuredClone(show);
-    const id = `f${next.fixtures.length + 1}`;
-    const devId = next.devices[0]?.id ?? '';
-    const px = 150;
-    next.fixtures.push({
-      id, name: id, pixelCount: px, colorOrder: 'GRB',
-      output: { deviceId: devId, pixelOffset: deviceEnd(next, devId), pixelCount: px },
-      input: { points: [[0.05, 0.5], [0.95, 0.5]], samples: px },
+  // "Save to device": write each output's LED length + colour order to WLED's
+  // config, then set the controller's DEFAULT colour so it shows the brand colour.
+  function saveToDeviceRow(d) {
+    const show = getShow();
+    const nOut = (show.deviceTypes || []).find((m) => m.id === d.typeId)?.outputs ?? d.outputs ?? 1;
+    const outs = [];
+    for (let p = 1; p <= nOut; p++) {
+      const len = (show.fixtures || [])
+        .filter((f) => (f.output?.deviceId || '') === d.id && (f.output?.port ?? 1) === p)
+        .reduce((m, f) => m + (f.pixelCount || 0), 0);
+      outs.push({ len, order: d.colorOrder || 'GRB' });
+    }
+    const note = pushStatus.get(d.id);
+    const btn = el('button', {
+      className: 'ctrl-btn', textContent: 'save to device',
+      title: `write LED count + colour order + default colour to ${d.name || d.id}'s WLED config`,
+      onclick: async () => {
+        pushStatus.set(d.id, 'saving…'); render();
+        const r = await pushDeviceConfig(d.ip, outs);
+        if (r.ok && d.defaultColor) await setDeviceState(d.ip, { on: true, seg: [{ fx: 0, col: [hexToRgb(d.defaultColor)] }] });
+        pushStatus.set(d.id, r.ok
+          ? `✓ saved ${r.data.applied}/${r.data.outputs} outputs · ${r.data.total} px · ${d.colorOrder || 'GRB'}`
+          : `⚠ save failed · ${r.error}`);
+        render();
+      },
     });
-    selFixtureId = id;
-    commit(next);
-    return id;
+    return el('div', { className: 'ctrl-push' }, [
+      btn,
+      ...(note ? [el('div', { className: 'fx-devstatus' + (note.startsWith('⚠') ? ' is-off' : note.startsWith('✓') ? ' is-on' : ''), textContent: note })] : []),
+    ]);
   }
 
-  // Clone the selected fixture (same device/colorOrder/geometry), appended
-  // contiguously in its device's address space.
-  function duplicateFixture(show, f) {
+  // Network scan: find WLED controllers on the LAN (via the daemon) and add them
+  // with one click. Results persist across renders so adding one re-renders the
+  // list with it marked "added".
+  function scanBlock(show) {
+    const wrap = el('div', { className: 'scan-block' });
+    const btn = el('button', {
+      className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan network',
+      title: 'find WLED controllers on your network (needs the daemon running)',
+      disabled: scanState.running,
+      onclick: async () => {
+        if (scanState.running) return;
+        scanState = { running: true, result: null, error: null }; render();
+        const r = await scanDevices();
+        scanState = { running: false, result: r.ok ? r.data : null, error: r.ok ? null : r.error };
+        render();
+      },
+    });
+    wrap.append(btn);
+    if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
+    const res = scanState.result;
+    if (res) {
+      const known = new Set((show.devices || []).map((d) => d.ip));
+      wrap.append(el('div', { className: 'fx-pts', textContent: `found ${res.devices.length} on ${res.subnets.join(', ') || '—'}` }));
+      if (!res.devices.length) wrap.append(el('div', { className: 'seg-hint', textContent: 'no WLED controllers responded' }));
+      for (const d of res.devices) {
+        const added = known.has(d.ip);
+        const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
+        add.onclick = () => {
+          const next = structuredClone(show);
+          const id = `c${next.devices.length + 1}`;
+          const dts = next.deviceTypes || [];
+          const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
+          next.devices.push({ id, name: d.name || id, ip: d.ip, colorOrder: 'GRB', port: 4048, typeId });
+          selDeviceId = id; lastSel = 'device';
+          commit(next);
+        };
+        const row = el('div', { className: 'output-row scan-row' }, [
+          el('span', { textContent: d.name }),
+          el('span', { className: 'fx-badge', textContent: d.ip }),
+          ...(d.leds != null ? [el('span', { className: 'fx-badge', textContent: `${d.leds} px` })] : []),
+          add,
+        ]);
+        wrap.append(row);
+      }
+    }
+    return wrap;
+  }
+
+  // Per-device patch ruler: the controller's pixel address space as proportional
+  // segments, one per fixture, in offset order. Makes the DDP budget + each
+  // fixture's slice visible at a glance (offsets are auto-packed, so contiguous).
+  function patchRuler(show, d) {
+    const fxs = (show.fixtures || [])
+      .filter((f) => (f.output?.deviceId || '') === d.id)
+      .sort((a, b) => (a.output?.pixelOffset || 0) - (b.output?.pixelOffset || 0));
+    const total = fxs.reduce((m, f) => m + (f.pixelCount || 0), 0);
+    const wrap = el('div', {}, [el('div', { className: 'fx-pts', textContent: `patch · ${total} px` })]);
+    if (!total) { wrap.append(el('div', { className: 'seg-hint', textContent: 'no fixtures on this device' })); return wrap; }
+    const bar = el('div', { className: 'patch-bar' });
+    for (const f of fxs) {
+      const seg = el('div', { className: 'patch-seg' });
+      seg.style.flexGrow = String(f.pixelCount || 0);
+      seg.title = `${fixtureLabel(f, show.fixtures.indexOf(f))} · ${fixtureRange(f)}`;
+      seg.append(el('span', { textContent: fixtureLabel(f, show.fixtures.indexOf(f)) }));
+      bar.append(seg);
+    }
+    wrap.append(bar);
+    return wrap;
+  }
+
+  // Inline editor for the selected DEVICE INSTANCE (rendered under its list row).
+  // Output count + per-output budget come from its controller MODEL (Library) —
+  // here you only set the per-unit facts: name, IP, model, colour order, bright.
+  function deviceDetail(show, d) {
+    const di = show.devices.indexOf(d);
+    const upd = (patch) => { const next = structuredClone(show); Object.assign(next.devices[di], patch); commit(next); };
+    const models = show.deviceTypes || [];
+    const model = models.find((m) => m.id === d.typeId);
+    // IP row with a link out to the controller's own WLED web UI.
+    const ipLink = el('a', { className: 'ip-open', textContent: '↗',
+      href: d.ip ? `http://${d.ip}` : '#', target: '_blank', rel: 'noopener',
+      title: d.ip ? `open the WLED UI at http://${d.ip}` : 'set an IP first' });
+    if (!d.ip) { ipLink.style.pointerEvents = 'none'; ipLink.style.opacity = '.35'; }
+    return el('div', { className: 'fx-card fx-detail' }, [
+      field('Name', textInputCommit(d.name, (x) => upd({ name: x }))),
+      el('label', { className: 'fx-field' }, [el('span', { textContent: 'IP' }), textInputCommit(d.ip, (x) => upd({ ip: x })), ipLink]),
+      // Controller MODEL — drives the output count (a live template from Library).
+      field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
+      field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
+      field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Default colour — the idle colour shown on the strip after "save to device",
+      // so you can tell controllers apart physically. Seeds from this controller's
+      // auto-assigned identity hue (same colour as its preview/swatch) until set.
+      (() => {
+        const autoHex = hslToHex(controllerColorMap(show).hue.get(d.id) ?? 210, 70, 60);
+        const c = el('input', { type: 'color', className: 'fx-color', value: d.defaultColor || autoHex });
+        c.addEventListener('change', () => upd({ defaultColor: c.value }));
+        return field('Default color', c);
+      })(),
+      patchRuler(show, d),
+      controllerBlock(d),
+    ]);
+  }
+
+  // Library editor for a controller MODEL (device type): name + physical output
+  // count + per-output pixel budget. Editing it propagates to every device that
+  // uses the model (via syncDeviceTypes on rebuild) — the device-side twin of a
+  // fixture definition.
+  function controllerTypeDetail(show, t) {
+    const ti = show.deviceTypes.indexOf(t);
+    const upd = (mutate) => { const next = structuredClone(show); mutate(next.deviceTypes[ti]); commit(next); };
+    const count = deviceTypeInstanceCount(show, t.id);
+    return el('div', { className: 'fx-card fx-detail' }, [
+      field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = x; }))),
+      // Physical OUTPUTS on this controller (e.g. a QuinLED DigQuad = 4). Fixtures
+      // patch to one of these; each output is its own daisy-chain.
+      sliderRow('Outputs', t.outputs ?? 4, (x) => upd((nt) => { nt.outputs = Math.max(1, Math.round(x)); }), 1, 16, 1),
+      // Max pixels a single output can drive (0 = unlimited). A full output greys
+      // out extending its chain.
+      sliderRow('Max px/output', t.maxPerOutput ?? 0, (x) => upd((nt) => { nt.maxPerOutput = Math.max(0, Math.round(x)); }), 0, 2048, 1),
+      el('div', { className: 'fx-pts', textContent: count ? `${count} in use · ⌫ to delete (remove them first)` : `0 in use · ⌫ to delete` }),
+    ]);
+  }
+
+  // Add a generic controller model and select it.
+  function addController(show) {
     const next = structuredClone(show);
-    const src = next.fixtures.find((x) => x.id === f.id);
-    let n = 1; let id;
-    do { id = `${f.id}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === id));
-    const devId = src.output?.deviceId || '';
-    const copy = structuredClone(src);
-    copy.id = id;
-    copy.name = `${f.name || f.id} copy`;
-    copy.output.pixelOffset = deviceEnd(next, devId);
-    next.fixtures.push(copy);
-    selFixtureId = id;
+    const id = `dt${(next.deviceTypes?.length || 0) + 1}`;
+    (next.deviceTypes ||= []).push(makeDeviceType('Controller', 4, 830, id));
+    selDevTypeId = id; lastSel = 'devtype'; libSel = 'controller';
+    commit(next);
+  }
+
+  // Library editor for a fixture DEFINITION (type): name + physical strip only —
+  // density, length, pixel count, colour order. Editing it propagates to every
+  // placed instance (via syncFixtureTypes on rebuild). Placement + patch live in
+  // the Fixtures tab.
+  function typeDetail(show, t) {
+    const ti = show.fixtureTypes.indexOf(t);
+    const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtureTypes[ti]); commit(next); };
+    const defName = (lpm, m) => `${round2(m)}m · ${Math.max(1, Math.round(lpm * m))}px`;
+    const applyT = (nt, lpm, m) => {
+      const a = Math.max(0, Number(lpm) || 0), b = Math.max(0, Number(m) || 0);
+      // Keep an auto-generated name in sync with the spec; leave a custom name be.
+      if (nt.name === defName(nt.ledsPerMeter, nt.meters)) nt.name = defName(a, b);
+      nt.ledsPerMeter = a; nt.meters = b; nt.pixelCount = Math.max(1, Math.round(a * b));
+    };
+    const count = typeInstanceCount(show, t.id);
+    return el('div', { className: 'fx-card fx-detail' }, [
+      field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = x; }))),
+      sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => applyT(nt, x, nt.meters)), 0, 200, 1),
+      sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => applyT(nt, nt.ledsPerMeter, x)), 0, 20, 0.1),
+      field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })),
+      // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
+      el('div', { className: 'fx-pts', textContent: count ? `${count} placed · ⌫ to delete (remove them first)` : `0 placed · ⌫ to delete` }),
+    ]);
+  }
+
+  // Add a fresh definition (60/m × 2.5m = 150px) and select it.
+  function addType(show) {
+    const next = structuredClone(show);
+    const id = `t${(next.fixtureTypes?.length || 0) + 1}`;
+    (next.fixtureTypes ||= []).push(makeFixtureType(60, 2.5, 'GRB', id));
+    selTypeId = id; lastSel = 'type'; libSel = 'fixture';
     commit(next);
   }
 
   function render() {
     const show = getShow();
-    root.textContent = '';
+    devicesBox.textContent = '';
+    libraryBox.textContent = '';
 
     const v = validate(show);
-    root.append(el('div', { className: 'fx-title', textContent: 'show editor' }));
+    // --- Validation banner (whole show) — only surfaces when something's wrong;
+    //     a clean show shows nothing (no "valid" noise). ---
+    if (!v.ok) devicesBox.append(el('div', { className: 'fx-err', textContent: v.errors.join(' · ') }));
 
-    // --- Validation banner ---
-    const banner = el('div', { className: v.ok ? 'fx-ok' : 'fx-err' });
-    banner.textContent = v.ok ? 'valid' : v.errors.join(' · ');
-    root.append(banner);
+    // Device control (scan / monitor / output) only works when the app is served BY
+    // the daemon (port 7070). If we're loaded elsewhere, say so — those buttons 404.
+    if (location.port !== '7070') {
+      devicesBox.append(el('div', { className: 'fx-daemon-hint',
+        textContent: 'Device control needs the daemon — run “npm start” and open http://localhost:7070' }));
+    }
 
     // Compact selectable row (master): name + a couple of badges. Clicking opens
     // its editor below. Reuses the Output tab's list styling.
@@ -208,76 +404,131 @@ export function createFixturePanel({ getShow, setShow }) {
       .filter((f) => (f.output?.deviceId || '') === devId)
       .reduce((m, f) => m + (f.pixelCount || 0), 0);
 
-    // --- Devices (collapsible: selectable list → inline editor under the row) ---
+    // --- Devices: a selectable list; the editor opens in the LEFT sidebar. ---
     if (!show.devices.some((d) => d.id === selDeviceId)) selDeviceId = show.devices[0]?.id ?? null;
-    root.append(Section('Devices', 'devices', (b) => {
+    const modelName = (d) => (show.deviceTypes || []).find((m) => m.id === d.typeId)?.name || 'no model';
+    // The Devices tab is already labelled — render the list directly (no
+    // redundant "DEVICES" section header).
+    {
+      const b = devicesBox;
       const devList = el('div', { className: 'fx-list' });
       for (const d of show.devices) {
-        devList.append(listRow(d.name || d.id, [d.ip || 'no ip', d.colorOrder || 'GRB', `${devicePixels(d.id)} px`],
-          d.id === selDeviceId, () => { selDeviceId = d.id; render(); }));
-        if (d.id === selDeviceId) devList.append(deviceDetail(show, d));
+        const st = deviceStatus.get(d.id);
+        const state = !d.ip ? 'noip' : pinging.has(d.id) || !st ? 'check' : st.ok ? 'online' : 'offline';
+        const title = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set' }[state];
+        const row = listRow(d.name || d.id, [d.ip || 'no ip', modelName(d), `${devicePixels(d.id)} px`],
+          d.id === selDeviceId, () => { selDeviceId = d.id; lastSel = 'device'; render(); });
+        row.prepend(el('i', { className: `dev-dot dev-${state}`, title }));
+        devList.append(row);
       }
+      autoPing(show.devices);
+      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet — add one, or define models in Inventory' }));
       b.append(devList);
-      // Grand total across the whole patch.
-      const totalPx = show.fixtures.reduce((m, f) => m + (f.pixelCount || 0), 0);
-      b.append(el('div', { className: 'fx-budget',
-        textContent: `${totalPx} px · ${show.devices.length} device${show.devices.length === 1 ? '' : 's'}` }));
       b.append(el('button', {
         className: 'fx-add', textContent: '+ device',
         onclick: () => {
           const next = structuredClone(show);
           const id = `c${next.devices.length + 1}`;
-          next.devices.push({ id, name: id, ip: '127.0.0.1', colorOrder: 'GRB', port: 4048 });
-          selDeviceId = id;
+          const dts = next.deviceTypes || [];
+          const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
+          next.devices.push({ id, name: id, ip: '', colorOrder: 'GRB', port: 4048, typeId });   // blank IP — set it or scan to bind a real controller
+          selDeviceId = id; lastSel = 'device';
           commit(next);
         },
       }));
-    }));
+      b.append(scanBlock(show));
+    }
 
-    // --- Fixtures (collapsible: selectable list → inline editor under the row) ---
-    if (!show.fixtures.some((f) => f.id === selFixtureId)) selFixtureId = show.fixtures[0]?.id ?? null;
-    root.append(Section('Fixtures', 'fixtures', (b) => {
-      const fxList = el('div', { className: 'fx-list' });
-      for (const f of show.fixtures) {
-        const o = f.output || {};
-        const range = `${o.pixelOffset ?? 0}–${(o.pixelOffset ?? 0) + (o.pixelCount ?? 0)}`;
-        fxList.append(listRow(f.name || f.id, [o.deviceId || '—', `${range} px`],
-          f.id === selFixtureId, () => { selFixtureId = f.id; render(); }));
-        if (f.id === selFixtureId) fxList.append(fixtureDetail(show, f));
+    // === LIBRARY tab = the catalog of MODELS you build with ===================
+
+    // --- Controller MODELS (device types) — DigUno/Quad/Octa + generic. Editing
+    //     a model fans out to every device that uses it. ---
+    const devTypes = show.deviceTypes || [];
+    if (!devTypes.some((t) => t.id === selDevTypeId)) selDevTypeId = devTypes[0]?.id ?? null;
+    libraryBox.append(Section('Controller models', 'controllers', (b) => {
+      const list = el('div', { className: 'fx-list' });
+      for (const t of devTypes) {
+        const count = deviceTypeInstanceCount(show, t.id);
+        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`],
+          libSel === 'controller' && t.id === selDevTypeId,
+          () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); }));
       }
-      b.append(fxList);
-      b.append(el('button', {
-        className: 'fx-add', textContent: '+ fixture',
-        onclick: () => { selFixtureId = newFixture(show); },
-      }));
+      if (!devTypes.length) b.append(el('div', { className: 'seg-hint', textContent: 'no controller models yet' }));
+      b.append(list);
+      b.append(el('button', { className: 'fx-add', textContent: '+ controller', onclick: () => addController(show) }));
     }));
 
-    // --- Persistence (File API) ---
-    const io = el('div', { className: 'fx-io' });
-    io.append(el('button', {
-      textContent: 'save (download)',
-      onclick: () => {
-        const blob = new Blob([JSON.stringify(getShow(), null, 2)], { type: 'application/json' });
-        const a = el('a', { href: URL.createObjectURL(blob), download: 'show.json' });
-        a.click();
-        URL.revokeObjectURL(a.href);
-      },
+    // --- Fixture DEFINITIONS (types) — define once, place many in the Fixtures
+    //     tab. Editing a definition updates all its placed instances. ---
+    const types = show.fixtureTypes || [];
+    if (!types.some((t) => t.id === selTypeId)) selTypeId = types[0]?.id ?? null;
+    libraryBox.append(Section('Fixture types', 'fixtures', (b) => {
+      const list = el('div', { className: 'fx-list' });
+      for (const t of types) {
+        const count = typeInstanceCount(show, t.id);
+        list.append(listRow(t.name, [`${t.pixelCount} px`, `×${count}`],
+          libSel === 'fixture' && t.id === selTypeId,
+          () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); }));
+      }
+      if (!types.length) b.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
+      b.append(list);
+      b.append(el('button', { className: 'fx-add', textContent: '+ definition', onclick: () => addType(show) }));
     }));
-    const fileIn = el('input', { type: 'file', accept: '.json,application/json' });
-    fileIn.style.display = 'none';
-    fileIn.addEventListener('change', async () => {
-      const file = fileIn.files[0];
-      if (!file) return;
-      try {
-        const loaded = JSON.parse(await file.text());
-        commit(loaded);
-      } catch (e) { banner.className = 'fx-err'; banner.textContent = `load failed: ${e.message}`; }
-      fileIn.value = '';
-    });
-    io.append(el('button', { textContent: 'load (file)', onclick: () => fileIn.click() }), fileIn);
-    root.append(io);
+    // Project file I/O lives in the Settings tab.
+    if (mounted) onSelect?.();   // lists rebuilt → refresh the left sidebar editor too (covers status pings, edits)
   }
 
   render();
-  return { el: root, refresh: render };
+  mounted = true;
+  return {
+    devicesEl: devicesBox, libraryEl: libraryBox, refresh: render,
+    // The selected item's EDITOR — app mounts these into the left sidebar.
+    deviceDetailEl: () => {
+      const show = getShow();
+      const d = (show.devices || []).find((x) => x.id === selDeviceId);
+      return d ? deviceDetail(show, d) : null;
+    },
+    libraryDetailEl: () => {
+      const show = getShow();
+      if (libSel === 'controller') {
+        const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
+        return t ? controllerTypeDetail(show, t) : null;
+      }
+      const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
+      return t ? typeDetail(show, t) : null;
+    },
+    // ⌫ deletes the last-clicked device (Devices tab) or model/definition
+    // (Library tab). A model/definition still IN USE is NOT deleted. Returns
+    // true if it deleted.
+    deleteSelected: () => {
+      const show = getShow();
+      if (lastSel === 'device' && selDeviceId && (show.devices || []).some((d) => d.id === selDeviceId)) {
+        const dev = show.devices.find((d) => d.id === selDeviceId);
+        const used = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === selDeviceId).length;
+        const msg = `Delete device “${dev?.name || selDeviceId}”?`
+          + (used ? `\n\n${used} fixture${used === 1 ? '' : 's'} routed to it will be unrouted.` : '');
+        if (!window.confirm(msg)) return false;
+        const next = structuredClone(show);
+        next.devices = next.devices.filter((d) => d.id !== selDeviceId);
+        selDeviceId = null; commit(next); return true;
+      }
+      if (lastSel === 'devtype' && selDevTypeId && selDevTypeId !== 'generic' && deviceTypeInstanceCount(show, selDevTypeId) === 0) {
+        const next = structuredClone(show);
+        next.deviceTypes = (next.deviceTypes || []).filter((t) => t.id !== selDevTypeId);
+        selDevTypeId = null; commit(next); return true;
+      }
+      if (lastSel === 'type' && selTypeId && selTypeId !== 'generic' && typeInstanceCount(show, selTypeId) === 0) {
+        const next = structuredClone(show);
+        next.fixtureTypes = (next.fixtureTypes || []).filter((t) => t.id !== selTypeId);
+        selTypeId = null; commit(next); return true;
+      }
+      return false;
+    },
+    // Selecting a placed fixture pre-selects its DEFINITION (shown if you open
+    // Library); the per-fixture position editor itself is the app's sidebar.
+    selectFixture: (id) => {
+      const typeId = getShow().fixtures.find((f) => f.id === id)?.typeId;
+      if (typeId) { selTypeId = typeId; render(); }
+    },
+  };
 }

@@ -46,9 +46,10 @@ export function buildPipelineInputs(show) {
       spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
-      // Per-fixture colorOrder (falls back to the device's) for mixed strips on
-      // one controller — the daemon re-orders each segment independently.
-      segments.push({ start: devLocal, count: pts.length, colorOrder: f.colorOrder || d.colorOrder });
+      // Colour order is a CONTROLLER setting (how its strips are wired), so the
+      // DEVICE's order wins; a fixture's own order is only a fallback for a device
+      // that somehow has none. (Edit it in the Devices tab.)
+      segments.push({ start: devLocal, count: pts.length, colorOrder: d.colorOrder || f.colorOrder });
       devLocal += pts.length;
       cursor += pts.length;
     }

@@ -10,27 +10,23 @@
 canvas{display:block}
 /* Status bar: a solid footer strip (application chrome). Mono face mirrors --ui-font;
    inline because this <style> runs before ui.css defines the token. */
-#hud{position:fixed;bottom:0;left:0;right:0;height:24px;display:flex;align-items:center;gap:16px;padding:0 12px;z-index:6;pointer-events:none;color:#9aa2ac;background:#181a1f;border-top:1px solid #2d3139;font:11px "Spline Sans Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}</style>
+#hud{display:flex;align-items:center;gap:14px;padding:0 4px;color:var(--muted);font:11px var(--mono,"Spline Sans Mono",ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
-<div id="hud">booting…</div>
-<button id="show-ui" title="show the UI (H)">▸ show UI</button>
-<div id="topbar">
-  <div id="tabs" class="tabs">
-    <button id="tab-composition" class="tab tab-active" data-tab="composition">Composition</button>
-    <button id="tab-output" class="tab" data-tab="output">Output</button>
-    <button id="tab-fixtures" class="tab" data-tab="fixtures">Fixtures</button>
-  </div>
-  <!-- Global tweaks (apply across the whole show) -->
-  <div id="globals">
-    <label class="g-fader" title="master opacity (whole composition)">
-      <span class="g-label">master</span>
-      <input type="range" id="g-master" min="0" max="1" step="0.01" value="1">
-      <span class="g-val" id="g-master-val">100%</span>
-    </label>
-    <button id="g-reset" class="g-btn" title="restart the animation timer">↺ reset</button>
-    <button id="g-hide" class="g-btn" title="hide all UI (H)">hide UI</button>
-  </div>
+<!-- Hidden file input for Settings › Open show. -->
+<input id="open-show-file" type="file" accept=".json,application/json" style="display:none">
+<!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI
+     toggles, the zoom pill (appended at runtime), then the live telemetry inline. -->
+<div id="corner-controls">
+  <!-- Hide/show UI is FIRST so it keeps the same far-left spot whether or not the
+       rest of the cluster is visible (it's the only control shown while hidden). -->
+  <button id="g-hide" class="g-btn" title="hide all UI (H)">Hide UI</button>
+  <button id="menu-file" class="g-btn" title="project file actions">File</button>
+  <button id="menu-audio" class="g-btn" title="audio input">Audio</button>
+  <button id="overlay-toggle" title="show/hide fixtures on the canvas">▢ fixtures</button>
+  <button id="snap-btn" title="snap fixtures to each other & the grid">▢ snap</button>
+  <button id="color-btn" title="tint fixtures by controller colour">▢ color</button>
+  <div id="hud">booting…</div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
      letterboxed to the composition aspect; the UI panels float over it. -->
@@ -38,6 +34,10 @@ canvas{display:block}
   <div id="stageinner">
     <canvas id="stage"></canvas>
     <canvas id="preview" width="1280" height="720"></canvas>
+    <!-- Vector chrome (fixture outlines, arrows, handles, labels). Crisp at any
+         zoom (rides the same transform); pointer-events off so the canvas keeps
+         hit-testing. -->
+    <svg id="ovl" viewBox="0 0 1280 720" preserveAspectRatio="none"></svg>
   </div>
 </div>
 <div id="layout">
@@ -46,43 +46,59 @@ canvas{display:block}
     <section id="deckbar" class="panel"></section>
   </div>
 
-  <!-- COMPOSITION view: inspector column (Clip | Composition sub-tabs) + library -->
-  <aside id="inspector-col" class="panel">
-    <div id="insp-tabs" class="subtabs">
-      <button class="subtab subtab-active" data-itab="clip">Clip</button>
-      <button class="subtab" data-itab="layer">Layer</button>
-      <button class="subtab" data-itab="composition">Composition</button>
+  <!-- INSPECTOR: the selected item's editor in Output (fixture position / device
+       settings / library model). Sits just left of the right panel so it reads as
+       part of the right-hand controls. Empty + hidden otherwise. -->
+  <aside id="output-inspector" class="panel" hidden></aside>
+
+  <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
+       Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
+       Devices routing. Only one section shows at a time (more canvas room). -->
+  <aside id="side" class="panel">
+    <div id="section-switch" class="section-switch">
+      <button class="section-tab section-active" data-section="design">Design</button>
+      <button class="section-tab" data-section="output">Output</button>
     </div>
-    <div id="insp-panes">
-      <div id="insp-clip"></div>
-      <div id="insp-layer" hidden></div>
-      <div id="insp-composition" hidden>
-        <div id="comp-settings"></div>
-        <div id="insp-compfx"></div>
+
+    <!-- DESIGN -->
+    <div id="design-pane">
+      <div id="insp-tabs" class="subtabs">
+        <button class="subtab subtab-active" data-itab="clip">Clip</button>
+        <button class="subtab" data-itab="layer">Layer</button>
+        <button class="subtab" data-itab="composition">Composition</button>
+      </div>
+      <div id="insp-panes">
+        <div id="insp-clip"></div>
+        <div id="insp-layer" hidden></div>
+        <div id="insp-composition" hidden>
+          <div id="comp-settings"></div>
+          <div id="insp-compfx"></div>
+        </div>
+      </div>
+      <!-- Sources / Effects library docked at the bottom of the inspector. -->
+      <div id="library"></div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div id="output-pane" hidden>
+      <div class="subtabs" id="io-tabs">
+        <!-- data-otab keys are internal (kept stable); labels are user-facing.
+             "Inventory" = the catalog of models, distinct from Design's Sources shelf. -->
+        <button class="subtab subtab-active" data-otab="fixtures">Fixtures</button>
+        <button class="subtab" data-otab="devices">Devices</button>
+        <button class="subtab" data-otab="library">Inventory</button>
+      </div>
+      <div id="io-body">
+        <!-- Fixtures tab: the placement / wiring list. -->
+        <div id="output-list"></div>
+        <!-- Devices tab: the actual controller instances (name / ip / model). -->
+        <div id="devices-design"></div>
+        <!-- Library tab: the catalog of models — controller types + fixture types. -->
+        <div id="library-design"></div>
       </div>
     </div>
-    <!-- Sources / Effects library docked at the bottom of the inspector. -->
-    <div id="library"></div>
   </aside>
 
-  <!-- OUTPUT view: the mapping panel (add + position fixtures on the canvas) -->
-  <aside id="output-view" class="panel" hidden>
-    <div class="subtabs" id="output-tabs">
-      <button class="subtab subtab-active" data-otab="fixtures">fixtures</button>
-      <button class="subtab" data-otab="chains">chains</button>
-      <button class="subtab" data-otab="devices">devices</button>
-    </div>
-    <div class="output-tools">
-      <label class="snap-toggle"><input type="checkbox" id="snap-cb"> snap</label>
-      <span class="seg-hint">place &amp; adjust — design fixtures in the Fixtures tab · drag to move · knob/⟳ rotate · ⇄ flip · ←↑↓→ nudge</span>
-    </div>
-    <div id="output-list"></div>
-  </aside>
-
-  <!-- FIXTURES view: design fixtures + devices + import -->
-  <aside id="fixtures-view" class="panel" hidden>
-    <div id="fixtures-panels"></div>
-  </aside>
 </div>
 <script type="module" src="./src/app.js"></script></body>
 </html>
