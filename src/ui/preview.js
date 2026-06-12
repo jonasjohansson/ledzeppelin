@@ -73,16 +73,6 @@ export function createPreview(canvasEl, opts = {}) {
     piCache = { show, fixtureOrder, spans, samplePts, chainColors };
     return piCache;
   }
-  // A reusable 1×N offscreen for blitting a whole strip in ONE drawImage (vs a
-  // fillRect + colour-string per LED). Grows to the next power of two as needed.
-  let stripCv = null, stripCtx = null, stripImg = null, stripCap = 0;
-  function ensureStrip(n) {
-    if (n <= stripCap) return;
-    stripCap = Math.max(128, 1 << Math.ceil(Math.log2(n)));
-    stripCv = document.createElement('canvas'); stripCv.width = stripCap; stripCv.height = 1;
-    stripCtx = stripCv.getContext('2d');
-    stripImg = stripCtx.createImageData(stripCap, 1);
-  }
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
     // The backing scales WITH zoom: the LED cells are 1-2px dots now, and CSS
@@ -166,38 +156,30 @@ export function createPreview(canvasEl, opts = {}) {
       const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
+          // VECTOR cells (Resolume-style): each LED is a filled rectangle drawn in
+          // the bar's rotated frame — the canvas rasterizer anti-aliases the edges,
+          // so cells stay crisp at any angle and any zoom (the old bitmap-strip
+          // blit stair-stepped or blurred under rotation). The square dot's side is
+          // the LED's lit length along the strip (the ~5 mm package), capped by the
+          // bar thickness; sub-pixel pitches overlap into a continuous line, which
+          // is exactly what a dense strip looks like.
           const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
           const len = Math.hypot(bx - ax, by - ay) || 1;
           const ang = Math.atan2(by - ay, bx - ax);
-          const halfCell = len / (2 * (count - 1));
-          // Each LED renders as a DISCRETE cell — lit texels then transparent gap —
-          // the way the physical strip is built, instead of one smeared bar. Texels
-          // per LED track the cell's on-screen size so a sparse strip's single lit
-          // texel still lands on a device pixel (no nearest-neighbour dropouts)
-          // while a zoomed-in cell gets fine-grained duty-cycle steps.
-          const cellPx = (len / (count - 1)) * (canvasEl.width / W);   // cell size in BACKING px
-          const tex = Math.max(2, Math.min(16, Math.round(cellPx)));
-          const lit = Math.max(1, Math.min(tex, Math.round(litFrac * tex)));
-          // An LED is a SQUARE dot (a 5 mm package), not a slash across the bar:
-          // the drawn height matches the lit length along the strip, so each pixel
-          // reads as a binary point of light. The bar thickness only caps it.
-          const dot = Math.max(1.5, Math.min(thick, (len / (count - 1)) * litFrac));
-          ensureStrip(count * tex);
-          const d = stripImg.data;
+          const pitch = len / (count - 1);
+          const dotL = Math.max(1.5, pitch * litFrac);             // along the strip
+          const dotH = Math.max(1.5, Math.min(thick, dotL));       // across it
+          ctx.save();
+          ctx.translate(ax, ay); ctx.rotate(ang);
+          let last = '';
           for (let i = 0; i < count; i++) {
-            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * tex * 4;
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            for (let k = 0; k < tex; k++) {
-              const o = di + k * 4, on = k < lit;
-              d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = on ? 255 : 0;
-            }
+            const css = `rgb(${r},${g},${b})`;
+            if (css !== last) { ctx.fillStyle = css; last = css; }
+            ctx.fillRect(i * pitch - dotL / 2, -dotH / 2, dotL, dotH);
           }
-          stripCtx.putImageData(stripImg, 0, 0);
-          ctx.save();
-          ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
-          ctx.translate(ax, ay); ctx.rotate(ang);
-          ctx.drawImage(stripCv, 0, 0, count * tex, 1, -halfCell, -dot / 2, len + 2 * halfCell, dot);
           ctx.restore();
         } else {
           // Polyline fallback: a square per LED, sized to the same physical duty

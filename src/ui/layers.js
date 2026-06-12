@@ -53,12 +53,10 @@ const fmt = (v) => {
   const n = Number(v);
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 };
-// Coarser format for the LIVE animated readout — a sweeping value at 3 decimals
-// churns its last digits every frame and reads as noise. 2 decimals is enough.
-const fmtLive = (v) => {
-  const n = Number(v);
-  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
-};
+// Format for the LIVE animated readout — FIXED 2 decimals, never trimmed: a
+// sweeping value that collapses "2.00" → "2" as it crosses a round number makes
+// the display skip width every cycle. Constant shape = calm counting.
+const fmtLive = (v) => (Number(v) || 0).toFixed(2);
 
 // Clip/layer param slider — live commit (writes on every drag tick). Thin wrapper
 // over the shared Slider; right-click resets to defaultValue.
@@ -113,7 +111,7 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
     const w = wrap.clientWidth || 1;
     const x = frac(Number(rangeEl.value)) * (w - 12) + 6;
     bub.style.left = `${Math.max(23, Math.min(w - 23, x))}px`;   // keep the 44px bubble on the track
-    if (document.activeElement !== bub) bub.value = fmt(Number(rangeEl.value));
+    if (document.activeElement !== bub) bub.value = fmtLive(Number(rangeEl.value));
   };
   let hideHook = null;
   const showBubbles = () => {

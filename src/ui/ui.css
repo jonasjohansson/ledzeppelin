@@ -642,6 +642,15 @@ input[type=checkbox]:checked::after {
   background: var(--accent); border: 1px solid var(--bg);
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
+/* The handles BRACKET the active span (Resolume trim-grip style): the in-grip
+   hangs left of its value, the out-grip right of it — [in][ fill ][out] — so
+   the grips read as the edges of the range, and both stay grabbable even when
+   in == out. (Transform moves the painted box; the native hit area is wider
+   than the visual shift, so grabbing is unaffected.) */
+.range-track .rt-in::-webkit-slider-thumb { transform: translateX(-5px); }
+.range-track .rt-out::-webkit-slider-thumb { transform: translateX(5px); }
+.range-track .rt-in::-moz-range-thumb { transform: translateX(-5px); }
+.range-track .rt-out::-moz-range-thumb { transform: translateX(5px); }
 /* Distinguish the END (out) handle from the START (in) handle. */
 /* Handle value bubble: a tiny editable readout that pops above a grabbed thumb
    and follows it — type into it to set an exact in/out value. */
