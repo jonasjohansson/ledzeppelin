@@ -754,22 +754,20 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           className: 'dir-btn' + (dir === d ? ' on' : ''), textContent: glyph, title,
           onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
         });
+        // LOOP rides in the same strip as a fourth, INDEPENDENT toggle (it's not
+        // a direction — it's whether the deck wraps after the last clip). The
+        // shuffle mode still exists in the transport but isn't exposed here.
+        const loopBtn = el('button', {
+          className: 'dir-btn' + ((transport.getLoop?.() ?? true) ? ' on' : ''),
+          textContent: 'LOOP', title: 'wrap to the first clip after the last (off: stop on the last clip)',
+          onclick: () => { transport.setLoop(!(transport.getLoop?.() ?? true)); render(); },
+        });
         b.append(field('Direction', el('div', { className: 'dir-btns' }, [
           dirBtn('backward', '◀', 'play the deck backward'),
           dirBtn('off', '■', 'stop (hold the current clip)'),
           dirBtn('forward', '▶', 'play the deck forward'),
-          // NOT a loop — random clip order. The old ⤨ read as a loop glyph at
-          // this size; spell it out in the row's micro-caps language instead.
-          dirBtn('shuffle', 'RND', 'shuffle — play clips in random order'),
+          loopBtn,
         ])));
-        const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop?.() ?? true });
-        loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
-        b.append(el('label', {
-          className: 'fx-field bool-row',
-          title: 'wrap to the first clip after the last (off: stop on the last clip)',
-        }, [
-          el('span', { className: 'ly-plabel', textContent: 'Loop' }), loopCb,
-        ]));
       }));
     }
 
