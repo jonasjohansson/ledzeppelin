@@ -42,13 +42,15 @@ export function controllerColorMap(show) {
     ports.get(d).add(p);
   }
   const portList = (d) => [...(ports.get(d) || [])].sort((a, b) => a - b);
+  // 30% saturation: hues stay tellable-apart (which controller / which output)
+  // without turning the canvas into a colour chart — the UI keeps ONE accent.
   const runColor = (deviceId, port) => {
     const h = (hue.get(deviceId) ?? 210).toFixed(1);
     const ps = portList(deviceId), n = ps.length || 1, i = Math.max(0, ps.indexOf(port));
     const l = n > 1 ? 44 + i * (32 / (n - 1)) : 60;   // ramp 44%..76% across the device's outputs
-    return `hsl(${h}, 70%, ${l.toFixed(0)}%)`;
+    return `hsl(${h}, 30%, ${l.toFixed(0)}%)`;
   };
-  const deviceColor = (deviceId) => `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 70%, 60%)`;
+  const deviceColor = (deviceId) => `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 30%, 60%)`;
   return { hue, runColor, deviceColor };
 }
 

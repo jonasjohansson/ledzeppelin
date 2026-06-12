@@ -12,21 +12,22 @@
   --ui-font: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* --ui-font: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; */
   --mono: var(--ui-font);
-  /* OCR/disguise: panels are SLIGHTLY TRANSLUCENT near-black so the full-bleed
-     canvas reads underneath (content-first, like Elverket); 1px hairlines define
-     structure — see [[ui-aesthetic-ocr-disguise]]. */
-  --bg:#08090b; --panel:rgba(12,13,17,0.94); --panel-2:rgba(22,24,30,0.94); --hover:rgba(42,46,54,0.95);
-  --panel-solid:#13141a;       /* opaque variant for popovers/menus over the canvas */
-  --line:#262a32; --line-2:#3a3f49;       /* hairline borders */
-  --text:#f4f5f7; --muted:#9aa2ac; --faint:#697079;
+  /* SOLID SOFTWARE (Resolume-calibrated): panels are opaque dark-gray surfaces a
+     step brighter than the old near-black, so chrome reads as solid tooling that
+     the canvas sits INSIDE of, not a ghost floating over it. One gray ramp,
+     hairlines one step stronger. */
+  --bg:#101114; --panel:#1c1e22; --panel-2:#26282d; --hover:#33363c;
+  --panel-solid:#1c1e22;       /* menus/popovers share the panel surface */
+  --line:#33363e; --line-2:#474c55;       /* hairline borders */
+  --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84;
   /* WARM MONOCHROME (Jonas): ONE warm accent everywhere — the old blue/green/cyan
      all collapse to it, so the UI reads as near-black + one warm orange + red for
      danger. See [[ui-aesthetic-ocr-disguise]]. (Per-controller canvas hues in
      controllerColorMap are separate — functional fixture identity, kept.) */
   --accent:#e8a35c;            /* the one warm accent (was blue) */
-  --accent-soft:#241a12;       /* warm selected/active background */
+  --accent-soft:#33271a;       /* warm selected/active background (lifted with the panels) */
   --accent-text:#f1d6bb;       /* text on accent surfaces */
-  --accent-line:#3d2e1f;       /* active border */
+  --accent-line:#54402b;       /* active border */
   --green:var(--accent);       /* collapsed to the one warm accent */
   --amber:var(--accent);
   --cyan:var(--accent);
@@ -35,7 +36,7 @@
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
      row and input shares ONE blue-tinted palette (was a second neutral-gray set
      that made identical controls look mismatched). */
-  --field-bg:#050608;                 /* recessed input fill (darker than --bg) */
+  --field-bg:#121317;                 /* recessed input fill (one step under --panel) */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -197,7 +198,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
-  background-color: #0c0c0f;
+  background-color: var(--bg);
   background-image:
     linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%),
     linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%);
