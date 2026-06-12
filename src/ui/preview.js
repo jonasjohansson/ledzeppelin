@@ -155,13 +155,18 @@ export function createPreview(canvasEl, opts = {}) {
       // per LED. The lit composite reads ON the strip; off pixels stay dark.
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
-          ensureStrip(count);
+          // 4 texels per LED — 3 lit + 1 transparent — so each LED renders as a
+          // DISCRETE cell with a gap, the way the physical strip is built
+          // (n pixels per meter), instead of one continuous smeared bar. When a
+          // dense strip maps to sub-pixel cells the gaps simply vanish.
+          ensureStrip(count * 4);
           const d = stripImg.data;
           for (let i = 0; i < count; i++) {
-            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * 4;
-            if (si + 2 <= rgba.length - 1) { d[di] = rgba[si]; d[di + 1] = rgba[si + 1]; d[di + 2] = rgba[si + 2]; }
-            else { d[di] = d[di + 1] = d[di + 2] = 0; }
-            d[di + 3] = 255;
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * 16;
+            let r = 0, g = 0, b = 0;
+            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+            for (let k = 0; k < 12; k += 4) { d[di + k] = r; d[di + k + 1] = g; d[di + k + 2] = b; d[di + k + 3] = 255; }
+            d[di + 12] = d[di + 13] = d[di + 14] = d[di + 15] = 0;   // the gap
           }
           stripCtx.putImageData(stripImg, 0, 0);
           const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
@@ -171,7 +176,7 @@ export function createPreview(canvasEl, opts = {}) {
           ctx.save();
           ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
           ctx.translate(ax, ay); ctx.rotate(ang);
-          ctx.drawImage(stripCv, 0, 0, count, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
+          ctx.drawImage(stripCv, 0, 0, count * 4, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
           ctx.restore();
         } else {
           const cell = Math.max(2, thick);
