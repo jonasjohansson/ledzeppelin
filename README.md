@@ -113,6 +113,17 @@ for an address that hasn't sent anything yet. The four audio band names
 (`level`, `bass`, `mid`, `high`) are **reserved** by the Audio input — don't
 name external channels after them.
 
+### Output protocols
+
+Each device picks its protocol in the Output tab's device editor:
+
+- **DDP** (default) — WLED's realtime stream on UDP 4048. Recommended for WLED
+  controllers and large pixel counts (one packet per ~480 px, no universe math).
+- **Art-Net** — ArtDmx on UDP 6454 for non-WLED gear (commercial nodes,
+  consoles, MadMapper/Resolume). Set the device's base **universe**; its pixels
+  occupy consecutive universes from there at **170 RGB px per universe**
+  (510 channels). The editor shows the resulting span.
+
 ## Architecture
 
 | Layer | Files |

@@ -56,7 +56,10 @@ export function buildPipelineInputs(show) {
 
     route.push({
       ip: d.ip,
-      port: d.port ?? 4048,
+      port: d.port ?? (d.protocol === 'artnet' ? 6454 : 4048),
+      // Output protocol per device: DDP (default) or Art-Net from a base universe.
+      protocol: d.protocol === 'artnet' ? 'artnet' : 'ddp',
+      universe: d.universe ?? 0,
       colorOrder: d.colorOrder,
       byteStart: globalBase * 3,
       byteEnd: cursor * 3,

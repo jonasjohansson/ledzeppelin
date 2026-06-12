@@ -31,7 +31,7 @@ test('buildPipelineInputs builds one route entry per device with byte range', ()
   const { route } = buildPipelineInputs(demo());
   assert.equal(route.length, 1);
   assert.deepEqual(route[0], {
-    ip: '10.0.0.11', port: 4048, colorOrder: 'GRB', byteStart: 0, byteEnd: 4 * 3,
+    ip: '10.0.0.11', port: 4048, protocol: 'ddp', universe: 0, colorOrder: 'GRB', byteStart: 0, byteEnd: 4 * 3,
     segments: [
       { start: 0, count: 2, colorOrder: 'GRB' },
       { start: 2, count: 2, colorOrder: 'GRB' },
@@ -99,7 +99,7 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
   assert.equal(route.length, 2);
   // devA: global base 0, 200 pixels
   assert.deepEqual(route[0], {
-    ip: '10.0.0.1', port: 4048, colorOrder: 'GRB', byteStart: 0, byteEnd: 200 * 3,
+    ip: '10.0.0.1', port: 4048, protocol: 'ddp', universe: 0, colorOrder: 'GRB', byteStart: 0, byteEnd: 200 * 3,
     segments: [
       { start: 0, count: 100, colorOrder: 'GRB' },
       { start: 100, count: 100, colorOrder: 'GRB' },
@@ -108,7 +108,7 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
   });
   // devB: global base 200 (NOT device-local 0), 90 pixels
   assert.deepEqual(route[1], {
-    ip: '10.0.0.2', port: 4048, colorOrder: 'RGB', byteStart: 200 * 3, byteEnd: 290 * 3,
+    ip: '10.0.0.2', port: 4048, protocol: 'ddp', universe: 0, colorOrder: 'RGB', byteStart: 200 * 3, byteEnd: 290 * 3,
     segments: [
       { start: 0, count: 50, colorOrder: 'RGB' },
       { start: 50, count: 40, colorOrder: 'RGB' },

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes } from '../src/model/show.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -27,4 +27,21 @@ test('non-zero starting pixel offset fails contiguity validation', () => {
   const r = validate(s);
   assert.equal(r.ok, false);
   assert.match(r.errors.join(), /must start at 0 and be contiguous/);
+});
+
+// --- Output protocol (DDP default | Art-Net + base universe) -------------------
+test('syncDeviceTypes defaults protocol to ddp / universe 0 for legacy devices', () => {
+  const s = syncDeviceTypes(addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: 'x' }));
+  assert.equal(s.devices[0].protocol, 'ddp');
+  assert.equal(s.devices[0].universe, 0);
+});
+
+test('syncDeviceTypes preserves artnet protocol + universe and sanitises bad values', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'A', ip: 'x', protocol: 'artnet', universe: 4 });
+  s = addDevice(s, { id: 'c2', name: 'B', ip: 'y', protocol: 'bogus', universe: -3.7 });
+  s = syncDeviceTypes(s);
+  assert.equal(s.devices[0].protocol, 'artnet');
+  assert.equal(s.devices[0].universe, 4);
+  assert.equal(s.devices[1].protocol, 'ddp');     // unknown protocol collapses to ddp
+  assert.equal(s.devices[1].universe, 0);         // universe clamped to int ≥ 0
 });
