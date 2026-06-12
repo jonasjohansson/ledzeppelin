@@ -63,7 +63,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
     });
 
     root.append(el('button', {
-      className: 'fx-add imp-btn', textContent: 'import from Kagora…',
+      className: 'fx-add imp-btn', textContent: 'import from LEDger…',
       onclick: () => fileIn.click(),
     }), fileIn, banner);
 
