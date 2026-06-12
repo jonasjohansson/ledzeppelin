@@ -868,6 +868,12 @@ const renderOutputList = renderOutput; // back-compat alias
 //     once. The fixture overlay (draggable rectangles on the canvas) is a
 //     separate toggle, decoupled from any tab. ---
 let overlayVisible = false;   // are the fixture rectangles shown over the composite?
+// Section-switch elements live here (not at their wiring below) because the
+// live-view init a few lines down runs updateInspector(), which reads them —
+// declaring them later would put that first call in the TDZ.
+const sectionSwitchEl = document.getElementById('section-switch');
+const designPaneEl = document.getElementById('design-pane');
+const outputPaneEl = document.getElementById('output-pane');
 const overlayToggleBtn = document.getElementById('overlay-toggle');
 const ovlSvg = document.getElementById('ovl');
 function setOverlay(v) {
@@ -1183,10 +1189,8 @@ outputTabsEl?.addEventListener('click', (ev) => {
 });
 
 // --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
-//     Output (Fixtures/Chains/Devices). Only one shows at a time. ---
-const sectionSwitchEl = document.getElementById('section-switch');
-const designPaneEl = document.getElementById('design-pane');
-const outputPaneEl = document.getElementById('output-pane');
+//     Output (Fixtures/Chains/Devices). Only one shows at a time.
+//     (Element lookups are hoisted to the overlay section — see note there.) ---
 function setSection(which) {
   sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
     x.classList.toggle('section-active', x.dataset.section === which));
