@@ -63,6 +63,22 @@
   --slider-w:120px;  /* fixed slider width — matte-style: label fills left, value far right */
 }
 html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
+/* ═══════════ SHARED APP-SURFACE BACKBONE (keep in sync with LEDger
+   src/style.css) ═══════════ Rock-solid-app hardening both tools share: no OS
+   highlights/tap flashes/ghost drags/overscroll; themed caret + selection. */
+html, body {
+  overscroll-behavior: none;
+  cursor: default;                            /* arrow over chrome, not I-beam */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable] { cursor: text; caret-color: var(--accent); }
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); }
+img, a, button, summary, label { -webkit-user-drag: none; user-drag: none; }
+input:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 1px solid var(--line-2); outline-offset: 1px;
+}
+/* ═══════════ end shared backbone ═══════════ */
 /* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
 #hud.hud-offline { color: var(--amber); }
 #hud.hud-live { color: var(--green, #7bd88f); }
