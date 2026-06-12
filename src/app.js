@@ -11,9 +11,10 @@ import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import { Slider } from './ui/controls.js';
 import {
-  prefixedDefaults, normalizeComposition, makeClip,
+  prefixedDefaults, normalizeComposition, makeClip, setActiveClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
+import { routeOsc } from './model/osc-map.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
@@ -160,7 +161,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: extSet });   // ext channels (OSC / socket JSON) → store
+  else bridge = connectBridge(route, { onExt: handleExt });   // canonical OSC addresses + ext channels
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -186,6 +187,26 @@ function setComposition(next) {
   snapshotForUndo(show);   // capture the pre-change state for undo (coalesced)
   show = next;
   saveShow(show);
+}
+
+// External messages (OSC over UDP / socket JSON), relayed by the daemon. FIRST
+// try the canonical address map (/layer/…, /selected/… — Resolume-style, every
+// param always addressable, values normalized 0..1); anything that doesn't
+// match stays a free channel for the per-param binding model (extSet).
+function handleExt(channel, value) {
+  const r = routeOsc(show, layerPanel?.getSelectedClipId?.() ?? null, channel, value);
+  if (!r) { extSet(channel, value); return; }
+  if (r.trigger) {
+    // Same path as a deck double-click: activate the clip (compositor crossfades).
+    setComposition(setActiveClip(show, r.trigger.layerId, r.trigger.clipId));
+    layerPanel?.refresh?.();
+    return;
+  }
+  // Model-only write, NO panel re-render (the commitLive path): the compositor
+  // reads the show each frame so output follows immediately. An open slider may
+  // read stale until the next re-render — acceptable; re-rendering at OSC
+  // message rate would churn the DOM and fight a focused drag.
+  if (r.show !== show) setComposition(r.show);
 }
 
 // Resolution-change path. Updates composition.canvas (clamped, immutable),

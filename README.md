@@ -78,22 +78,50 @@ creative side with no tubes plugged in.
 
 ### External control (OSC / socket JSON)
 
-Any animatable parameter can follow a **live external channel** instead of the
-clock or the mic: open a param's ⚙ menu and pick **External**. A channel is just
-a name → latest number; two ways to feed one:
+There are **two models**, and they share the same transports:
 
-**OSC over UDP** — the daemon listens on `:9000` (`OSC_PORT` overrides). Any
-address works; the first numeric argument (`f`/`i`/`d`) becomes the channel
-value. Bundles (TouchOSC, TouchDesigner) are unpacked. Try it:
+1. **Canonical addresses** (Resolume-style, the primary path) — *every*
+   parameter has a predictable, **always-active** OSC address. No binding step:
+   point a controller at the address and send a float normalized **0..1**; it's
+   clamped and mapped onto the param's slider range (bool params: ≥ 0.5 = on).
+2. **Bound channels** (custom in/out) — for sensor-style signals on arbitrary
+   names: open a param's ⚙ menu, pick **External**, and bind a channel with
+   your own `in`/`out` mapping.
+
+#### OSC address map
+
+All indices are **1-based, deck order** (`/layer/1` is the *top* deck row;
+clips count left→right). `<paramKey>` is the source's manifest key — the same
+name as its slider (camelCased: `speed`, `headWidth`, …).
+
+| Address | Drives | Value (0..1) |
+|---|---|---|
+| `/layer/<n>/clip/<m>/<paramKey>` | a clip's source param | mapped onto the param's min..max |
+| `/layer/<n>/clip/<m>/tf/<x\|y\|scale\|rotation\|opacity>` | clip transform | mapped onto the slider range (x/y −1..1, scale 0..3, rotation −180..180, opacity 0..1) |
+| `/layer/<n>/clip/<m>/trigger` | activate (trigger) that clip | ≥ 0.5 fires |
+| `/layer/<n>/opacity` | layer opacity | 0..1 direct |
+| `/selected/<paramKey>` · `/selected/tf/<…>` | the **selected** clip (alias, resolved live) | as above |
 
 ```bash
-oscsend localhost 9000 /speed f 0.7
+oscsend localhost 9000 /layer/1/clip/2/speed f 0.5   # clip 2's speed → mid-range
+oscsend localhost 9000 /layer/1/clip/2/trigger f 1   # activate clip 2
+oscsend localhost 9000 /selected/tf/scale f 0.33     # scale whatever's selected
 ```
 
-…or point TouchOSC at `<host>:9000` and every fader shows up as a channel.
+Every External controls row shows the param's canonical address as a muted
+chip — click it to copy. Anything that *doesn't* match the scheme stays a free
+channel for the binding model below.
+
+#### Feeding values
+
+**OSC over UDP** — the daemon listens on `:9000` (`OSC_PORT` overrides). Any
+address works; the first numeric argument (`f`/`i`/`d`) becomes the value.
+Bundles (TouchOSC, TouchDesigner) are unpacked. Point TouchOSC at
+`<host>:9000` and every fader shows up.
 
 **Socket JSON** — any client can connect to the daemon's WebSocket and send
-`{ type:'ext', channel, value }`; the daemon relays it to every other client:
+`{ type:'ext', channel, value }` (`channel` may be a canonical address); the
+daemon relays it to every other client:
 
 ```js
 import WebSocket from 'ws';
@@ -104,6 +132,8 @@ ws.on('open', () => {
   })), 100);
 });
 ```
+
+#### Bound channels (custom mapping)
 
 Per binding, the raw signal maps onto the param as
 `from + (to − from) · clamp(value × gain, 0, 1)` — so a 0..1 fader can drive any

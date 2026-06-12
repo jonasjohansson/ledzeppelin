@@ -33,6 +33,7 @@ import {
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue } from '../model/anim.js';
+import { addressFor } from '../model/osc-map.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
@@ -119,7 +120,9 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
 // the live marker) and a controls row appears below (direction · in · out · s,
 // band · in · out · gain, or channel · in · out · gain).
 //   onValue(v): set the static value · onAnim(spec|null): set/clear the animation
-function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive }) {
+//   oscAddress: the param's CANONICAL always-active OSC address (shown in the
+//   External controls as a copyable chip), when the scheme covers it.
+function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, oscAddress }) {
   if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
@@ -173,7 +176,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive }) {
   ]);
   wrap.append(head);
   wrap.append(track);
-  wrap.append(animControls(anim, onAnim));
+  wrap.append(animControls(anim, onAnim, oscAddress));
   return wrap;
 }
 
@@ -233,7 +236,7 @@ function dirButtons(current, onPick) {
 // Fields for an animated param (mode already chosen via the cog menu):
 //   Timeline → direction buttons · in · out · s    Audio → band · in · out · gain
 //   External → channel select (+ free-text address) · in · out · gain
-function animControls(anim, onAnim) {
+function animControls(anim, onAnim, oscAddress) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
     i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
@@ -261,16 +264,33 @@ function animControls(anim, onAnim) {
       opts.unshift({ value: anim.channel, label: `${anim.channel} · —` });
     }
     if (!opts.length) opts.push({ value: '', label: 'no channels yet' });
-    // Free-text address: bind a channel that hasn't sent anything yet.
+    // Free-text address: bind a channel that hasn't sent anything yet. The
+    // placeholder is the param's CANONICAL address, so the empty state teaches
+    // the scheme instead of a blank "/address".
     const txt = el('input', {
       type: 'text', className: 'anim-chan-text', value: anim.channel || '',
-      placeholder: '/address', title: 'type an OSC address / channel name',
+      placeholder: oscAddress || '/address', title: 'type an OSC address / channel name',
     });
     txt.addEventListener('change', () => { const ch = txt.value.trim(); if (ch) onAnim({ ...anim, channel: ch }); });
     const srcRow = el('div', { className: 'anim-ctrls' }, [
       selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })),
       txt,
     ]);
+    // The canonical address is ALWAYS live (no binding needed) — show it as a
+    // muted, click-to-copy chip so controllers know exactly where to send.
+    if (oscAddress) {
+      const chip = el('button', {
+        type: 'button', className: 'osc-addr', textContent: oscAddress,
+        title: 'this param’s always-active OSC address — click to copy',
+      });
+      chip.onclick = (e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(oscAddress).catch(() => { /* clipboard denied */ });
+        chip.textContent = 'copied ✓';
+        setTimeout(() => { chip.textContent = oscAddress; }, 700);
+      };
+      srcRow.append(chip);
+    }
     const mapRow = el('div', { className: 'anim-ctrls' }, [
       mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
       mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
@@ -862,6 +882,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // chain (with a drop zone). Source is changed by dragging onto a clip cell.
   function selectedClipEditor(id, clip) {
     const box = el('div', { className: 'clip-editor' });
+    // 1-based canonical OSC indices: layers in DECK order (top row = /layer/1 =
+    // array end — matches osc-map.js), clips left→right.
+    const allLayers = getShow().composition?.layers || [];
+    const layerIndex = allLayers.length - allLayers.findIndex((L) => L.id === id);
+    const clipIndex = ((layerById(id)?.clips || []).findIndex((c) => c.id === clip.id)) + 1;
 
     const nameInput = el('input', {
       className: 'ly-nameedit', value: clip.name || clip.id, title: 'clip name',
@@ -929,6 +954,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           const key = gen.name + '.' + p.key;
           b.append(animatableParam({
             key, p, value: clip.params?.[key], anim: clip.anim?.[key],
+            oscAddress: addressFor({ kind: 'param', layerIndex, clipIndex, key: p.key }),
             onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
             onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
             onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, key, spec)),
@@ -947,6 +973,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const tfParam = (key, label, min, max, def, value, apply) => b.append(animatableParam({
         key: 'tf.' + key, p: { key: label, type: 'float', min, max, default: def },
         value, anim: clip.anim?.['tf.' + key],
+        oscAddress: addressFor({ kind: 'tf', layerIndex, clipIndex, key }),
         onValue: (v) => commitLive(apply(v)),
         onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
         onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
@@ -1141,7 +1168,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   }
 
   render();
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer };
+  // getSelectedClipId: app.js resolves /selected/… canonical OSC addresses
+  // against the inspector's current clip at message time.
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
