@@ -51,7 +51,7 @@ const prettyParam = (key) =>
 
 const fmt = (v) => {
   const n = Number(v);
-  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 };
 // Coarser format for the LIVE animated readout — a sweeping value at 3 decimals
 // churns its last digits every frame and reads as noise. 2 decimals is enough.
@@ -238,7 +238,7 @@ function dirButtons(current, onPick) {
 //   External → channel select (+ free-text address) · in · out · gain
 function animControls(anim, onAnim, oscAddress) {
   const mini = (label, val, commit) => {
-    const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
+    const i = el('input', { type: 'number', value: fmt(val), step: 'any', className: 'anim-num' });
     i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
     const lab = el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
     lab.dataset.mini = label;   // lets the range-track thumbs sync this field live
@@ -691,6 +691,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       // Triggerable source (e.g. Pulse) → a ⚡ badge so you know it fires.
       if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable — fire from the Clip inspector' }));
       cell.append(thumbWrap);
+      // Modulation badges on the THUMBNAIL corner (the label bar is too narrow):
+      // A = a param follows the audio input, E = a param follows an external
+      // (OSC / socket) channel — so the deck shows at a glance which clips are
+      // being driven from outside.
+      const animModes = new Set(Object.values(clip.anim || {}).map((a) => a && a.mode));
+      const mods = el('div', { className: 'clip-mods' });
+      if (animModes.has('audio')) mods.append(el('span', { className: 'clip-mod', textContent: 'A', title: 'a parameter follows the audio input' }));
+      if (animModes.has('external')) mods.append(el('span', { className: 'clip-mod', textContent: 'E', title: 'a parameter follows an external (OSC / socket) channel' }));
+      if (mods.childNodes.length) thumbWrap.append(mods);
       // Label bar: clip name + an "fx" marker when it carries effects.
       const labelBar = el('div', { className: 'clip-label-bar' }, [el('span', { textContent: clip.name || clip.id })]);
       if ((clip.effects || []).length) labelBar.append(el('span', { className: 'deck-fx', textContent: 'fx', title: 'has effects' }));
