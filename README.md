@@ -7,7 +7,7 @@ pixels, and stream them to QuinLED controllers over **DDP** at ~40fps.
 Built for an installation of ~120 WS2815 tubes (~32,760 px) across 12 QuinLED
 DigQuad controllers, but works standalone — define controllers, fixtures, and
 compositions by hand, or import the physical layout from the
-[Kagora](../kagora) planning tool.
+[LEDger](../LEDger) planning tool.
 
 ## How it works
 

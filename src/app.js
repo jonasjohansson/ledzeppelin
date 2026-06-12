@@ -1379,7 +1379,7 @@ openShowInput?.addEventListener('change', async () => {
   try {
     const loaded = JSON.parse(await file.text());
     if (!loaded || !Array.isArray(loaded.fixtures) || !loaded.composition) {
-      window.alert(loaded?.instances ? 'That looks like a Kagora file — use “import from Kagora…” in the File menu.' : 'Not a Led Zeppelin project file.');
+      window.alert(loaded?.instances ? 'That looks like a LEDger file — use “import from LEDger…” in the File menu.' : 'Not a Led Zeppelin project file.');
     } else {
       applyFullShow(normalizeComposition(loaded));
     }
@@ -1412,7 +1412,7 @@ if (settingsFileEl) {
       oel('button', { className: 'fx-add', textContent: 'new project', onclick: newProject }),
       oel('button', { className: 'fx-add', textContent: 'save…', onclick: saveShowToFile }),
       oel('button', { className: 'fx-add', textContent: 'load…', onclick: () => openShowInput?.click() }),
-      oel('button', { className: 'fx-add', textContent: 'import from Kagora…',
+      oel('button', { className: 'fx-add', textContent: 'import from LEDger…',
         onclick: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } }),
     ]),
   );
@@ -1458,7 +1458,7 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Save…', key: '⌘S', act: saveShowToFile },
     { label: 'Load…', key: '⌘O', act: () => openShowInput?.click() },
     { sep: true },
-    { label: 'Import from Kagora…', act: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } },
+    { label: 'Import from LEDger…', act: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } },
     { sep: true },
     { label: 'Save composition…', act: saveCompositionToFile },
     { label: 'Load composition…', act: () => openCompInput.click() },
