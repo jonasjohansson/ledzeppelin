@@ -156,21 +156,19 @@ export function createPreview(canvasEl, opts = {}) {
       const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
-          // VECTOR cells (Resolume-style): each LED is a filled rectangle drawn in
-          // the bar's rotated frame — the canvas rasterizer anti-aliases the edges,
-          // so cells stay crisp at any angle and any zoom (the old bitmap-strip
-          // blit stair-stepped or blurred under rotation). The square dot's side is
-          // the LED's lit length along the strip (the ~5 mm package), capped by the
-          // bar thickness; sub-pixel pitches overlap into a continuous line, which
-          // is exactly what a dense strip looks like.
+          // BINARY cells: each LED is an axis-aligned square SNAPPED to the device
+          // pixel grid — only its POSITION follows the bar's angle; the square
+          // itself stays straight, so every edge lands exactly on pixels: hard,
+          // un-antialiased points of light (no AA fuzz, no rotation jaggies).
+          // The side is the LED's lit length along the strip (~5 mm package),
+          // capped by the bar thickness; sub-pixel pitches overlap into a
+          // continuous line, which is what a dense strip looks like.
           const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
           const len = Math.hypot(bx - ax, by - ay) || 1;
-          const ang = Math.atan2(by - ay, bx - ax);
+          const ux = (bx - ax) / len, uy = (by - ay) / len;
           const pitch = len / (count - 1);
-          const dotL = Math.max(1.5, pitch * litFrac);             // along the strip
-          const dotH = Math.max(1.5, Math.min(thick, dotL));       // across it
-          ctx.save();
-          ctx.translate(ax, ay); ctx.rotate(ang);
+          const k = canvasEl.width / W;                       // logical → device px
+          const side = Math.max(1, Math.round(Math.max(1.5, Math.min(thick, pitch * litFrac)) * k)) / k;
           let last = '';
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
@@ -178,9 +176,9 @@ export function createPreview(canvasEl, opts = {}) {
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
             const css = `rgb(${r},${g},${b})`;
             if (css !== last) { ctx.fillStyle = css; last = css; }
-            ctx.fillRect(i * pitch - dotL / 2, -dotH / 2, dotL, dotH);
+            const cx = ax + ux * i * pitch, cy = ay + uy * i * pitch;
+            ctx.fillRect(Math.round((cx - side / 2) * k) / k, Math.round((cy - side / 2) * k) / k, side, side);
           }
-          ctx.restore();
         } else {
           // Polyline fallback: a square per LED, sized to the same physical duty
           // cycle (litFrac of the pitch along the line), capped by the bar thickness.
