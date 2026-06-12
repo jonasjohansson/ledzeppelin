@@ -32,7 +32,7 @@ import {
   addLayer, removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
-import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue } from '../model/anim.js';
+import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { extList } from '../model/external.js';
@@ -103,11 +103,47 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
     fill.style.left = `${Math.min(a, b) * 100}%`;
     fill.style.width = `${Math.abs(b - a) * 100}%`;
   };
-  inEl.addEventListener('input', () => { layout(); onLiveFrom?.(Number(inEl.value)); });
-  outEl.addEventListener('input', () => { layout(); onLiveTo?.(Number(outEl.value)); });
+  // The in/out VALUES live on the handles themselves: grabbing a thumb pops a
+  // tiny editable bubble above it that follows the drag; type into it to set an
+  // exact value. This replaces the separate in/out number fields below the track.
+  const wrap = el('div', { className: 'range-track' });
+  const mkBubble = () => el('input', { type: 'text', inputMode: 'decimal', className: 'rt-bubble', hidden: true, spellcheck: false });
+  const inBub = mkBubble(), outBub = mkBubble();
+  const place = (bub, rangeEl) => {
+    const w = wrap.clientWidth || 1;
+    const x = frac(Number(rangeEl.value)) * (w - 12) + 6;
+    bub.style.left = `${Math.max(23, Math.min(w - 23, x))}px`;   // keep the 44px bubble on the track
+    if (document.activeElement !== bub) bub.value = fmt(Number(rangeEl.value));
+  };
+  let hideHook = null;
+  const showBubbles = () => {
+    inBub.hidden = outBub.hidden = false;
+    place(inBub, inEl); place(outBub, outEl);
+    if (!hideHook) {   // dismiss when interaction leaves the track
+      hideHook = (ev) => {
+        if (wrap.contains(ev.target)) return;
+        inBub.hidden = outBub.hidden = true;
+        document.removeEventListener('pointerdown', hideHook); hideHook = null;
+      };
+      document.addEventListener('pointerdown', hideHook);
+    }
+  };
+  const typeCommit = (bub, rangeEl, fire) => {
+    bub.addEventListener('keydown', (e) => { if (e.key === 'Enter') bub.blur(); });
+    bub.addEventListener('change', () => {
+      const v = Number(bub.value.trim().replace(',', '.'));
+      if (Number.isFinite(v)) { const c = Math.min(max, Math.max(min, v)); rangeEl.value = String(c); layout(); fire(c); }
+      else bub.value = fmt(Number(rangeEl.value));
+    });
+  };
+  typeCommit(inBub, inEl, onFrom); typeCommit(outBub, outEl, onTo);
+  inEl.addEventListener('pointerdown', showBubbles);
+  outEl.addEventListener('pointerdown', showBubbles);
+  inEl.addEventListener('input', () => { layout(); place(inBub, inEl); onLiveFrom?.(Number(inEl.value)); });
+  outEl.addEventListener('input', () => { layout(); place(outBub, outEl); onLiveTo?.(Number(outEl.value)); });
   inEl.addEventListener('change', () => onFrom(Number(inEl.value)));
   outEl.addEventListener('change', () => onTo(Number(outEl.value)));
-  const wrap = el('div', { className: 'range-track' }, [el('div', { className: 'rt-base' }), fill, live, inEl, outEl]);
+  wrap.append(el('div', { className: 'rt-base' }), fill, live, inEl, outEl, inBub, outBub);
   wrap.dataset.animkey = animKey;
   wrap.dataset.min = String(min); wrap.dataset.max = String(max);
   layout();
@@ -152,21 +188,15 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   // Animated layout (un-crammed): three stacked rows —
   //   1. label · live value · cog   2. full-width in/out track   3. direction · in · out · s
   const readout = el('span', { className: 'ly-readout', textContent: fmtLive(anim.from) });
-  // Push a dragged thumb's value into the matching in/out number field without a
-  // re-render (the fields live in the controls row built below).
-  const syncMini = (name, v) => {
-    const i = wrap.querySelector(`.anim-mini[data-mini="${name}"] input`);
-    if (i) i.value = fmt(v);
-  };
   const track = rangeTrack({
     min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
     onFrom: (v) => onAnim({ ...anim, from: v }),
     onTo: (v) => onAnim({ ...anim, to: v }),
     // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
-    // sweep/mapping follows the thumb in realtime) and the in/out number fields
-    // are synced directly in the DOM; release does the full commit + re-render.
-    onLiveFrom: (v) => { syncMini('in', v); onAnimLive?.({ ...anim, from: v }) },
-    onLiveTo: (v) => { syncMini('out', v); onAnimLive?.({ ...anim, to: v }) },
+    // sweep/mapping follows the thumb in realtime); the thumb's own value bubble
+    // tracks the drag. Release does the full commit + re-render.
+    onLiveFrom: (v) => onAnimLive?.({ ...anim, from: v }),
+    onLiveTo: (v) => onAnimLive?.({ ...anim, to: v }),
   });
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
@@ -233,9 +263,11 @@ function dirButtons(current, onPick) {
   })));
 }
 
-// Fields for an animated param (mode already chosen via the cog menu):
-//   Timeline → direction buttons · in · out · s    Audio → band · in · out · gain
-//   External → channel select (+ free-text address) · in · out · gain
+// Fields for an animated param (mode already chosen via the cog menu). The
+// in/out values live on the range-track handles (value bubbles), so each row
+// carries only what's left:
+//   Timeline → direction buttons · s    Audio → band · gain
+//   External → channel select (+ free-text address) · canonical-address chip
 function animControls(anim, onAnim, oscAddress) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: fmt(val), step: 'any', className: 'anim-num' });
@@ -248,10 +280,9 @@ function animControls(anim, onAnim, oscAddress) {
   const isExternal = anim.mode === 'external';
   const kids = [];
   if (isAudio) {
+    // (in/out live on the track handles — grab a thumb for its value bubble)
     kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
       (bnd) => onAnim({ ...anim, band: bnd })));
-    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
-    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
   } else if (isExternal) {
     // TWO rows: WHERE the signal comes from (channel select · free address),
@@ -291,17 +322,16 @@ function animControls(anim, onAnim, oscAddress) {
       };
       srcRow.append(chip);
     }
-    const mapRow = el('div', { className: 'anim-ctrls' }, [
-      mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
-      mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
-      // (no gain here — external senders own their scaling; in/out covers mapping)
-    ]);
-    return el('div', {}, [srcRow, mapRow]);
+    // (no in/out row — the mapping lives on the track handles; no gain either:
+    //  external senders own their scaling)
+    return srcRow;
   } else {
-    kids.push(dirButtons(anim.direction, (d) => onAnim({ ...anim, direction: d })));
-    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
-    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
-    kids.push(mini('s', anim.durationMs / 1000, (v) => onAnim({ ...anim, durationMs: Math.max(0, Math.round(v * 1000)) })));
+    // (in/out live on the track handles — grab a thumb for its value bubble)
+    // Direction/duration edits are RETIMED against the clock so the sweep
+    // continues from its current position instead of jumping.
+    kids.push(dirButtons(anim.direction, (d) => onAnim(retimeAnim(anim, { ...anim, direction: d }, animClock()))));
+    kids.push(mini('s', anim.durationMs / 1000, (v) =>
+      onAnim(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock()))));
   }
   return el('div', { className: 'anim-ctrls' }, kids);
 }
@@ -312,11 +342,16 @@ function animControls(anim, onAnim, oscAddress) {
 // dragend. dataTransfer still carries the payload for completeness.
 let drag = null; // { kind: 'source' | 'effect', name }
 
+// The animation clock — set from the transport by createLayerPanel so the
+// module-level control builders (animControls) can retime sweep edits.
+let animClock = () => 0;
+
 // transport (optional): { isPlaying(), toggle(), getLoop(), setLoop(bool) } —
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
 export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect }) {
+  if (transport?.now) animClock = transport.now;
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;

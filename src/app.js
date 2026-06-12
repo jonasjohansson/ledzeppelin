@@ -250,6 +250,7 @@ const nowSec = () => (lastTs - t0) / 1000;
 const transport = {
   direction: 'off',   // 'off' | 'forward' | 'backward' | 'shuffle'
   loop: true, startTs: 0, _shuffle: null,
+  now: nowSec,        // the animation clock — lets UI edits retime sweeps continuously
   isPlaying() { return this.direction !== 'off'; },
   getDirection() { return this.direction; },
   setDirection(d) { this.direction = d; this.startTs = lastTs; this._shuffle = null; },

@@ -32,14 +32,45 @@ export function makeExternalAnim(from, to, channel = '', gain = 1) {
 }
 
 // Normalized 0..1 phase for the given clock time, duration and direction.
-export function animPhase(timeSec, durationMs, direction = 'forward') {
+// `phase` is an offset in CYCLES (0..1) — retimeAnim() writes it so edits to
+// direction/duration stay continuous on the free-running clock.
+export function animPhase(timeSec, durationMs, direction = 'forward', phase = 0) {
   const dur = (Number(durationMs) || 0) / 1000;
   if (dur <= 0) return 0;
-  let ph = (Number(timeSec) || 0) / dur;
+  let ph = (Number(timeSec) || 0) / dur + (Number(phase) || 0);
   ph -= Math.floor(ph);          // wrap to 0..1 (handles negative too)
   if (direction === 'backward') return 1 - ph;
   if (direction === 'mirror') return 1 - Math.abs(2 * ph - 1); // 0→1→0
   return ph;                      // forward
+}
+
+// Retime a timeline spec edit so the sweep CONTINUES from where it is now
+// instead of jumping: given the current spec, the edited spec and the clock,
+// compute the `phase` offset that makes the new (direction, duration) pass
+// through the value the old spec is at right now — pressing ← reverses from
+// the current position, bounce folds from it, a duration change rescales
+// around it. Non-timeline specs pass through untouched.
+export function retimeAnim(spec, next, timeSec) {
+  if (!next || next.mode !== 'timeline' || !spec || spec.mode !== 'timeline') return next;
+  const dur = (Number(next.durationMs) || 0) / 1000;
+  if (dur <= 0) return next;
+  // Where the OLD spec is right now: clock position x (0..1) and value position p.
+  const p = animPhase(timeSec, spec.durationMs, spec.direction, spec.phase);
+  const oldDur = (Number(spec.durationMs) || 0) / 1000;
+  let x = oldDur > 0 ? (Number(timeSec) || 0) / oldDur + (Number(spec.phase) || 0) : 0;
+  x -= Math.floor(x);
+  // Is the value currently travelling UP? (forward rises; mirror rises in its
+  // first half; backward falls.)
+  const rising = spec.direction === 'forward' || (spec.direction === 'mirror' && x < 0.5);
+  // The clock position the NEW direction needs to output p (mirror picks the
+  // branch that keeps the current travel direction).
+  let nx;
+  if (next.direction === 'backward') nx = 1 - p;
+  else if (next.direction === 'mirror') nx = rising ? p / 2 : 1 - p / 2;
+  else nx = p;
+  let phase = nx - (Number(timeSec) || 0) / dur;
+  phase -= Math.floor(phase);
+  return { ...next, phase };
 }
 
 // The value of one spec at `timeSec`, given the current `signals` map — the
@@ -53,7 +84,7 @@ export function animatedValue(spec, timeSec, signals) {
     const v = (signals && signals[spec.mode === 'audio' ? spec.band : spec.channel]) || 0;
     p = Math.max(0, Math.min(1, v * (spec.gain ?? 1)));
   } else {
-    p = animPhase(timeSec, spec.durationMs, spec.direction);
+    p = animPhase(timeSec, spec.durationMs, spec.direction, spec.phase);
   }
   return spec.from + (spec.to - spec.from) * p;
 }

@@ -59,3 +59,40 @@ test('resolveParams handles audio specs', () => {
   const out = resolveParams(params, anim, 0, { level: 0.4 });
   assert.ok(Math.abs(out['hue.shift'] - 0.4) < 1e-9);
 });
+
+// --- retimeAnim: direction/duration edits continue from the current value ---
+import { retimeAnim } from '../src/model/anim.js';
+
+const valAt = (spec, t) => animatedValue(spec, t, {});
+
+test('retimeAnim keeps the value continuous when reversing direction', () => {
+  const spec = makeAnim(0, 10, 4000, 'forward');
+  const t = 1.3;                                     // mid-sweep
+  const before = valAt(spec, t);
+  const next = retimeAnim(spec, { ...spec, direction: 'backward' }, t);
+  assert.ok(Math.abs(valAt(next, t) - before) < 1e-9);
+  // and it now travels DOWN from there
+  assert.ok(valAt(next, t + 0.01) < before);
+});
+
+test('retimeAnim keeps the value continuous switching to mirror, preserving travel', () => {
+  const spec = makeAnim(0, 10, 4000, 'forward');
+  const t = 0.9;
+  const before = valAt(spec, t);
+  const next = retimeAnim(spec, { ...spec, direction: 'mirror' }, t);
+  assert.ok(Math.abs(valAt(next, t) - before) < 1e-9);
+  assert.ok(valAt(next, t + 0.01) > before);         // forward was rising → still rising
+});
+
+test('retimeAnim keeps the value continuous on a duration change', () => {
+  const spec = makeAnim(0, 10, 4000, 'forward');
+  const t = 2.5;
+  const before = valAt(spec, t);
+  const next = retimeAnim(spec, { ...spec, durationMs: 12000 }, t);
+  assert.ok(Math.abs(valAt(next, t) - before) < 1e-9);
+});
+
+test('retimeAnim passes non-timeline specs through', () => {
+  const a = makeAudioAnim(0, 1, 'bass', 1);
+  assert.equal(retimeAnim(a, a, 5), a);
+});

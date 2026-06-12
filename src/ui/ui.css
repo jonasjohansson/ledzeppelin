@@ -643,6 +643,16 @@ input[type=checkbox]:checked::after {
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
 /* Distinguish the END (out) handle from the START (in) handle. */
+/* Handle value bubble: a tiny editable readout that pops above a grabbed thumb
+   and follows it — type into it to set an exact in/out value. */
+.range-track .rt-bubble {
+  position: absolute; top: -19px; transform: translateX(-50%);
+  width: 44px; height: 17px; padding: 0 2px; text-align: center; z-index: 6;
+  font: var(--fs-micro) var(--mono); color: var(--text);
+  background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+}
+.range-track .rt-bubble:focus { border-color: var(--accent); outline: none; }
+.range-track .rt-bubble[hidden] { display: none; }
 .range-track .rt-out::-webkit-slider-thumb { background: var(--amber); }
 .range-track .rt-out::-moz-range-thumb { background: var(--amber); }
 .is-audio .range-track .rt-fill { background: var(--green); }
