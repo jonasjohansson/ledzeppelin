@@ -217,7 +217,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 /* Live view (corner ▣ live): the composite dims to a ghost for context while
    the LED cells on #preview stay full strength — where the visuals hit a tube,
    its pixels light up; the rest reads as the dark wall. SVG chrome drops. */
-body.wall-view #stage { opacity: 0.16; }
+body.wall-view #stage { opacity: 0.07; }
 body.wall-view #ovl { display: none !important; }  /* outranks setOverlay's inline style */
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }

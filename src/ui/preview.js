@@ -153,33 +153,49 @@ export function createPreview(canvasEl, opts = {}) {
       // Light the strip from the sampled composite. A straight BAR blits its whole
       // pixel row in ONE drawImage (cheap); a bent polyline falls back to a square
       // per LED. The lit composite reads ON the strip; off pixels stay dark.
+      // Physical duty cycle: an LED package is ~5 mm, so the lit fraction of each
+      // cell is 5mm / pitch — 30 led/m (33 mm pitch) reads as sparse dots with big
+      // gaps, 60 led/m about a third lit, 144 led/m nearly continuous. Falls back
+      // to 60 led/m when the fixture predates the density fields.
+      const lpm = Number(f.ledsPerMeter)
+        || (Number(f.meters) > 0 ? count / Number(f.meters) : 60);
+      const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
-          // 4 texels per LED — 3 lit + 1 transparent — so each LED renders as a
-          // DISCRETE cell with a gap, the way the physical strip is built
-          // (n pixels per meter), instead of one continuous smeared bar. When a
-          // dense strip maps to sub-pixel cells the gaps simply vanish.
-          ensureStrip(count * 4);
-          const d = stripImg.data;
-          for (let i = 0; i < count; i++) {
-            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * 16;
-            let r = 0, g = 0, b = 0;
-            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            for (let k = 0; k < 12; k += 4) { d[di + k] = r; d[di + k + 1] = g; d[di + k + 2] = b; d[di + k + 3] = 255; }
-            d[di + 12] = d[di + 13] = d[di + 14] = d[di + 15] = 0;   // the gap
-          }
-          stripCtx.putImageData(stripImg, 0, 0);
           const ax = sx(0), ay = sy(0), bx = sx(count - 1), by = sy(count - 1);
           const len = Math.hypot(bx - ax, by - ay) || 1;
           const ang = Math.atan2(by - ay, bx - ax);
           const halfCell = len / (2 * (count - 1));
+          // Each LED renders as a DISCRETE cell — lit texels then transparent gap —
+          // the way the physical strip is built, instead of one smeared bar. Texels
+          // per LED track the cell's on-screen size so a sparse strip's single lit
+          // texel still lands on a device pixel (no nearest-neighbour dropouts)
+          // while a zoomed-in cell gets fine-grained duty-cycle steps.
+          const cellPx = (len / (count - 1)) * ((vr.width || 1) / W) * (window.devicePixelRatio || 1);
+          const tex = Math.max(2, Math.min(16, Math.round(cellPx)));
+          const lit = Math.max(1, Math.min(tex, Math.round(litFrac * tex)));
+          ensureStrip(count * tex);
+          const d = stripImg.data;
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4, di = i * tex * 4;
+            let r = 0, g = 0, b = 0;
+            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+            for (let k = 0; k < tex; k++) {
+              const o = di + k * 4, on = k < lit;
+              d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = on ? 255 : 0;
+            }
+          }
+          stripCtx.putImageData(stripImg, 0, 0);
           ctx.save();
           ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
           ctx.translate(ax, ay); ctx.rotate(ang);
-          ctx.drawImage(stripCv, 0, 0, count * 4, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
+          ctx.drawImage(stripCv, 0, 0, count * tex, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
           ctx.restore();
         } else {
-          const cell = Math.max(2, thick);
+          // Polyline fallback: a square per LED, sized to the same physical duty
+          // cycle (litFrac of the pitch along the line), capped by the bar thickness.
+          const spacing = count >= 2 ? (Math.hypot(sx(1) - sx(0), sy(1) - sy(0)) || thick) : thick;
+          const cell = Math.max(1.5, Math.min(Math.max(2, thick), spacing * litFrac));
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
