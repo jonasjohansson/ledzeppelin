@@ -883,11 +883,12 @@ function setOverlay(v) {
 }
 overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 
-// --- Wall view (corner "▣ wall"): hide the full-bleed composite so ONLY the lit
-// fixture cells glow on black — what the physical LEDs will do. CSS visibility
-// only: the sampler reads the GL canvas regardless, so live output is unaffected.
-// Forces the overlay on (the cells ARE this view); the SVG chrome is dropped via
-// CSS so it reads as a wall, not an editor.
+// --- Live view (corner "▣ live"): the composite dims to a ghost and the fixture
+// cells glow at full strength — where the visuals cross a tube, its pixels light
+// up; everywhere else stays dark context. CSS only: the sampler reads the GL
+// canvas regardless, so output is unaffected. Forces the overlay on (the cells
+// ARE this view); the SVG chrome drops via CSS so it reads as the wall, not the
+// editor.
 let wallView = false;
 try { wallView = localStorage.getItem('lz.wall') === '1'; } catch { /* ignore */ }
 const wallBtn = document.getElementById('wall-btn');
@@ -896,7 +897,7 @@ function setWallView(v) {
   try { localStorage.setItem('lz.wall', wallView ? '1' : '0'); } catch { /* ignore */ }
   if (wallView && !overlayVisible) setOverlay(true);
   document.body.classList.toggle('wall-view', wallView);
-  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' wall'; }
+  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' live'; }
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
