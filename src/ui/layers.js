@@ -174,20 +174,13 @@ function animModeMenu({ animated, isAudio, isExternal, onPick }) {
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   const close = () => { menu.hidden = true; };
   const cur = !animated ? 'basic' : (isAudio ? 'audio' : isExternal ? 'external' : 'timeline');
-  // Each mode carries a one-line description — this menu is the doorway to the
-  // whole animation system, and a bare Basic/Timeline/Audio gave no scent of
-  // what lives behind each word.
-  const item = (mode, label, desc) => {
-    const b = el('button', {
-      className: 'fx-menu-item anim-mode-item' + (mode === cur ? ' is-current' : ''),
-      onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
-    });
-    b.append(
-      el('span', { className: 'anim-mode-name', textContent: label }),
-      el('span', { className: 'anim-mode-desc', textContent: desc })
-    );
-    return b;
-  };
+  // Compact one-line items; what each mode does lives on the HOVER title — a
+  // visible description per row made this little picker read like a manual.
+  const item = (mode, label, desc) => el('button', {
+    className: 'fx-menu-item' + (mode === cur ? ' is-current' : ''),
+    textContent: label, title: desc,
+    onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
+  });
   menu.append(
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),

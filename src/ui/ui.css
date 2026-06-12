@@ -582,16 +582,9 @@ input[type=checkbox]:checked::after {
 }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 .anim-cog.audio { color: var(--green); border-color: var(--line-2); background: var(--hover); }
-.anim-mode-menu { right: 0; min-width: 200px; }
+.anim-mode-menu { right: 0; min-width: 112px; }
 .fx-menu-item.is-current { color: var(--accent); }
 .fx-menu-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
-/* Mode items carry a one-line description so Basic/Timeline/Audio explain
-   themselves — this menu is the front door to the animation system. */
-.anim-mode-item { display: flex; flex-direction: column; gap: 1px; align-items: stretch; }
-.anim-mode-item .anim-mode-name { line-height: var(--lh-tight); }
-.anim-mode-item .anim-mode-desc { font-size: var(--fs-micro); color: var(--faint); letter-spacing: 0; text-transform: none; }
-.anim-mode-item.is-current .anim-mode-desc { color: var(--muted); }
-.anim-mode-item.is-current::after { content: none; }   /* the accent name marks current; the floated dot collides with the two-line layout */
 .is-audio input[type=range] { accent-color: var(--green); }
 .is-animated input[type=range] { accent-color: var(--green); }
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; flex-wrap: wrap; }
