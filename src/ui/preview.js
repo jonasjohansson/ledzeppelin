@@ -84,12 +84,14 @@ export function createPreview(canvasEl, opts = {}) {
   }
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
-    // The lights canvas no longer needs to scale with zoom — the crisp chrome is on
-    // the SVG layer, and the LED cells tolerate CSS upscaling. So keep a FIXED
-    // backing (~composition × dpr, capped) → zooming never balloons it (no lag).
+    // The backing scales WITH zoom: the LED cells are 1-2px dots now, and CSS
+    // upscaling smears them into mush when zoomed in. Quantized to half-steps
+    // (wheel ticks rarely reallocate) and capped by an area budget so a deep
+    // zoom never balloons the canvas.
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const areaK = Math.sqrt(6_000_000 / Math.max(1, BASE_W * BASE_H));
-    const k = Math.max(1, Math.min(dpr, areaK));
+    const areaK = Math.sqrt(12_000_000 / Math.max(1, BASE_W * BASE_H));
+    const want = Math.min(Math.max(dpr, dpr * viewZoom), areaK);
+    const k = Math.max(1, Math.round(want * 2) / 2);
     const w = Math.round(BASE_W * k), h = Math.round(BASE_H * k);
     if (canvasEl.width !== w) { canvasEl.width = w; canvasEl.height = h; }
   }
@@ -171,7 +173,7 @@ export function createPreview(canvasEl, opts = {}) {
           // per LED track the cell's on-screen size so a sparse strip's single lit
           // texel still lands on a device pixel (no nearest-neighbour dropouts)
           // while a zoomed-in cell gets fine-grained duty-cycle steps.
-          const cellPx = (len / (count - 1)) * ((vr.width || 1) / W) * (window.devicePixelRatio || 1);
+          const cellPx = (len / (count - 1)) * (canvasEl.width / W);   // cell size in BACKING px
           const tex = Math.max(2, Math.min(16, Math.round(cellPx)));
           const lit = Math.max(1, Math.min(tex, Math.round(litFrac * tex)));
           // An LED is a SQUARE dot (a 5 mm package), not a slash across the bar:
