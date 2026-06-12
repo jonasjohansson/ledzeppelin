@@ -133,7 +133,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive }) {
       if (mode === 'basic') onAnim(null);
       else if (mode === 'audio') { enableAudio(); onAnim(makeAudioAnim(min, max, 'level', 1)); }
       // Default to the first live channel, if any has been seen yet.
-      else if (mode === 'external') onAnim(makeExternalAnim(min, max, extList()[0]?.channel ?? '', 1));
+      else if (mode === 'external') onAnim(makeExternalAnim(min, max, extList()[0]?.channel ?? ''));
       else onAnim(makeAnim(min, max, 10000, 'forward'));
     },
   });
@@ -149,14 +149,21 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive }) {
   // Animated layout (un-crammed): three stacked rows —
   //   1. label · live value · cog   2. full-width in/out track   3. direction · in · out · s
   const readout = el('span', { className: 'ly-readout', textContent: fmtLive(anim.from) });
+  // Push a dragged thumb's value into the matching in/out number field without a
+  // re-render (the fields live in the controls row built below).
+  const syncMini = (name, v) => {
+    const i = wrap.querySelector(`.anim-mini[data-mini="${name}"] input`);
+    if (i) i.value = fmt(v);
+  };
   const track = rangeTrack({
     min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
     onFrom: (v) => onAnim({ ...anim, from: v }),
     onTo: (v) => onAnim({ ...anim, to: v }),
     // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
-    // sweep/mapping follows the thumb in realtime); release does the full commit.
-    onLiveFrom: onAnimLive ? (v) => onAnimLive({ ...anim, from: v }) : null,
-    onLiveTo: onAnimLive ? (v) => onAnimLive({ ...anim, to: v }) : null,
+    // sweep/mapping follows the thumb in realtime) and the in/out number fields
+    // are synced directly in the DOM; release does the full commit + re-render.
+    onLiveFrom: (v) => { syncMini('in', v); onAnimLive?.({ ...anim, from: v }) },
+    onLiveTo: (v) => { syncMini('out', v); onAnimLive?.({ ...anim, to: v }) },
   });
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
@@ -230,7 +237,9 @@ function animControls(anim, onAnim) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
     i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
-    return el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
+    const lab = el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
+    lab.dataset.mini = label;   // lets the range-track thumbs sync this field live
+    return lab;
   };
   const isAudio = anim.mode === 'audio';
   const isExternal = anim.mode === 'external';
@@ -265,7 +274,7 @@ function animControls(anim, onAnim) {
     const mapRow = el('div', { className: 'anim-ctrls' }, [
       mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
       mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
-      mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })),
+      // (no gain here — external senders own their scaling; in/out covers mapping)
     ]);
     return el('div', {}, [srcRow, mapRow]);
   } else {
