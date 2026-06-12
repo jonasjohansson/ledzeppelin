@@ -153,10 +153,10 @@ export function importKagora(preset) {
   const toPx = (p) => [(p.x - minX) * scl, (p.y - minY) * scl];
   function barTransform(s) {
     const pts = s.points ?? [];
-    if (pts.length < 2) return { x: 0, y: 0, w: 10, h: 8, rotation: 0 };
+    if (pts.length < 2) return { x: 0, y: 0, w: 10, h: 0, rotation: 0 };
     const [ax, ay] = toPx(pts[0]);
     const [bx, by] = toPx(pts[pts.length - 1]);
-    return { x: (ax + bx) / 2, y: (ay + by) / 2, w: Math.hypot(bx - ax, by - ay), h: 8,
+    return { x: (ax + bx) / 2, y: (ay + by) / 2, w: Math.hypot(bx - ax, by - ay), h: 0,
       rotation: Math.atan2(by - ay, bx - ax) * 180 / Math.PI };
   }
 

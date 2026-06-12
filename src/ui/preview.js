@@ -4,6 +4,7 @@ import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
   setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel,
+  thicknessOf,
 } from '../model/fixture-transform.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
@@ -149,7 +150,8 @@ export function createPreview(canvasEl, opts = {}) {
       const [ox, oy] = chainOffset(show, f.id);   // dots show WHERE it samples (cascade)
       const reversed = !!f.input.reversed;        // which geometric end is pixel 0
       const count = pts.length;
-      const thick = Math.max(2, Number(f.input?.transform?.h) || 8);
+      const cvT = show.composition?.canvas;
+      const thick = Math.max(2, thicknessOf(f, cvT) * (Hh / ((cvT && cvT.h) || Hh)));
       const sx = (i) => (pts[i][0] + ox) * W, sy = (i) => (pts[i][1] + oy) * Hh;
 
       // Light the strip from the sampled composite. A straight BAR blits its whole
@@ -312,7 +314,7 @@ export function createPreview(canvasEl, opts = {}) {
         const ax = eps[0][0] * W, ay = eps[0][1] * Hh, bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
         const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, perpX = -dy / len, perpY = dx / len;
         const cv = show.composition?.canvas || { w: W, h: Hh };
-        const ht = ((f.input.transform?.h ?? 8) / 2) * (Hh / (cv.h || Hh));
+        const ht = (thicknessOf(f, cv) / 2) * (Hh / (cv.h || Hh));
         const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
         p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="none" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
         if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck));
@@ -411,7 +413,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const ddx = bx - ax, ddy = by - ay, dl = Math.hypot(ddx, ddy) || 1;
         const cpx = -ddy / dl, cpy = ddx / dl;
         const cv = show.composition?.canvas || { w: rw, h: rh };
-        const ht = ((f.input.transform?.h ?? 8) / 2) * (rh / (cv.h || rh));
+        const ht = (thicknessOf(f, cv) / 2) * (rh / (cv.h || rh));
         const corners = [
           [ax + cpx * ht, ay + cpy * ht], [bx + cpx * ht, by + cpy * ht],
           [bx - cpx * ht, by - cpy * ht], [ax - cpx * ht, ay - cpy * ht],

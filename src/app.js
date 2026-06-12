@@ -15,7 +15,7 @@ import {
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
@@ -44,7 +44,7 @@ function defaultShow() {
   const N = 8, run = 230, mid = 160, ccx = cv.w / 2, ccy = cv.h / 2;
   for (let i = 0; i < N; i++) {
     const deg = i * (360 / N), a = deg * Math.PI / 180;
-    const transform = { x: ccx + Math.cos(a) * mid, y: ccy + Math.sin(a) * mid, w: run, h: 10, rotation: deg };
+    const transform = { x: ccx + Math.cos(a) * mid, y: ccy + Math.sin(a) * mid, w: run, h: 0, rotation: deg };
     show = addFixture(show, {
       id: `f${i + 1}`, typeId: 't1',
       output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 96 },
@@ -572,7 +572,18 @@ function positionEditor(sel) {
       txField('X', tf.x, (v) => setT({ x: v })),
       txField('Y', tf.y, (v) => setT({ y: v })),
       txField('Length', tf.w, (v) => setT({ w: v })),
-      txField('Height', tf.h, (v) => setT({ h: v })),
+      // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
+      // fixture's px-per-meter). The field shows the effective px; typing a
+      // value overrides, 0 (or clearing) returns to auto.
+      (() => {
+        const eff = Math.round(thicknessOf(sel, show.composition?.canvas) * 10) / 10;
+        const manual = !isAutoThickness(tf.h);
+        const fld = txField('Height', manual ? tf.h : eff, (v) => setT({ h: v > 0 ? v : 0 }));
+        fld.title = manual
+          ? 'manual height (px) — set 0 to return to physical auto (10 mm strip)'
+          : `auto — physical scale (10 mm strip ≈ ${eff}px on this fixture); type a value to override`;
+        return fld;
+      })(),
       txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
     ]),
     oel('div', { className: 'dir-btns out-transform' }, [
@@ -673,7 +684,7 @@ function addInstance(typeId) {
   // land in the "Unassigned" group until you wire them to an output. A thin
   // VERTICAL strip: thickness 10 px, run = pixel count (rotation 90° stands it up).
   const k = next.fixtures.length;
-  const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 10, rotation: 90 };
+  const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 0, rotation: 90 };
   next.fixtures.push({
     id, typeId: t.id,
     output: { deviceId: '', port: 1, pixelOffset: 0, pixelCount: t.pixelCount },
@@ -1412,7 +1423,7 @@ function newProject() {
   const cv = next.composition.canvas;   // 1280×720
   next = addDevice(next, { id: 'c1', name: 'Controller 1', ip: '', colorOrder: 'GRB', port: 4048, typeId: 'digquad' });
   next.fixtureTypes = [{ id: 't1', name: '1m · 60px', ledsPerMeter: 60, meters: 1, pixelCount: 60, colorOrder: 'GRB' }];
-  const transform = { x: cv.w / 2, y: cv.h / 2, w: 240, h: 10, rotation: 0 };
+  const transform = { x: cv.w / 2, y: cv.h / 2, w: 240, h: 0, rotation: 0 };
   next = addFixture(next, {
     id: 'f1', typeId: 't1',
     output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 60 },

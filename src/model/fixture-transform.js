@@ -68,6 +68,46 @@ export function isPolylineFixture(input) {
   return input?.mode === 'polyline' || (input?.mode !== 'bar' && n > 2);
 }
 
+// Physical strip width — a standard LED strip/PCB is ~10 mm across.
+export const STRIP_WIDTH_M = 0.010;
+
+// Centreline length of a fixture in composition-canvas px (bar: transform.w;
+// polyline: the summed segment lengths of its normalized points × canvas).
+export function centrelineLengthPx(f, canvas) {
+  const input = f?.input;
+  if (input?.transform && !isPolylineFixture(input)) return Number(input.transform.w) || 0;
+  const { w: W, h: H } = canvasOf(canvas);
+  const pts = Array.isArray(input?.points) ? input.points : [];
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) {
+    L += Math.hypot(((Number(pts[i]?.[0]) || 0) - (Number(pts[i - 1]?.[0]) || 0)) * W,
+      ((Number(pts[i]?.[1]) || 0) - (Number(pts[i - 1]?.[1]) || 0)) * H);
+  }
+  return L;
+}
+
+// AUTO height sentinel: 0/null mean "derive physically". The legacy hardcoded
+// creation defaults (8 and 10) were never user choices, so they count as auto
+// too — old shows snap to physical scale without migration.
+export const isAutoThickness = (h) => {
+  const v = Number(h);
+  return !Number.isFinite(v) || v <= 0 || v === 8 || v === 10;
+};
+
+// EFFECTIVE bar thickness in composition-canvas px. AUTO by default: drawn to
+// PHYSICAL scale — strip width (10 mm) × the fixture's own px-per-meter
+// (centreline length ÷ meters) — so the bar is as wide as the real strip and
+// follows when stretched. Any other stored positive h is a manual override.
+// Clamped ≥2 px so a long-thin fixture never vanishes.
+export function thicknessOf(f, canvas) {
+  const stored = Number(f?.input?.transform?.h);
+  if (!isAutoThickness(stored)) return stored;
+  const meters = Number(f?.meters) || 0;
+  const lenPx = centrelineLengthPx(f, canvas);
+  if (meters > 0 && lenPx > 0) return Math.max(2, (lenPx / meters) * STRIP_WIDTH_M);
+  return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_THICKNESS;
+}
+
 // Auto fixture identity for the lists/canvas: a 1-based number ("#1", "#2", …).
 // The internal `id` stays the stable routing handle (chains/selection); users no
 // longer type it. Pass the fixture's index in the patch; falls back to id.
@@ -187,7 +227,7 @@ export function fitCanvasToFixtures(show, { target = 1280, pad = 24 } = {}) {
       // so the canvas contains the strip's full footprint, not just its spine.
       const [ax, ay] = pts[0], [bx, by] = pts[pts.length - 1];
       const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-      const hx = -dy / len, hy = dx / len, ht = (Number(f.input?.transform?.h) || 0) / 2;
+      const hx = -dy / len, hy = dx / len, ht = thicknessOf(f, cv) / 2;
       for (const [cx, cy] of [[ax, ay], [bx, by]]) { ext(cx + hx * ht, cy + hy * ht); ext(cx - hx * ht, cy - hy * ht); }
     } else {
       for (const [px, py] of pts) ext(px, py);
@@ -210,10 +250,12 @@ export function fitCanvasToFixtures(show, { target = 1280, pad = 24 } = {}) {
       return { ...f, input: { ...f.input, mode: 'polyline', points: pts.length >= 2 ? pts : f.input.points } };
     }
     const transform = transformFromPoints(pts, newCanvas);
-    // Preserve the bar's thickness proportionally (transformFromPoints resets it
-    // to a default), so fitting doesn't flatten thick strips.
+    // Preserve a MANUAL thickness proportionally (transformFromPoints resets it
+    // to the auto default), so fitting doesn't flatten deliberately-thick bars.
+    // The auto sentinel (DEFAULT_THICKNESS) passes through untouched — physical
+    // thickness re-derives from the new px-per-meter by itself.
     const origH = Number(f.input?.transform?.h);
-    if (Number.isFinite(origH) && origH > 0) transform.h = origH * scale;
+    if (!isAutoThickness(origH)) transform.h = origH * scale;
     return { ...f, input: { ...f.input, mode: 'bar', transform, points: pointsFromTransform(transform, newCanvas) } };
   });
   return { ...show, composition: { ...(show.composition || {}), canvas: newCanvas }, fixtures: out };
