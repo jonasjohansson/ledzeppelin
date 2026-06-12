@@ -174,6 +174,10 @@ export function createPreview(canvasEl, opts = {}) {
           const cellPx = (len / (count - 1)) * ((vr.width || 1) / W) * (window.devicePixelRatio || 1);
           const tex = Math.max(2, Math.min(16, Math.round(cellPx)));
           const lit = Math.max(1, Math.min(tex, Math.round(litFrac * tex)));
+          // An LED is a SQUARE dot (a 5 mm package), not a slash across the bar:
+          // the drawn height matches the lit length along the strip, so each pixel
+          // reads as a binary point of light. The bar thickness only caps it.
+          const dot = Math.max(1.5, Math.min(thick, (len / (count - 1)) * litFrac));
           ensureStrip(count * tex);
           const d = stripImg.data;
           for (let i = 0; i < count; i++) {
@@ -189,7 +193,7 @@ export function createPreview(canvasEl, opts = {}) {
           ctx.save();
           ctx.imageSmoothingEnabled = false;     // crisp pixel blocks, no blur
           ctx.translate(ax, ay); ctx.rotate(ang);
-          ctx.drawImage(stripCv, 0, 0, count * tex, 1, -halfCell, -thick / 2, len + 2 * halfCell, thick);
+          ctx.drawImage(stripCv, 0, 0, count * tex, 1, -halfCell, -dot / 2, len + 2 * halfCell, dot);
           ctx.restore();
         } else {
           // Polyline fallback: a square per LED, sized to the same physical duty
