@@ -55,7 +55,8 @@
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
   --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) */
-  --row-h:22px;      /* param row height + square B/S/✕ buttons */
+  --row-h:26px;      /* ONE row height — every label·control row (input, select, slider, bool) */
+  --ctrl-h:22px;     /* ONE control height — fields/selects/buttons inside rows (row-h minus breath) */
   --col-label:84px;  /* param label column (fixed-width fields) */
   --col-val:44px;    /* param value / readout column */
   --slider-w:120px;  /* fixed slider width — matte-style: label fills left, value far right */
@@ -101,11 +102,14 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .tab:focus-visible { outline: 1px solid var(--line-2); outline-offset: -1px; }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
-.subtabs { display: flex; gap: 0; margin-bottom: var(--s3); border-bottom: 1px solid var(--line); }
+/* CHILD row of the Design/Output switch: indented + a step smaller, no border
+   of its own (the parent row above carries the divider) — scale + indent say
+   "these live inside the section", keeping the text-only OCR language. */
+.subtabs { display: flex; gap: 14px; margin-bottom: var(--s3); padding: 3px 0 2px var(--s4); }
 .subtab {
-  flex: 1 1 0; text-align: center;            /* Clip · Layer · Composition = equal thirds */
-  background: transparent; color: var(--faint); border: none; border-bottom: 2px solid transparent;
-  border-radius: 0; padding: 5px 0; font: var(--fw-med) var(--fs-ctrl) var(--sans); cursor: pointer;
+  flex: 0 0 auto; text-align: left;
+  background: transparent; color: var(--faint); border: none;
+  border-radius: 0; padding: 3px 1px; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .subtab:hover { color: var(--muted); }
@@ -121,7 +125,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-tools select {
   width: 100%; box-sizing: border-box; background: var(--field-bg); color: var(--text);
   border: 1px solid var(--field-border); border-radius: var(--radius);
-  padding: 5px 7px; font: var(--fs-body) var(--sans); cursor: pointer;
+  height: var(--ctrl-h); padding: 0 7px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
 #add-fixture { color: var(--green); border-color: var(--line); }
 .snap-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--fs-body); color: var(--muted); cursor: pointer; }
@@ -263,7 +267,9 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
    sub-tabs: the active one is just BRIGHT, the others dim. No fills, no borders,
    no underline (Jonas: don't use boxes/borders to mark the active thing). The
    left-aligned row reads as a quiet OCR menu rather than a segmented control. */
-.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding-bottom: 8px; margin-bottom: var(--s3); }
+/* The PARENT row carries the divider (the subtabs underneath sit inside it),
+   so the two tab rows read as one nested hierarchy, not two unrelated menus. */
+.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding-bottom: 6px; margin-bottom: var(--s2); border-bottom: 1px solid var(--line); }
 .section-tab {
   flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output = 50% each */
   border: none; border-radius: 0; padding: 4px 0; cursor: pointer;
@@ -279,7 +285,7 @@ body.gui-hidden #layout { display: none; }
 /* No top bar — chrome lives in the bottom-left corner cluster. */
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
-  padding: 5px 10px; font: var(--fs-body) var(--sans); cursor: pointer;
+  height: var(--ctrl-h); padding: 0 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
 /* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
    overlay toggle + hide UI. Decoupled from any tab. */
@@ -292,7 +298,7 @@ body.gui-hidden #layout { display: none; }
 #g-hide { min-width: 74px; text-align: center; }
 #corner-controls button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
-  padding: 5px 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
+  height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
 #corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
@@ -364,15 +370,18 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .insp-sec.is-locked .insp-sec-head { cursor: default; }
 .insp-sec.is-locked .insp-sec-head:hover { background: none; }
 .insp-sec.is-locked .insp-tri { visibility: hidden; }
-/* Per-group reset — faint, revealed on header hover, pushed to the right. */
-/* Always visible (touch-first — no hover to reveal it), just faint until used. */
+/* Per-group reset — always visible (touch-first), one step up from faint so it
+   reads as a live control, with a warm hover so it announces itself before the
+   press (it was invisible-until-pressed). */
 .insp-sec-reset {
   margin-left: auto; flex: 0 0 auto; padding: 0 4px; min-width: 0; line-height: 1;
-  background: none; border: none; border-radius: var(--radius-sm); color: var(--faint);
+  background: none; border: none; border-radius: var(--radius-sm); color: var(--muted);
   font-size: var(--fs-body); cursor: pointer;
 }
+.insp-sec-reset:hover { color: var(--accent); background: var(--accent-soft); }
 .insp-sec-reset:active { color: var(--text); background: var(--hover); }
 .insp-sec-reset:disabled { opacity: .2; cursor: default; background: none; }
+.insp-sec-reset:disabled:hover { color: var(--faint); background: none; }
 .insp-sec-body { display: none; padding: 2px 0 6px; }
 .insp-sec.is-open .insp-sec-body { display: block; }
 /* Subtle table separation so a run of rows reads as a ledger (Resolume-like). */
@@ -393,7 +402,10 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .scan-block { display: flex; flex-direction: column; gap: 3px; }
 .scan-row .ctrl-btn { margin-left: auto; }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
-.out-transform { margin-top: 4px; }   /* rotate-90° / flip button row in the Output editor */
+/* Rotate-90° / flip row in the Output editor — full-width, equal shares (action
+   buttons either fill the row or split it evenly; never intrinsic-width chips). */
+.out-transform { display: flex; width: 100%; margin-top: 4px; }
+.out-transform .dir-btn { flex: 1 1 0; min-width: 0; }
 .fx-del-link {
   grid-column: 1 / -1; justify-self: start; background: none; border: none; padding: 4px 0 0;
   color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
@@ -402,18 +414,19 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
 /* Shared horizontal row module: label left (fixed column) · value right. */
-.fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: 26px; font-size: var(--fs-body); color: var(--muted); }
+.fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
 /* Fixed label column so the name stays readable (text/number inputs otherwise
    claim their intrinsic width and squeeze the label down to an ellipsis). */
 .fx-field > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-field > input, .fx-field > select { flex: 1 1 0; min-width: 0; width: auto; }
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: var(--radius); padding: 4px 7px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
 }
 .fx-field select { font-family: var(--sans); }   /* selects are chrome, not data → sans */
-/* Derived, non-editable value (e.g. computed pixel count) — reads as data, no field chrome. */
-.fx-field > .fx-readonly { flex: 1 1 0; min-width: 0; color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 3px 5px; }
+/* Derived, non-editable value (e.g. computed pixel count) — reads as data, no field
+   chrome, but sits on the SAME control height so mixed rows stay one rhythm. */
+.fx-field > .fx-readonly { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: var(--ctrl-h); color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 0 8px; }
 /* Placement list grouped by CONTROLLER → output. The controller header is STICKY
    so you always know which device you're scrolling in; the output sub-headers
    nest under it (indented, not sticky). A colour swatch on each ties to the
@@ -446,7 +459,7 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .fx-devstatus.is-off { color: var(--amber, #e8b27f); }
 
 /* Controller controls — a button row + a brightness slider. */
-.fx-color { width: 100%; height: 26px; padding: 2px; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; }
+.fx-color { width: 100%; height: var(--ctrl-h); padding: 2px; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; }
 /* Make the swatch fill the control so the colour actually reads. */
 .fx-color::-webkit-color-swatch-wrapper { padding: 0; }
 .fx-color::-webkit-color-swatch { border: none; border-radius: 2px; }
@@ -458,10 +471,10 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .ctrl-stat-k { color: var(--faint); text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .ctrl-stat-v { color: var(--readout); }
 .ctrl-push { display: flex; flex-direction: column; gap: 3px; }
-.ip-open { flex: 0 0 auto; color: var(--cyan); text-decoration: none; padding: 0 5px; font-size: var(--fs-ctrl); border: 1px solid var(--field-border); border-radius: var(--radius); line-height: var(--lh-ctrl); }
+.ip-open { flex: 0 0 auto; display: inline-flex; align-items: center; box-sizing: border-box; height: var(--ctrl-h); color: var(--cyan); text-decoration: none; padding: 0 6px; font-size: var(--fs-ctrl); border: 1px solid var(--field-border); border-radius: var(--radius); }
 .ip-open:hover { background: var(--hover); }
 .ctrl-row { display: flex; gap: 5px; }
-.ctrl-btn { flex: 1 1 0; padding: 5px 0; font: var(--fs-body) var(--sans); color: var(--text);
+.ctrl-btn { flex: 1 1 0; height: var(--ctrl-h); padding: 0 6px; font: var(--fs-body) var(--sans); color: var(--text);
   text-transform: uppercase; letter-spacing: .06em;
   background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius); cursor: pointer; }
 .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -495,17 +508,20 @@ input[type=checkbox]:checked::after {
 .fx-del { grid-column: 1 / -1; margin-top: 4px; color: var(--danger); border-color: var(--line); }
 /* Primary action button — matches .ctrl-btn (check / save to device): full width,
    uppercase, hairline. Used for + device / scan network / + controller / apply / fit. */
-.fx-add { width: 100%; padding: 5px 0; font: var(--fs-body) var(--sans); color: var(--text);
+.fx-add { width: 100%; height: var(--ctrl-h); padding: 0 6px; font: var(--fs-body) var(--sans); color: var(--text);
   text-transform: uppercase; letter-spacing: .06em;
   background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius); cursor: pointer; }
 .fx-add:hover { border-color: var(--accent); color: var(--accent); }
 .fx-add:active { background: var(--panel-2); }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
+/* Action rows: buttons SHARE the row width equally (never intrinsic-width chips). */
+.fx-io > button { flex: 1 1 0; min-width: 0; height: var(--ctrl-h); }
+#settings-file .fx-io > button { flex: 0 0 auto; }   /* stacked column variant — full width via stretch */
 
 /* --- Composition (canvas resolution) panel --- */
 .cmp-panel { margin-bottom: var(--s4); }
 .cmp-presets { display: flex; flex-wrap: wrap; gap: 4px; }
-.cmp-preset { padding: 3px 8px; }
+.cmp-presets .cmp-preset { flex: 1 1 0; min-width: 0; height: var(--ctrl-h); padding: 0 8px; }
 .cmp-grid { grid-template-columns: 1fr; margin-top: 4px; }
 /* First card sits right under the subtabs' own border — drop its top rule so the
    two parallel lines don't read as a doubled separator. */
@@ -521,9 +537,10 @@ input[type=checkbox]:checked::after {
 .imp-panel { margin-bottom: var(--s4); }
 .imp-banner { white-space: pre-wrap; margin-top: 4px; }
 .imp-autofill { display: flex; gap: 6px; margin: 4px 0; }
+.imp-autofill > button { flex: 0 0 auto; height: var(--ctrl-h); }
 .imp-base {
   flex: 1 1 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--mono); box-sizing: border-box;
+  border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--mono); box-sizing: border-box;
 }
 .imp-row { grid-template-columns: 2fr 1fr; }
 .imp-apply { color: var(--green); border-color: var(--line); }
@@ -556,9 +573,16 @@ input[type=checkbox]:checked::after {
 }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 .anim-cog.audio { color: var(--green); border-color: var(--line-2); background: var(--hover); }
-.anim-mode-menu { right: 0; min-width: 104px; }
+.anim-mode-menu { right: 0; min-width: 200px; }
 .fx-menu-item.is-current { color: var(--accent); }
 .fx-menu-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
+/* Mode items carry a one-line description so Basic/Timeline/Audio explain
+   themselves — this menu is the front door to the animation system. */
+.anim-mode-item { display: flex; flex-direction: column; gap: 1px; align-items: stretch; }
+.anim-mode-item .anim-mode-name { line-height: var(--lh-tight); }
+.anim-mode-item .anim-mode-desc { font-size: var(--fs-micro); color: var(--faint); letter-spacing: 0; text-transform: none; }
+.anim-mode-item.is-current .anim-mode-desc { color: var(--muted); }
+.anim-mode-item.is-current::after { content: none; }   /* the accent name marks current; the floated dot collides with the two-line layout */
 .is-audio input[type=range] { accent-color: var(--green); }
 .is-animated input[type=range] { accent-color: var(--green); }
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; flex-wrap: wrap; }
@@ -603,7 +627,7 @@ input[type=checkbox]:checked::after {
 /* Sweep direction as a 3-button segmented control (→ ← ⇄). */
 .dir-btns { display: inline-flex; flex: 0 0 auto; }
 .dir-btn {
-  padding: 1px 6px; min-width: 0; font-size: var(--fs-body); line-height: var(--lh-ctrl);
+  height: var(--ctrl-h); padding: 0 6px; min-width: 0; font-size: var(--fs-body); line-height: var(--lh-ctrl);
   color: var(--faint); background: var(--field-bg);
   border: 1px solid var(--line-2); border-right-width: 0; border-radius: 0;
 }
@@ -686,7 +710,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .ly-addfx { margin-top: 4px; }
 .ly-addfx select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
-  border-radius: var(--radius); padding: 3px 5px; font: var(--fs-ctrl) var(--sans); width: 100%; box-sizing: border-box;
+  border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--sans); width: 100%; box-sizing: border-box;
 }
 
 /* Layer name as an inline editable field in the header. */
@@ -909,11 +933,11 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Transport bar (play-through of the clip timeline). */
 .composer-deckhead { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }
 .transport { display: flex; align-items: center; gap: 8px; }
-.transport-play { padding: 2px 12px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--green); border-color: var(--line); }
+.transport-play { height: var(--ctrl-h); padding: 0 12px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--green); border-color: var(--line); }
 .transport-play.is-playing { color: var(--danger); border-color: var(--line); background: rgba(255,107,107,.08); }
 .transport-loop { display: flex; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--muted); }
 .transport-loop input { width: auto; accent-color: var(--accent); }
-.transport-fire { padding: 2px 10px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--amber); border-color: var(--line); }
+.transport-fire { height: var(--ctrl-h); padding: 0 10px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--amber); border-color: var(--line); }
 .transport-fire:active { background: rgba(232,178,127,.28); }
 
 /* Playhead highlight: the slot the transport is currently on. */
@@ -968,7 +992,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .settings-panel .set-sec:last-child { margin-bottom: 0; }
 .settings-panel .fx-pts { margin: 0 0 8px; }
 .settings-panel .set-body { display: flex; flex-direction: column; }
-.settings-panel .set-body > .fx-field { min-height: var(--row-h); padding: 4px 0; }
+.settings-panel .set-body > .fx-field { min-height: var(--row-h); padding: 2px 0; }
 .settings-panel .set-body > .fx-field + .fx-field {
   border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
 }
@@ -982,7 +1006,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .settings-panel .swatch-field > span:first-child { flex: 1 1 auto; }
 /* Swatch chip — the native well reads as a flat colour tile. */
 .swatch {
-  flex: 0 0 auto; width: 46px; height: 22px; display: block; overflow: hidden;
+  flex: 0 0 auto; width: 46px; height: var(--ctrl-h); display: block; overflow: hidden;
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
 }
 .swatch input[type=color] {

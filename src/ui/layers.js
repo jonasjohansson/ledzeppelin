@@ -168,11 +168,25 @@ function animModeMenu({ animated, isAudio, onPick }) {
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   const close = () => { menu.hidden = true; };
   const cur = !animated ? 'basic' : (isAudio ? 'audio' : 'timeline');
-  const item = (mode, label) => el('button', {
-    className: 'fx-menu-item' + (mode === cur ? ' is-current' : ''), textContent: label,
-    onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
-  });
-  menu.append(item('basic', 'Basic'), item('timeline', 'Timeline'), item('audio', 'Audio'));
+  // Each mode carries a one-line description — this menu is the doorway to the
+  // whole animation system, and a bare Basic/Timeline/Audio gave no scent of
+  // what lives behind each word.
+  const item = (mode, label, desc) => {
+    const b = el('button', {
+      className: 'fx-menu-item anim-mode-item' + (mode === cur ? ' is-current' : ''),
+      onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
+    });
+    b.append(
+      el('span', { className: 'anim-mode-name', textContent: label }),
+      el('span', { className: 'anim-mode-desc', textContent: desc })
+    );
+    return b;
+  };
+  menu.append(
+    item('basic', 'Basic', 'hold a value, or sweep between two'),
+    item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
+    item('audio', 'Audio', 'follow a band of the live audio input')
+  );
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
     textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio)',

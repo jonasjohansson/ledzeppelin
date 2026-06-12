@@ -671,9 +671,19 @@ function addFixtureControl() {
     wrap.append(oel('span', { className: 'seg-hint', textContent: 'define a fixture type in the Inventory tab first' }));
     return wrap;
   }
-  const sel = oel('select');
-  for (const t of types) sel.append(oel('option', { value: t.id, textContent: `${t.name} · ${t.pixelCount}px` }));
-  wrap.append(oel('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addInstance(sel.value) }), sel);
+  const sel = oel('select', { title: 'fixture type to place (defined in the Inventory tab)' });
+  for (const t of types) {
+    // Don't re-append the px count when the type's NAME already states it —
+    // the default type is literally named "1.6m · 96px", so it rendered as the
+    // baffling "1.6m · 96px · 96px".
+    const label = /\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`;
+    sel.append(oel('option', { value: t.id, textContent: label }));
+  }
+  wrap.append(
+    oel('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addInstance(sel.value) }),
+    oel('span', { className: 'seg-hint', textContent: 'type' }),
+    sel
+  );
   return wrap;
 }
 
