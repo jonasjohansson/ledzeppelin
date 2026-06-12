@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { createSocket } from 'node:dgram';
 import { WebSocketServer } from 'ws';
+import { parseOsc } from './osc.js';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
@@ -51,7 +53,7 @@ function openBrowser(url) {
   } catch { /* no browser / unsupported env — UI is still reachable manually */ }
 }
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 7070;
+const PORT = Number(process.env.PORT) || 7070;
 const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));
@@ -91,6 +93,10 @@ wss.on('connection', (ws) => {
     try {
       const m = JSON.parse(data.toString());
       if (m.type === 'route') { route = m.route; console.log(`[ws] route set: ${route.length} device(s)`); }
+      // External-channel ingest over the socket: any client (an app, a sensor
+      // script) can send { type:'ext', channel, value } — relay it to the OTHER
+      // clients so the UI(s) pick it up. Same shape the OSC listener broadcasts.
+      else if (m.type === 'ext') broadcastExt(m.channel, m.value, ws);
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
   const timer = setInterval(() => {
@@ -103,6 +109,29 @@ wss.on('connection', (ws) => {
   ws.on('close', () => { clearInterval(timer); console.log('[ws] client disconnected'); });
 });
 setInterval(() => { if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
+
+// --- External modulation ingest ---------------------------------------------
+// Push an external channel value to every connected ws client (except the
+// sender, when it came in over the socket itself). The browser maps these onto
+// 'external'-mode params (src/model/external.js).
+function broadcastExt(channel, value, except) {
+  if (typeof channel !== 'string' || !Number.isFinite(Number(value))) return;
+  const msg = JSON.stringify({ type: 'ext', channel, value: Number(value) });
+  for (const c of wss.clients) {
+    if (c !== except && c.readyState === 1) { try { c.send(msg); } catch { /* closing */ } }
+  }
+}
+// OSC over UDP: any address, first numeric arg → an external channel named by
+// the address. TouchOSC / TouchDesigner / oscsend point here.
+const OSC_PORT = Number(process.env.OSC_PORT) || 9000;
+const osc = createSocket('udp4');
+let oscSeen = false;
+osc.on('message', (buf) => {
+  if (!oscSeen) { oscSeen = true; console.log(`[osc] receiving on :${OSC_PORT}`); }
+  for (const { address, value } of parseOsc(buf)) broadcastExt(address, value);
+});
+osc.on('error', (e) => { console.error(`[osc] listener error: ${e.message}`); try { osc.close(); } catch { /* already closed */ } });
+osc.bind(OSC_PORT);
 http.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`ledzeppelin ${url}`);

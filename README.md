@@ -76,6 +76,43 @@ Develop without hardware: the on-screen **virtual preview** colors each
 fixture's pixels from the live sampled frame, so you can build the whole
 creative side with no tubes plugged in.
 
+### External control (OSC / socket JSON)
+
+Any animatable parameter can follow a **live external channel** instead of the
+clock or the mic: open a param's ⚙ menu and pick **External**. A channel is just
+a name → latest number; two ways to feed one:
+
+**OSC over UDP** — the daemon listens on `:9000` (`OSC_PORT` overrides). Any
+address works; the first numeric argument (`f`/`i`/`d`) becomes the channel
+value. Bundles (TouchOSC, TouchDesigner) are unpacked. Try it:
+
+```bash
+oscsend localhost 9000 /speed f 0.7
+```
+
+…or point TouchOSC at `<host>:9000` and every fader shows up as a channel.
+
+**Socket JSON** — any client can connect to the daemon's WebSocket and send
+`{ type:'ext', channel, value }`; the daemon relays it to every other client:
+
+```js
+import WebSocket from 'ws';
+const ws = new WebSocket('ws://localhost:7070/frames');
+ws.on('open', () => {
+  setInterval(() => ws.send(JSON.stringify({
+    type: 'ext', channel: 'sensor/1', value: Math.random(),
+  })), 100);
+});
+```
+
+Per binding, the raw signal maps onto the param as
+`from + (to − from) · clamp(value × gain, 0, 1)` — so a 0..1 fader can drive any
+slider range, and `gain` rescales hotter/colder signals. The External controls
+row offers a select of live channels (`/fader1 · 0.42`) plus a free-text field
+for an address that hasn't sent anything yet. The four audio band names
+(`level`, `bass`, `mid`, `high`) are **reserved** by the Audio input — don't
+name external channels after them.
+
 ## Architecture
 
 | Layer | Files |

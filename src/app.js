@@ -18,6 +18,7 @@ import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromT
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain } from './model/audio.js';
+import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
@@ -159,7 +160,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route);
+  else bridge = connectBridge(route, { onExt: extSet });   // ext channels (OSC / socket JSON) → store
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -1248,33 +1249,35 @@ function loop(ts) {
         layerPanel.setPlayhead(clips.findIndex((c) => c.id === ph.clip.id));   // real deck index
       }
     }
-    // Per-parameter animations run on a free-running clock (Timeline) or off the
-    // live audio bands (Audio); resolve each layer's + clip's animated params to
-    // plain numbers before compositing. No-op (same ref) when nothing is animated.
+    // Per-parameter animations run on a free-running clock (Timeline), off the
+    // live audio bands (Audio), or off a live OSC/socket channel (External);
+    // resolve each layer's + clip's animated params to plain numbers before
+    // compositing. No-op (same ref) when nothing is animated. The signals map
+    // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
-    const bands = updateAudio();
+    const signals = { ...updateAudio(), ...extChannels() };
     renderLayers = renderLayers.map((L) => {
-      const lp = resolveParams(L.params, L.anim, t, bands);
+      const lp = resolveParams(L.params, L.anim, t, signals);
       let clips = L.clips;
       if (clips && clips.some((c) => c.anim && Object.keys(c.anim).length)) {
         clips = clips.map((c) => {
           const a = c.anim;
           if (!(a && Object.keys(a).length)) return c;
-          const params = resolveParams(c.params, a, t, bands);
+          const params = resolveParams(c.params, a, t, signals);
           // Animated TRANSFORM (keys tf.x/tf.y/tf.scale/tf.rotation) + OPACITY (tf.opacity).
           let transform = c.transform, opacity = c.opacity;
           if (a['tf.x'] || a['tf.y'] || a['tf.scale'] || a['tf.rotation']) {
             transform = { ...(c.transform || {}) };
-            for (const f of ['x', 'y', 'scale', 'rotation']) if (a['tf.' + f]) transform[f] = animatedValue(a['tf.' + f], t, bands);
+            for (const f of ['x', 'y', 'scale', 'rotation']) if (a['tf.' + f]) transform[f] = animatedValue(a['tf.' + f], t, signals);
           }
-          if (a['tf.opacity']) opacity = animatedValue(a['tf.opacity'], t, bands);
+          if (a['tf.opacity']) opacity = animatedValue(a['tf.opacity'], t, signals);
           return { ...c, params, transform, opacity };
         });
       }
       return (lp === L.params && clips === L.clips) ? L : { ...L, params: lp, clips };
     });
     // Move the inspector's animated sliders live (selected clip + composition).
-    layerPanel.updateLive?.(t, bands);
+    layerPanel.updateLive?.(t, signals);
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.

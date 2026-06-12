@@ -6,7 +6,12 @@
 //  - send() does nothing until the socket is actually open,
 //  - AUTO-RECONNECT with backoff so a daemon restart / sleep-wake / Wi-Fi blip
 //    recovers on its own (output used to die until the next geometry edit).
-export function connectBridge(route) {
+//
+// The socket is also the RECEIVE path for external modulation: the daemon
+// relays OSC + socket-JSON channel values as { type:'ext', channel, value } —
+// pass an onExt(channel, value) handler to consume them (optional; the old
+// single-argument call still works).
+export function connectBridge(route, { onExt } = {}) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   let ws = null;
   let closed = false;     // explicit close() → stop reconnecting
@@ -24,6 +29,14 @@ export function connectBridge(route) {
       ws.addEventListener('open', () => {
         backoff = 500; everOpen = true; lastErr = null;
         try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ }
+      });
+      // Inbound JSON from the daemon (binary never arrives browser-side).
+      ws.addEventListener('message', (ev) => {
+        if (typeof ev.data !== 'string') return;
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'ext' && onExt) onExt(m.channel, m.value);
+        } catch { /* not JSON — ignore */ }
       });
       ws.addEventListener('error', () => { lastErr = 'connection error'; });   // a failed connect fires 'close' next
       ws.addEventListener('close', () => {

@@ -605,6 +605,11 @@ input[type=checkbox]:checked::after {
   width: 42px; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
   border-radius: var(--radius); padding: 1px 3px; font: var(--fs-micro) var(--mono); box-sizing: border-box;
 }
+/* Free-text channel address for an External binding (sits next to the select). */
+.anim-chan-text {
+  width: 84px; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
+  border-radius: var(--radius); padding: 1px 4px; font: var(--fs-micro) var(--mono); box-sizing: border-box;
+}
 /* Dual-handle in/out range track for an animated param (Resolume-style). Two
    overlaid native sliders share one track; the thumbs are draggable, a fill spans
    in→out, and a green marker shows the live animated value. */

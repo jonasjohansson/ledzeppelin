@@ -32,8 +32,9 @@ import {
   addLayer, removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
-import { makeAnim, makeAudioAnim, animatedValue } from '../model/anim.js';
+import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue } from '../model/anim.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
+import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
 import { el, field, selectInput } from './dom.js';
@@ -112,23 +113,27 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo }) {
   return wrap;
 }
 
-// A numeric param that can be BASIC (static slider) or ANIMATED (Timeline/Audio).
-// The cog picks the mode. When animated the row becomes a dual-handle in/out range
-// track (tagged data-animkey so the render loop moves the live marker) and a
-// controls row appears below (direction · in · out · s, or band · in · out · gain).
+// A numeric param that can be BASIC (static slider) or ANIMATED (Timeline/
+// Audio/External). The cog picks the mode. When animated the row becomes a
+// dual-handle in/out range track (tagged data-animkey so the render loop moves
+// the live marker) and a controls row appears below (direction · in · out · s,
+// band · in · out · gain, or channel · in · out · gain).
 //   onValue(v): set the static value · onAnim(spec|null): set/clear the animation
 function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
   const isAudio = anim?.mode === 'audio';
+  const isExternal = anim?.mode === 'external';
   const wrap = el('div', { className: 'anim-param' });
   const cog = animModeMenu({
-    animated, isAudio,
+    animated, isAudio, isExternal,
     onPick: (mode) => {
       // Default the sweep to the FULL slider range (in = min, out = max).
       if (mode === 'basic') onAnim(null);
       else if (mode === 'audio') { enableAudio(); onAnim(makeAudioAnim(min, max, 'level', 1)); }
+      // Default to the first live channel, if any has been seen yet.
+      else if (mode === 'external') onAnim(makeExternalAnim(min, max, extList()[0]?.channel ?? '', 1));
       else onAnim(makeAnim(min, max, 10000, 'forward'));
     },
   });
@@ -151,6 +156,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   });
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
+  if (isExternal) wrap.classList.add('is-external');
   const head = el('div', { className: 'ly-param anim-head' }, [
     el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout, cog,
   ]);
@@ -160,14 +166,14 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
   return wrap;
 }
 
-// The cog button + its Basic/Timeline/Audio popover (Resolume-style). The cog
-// reflects the current mode (accent when animated, green for Audio); the menu
-// marks the active mode. Replaces the old inline "T" toggle + mode dropdown.
-function animModeMenu({ animated, isAudio, onPick }) {
+// The cog button + its Basic/Timeline/Audio/External popover (Resolume-style).
+// The cog reflects the current mode (accent when animated, green for Audio);
+// the menu marks the active mode. Replaces the old inline "T" toggle + dropdown.
+function animModeMenu({ animated, isAudio, isExternal, onPick }) {
   const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   const close = () => { menu.hidden = true; };
-  const cur = !animated ? 'basic' : (isAudio ? 'audio' : 'timeline');
+  const cur = !animated ? 'basic' : (isAudio ? 'audio' : isExternal ? 'external' : 'timeline');
   // Each mode carries a one-line description — this menu is the doorway to the
   // whole animation system, and a bare Basic/Timeline/Audio gave no scent of
   // what lives behind each word.
@@ -185,11 +191,13 @@ function animModeMenu({ animated, isAudio, onPick }) {
   menu.append(
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
-    item('audio', 'Audio', 'follow a band of the live audio input')
+    item('audio', 'Audio', 'follow a band of the live audio input'),
+    item('external', 'External', 'follow an OSC address or socket channel')
   );
+  // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio)',
+    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External)',
   });
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -220,6 +228,7 @@ function dirButtons(current, onPick) {
 
 // Fields for an animated param (mode already chosen via the cog menu):
 //   Timeline → direction buttons · in · out · s    Audio → band · in · out · gain
+//   External → channel select (+ free-text address) · in · out · gain
 function animControls(anim, onAnim) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: String(val), step: 'any', className: 'anim-num' });
@@ -227,10 +236,32 @@ function animControls(anim, onAnim) {
     return el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
   };
   const isAudio = anim.mode === 'audio';
+  const isExternal = anim.mode === 'external';
   const kids = [];
   if (isAudio) {
     kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
       (bnd) => onAnim({ ...anim, band: bnd })));
+    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
+    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
+    kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
+  } else if (isExternal) {
+    // Live channels seen so far (`/fader1 · 0.42` — name + current value; the
+    // value refreshes on re-render). The bound channel stays listed even before
+    // its first message arrives, so the selection doesn't silently vanish.
+    const live = extList();
+    const opts = live.map(({ channel, value }) => ({ value: channel, label: `${channel} · ${fmtLive(value)}` }));
+    if (anim.channel && !live.some((c) => c.channel === anim.channel)) {
+      opts.unshift({ value: anim.channel, label: `${anim.channel} · —` });
+    }
+    if (!opts.length) opts.push({ value: '', label: 'no channels yet' });
+    kids.push(selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })));
+    // Free-text address: bind a channel that hasn't sent anything yet.
+    const txt = el('input', {
+      type: 'text', className: 'anim-chan-text', value: anim.channel || '',
+      placeholder: '/address', title: 'type an OSC address / channel name',
+    });
+    txt.addEventListener('change', () => { const ch = txt.value.trim(); if (ch) onAnim({ ...anim, channel: ch }); });
+    kids.push(txt);
     kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
     kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
@@ -278,12 +309,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Move each animated param's live marker + readout to its value at time t
   // (selected clip + composition FX). Cheap: only touches data-animkey nodes.
-  function applyLive(container, anim, t, bands) {
+  // `signals` = audio bands merged with external channels (see app.js).
+  function applyLive(container, anim, t, signals) {
     if (!anim || !container) return;
     for (const k of Object.keys(anim)) {
       const node = container.querySelector(`[data-animkey="${k}"]`);
       if (!node) continue;
-      const v = animatedValue(anim[k], t, bands);
+      const v = animatedValue(anim[k], t, signals);
       // Range track: slide the live marker along [min,max]. (Fallback: a plain input.)
       const lo = Number(node.dataset.min), hi = Number(node.dataset.max);
       const live = node.querySelector?.('.anim-live');
@@ -293,14 +325,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (out) out.textContent = fmtLive(v);
     }
   }
-  function updateLive(t, bands) {
+  function updateLive(t, signals) {
     const layers = getShow().composition?.layers || [];
     if (!layers.length) return;
     // The selected clip can live in any layer; the composition FX shown is the top layer's.
     let sel = null;
     for (const L of layers) { sel = (L.clips || []).find((c) => c.id === selectedClipId); if (sel) break; }
-    applyLive(mounts?.inspectorClip || root, sel?.anim, t, bands);
-    applyLive(mounts?.inspectorComposition || root, layers[layers.length - 1].anim, t, bands);
+    applyLive(mounts?.inspectorClip || root, sel?.anim, t, signals);
+    applyLive(mounts?.inspectorComposition || root, layers[layers.length - 1].anim, t, signals);
   }
 
   // STRUCTURAL edit: persist + re-render (add/remove/reorder, trigger, source swap).

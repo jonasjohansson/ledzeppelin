@@ -16,14 +16,19 @@
 
 export const DIRECTIONS = ['forward', 'backward', 'mirror'];
 
-// A param spec is BASIC (no entry), TIMELINE (mode 'timeline', default), or
-// AUDIO (mode 'audio', driven by an audio band 0..1 scaled by gain).
+// A param spec is BASIC (no entry), TIMELINE (mode 'timeline', default),
+// AUDIO (mode 'audio', driven by an audio band 0..1 scaled by gain), or
+// EXTERNAL (mode 'external', driven by a live OSC / socket-JSON channel).
 export function makeAnim(from, to, durationMs = 10000, direction = 'forward') {
   return { mode: 'timeline', from: Number(from) || 0, to: Number(to) || 0, durationMs: Math.max(0, Math.round(durationMs)), direction };
 }
 
 export function makeAudioAnim(from, to, band = 'level', gain = 1) {
   return { mode: 'audio', from: Number(from) || 0, to: Number(to) || 0, band, gain: Number(gain) || 1 };
+}
+
+export function makeExternalAnim(from, to, channel = '', gain = 1) {
+  return { mode: 'external', from: Number(from) || 0, to: Number(to) || 0, channel, gain: Number(gain) || 1 };
 }
 
 // Normalized 0..1 phase for the given clock time, duration and direction.
@@ -37,13 +42,15 @@ export function animPhase(timeSec, durationMs, direction = 'forward') {
   return ph;                      // forward
 }
 
-// The value of one spec at `timeSec`, given the current `audio` bands (a map
-// band→0..1). Timeline specs use the clock; audio specs use the bound band.
-export function animatedValue(spec, timeSec, audio) {
+// The value of one spec at `timeSec`, given the current `signals` map — the
+// audio bands MERGED with the external channels ({ level, bass, mid, high,
+// ...extChannels }; the four band names are reserved by audio). Timeline specs
+// use the clock; audio/external specs read their bound signal (×gain, clamped).
+export function animatedValue(spec, timeSec, signals) {
   if (!spec) return undefined;
   let p;
-  if (spec.mode === 'audio') {
-    const v = (audio && audio[spec.band]) || 0;
+  if (spec.mode === 'audio' || spec.mode === 'external') {
+    const v = (signals && signals[spec.mode === 'audio' ? spec.band : spec.channel]) || 0;
     p = Math.max(0, Math.min(1, v * (spec.gain ?? 1)));
   } else {
     p = animPhase(timeSec, spec.durationMs, spec.direction);
@@ -51,14 +58,14 @@ export function animatedValue(spec, timeSec, audio) {
   return spec.from + (spec.to - spec.from) * p;
 }
 
-// Resolve a params map against an anim map at `timeSec` (+ audio bands): animated
+// Resolve a params map against an anim map at `timeSec` (+ signals): animated
 // keys are overridden by their computed value; everything else passes through.
 // Returns the SAME params reference when there are no animations (fast-path).
-export function resolveParams(params, anim, timeSec, audio) {
+export function resolveParams(params, anim, timeSec, signals) {
   if (!anim) return params;
   const keys = Object.keys(anim);
   if (!keys.length) return params;
   const out = { ...(params || {}) };
-  for (const k of keys) out[k] = animatedValue(anim[k], timeSec, audio);
+  for (const k of keys) out[k] = animatedValue(anim[k], timeSec, signals);
   return out;
 }

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { importKagora } from '../src/model/kagora-import.js';
 import { validate } from '../src/model/show.js';
+import { chainOf } from '../src/model/chains.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const preset = JSON.parse(
@@ -67,10 +68,10 @@ test('devices carry colorOrder from their strips (GRB default)', () => {
   for (const d of show.devices) assert.equal(d.colorOrder, 'GRB');
 });
 
-test('a daisy-chain run auto-creates a chain (members in data-flow order)', () => {
+test('a daisy-chain run imports as one derived chain (members in data-flow order)', () => {
   const show = importKagora(preset);
-  // sA-1 → sA-2 daisy-chain on brainA should become one chain, in order.
-  const ch = (show.chains || []).find((c) => c.members.includes('sA-1'));
+  // sA-1 → sA-2 daisy-chain on brainA share an output → one derived chain, in order.
+  const ch = chainOf(show, 'sA-1');
   assert.ok(ch, 'expected a chain containing the daisy-chained strips');
   assert.deepEqual(ch.members, ['sA-1', 'sA-2']);
   assert.equal(ch.stagger, 0);   // imported off; operator dials it in
