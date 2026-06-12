@@ -98,7 +98,9 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   cursor: pointer;
 }
 .tab:hover { color: var(--text); }
-.tab-active, .tab-active:hover { color: var(--text); background: var(--hover); }
+/* Active = ACCENT text (family rule shared with LEDger: the selected tab is
+   warm, not just bright) — at every tier: workspace tab, sub-tab, section tab. */
+.tab-active, .tab-active:hover { color: var(--accent); background: var(--hover); }
 .tab:focus-visible { outline: 1px solid var(--line-2); outline-offset: -1px; }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
@@ -118,7 +120,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    filled) pane below — you can see you're "in Clip" because the Clip tab and
    its options are physically one connected surface. Works for all three on the
    Design side and the Fixtures/Devices/Inventory trio on Output. */
-.subtab-active { color: var(--text); background: var(--panel-2); }
+.subtab-active { color: var(--accent); background: var(--panel-2); }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -288,7 +290,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   font: var(--fw-med) var(--fs-ctrl) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .section-tab:hover { color: var(--muted); }
-.section-tab.section-active { color: var(--text); }
+.section-tab.section-active { color: var(--accent); }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
 /* 'h' / Tab hides all GUI to view the canvas full-screen. */
