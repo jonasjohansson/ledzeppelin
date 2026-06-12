@@ -102,20 +102,23 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .tab:focus-visible { outline: 1px solid var(--line-2); outline-offset: -1px; }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
-/* CHILD row of the Design/Output switch: indented + a step smaller, no border
-   of its own (the parent row above carries the divider) — scale + indent say
-   "these live inside the section", keeping the text-only OCR language. */
-.subtabs { display: flex; gap: 14px; margin-bottom: var(--s3); padding: 3px 0 2px var(--s4); }
+/* CHILD row of the Design/Output switch: full width, equal thirds (big touch
+   targets), but a step SMALLER than the parent and with no border of its own
+   (the parent row above carries the divider) — scale + position say "these
+   live inside the section", keeping the text-only OCR language. */
+.subtabs { display: flex; gap: 0; margin-bottom: 0; padding: 3px 0 0; }
 .subtab {
-  flex: 0 0 auto; text-align: left;
+  flex: 1 1 0; text-align: center;            /* Clip · Layer · Composition = equal thirds */
   background: transparent; color: var(--faint); border: none;
-  border-radius: 0; padding: 3px 1px; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
+  border-radius: var(--radius) var(--radius) 0 0; padding: 6px 0; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .subtab:hover { color: var(--muted); }
-/* Active tab: brighter text only — strong contrast vs the dim inactive tabs so the
-   Design › CLIP path is obvious (no underline/fill). */
-.subtab-active { color: var(--text); background: transparent; }
+/* FOLDER TAB: the active tab is a filled block that MERGES into the (equally
+   filled) pane below — you can see you're "in Clip" because the Clip tab and
+   its options are physically one connected surface. Works for all three on the
+   Design side and the Fixtures/Devices/Inventory trio on Output. */
+.subtab-active { color: var(--text); background: var(--panel-2); }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -254,7 +257,13 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 #settings-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }   /* third tab — scrolls as a whole */
 #settings-file { margin-bottom: var(--s3); }
 #settings-file .fx-io { flex-direction: column; align-items: stretch; gap: 4px; }
-#insp-panes, #io-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The pane shares the active tab's fill — together they read as one folder-tab
+   surface (the tab is the handle, this is the page). */
+#insp-panes, #io-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
+  padding: var(--s4) var(--s3) var(--s4);
+}
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;
   border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
@@ -372,11 +381,11 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .insp-sec.is-locked .insp-tri { visibility: hidden; }
 /* Per-group reset — always visible (touch-first), one step up from faint so it
    reads as a live control, with a warm hover so it announces itself before the
-   press (it was invisible-until-pressed). */
+   press. Glyph-sized (it was an 11px speck) with a real hit area. */
 .insp-sec-reset {
-  margin-left: auto; flex: 0 0 auto; padding: 0 4px; min-width: 0; line-height: 1;
+  margin-left: auto; flex: 0 0 auto; padding: 2px 7px; min-width: 0; line-height: 1;
   background: none; border: none; border-radius: var(--radius-sm); color: var(--muted);
-  font-size: var(--fs-body); cursor: pointer;
+  font-size: var(--fs-glyph); cursor: pointer;
 }
 .insp-sec-reset:hover { color: var(--accent); background: var(--accent-soft); }
 .insp-sec-reset:active { color: var(--text); background: var(--hover); }
@@ -626,6 +635,10 @@ input[type=checkbox]:checked::after {
 
 /* Sweep direction as a 3-button segmented control (→ ← ⇄). */
 .dir-btns { display: inline-flex; flex: 0 0 auto; }
+/* In a field row (e.g. Autopilot › Direction) the segmented control takes the
+   FULL control column — four equal, easy-to-hit buttons instead of a tiny pill. */
+.fx-field .dir-btns { display: flex; flex: 1 1 auto; }
+.fx-field .dir-btn { flex: 1 1 0; }
 .dir-btn {
   height: var(--ctrl-h); padding: 0 6px; min-width: 0; font-size: var(--fs-body); line-height: var(--lh-ctrl);
   color: var(--faint); background: var(--field-bg);
