@@ -883,6 +883,24 @@ function setOverlay(v) {
 }
 overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 
+// --- Wall view (corner "▣ wall"): hide the full-bleed composite so ONLY the lit
+// fixture cells glow on black — what the physical LEDs will do. CSS visibility
+// only: the sampler reads the GL canvas regardless, so live output is unaffected.
+// Forces the overlay on (the cells ARE this view); the SVG chrome is dropped via
+// CSS so it reads as a wall, not an editor.
+let wallView = false;
+try { wallView = localStorage.getItem('lz.wall') === '1'; } catch { /* ignore */ }
+const wallBtn = document.getElementById('wall-btn');
+function setWallView(v) {
+  wallView = !!v;
+  try { localStorage.setItem('lz.wall', wallView ? '1' : '0'); } catch { /* ignore */ }
+  if (wallView && !overlayVisible) setOverlay(true);
+  document.body.classList.toggle('wall-view', wallView);
+  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' wall'; }
+}
+wallBtn?.addEventListener('click', () => setWallView(!wallView));
+setWallView(wallView);
+
 // Blackout: a live-performance master that holds ALL output dark (sends zeros) while
 // the preview keeps playing, so you can cue without lighting the wall. Off by default.
 // (Blackout state + setBlackout are declared above the layer panel — see there.

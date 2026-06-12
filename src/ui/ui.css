@@ -214,6 +214,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 /* Full-bleed: the composite fills the window width (TouchDesigner-style),
    centred vertically; aspect preserved, vertical overflow cropped. */
 #stageinner canvas#stage { display: block; width: 100vw; height: auto; }
+/* Wall view (corner ▣ wall): composite + SVG chrome disappear; only the LED
+   cells on #preview glow against black — the physical wall, previewed. */
+body.wall-view #stage { visibility: hidden; }      /* keeps layout (sizes #stageinner) */
+body.wall-view #ovl { display: none !important; }  /* outranks setOverlay's inline style */
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Vector chrome layer over the lights canvas — stays sharp under the zoom/pan
