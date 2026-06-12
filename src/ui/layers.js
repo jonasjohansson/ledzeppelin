@@ -88,7 +88,7 @@ function paramControl(p, value, onInput) {
 // on the [min,max] track (Resolume-style), with a fill between and a live marker
 // the render loop moves to the current animated value. Dragging a thumb commits
 // on release (change) — the fill follows live (input) without re-rendering.
-function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo }) {
+function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFrom, onLiveTo }) {
   const span = (max - min) || 1;
   const frac = (v) => Math.max(0, Math.min(1, (v - min) / span));
   const st = String(step ?? ((max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1));
@@ -102,8 +102,8 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo }) {
     fill.style.left = `${Math.min(a, b) * 100}%`;
     fill.style.width = `${Math.abs(b - a) * 100}%`;
   };
-  inEl.addEventListener('input', layout);
-  outEl.addEventListener('input', layout);
+  inEl.addEventListener('input', () => { layout(); onLiveFrom?.(Number(inEl.value)); });
+  outEl.addEventListener('input', () => { layout(); onLiveTo?.(Number(outEl.value)); });
   inEl.addEventListener('change', () => onFrom(Number(inEl.value)));
   outEl.addEventListener('change', () => onTo(Number(outEl.value)));
   const wrap = el('div', { className: 'range-track' }, [el('div', { className: 'rt-base' }), fill, live, inEl, outEl]);
@@ -119,7 +119,7 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo }) {
 // the live marker) and a controls row appears below (direction · in · out · s,
 // band · in · out · gain, or channel · in · out · gain).
 //   onValue(v): set the static value · onAnim(spec|null): set/clear the animation
-function animatableParam({ key, p, value, anim, onValue, onAnim }) {
+function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive }) {
   if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
@@ -153,6 +153,10 @@ function animatableParam({ key, p, value, anim, onValue, onAnim }) {
     min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
     onFrom: (v) => onAnim({ ...anim, from: v }),
     onTo: (v) => onAnim({ ...anim, to: v }),
+    // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
+    // sweep/mapping follows the thumb in realtime); release does the full commit.
+    onLiveFrom: onAnimLive ? (v) => onAnimLive({ ...anim, from: v }) : null,
+    onLiveTo: onAnimLive ? (v) => onAnimLive({ ...anim, to: v }) : null,
   });
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
@@ -238,26 +242,32 @@ function animControls(anim, onAnim) {
     kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
   } else if (isExternal) {
-    // Live channels seen so far (`/fader1 · 0.42` — name + current value; the
-    // value refreshes on re-render). The bound channel stays listed even before
-    // its first message arrives, so the selection doesn't silently vanish.
+    // TWO rows: WHERE the signal comes from (channel select · free address),
+    // then HOW it maps (in · out · gain). Live channels read `/fader1 · 0.42`
+    // (name + current value; refreshes on re-render). The bound channel stays
+    // listed even before its first message, so the selection never vanishes.
     const live = extList();
     const opts = live.map(({ channel, value }) => ({ value: channel, label: `${channel} · ${fmtLive(value)}` }));
     if (anim.channel && !live.some((c) => c.channel === anim.channel)) {
       opts.unshift({ value: anim.channel, label: `${anim.channel} · —` });
     }
     if (!opts.length) opts.push({ value: '', label: 'no channels yet' });
-    kids.push(selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })));
     // Free-text address: bind a channel that hasn't sent anything yet.
     const txt = el('input', {
       type: 'text', className: 'anim-chan-text', value: anim.channel || '',
       placeholder: '/address', title: 'type an OSC address / channel name',
     });
     txt.addEventListener('change', () => { const ch = txt.value.trim(); if (ch) onAnim({ ...anim, channel: ch }); });
-    kids.push(txt);
-    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
-    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v })));
-    kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
+    const srcRow = el('div', { className: 'anim-ctrls' }, [
+      selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })),
+      txt,
+    ]);
+    const mapRow = el('div', { className: 'anim-ctrls' }, [
+      mini('in', anim.from, (v) => onAnim({ ...anim, from: v })),
+      mini('out', anim.to, (v) => onAnim({ ...anim, to: v })),
+      mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })),
+    ]);
+    return el('div', {}, [srcRow, mapRow]);
   } else {
     kids.push(dirButtons(anim.direction, (d) => onAnim({ ...anim, direction: d })));
     kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v })));
@@ -546,6 +556,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           key, p, value: comp.params?.[key], anim: comp.anim?.[key],
           onValue: (v) => commitLive(setCompositionParam(show(), key, v)),
           onAnim: (spec) => commit(setCompositionAnim(show(), key, spec)),
+          onAnimLive: (spec) => commitLive(setCompositionAnim(show(), key, spec)),
         }));
       }
     }
@@ -590,6 +601,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           key, p, value: layer?.params?.[key], anim: layer?.anim?.[key],
           onValue: (v) => commitLive(setLayerParam(show(), id, key, v)),
           onAnim: (spec) => commit(setLayerAnim(show(), id, key, spec)),
+          onAnimLive: (spec) => commitLive(setLayerAnim(show(), id, key, spec)),
         }));
       }
     }
@@ -910,6 +922,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
             key, p, value: clip.params?.[key], anim: clip.anim?.[key],
             onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
             onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+            onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, key, spec)),
           }));
         }
       }, () => commit(changeClipGenerator(show(), id, clip.id, clip.generator)), undefined, srcDirty));
@@ -927,6 +940,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         value, anim: clip.anim?.['tf.' + key],
         onValue: (v) => commitLive(apply(v)),
         onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
+        onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, 'tf.' + key, spec)),
       }));
       tfParam('x', 'x', -1, 1, 0, t.x ?? 0, (v) => setClipTransform(show(), id, clip.id, { x: v }));
       tfParam('y', 'y', -1, 1, 0, t.y ?? 0, (v) => setClipTransform(show(), id, clip.id, { y: v }));
@@ -985,6 +999,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           key, p, value: clip.params?.[key], anim: clip.anim?.[key],
           onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
           onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+            onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, key, spec)),
         }));
       }
     }
