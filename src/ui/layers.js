@@ -267,7 +267,7 @@ function dirButtons(current, onPick) {
 // in/out values live on the range-track handles (value bubbles), so each row
 // carries only what's left:
 //   Timeline → direction buttons · s    Audio → band · gain
-//   External → channel select (+ free-text address) · canonical-address chip
+//   External → channel select · canonical-address chip (fixed, copy-only)
 function animControls(anim, onAnim, oscAddress) {
   const mini = (label, val, commit) => {
     const i = el('input', { type: 'number', value: fmt(val), step: 'any', className: 'anim-num' });
@@ -285,8 +285,10 @@ function animControls(anim, onAnim, oscAddress) {
       (bnd) => onAnim({ ...anim, band: bnd })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
   } else if (isExternal) {
-    // TWO rows: WHERE the signal comes from (channel select · free address),
-    // then HOW it maps (in · out · gain). Live channels read `/fader1 · 0.42`
+    // ONE row: WHERE the signal comes from. Addresses are FIXED — the canonical
+    // OSC address (chip below) is the contract and is not editable; anything
+    // else (socket-JSON channels, sensor feeds, foreign OSC) appears in the
+    // dropdown once it has sent a message. Live channels read `/fader1 · 0.42`
     // (name + current value; refreshes on re-render). The bound channel stays
     // listed even before its first message, so the selection never vanishes.
     const live = extList();
@@ -295,17 +297,8 @@ function animControls(anim, onAnim, oscAddress) {
       opts.unshift({ value: anim.channel, label: `${anim.channel} · —` });
     }
     if (!opts.length) opts.push({ value: '', label: 'no channels yet' });
-    // Free-text address: bind a channel that hasn't sent anything yet. The
-    // placeholder is the param's CANONICAL address, so the empty state teaches
-    // the scheme instead of a blank "/address".
-    const txt = el('input', {
-      type: 'text', className: 'anim-chan-text', value: anim.channel || '',
-      placeholder: oscAddress || '/address', title: 'type an OSC address / channel name',
-    });
-    txt.addEventListener('change', () => { const ch = txt.value.trim(); if (ch) onAnim({ ...anim, channel: ch }); });
     const srcRow = el('div', { className: 'anim-ctrls' }, [
       selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })),
-      txt,
     ]);
     // The canonical address is ALWAYS live (no binding needed) — show it as a
     // muted, click-to-copy chip so controllers know exactly where to send.
