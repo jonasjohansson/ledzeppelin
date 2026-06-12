@@ -1,75 +1,84 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  addChain, removeChain, patchChain, moveChainMember, chainOf, chainOffset, pruneChains,
+  runsOf, runKey, chainOf, chainOffset, setRunStagger, setRunAxis,
+  moveFixtureInRun, wireAfter, wireFirst, freePort, pruneChains,
 } from '../src/model/chains.js';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
 
-const baseShow = () => ({ fixtures: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], chains: [] });
+// Chains are DERIVED, not stored: a chain = the fixtures sharing a controller
+// output — same (deviceId, port) — in show.fixtures order (= wiring order).
+const fx = (id, port = 1, deviceId = 'd1') => ({ id, output: { deviceId, port } });
+const baseShow = () => ({ fixtures: [fx('a'), fx('b'), fx('c', 2)] });
 
-test('addChain creates an ordered chain from ≥2 members; <2 is a no-op', () => {
-  const s = addChain(baseShow(), ['a', 'b', 'c']);
-  assert.equal(s.chains.length, 1);
-  assert.deepEqual(s.chains[0].members, ['a', 'b', 'c']);
-  assert.equal(s.chains[0].axis, 'x');
-  const none = addChain(baseShow(), ['a']);
-  assert.equal(none.chains.length, 0);
+test('runsOf groups fixtures by (device, port) in wiring order', () => {
+  const runs = runsOf(baseShow());
+  assert.equal(runs.length, 2);
+  assert.deepEqual(runs.find((r) => r.key === 'd1:1').members, ['a', 'b']);
+  assert.deepEqual(runs.find((r) => r.key === 'd1:2').members, ['c']);
 });
 
-test('a fixture belongs to at most one chain (re-chaining moves it)', () => {
-  let s = addChain(baseShow(), ['a', 'b']);
-  s = addChain(s, ['b', 'c']);          // b leaves the first chain
-  // first chain now has only [a] → dropped (<2); second is [b,c]
-  assert.equal(s.chains.length, 1);
-  assert.deepEqual(s.chains[0].members, ['b', 'c']);
+test('chainOf returns the run only when it is an actual chain (≥2 members)', () => {
+  const s = baseShow();
+  const ch = chainOf(s, 'b');
+  assert.deepEqual(ch.members, ['a', 'b']);
+  assert.equal(ch.index, 1);
+  assert.equal(chainOf(s, 'c'), null);   // alone on its output → not chained
+  assert.equal(chainOf(s, 'z'), null);   // unknown fixture
 });
 
-test('chainOffset is index*stagger along the axis; 0 when unchained', () => {
-  const s = addChain(baseShow(), ['a', 'b', 'c'], { stagger: 0.1, axis: 'x' });
+test('chainOffset is index*stagger along the run axis; 0 when unchained', () => {
+  let s = setRunStagger(baseShow(), 'd1:1', 0.1);
   assert.deepEqual(chainOffset(s, 'a'), [0, 0]);
   assert.ok(Math.abs(chainOffset(s, 'b')[0] - 0.1) < 1e-9);
-  assert.ok(Math.abs(chainOffset(s, 'c')[0] - 0.2) < 1e-9);
-  assert.deepEqual(chainOffset(s, 'z'), [0, 0]);   // not a member
-  const sy = patchChain(s, s.chains[0].id, { axis: 'y' });
-  assert.ok(Math.abs(chainOffset(sy, 'b')[1] - 0.1) < 1e-9);
-  assert.equal(chainOffset(sy, 'b')[0], 0);
+  assert.deepEqual(chainOffset(s, 'c'), [0, 0]);   // not a chain
+  s = setRunAxis(s, 'd1:1', 'y');
+  assert.ok(Math.abs(chainOffset(s, 'b')[1] - 0.1) < 1e-9);
+  assert.equal(chainOffset(s, 'b')[0], 0);
 });
 
-test('moveChainMember reorders, changing the stagger index', () => {
-  let s = addChain(baseShow(), ['a', 'b', 'c'], { stagger: 0.1 });
-  const id = s.chains[0].id;
-  s = moveChainMember(s, id, 'c', -1);     // c moves earlier → [a, c, b]
-  assert.deepEqual(s.chains[0].members, ['a', 'c', 'b']);
-  assert.ok(Math.abs(chainOffset(s, 'c')[0] - 0.1) < 1e-9);
+test('moveFixtureInRun reorders within the run, changing the stagger index', () => {
+  let s = setRunStagger(baseShow(), 'd1:1', 0.1);
+  s = moveFixtureInRun(s, 'b', -1);   // b moves earlier → [b, a]
+  assert.deepEqual(chainOf(s, 'a').members, ['b', 'a']);
+  assert.ok(Math.abs(chainOffset(s, 'a')[0] - 0.1) < 1e-9);
+  // at the edge it's a no-op
+  assert.equal(moveFixtureInRun(s, 'b', -1), s);
 });
 
-test('chainOf finds the chain; removeChain drops it', () => {
-  const s = addChain(baseShow(), ['a', 'b']);
-  assert.equal(chainOf(s, 'a').id, s.chains[0].id);
-  const r = removeChain(s, s.chains[0].id);
-  assert.equal(r.chains.length, 0);
-  assert.equal(chainOf(r, 'a'), null);
+test('wireAfter moves a fixture onto the target run, right after it; wireFirst heads it', () => {
+  let s = wireAfter(baseShow(), 'c', 'a');   // c leaves port 2, lands after a on port 1
+  assert.deepEqual(chainOf(s, 'a').members, ['a', 'c', 'b']);
+  assert.equal(s.fixtures.find((f) => f.id === 'c').output.port, 1);
+  s = wireFirst(s, 'b');
+  assert.deepEqual(chainOf(s, 'a').members, ['b', 'a', 'c']);
 });
 
-test('pruneChains drops dangling members and chains left with <2', () => {
-  let s = addChain(baseShow(), ['a', 'b', 'c']);
-  s = { ...s, fixtures: [{ id: 'a' }, { id: 'b' }] };   // c deleted
+test('freePort returns the next unused output number on a device', () => {
+  assert.equal(freePort(baseShow(), 'd1'), 3);
+  assert.equal(freePort(baseShow(), 'd9'), 1);
+});
+
+test('pruneChains strips the legacy chains list and dead chainSettings', () => {
+  const s = {
+    ...baseShow(),
+    chains: [{ id: 'legacy', members: ['a', 'b'] }],
+    chainSettings: { 'd1:1': { stagger: 0.1 }, 'gone:9': { stagger: 0.5 } },
+  };
   const pruned = pruneChains(s);
-  assert.deepEqual(pruned.chains[0].members, ['a', 'b']);
-  // now delete b too → only [a] left → chain removed
-  const gone = pruneChains({ ...pruned, fixtures: [{ id: 'a' }] });
-  assert.equal(gone.chains.length, 0);
+  assert.equal('chains' in pruned, false);
+  assert.deepEqual(Object.keys(pruned.chainSettings), ['d1:1']);
 });
 
-test('buildPipelineInputs bakes the chain stagger into the sample UVs', () => {
-  const show = {
+test('buildPipelineInputs bakes the run stagger into the sample UVs', () => {
+  let show = {
     devices: [{ id: 'd1', port: 4048, colorOrder: 'GRB' }],
     fixtures: [
-      { id: 'a', output: { deviceId: 'd1', pixelOffset: 0, pixelCount: 1 }, input: { points: [[0.2, 0.5], [0.2, 0.5]], samples: 1 } },
-      { id: 'b', output: { deviceId: 'd1', pixelOffset: 1, pixelCount: 1 }, input: { points: [[0.2, 0.5], [0.2, 0.5]], samples: 1 } },
+      { id: 'a', output: { deviceId: 'd1', port: 1, pixelOffset: 0, pixelCount: 1 }, input: { points: [[0.2, 0.5], [0.2, 0.5]], samples: 1 } },
+      { id: 'b', output: { deviceId: 'd1', port: 1, pixelOffset: 1, pixelCount: 1 }, input: { points: [[0.2, 0.5], [0.2, 0.5]], samples: 1 } },
     ],
-    chains: [{ id: 'c1', name: 'c1', members: ['a', 'b'], stagger: 0.1, axis: 'x' }],
   };
+  show = setRunStagger(show, runKey(show.fixtures[0]), 0.1);
   const { sampleUVs } = buildPipelineInputs(show);
   // a (index 0): u 0.2 ; b (index 1): u 0.2 + 0.1 = 0.3
   assert.ok(Math.abs(sampleUVs[0] - 0.2) < 1e-6);

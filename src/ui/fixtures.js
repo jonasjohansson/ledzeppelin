@@ -43,6 +43,14 @@ const numInput = (value, onInput, step = 'any') => {
 const sliderRow = (label, value, onCommit, min, max, step) =>
   Slider(label, value, { min, max, onInput: onCommit, step: step ?? ((max - min) <= 2 ? 0.01 : (max - min) <= 60 ? 0.1 : 1), commit: 'release' });
 
+// Commits on `change` (blur / Enter) — numeric twin of textInputCommit, for
+// detail-editor fields whose commit re-renders the panel.
+const numInputCommit = (value, onCommit, step = 1) => {
+  const i = el('input', { type: 'number', value: String(value ?? 0), step: String(step), min: '0' });
+  i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
+  return i;
+};
+
 const textInput = (value, onInput) => {
   const i = el('input', { type: 'text', value: value ?? '' });
   i.addEventListener('input', () => onInput(i.value));
@@ -275,6 +283,19 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     return wrap;
   }
 
+  // Art-Net span readout: how many universes this device's patched pixels occupy
+  // from its base universe (170 RGB px per universe — 510 of 512 DMX slots).
+  function artnetSpanHint(show, d) {
+    const px = (show.fixtures || [])
+      .filter((f) => (f.output?.deviceId || '') === d.id)
+      .reduce((m, f) => m + (f.pixelCount || 0), 0);
+    const base = d.universe ?? 0;
+    if (!px) return el('div', { className: 'seg-hint', textContent: 'no fixtures patched — spans 0 universes' });
+    const last = base + Math.ceil(px / 170) - 1;
+    const span = last === base ? `universe ${base}` : `universes ${base}–${last}`;
+    return el('div', { className: 'seg-hint', textContent: `spans ${span} (170 px each)` });
+  }
+
   // Inline editor for the selected DEVICE INSTANCE (rendered under its list row).
   // Output count + per-output budget come from its controller MODEL (Library) —
   // here you only set the per-unit facts: name, IP, model, colour order, bright.
@@ -295,6 +316,18 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
       field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
       field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Output protocol — DDP (WLED's realtime stream) or Art-Net for generic
+      // gear (nodes, consoles, MadMapper/Resolume). Switching also resets the
+      // port to the protocol's default (4048 / 6454).
+      field('Protocol', selectInput(
+        [{ value: 'ddp', label: 'DDP (WLED)' }, { value: 'artnet', label: 'Art-Net' }],
+        d.protocol ?? 'ddp',
+        (x) => upd({ protocol: x, port: x === 'artnet' ? 6454 : 4048 }))),
+      ...(d.protocol === 'artnet' ? [
+        // Base universe — the device's pixels occupy consecutive universes from it.
+        field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
+        artnetSpanHint(show, d),
+      ] : []),
       // Default colour — the idle colour shown on the strip after "save to device",
       // so you can tell controllers apart physically. Seeds from this controller's
       // auto-assigned identity hue (same colour as its preview/swatch) until set.

@@ -76,6 +76,17 @@ Develop without hardware: the on-screen **virtual preview** colors each
 fixture's pixels from the live sampled frame, so you can build the whole
 creative side with no tubes plugged in.
 
+### Output protocols
+
+Each device picks its protocol in the Output tab's device editor:
+
+- **DDP** (default) — WLED's realtime stream on UDP 4048. Recommended for WLED
+  controllers and large pixel counts (one packet per ~480 px, no universe math).
+- **Art-Net** — ArtDmx on UDP 6454 for non-WLED gear (commercial nodes,
+  consoles, MadMapper/Resolume). Set the device's base **universe**; its pixels
+  occupy consecutive universes from there at **170 RGB px per universe**
+  (510 channels). The editor shows the resulting span.
+
 ## Architecture
 
 | Layer | Files |

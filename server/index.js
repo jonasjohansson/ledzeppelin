@@ -51,7 +51,7 @@ function openBrowser(url) {
   } catch { /* no browser / unsupported env — UI is still reachable manually */ }
 }
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = 7070;
+const PORT = Number(process.env.PORT) || 7070;
 const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));

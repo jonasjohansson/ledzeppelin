@@ -45,7 +45,12 @@ export function syncDeviceTypes(show) {
       t = types.find((x) => x.outputs === outs)
         || (() => { const nt = makeDeviceType(`${outs}-output`, outs, d.maxPerOutput ?? 0, `dt${types.length + 1}`); types.push(nt); byId.set(nt.id, nt); return nt; })();
     }
-    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput };
+    // Output protocol: 'ddp' (default — absent/unknown collapses to it, so saved
+    // shows from before the field exist unchanged) or 'artnet' with a base
+    // universe (int ≥ 0; the device spans consecutive universes from it).
+    const protocol = d.protocol === 'artnet' ? 'artnet' : 'ddp';
+    const universe = Math.max(0, Math.round(Number(d.universe) || 0));
+    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe };
   });
   return { ...show, deviceTypes: types, devices };
 }
