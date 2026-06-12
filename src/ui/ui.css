@@ -252,7 +252,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 }
 /* The single right panel: a DESIGN|OUTPUT switch on top, then whichever section
    is active. Each pane is a flex column with its own scrolling body. */
-#side { flex: 0 0 332px; max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+/* Positioned + raised above the deck (z 1): at narrow widths the clip deck
+   overflows #left, and without this it painted OVER the panel — the deck now
+   slides UNDER the sidebar instead. */
+#side { flex: 0 0 332px; max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #settings-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }   /* third tab — scrolls as a whole */
 #settings-file { margin-bottom: var(--s3); }
