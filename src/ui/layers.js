@@ -680,14 +680,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
         });
         b.append(field('Direction', el('div', { className: 'dir-btns' }, [
-          dirBtn('backward', '◀', 'play backward'),
-          dirBtn('off', '■', 'stop'),
-          dirBtn('forward', '▶', 'play forward'),
-          dirBtn('shuffle', '⤨', 'shuffle'),
+          dirBtn('backward', '◀', 'play the deck backward'),
+          dirBtn('off', '■', 'stop (hold the current clip)'),
+          dirBtn('forward', '▶', 'play the deck forward'),
+          // NOT a loop — random clip order. The old ⤨ read as a loop glyph at
+          // this size; spell it out in the row's micro-caps language instead.
+          dirBtn('shuffle', 'RND', 'shuffle — play clips in random order'),
         ])));
         const loopCb = el('input', { type: 'checkbox', checked: transport.getLoop?.() ?? true });
         loopCb.addEventListener('change', () => transport.setLoop(loopCb.checked));
-        b.append(el('label', { className: 'fx-field bool-row' }, [
+        b.append(el('label', {
+          className: 'fx-field bool-row',
+          title: 'wrap to the first clip after the last (off: stop on the last clip)',
+        }, [
           el('span', { className: 'ly-plabel', textContent: 'Loop' }), loopCb,
         ]));
       }));
