@@ -453,6 +453,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   canvasEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
+    if (ev.button !== 0) return;   // left only — middle is the hand-pan, right the context menu
     const hit = hitTest(ev);
     if (!hit) {
       // Empty canvas → rubber-band marquee select (Shift = add to selection).
