@@ -965,18 +965,22 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.
+    // (Dirty checks are FUNCTIONS over liveClip — live drags commitLive without
+    //  re-rendering, so the ↺ must re-read fresh state, not the render snapshot.)
     box.append(Section('Playback', 'playback', (b) => {
       b.append(sliderField('Duration', (clip.durationMs ?? 4000) / 1000, 0.1, 30,
         (v) => commitLive(setClipDuration(show(), id, clip.id, Math.round(v * 1000))), 4));
-    }, () => commit(setClipDuration(show(), id, clip.id, 4000)), undefined, (clip.durationMs ?? 4000) !== 4000));
+    }, () => commit(setClipDuration(show(), id, clip.id, 4000)), undefined,
+    () => ((liveClip(clip.id) ?? clip).durationMs ?? 4000) !== 4000));
 
     // Source: the generator's own look params (auto-generated from the manifest).
     if (gen && gen.params.length) {
       // Dirty when any source param has been moved off its default or animated.
-      const srcDirty = gen.params.some((p) => {
+      const srcDirty = () => gen.params.some((p) => {
+        const c = liveClip(clip.id) ?? clip;
         const k = gen.name + '.' + p.key;
-        if (clip.anim?.[k]) return true;
-        const cur = clip.params?.[k];
+        if (c.anim?.[k]) return true;
+        const cur = c.params?.[k];
         if (cur === undefined) return false;
         const def = p.default;
         if (typeof cur === 'number' || typeof def === 'number') return Math.abs(Number(cur) - Number(def ?? 0)) > 1e-6;
@@ -999,9 +1003,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Transform + opacity (the clip's placement on the canvas) — all animatable
     // (Timeline/Audio) via the cog, like the source params. Anim keyed `tf.*`.
     const t = clip.transform || {};
-    const tfDirty = [['x', 0], ['y', 0], ['scale', 1], ['rotation', 0]].some(([k, d]) => Math.abs(Number(t[k] ?? d) - d) > 1e-6)
-      || Math.abs(Number(clip.opacity ?? 1) - 1) > 1e-6
-      || ['x', 'y', 'scale', 'rotation', 'opacity'].some((k) => clip.anim?.['tf.' + k]);
+    const tfDirty = () => {
+      const c = liveClip(clip.id) ?? clip;
+      const ct = c.transform || {};
+      return [['x', 0], ['y', 0], ['scale', 1], ['rotation', 0]].some(([k, d]) => Math.abs(Number(ct[k] ?? d) - d) > 1e-6)
+        || Math.abs(Number(c.opacity ?? 1) - 1) > 1e-6
+        || ['x', 'y', 'scale', 'rotation', 'opacity'].some((k) => c.anim?.['tf.' + k]);
+    };
     box.append(Section('Transform', 'transform', (b) => {
       const tfParam = (key, label, min, max, def, value, apply) => b.append(animatableParam({
         key: 'tf.' + key, p: { key: label, type: 'float', min, max, default: def },
