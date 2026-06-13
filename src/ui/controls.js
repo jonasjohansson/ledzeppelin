@@ -61,10 +61,15 @@ export function Slider(label, value, opts = {}) {
     else out.value = fmt(Number(range.value));
   });
 
-  if (def != null) {
-    range.addEventListener('contextmenu', (e) => { e.preventDefault(); range.value = String(def); out.value = fmt(def); paint(); onInput(def); });
-  }
-  return el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : '') }, [
+  const row = el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : '') }, [
     el('span', { className: 'ly-plabel', textContent: label }), out, range,
   ]);
+  // Right-click ANYWHERE on the row resets to the default (when one exists) and
+  // always suppresses the OS menu, so a slider feels like a control, not text.
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (def == null) return;
+    range.value = String(def); out.value = fmt(def); paint(); onInput(def);
+  });
+  return row;
 }

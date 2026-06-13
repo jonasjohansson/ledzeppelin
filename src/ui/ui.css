@@ -268,6 +268,10 @@ body.wall-view #ovl { display: none !important; }  /* outranks setOverlay's inli
 /* The right panel docks flush; -1px overlaps the deck's border into one shared
    hairline (no doubled 2px seam) — the packed-grid look. */
 #side { align-self: stretch; margin-left: -1px; }
+/* In Output the clip deck (#left) is hidden, so nothing pushes #side to its
+   usual far-right home — pin it there, with the fixture editor on the left and
+   the canvas between (the same left-edge / right-panel split as Design). */
+body.output-mode #side { margin-left: auto; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
