@@ -542,7 +542,10 @@ if (previewCanvas) {
     onMarquee: (rect) => {
       marqueeRect = rect;
       selectedFixtureIds = new Set([...marqueeBase, ...fixturesInRect(rect)]);
-      renderOutput(); redrawOverlay();
+      // Per pointermove: only redraw the cheap canvas overlay. The Output list is
+      // a full DOM teardown+rebuild — defer it to marquee end (a no-op while
+      // dragging since the list isn't what the user is watching).
+      redrawOverlay();
     },
     onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
@@ -1346,6 +1349,7 @@ function syncVideos() {
   for (const L of show.composition?.layers || []) for (const c of L.clips || []) {
     if (c.generator === 'video' && c.videoUrl) clips.push(c);
   }
+  if (!clips.length && !videoMap.size) return;   // no video clips, nothing mapped → nothing to do
   const live = new Set(clips.map((c) => c.id));
   for (const [id, v] of videoMap) {
     if (!live.has(id)) { try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
@@ -1366,6 +1370,7 @@ function syncVideos() {
   }
 }
 function uploadVideos() {
+  if (!videoMap.size) return;
   for (const v of videoMap.values()) {
     if (v.el.readyState >= 2 && v.el.videoWidth) {
       gl.bindTexture(gl.TEXTURE_2D, v.tex);

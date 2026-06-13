@@ -33,6 +33,16 @@ export function createPreview(canvasEl, opts = {}) {
   const svg = opts.svg || null;   // vector chrome layer (footprints/arrows/handles/labels)
   const dotR = opts.dotRadius ?? 4;
   const showLabels = opts.labels ?? true;
+  // getBoundingClientRect forces a layout flush — too costly to call every frame
+  // in the lights loop. Cache it; it only changes on resize/scroll and on a
+  // zoom/pan (which always calls setRenderScale), so invalidate there.
+  let rectCache = null;
+  const invalidateRect = () => { rectCache = null; };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', invalidateRect);
+    window.addEventListener('scroll', invalidateRect, true);
+  }
+  const canvasRect = () => rectCache || (rectCache = canvasEl.getBoundingClientRect());
   let BASE_W = canvasEl.width || 1280, BASE_H = canvasEl.height || 720;
   // Match the SVG viewBox to the composition size NOW (the HTML default is only a
   // placeholder) so the vector chrome shares the canvas's coordinate space at load,
@@ -85,6 +95,7 @@ export function createPreview(canvasEl, opts = {}) {
     const k = Math.max(1, Math.round(want * 2) / 2);
     const w = Math.round(BASE_W * k), h = Math.round(BASE_H * k);
     if (canvasEl.width !== w) { canvasEl.width = w; canvasEl.height = h; }
+    invalidateRect();   // a zoom/pan moved the canvas — refresh the cull rect
   }
 
   const isSelected = (sel, id) => sel && (sel.has ? sel.has(id) : sel === id);
@@ -120,7 +131,7 @@ export function createPreview(canvasEl, opts = {}) {
     // Viewport cull bounds: the overlay canvas is CSS-scaled, so map the window
     // rect back into canvas-logical pixels. Fixtures whose footprint falls fully
     // outside (plus a small margin) are skipped — the big win when zoomed in.
-    const vr = canvasEl.getBoundingClientRect();
+    const vr = canvasRect();
     const Lx = W / (vr.width || 1), Ly = Hh / (vr.height || 1);
     const vx0 = -vr.left * Lx - 24, vx1 = (window.innerWidth - vr.left) * Lx + 24;
     const vy0 = -vr.top * Ly - 24, vy1 = (window.innerHeight - vr.top) * Ly + 24;
@@ -190,11 +201,13 @@ export function createPreview(canvasEl, opts = {}) {
           // cycle (litFrac of the pitch along the line), capped by the bar thickness.
           const spacing = count >= 2 ? (Math.hypot(sx(1) - sx(0), sy(1) - sy(0)) || thick) : thick;
           const cell = Math.max(1.5, Math.min(Math.max(2, thick), spacing * litFrac));
+          let last = '';   // only touch fillStyle when the colour changes (matches the bar path)
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            const css = `rgb(${r},${g},${b})`;
+            if (css !== last) { ctx.fillStyle = css; last = css; }
             ctx.fillRect(sx(i) - cell / 2, sy(i) - cell / 2, cell, cell);
           }
         }
