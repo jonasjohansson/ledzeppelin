@@ -25,16 +25,13 @@ export function createControlPanel({ mount, getShow, send, status }) {
   function renderHead() {
     head.textContent = '';
     const s = status?.() || {};
-    const dot = el('span', { className: 'ctrl-status-dot' + (s.connected ? ' on' : '') });
-    head.append(el('div', { className: 'ctrl-status' }, [
-      dot, el('span', { textContent: s.connected ? 'companion live' : 'daemon offline — start it to serve phones' }),
-    ]));
-    if (s.url) {
-      head.append(el('div', { className: 'ctrl-qr', innerHTML: qrSvg(s.url, 116) }));
-      const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the companion in a new tab' });
-      head.append(a);
-      head.append(el('div', { className: 'ctrl-hint', textContent: 'open on any phone on this network' }));
-    }
+    if (!s.url) return;
+    // QR, then the URL with a status dot inline (red = daemon offline, accent =
+    // live). No prose — the dot says it.
+    head.append(el('div', { className: 'ctrl-qr', innerHTML: qrSvg(s.url, 116) }));
+    const dot = el('span', { className: 'ctrl-status-dot' + (s.connected ? ' on' : ''), title: s.connected ? 'daemon live' : 'daemon offline' });
+    const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the companion in a new tab' });
+    head.append(el('div', { className: 'ctrl-urlrow' }, [dot, a]));
   }
 
   function renderBody(force) {
