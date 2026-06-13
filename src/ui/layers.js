@@ -34,6 +34,7 @@ import {
 } from '../model/layers.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
+import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
@@ -166,7 +167,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const isExternal = anim?.mode === 'external';
   const wrap = el('div', { className: 'anim-param' });
   const cog = animModeMenu({
-    animated, isAudio, isExternal,
+    animated, isAudio, isExternal, oscAddress,
     onPick: (mode) => {
       // Default the sweep to the FULL slider range (in = min, out = max).
       if (mode === 'basic') onAnim(null);
@@ -213,7 +214,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
 // The cog button + its Basic/Timeline/Audio/External popover (Resolume-style).
 // The cog reflects the current mode (accent when animated, green for Audio);
 // the menu marks the active mode. Replaces the old inline "T" toggle + dropdown.
-function animModeMenu({ animated, isAudio, isExternal, onPick }) {
+function animModeMenu({ animated, isAudio, isExternal, onPick, oscAddress }) {
   const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   const close = () => { menu.hidden = true; };
@@ -231,6 +232,17 @@ function animModeMenu({ animated, isAudio, isExternal, onPick }) {
     item('audio', 'Audio', 'follow a band of the live audio input'),
     item('external', 'External', 'follow an OSC address or socket channel')
   );
+  // Companion tick: a ☑/◻ row that publishes THIS parameter to the phone remote.
+  // (Only for params that have a canonical address — i.e. everything routable.)
+  if (oscAddress) {
+    const on = remoteHook.has(oscAddress);
+    menu.append(el('button', {
+      className: 'fx-menu-item fx-menu-tick' + (on ? ' is-on' : ''),
+      textContent: `${on ? '☑' : '◻'} Companion`,
+      title: 'show this parameter on the phone companion',
+      onclick: (e) => { e.stopPropagation(); close(); remoteHook.toggle(oscAddress); },
+    }));
+  }
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
@@ -339,12 +351,21 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // module-level control builders (animControls) can retime sweep edits.
 let animClock = () => 0;
 
+// Companion-remote hook — set by createLayerPanel so the (module-level) cog menu
+// can read/toggle whether a parameter is published to the phone companion.
+let remoteHook = { has: () => false, toggle: () => {} };
+
 // transport (optional): { isPlaying(), toggle(), getLoop(), setLoop(bool) } —
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
 export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect }) {
   if (transport?.now) animClock = transport.now;
+  // Wire the cog-menu Companion tick to the show's exposed-controls set.
+  remoteHook = {
+    has: (addr) => hasRemoteControl(getShow(), addr),
+    toggle: (addr) => commit(toggleRemoteControl(getShow(), addr)),
+  };
   const root = el('div', { className: 'fx-panel cmp2-panel' });
   let deckCells = [];        // clip cells by deck index (for the playhead highlight)
   let playheadIndex = -1;
