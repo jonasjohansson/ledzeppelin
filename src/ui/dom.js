@@ -2,10 +2,16 @@
 // markup the same way (these used to be copy-pasted into 6 files, which is how
 // "identical" controls drifted apart). Keep this tiny and dependency-free.
 
-// el(tag, props, kids): create an element, Object.assign props, append children.
+// el(tag, props, kids): create an element, assign props, append children.
+// `data-*` / `aria-*` keys go through setAttribute — Object.assign would set a
+// dead expando that never reflects to the attribute or .dataset, so
+// `[data-x]` selectors silently miss; everything else is a plain property.
 export const el = (tag, props = {}, kids = []) => {
   const n = document.createElement(tag);
-  Object.assign(n, props);
+  for (const k in props) {
+    if (k.startsWith('data-') || k.startsWith('aria-')) n.setAttribute(k, props[k]);
+    else n[k] = props[k];
+  }
   for (const k of kids) n.append(k);
   return n;
 };

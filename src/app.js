@@ -1093,18 +1093,26 @@ document.addEventListener('keydown', (e) => {
 (() => {
   const inner = document.getElementById('stageinner');
   if (!inner) return;
+  // The view ALWAYS starts at 100% / centred on (re)load — it isn't persisted, so
+  // a reload is a clean slate (Jonas). Zoom/pan live only for the session.
   let z = 1, panX = 0, panY = 0;
   const clamp = (v) => Math.max(0.25, Math.min(10, v));
-  // Persist the view (zoom + pan) across reloads.
-  const VIEW_KEY = 'lz.view';
-  try {
-    const v = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null');
-    if (v && Number.isFinite(v.z)) { z = clamp(v.z); panX = Number(v.panX) || 0; panY = Number(v.panY) || 0; }
-  } catch { /* ignore bad/absent storage */ }
-  let saveTimer = null;
-  const persist = () => {
-    if (saveTimer) return;          // throttle: coalesce a drag's many frames into one write
-    saveTimer = setTimeout(() => { saveTimer = null; try { localStorage.setItem(VIEW_KEY, JSON.stringify({ z, panX, panY })); } catch { /* quota/private mode */ } }, 200);
+  // Track the last-applied transform so clampPan() can back out the canvas's
+  // (pan/zoom-invariant) layout box from a single getBoundingClientRect.
+  let appliedX = 0, appliedY = 0, appliedZ = 1;
+  const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  // Keep the composite CONTAINED in the window: you can't shove it off into the
+  // pasteboard. When the scaled content is larger than the viewport on an axis it
+  // must cover it (edges no further in than the window); when smaller it must sit
+  // fully inside. transformOrigin is 0 0, so the layout top-left maps to
+  // (baseL+panX, baseT+panY) and the box is Lw·z × Lh·z.
+  const clampPan = () => {
+    const rect = inner.getBoundingClientRect();        // reflects appliedX/Y/Z
+    const Lw = rect.width / (appliedZ || 1), Lh = rect.height / (appliedZ || 1);
+    const baseL = rect.left - appliedX, baseT = rect.top - appliedY;   // layout origin (invariant)
+    const cw = Lw * z, ch = Lh * z, winW = window.innerWidth, winH = window.innerHeight;
+    panX = cw >= winW ? clampNum(panX, winW - cw - baseL, -baseL) : clampNum(panX, -baseL, winW - cw - baseL);
+    panY = ch >= winH ? clampNum(panY, winH - ch - baseT, -baseT) : clampNum(panY, -baseT, winH - ch - baseT);
   };
   // A reset/zoom-% pill in the corner cluster — appears only when zoomed/panned.
   const resetBtn = document.createElement('button');
@@ -1112,15 +1120,16 @@ document.addEventListener('keydown', (e) => {
   // Insert the zoom pill before the telemetry (#hud) so order reads: …buttons · zoom% · fps.
   document.getElementById('corner-controls')?.insertBefore(resetBtn, document.getElementById('hud'));
   const apply = () => {
+    clampPan();
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `translate(${panX}px,${panY}px) scale(${z})`;
+    appliedX = panX; appliedY = panY; appliedZ = z;
     preview?.setRenderScale?.(z); redrawOverlay();      // re-render overlay crisp at the new zoom
     // Always-visible zoom readout (click to reset); 'on' accent only when zoomed/panned.
     const idle = z === 1 && panX === 0 && panY === 0;
     resetBtn.classList.toggle('on', !idle); resetBtn.textContent = `⤢ ${Math.round(z * 100)}%`;
-    persist();
   };
-  apply();   // restore the saved view (or the default) on startup
+  apply();   // 100% / centred on startup
   const reset = () => { z = 1; panX = 0; panY = 0; apply(); };
   resetView = reset;          // expose to the top menu (View › Reset zoom)
   resetBtn.onclick = reset;

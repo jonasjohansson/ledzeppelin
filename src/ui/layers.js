@@ -22,7 +22,7 @@ import {
   generatorNames, effectNames, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
-  addClip, addVideoClip, removeClip, moveClip, duplicateClip, setActiveClip, changeClipGenerator,
+  addClip, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
@@ -687,9 +687,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const selectThis = () => { selectedClipId = clip.id; selectedLayerId = id; deckSel = 'clip'; onClipSelect?.(); };
       cell.addEventListener('click', () => { selectThis(); render(); });
       cell.addEventListener('dblclick', () => { selectThis(); commit(setActiveClip(show(), id, clip.id)); });
-      // Drag this clip to reorder it (drop on another clip / empty slot).
+      // Drag this clip to reorder it (within a layer) OR move it to another layer
+      // (drop on a cell / empty slot in any row). The payload carries the SOURCE
+      // layer so the drop knows whether it's a reorder or a cross-layer move.
       cell.addEventListener('dragstart', (e) => {
-        drag = { kind: 'clip', clipId: clip.id };
+        drag = { kind: 'clip', clipId: clip.id, layerId: id };
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', 'clip:' + clip.id);
       });
@@ -703,11 +705,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           selectThis();   // dropping an effect also selects the clip you dropped on
           commit(addClipEffect(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
-          // Reorder: move the dragged clip to this clip's position.
-          const cur = (layerById(id)?.clips || []);
-          const from = cur.findIndex((c) => c.id === payload.clipId);
-          const to = cur.findIndex((c) => c.id === clip.id);
-          if (from >= 0 && to >= 0) commit(moveClip(show(), id, payload.clipId, to - from));
+          // Drop onto this cell → place the dragged clip at this clip's slot,
+          // in THIS layer (a reorder when it came from here, else a move across).
+          const to = (layerById(id)?.clips || []).findIndex((c) => c.id === clip.id);
+          if (to >= 0) { selectedClipId = payload.clipId; selectedLayerId = id; commit(moveClipToLayer(show(), payload.layerId ?? id, payload.clipId, id, to)); }
         }
       });
       // Thumbnail (top) + a label bar UNDERNEATH (Resolume-style).
@@ -753,10 +754,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       makeDropTarget(slot, (payload) => {
         if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
         else if (payload.kind === 'clip') {
-          // Move the dragged clip to the end of the deck.
-          const cur = layerById(id)?.clips || [];
-          const from = cur.findIndex((c) => c.id === payload.clipId);
-          if (from >= 0) commit(moveClip(show(), id, payload.clipId, (cur.length - 1) - from));
+          // Drop on the trailing slot → append to THIS layer's deck (a reorder to
+          // the end when from here, else a move from another layer).
+          selectedClipId = payload.clipId; selectedLayerId = id;
+          commit(moveClipToLayer(show(), payload.layerId ?? id, payload.clipId, id, -1));
         }
       });
       deck.append(slot);

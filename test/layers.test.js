@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   prefixedDefaults, normalizeComposition,
-  makeClip, addClip, removeClip, moveClip, setActiveClip,
+  makeClip, addClip, removeClip, moveClip, moveClipToLayer, setActiveClip,
   changeClipGenerator, setClipParam,
   setClipTransform, setClipOpacity, setClipDuration, playheadClip,
   addClipEffect, removeClipEffect, moveClipEffect,
@@ -226,6 +226,63 @@ test('moveClip reorders within the deck, bounds-safe', () => {
     [ids[1], ids[0], ids[2]]);
   // out-of-range → unchanged reference
   assert.equal(moveClip(show, lid, ids[0], -1), show);
+});
+
+// --- moveClipToLayer (cross-layer drag) ---
+function twoLayerShow() {
+  let show = deckShow('line');                 // layer A with 1 clip
+  show = addLayer(show);                        // a second layer prepended/appended
+  return show;
+}
+
+// A = the layer that owns the original clip; B = the other (empty) layer.
+// addLayer prepends, so don't assume array order — pick by content.
+const splitAB = (show) => {
+  const A = show.composition.layers.find((l) => (l.clips || []).length);
+  const B = show.composition.layers.find((l) => l.id !== A.id);
+  return [A, B];
+};
+
+test('moveClipToLayer moves a clip across layers, inserting at the target slot', () => {
+  let show = twoLayerShow();
+  let [A, B] = splitAB(show);
+  show = addClip(show, B.id, 'gradient');       // B now has 1 clip
+  const movingId = A.clips[0].id;
+  const bClips0 = show.composition.layers.find((l) => l.id === B.id).clips.map((c) => c.id);
+  const next = moveClipToLayer(show, A.id, movingId, B.id, 0);  // insert at index 0 of B
+  const a = next.composition.layers.find((l) => l.id === A.id);
+  const b = next.composition.layers.find((l) => l.id === B.id);
+  assert.equal(a.clips.find((c) => c.id === movingId), undefined);   // gone from A
+  assert.deepEqual(b.clips.map((c) => c.id), [movingId, bClips0[0]]);  // landed at slot 0
+});
+
+test('moveClipToLayer reassigns the source active clip and activates in the destination', () => {
+  let show = twoLayerShow();
+  let [A, B] = splitAB(show);
+  show = addClip(show, A.id, 'gradient');       // A has 2 clips; first is active
+  const movingId = show.composition.layers.find((l) => l.id === A.id).activeClipId;
+  const next = moveClipToLayer(show, A.id, movingId, B.id, -1);  // append to B
+  const a = next.composition.layers.find((l) => l.id === A.id);
+  const b = next.composition.layers.find((l) => l.id === B.id);
+  assert.notEqual(a.activeClipId, movingId);    // A's active fell back to a survivor
+  assert.equal(b.activeClipId, movingId);       // it was active in A → active in B
+  assert.equal(b.clips[b.clips.length - 1].id, movingId);  // appended
+});
+
+test('moveClipToLayer with same source and target is a plain reorder', () => {
+  let show = deckShow('line');
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  show = addClip(show, lid, 'solid');
+  const ids = show.composition.layers[0].clips.map((c) => c.id);
+  const next = moveClipToLayer(show, lid, ids[2], lid, 0);   // move last to front
+  assert.deepEqual(next.composition.layers[0].clips.map((c) => c.id), [ids[2], ids[0], ids[1]]);
+});
+
+test('moveClipToLayer on an unknown clip returns the same show', () => {
+  const show = twoLayerShow();
+  const [A, B] = show.composition.layers;
+  assert.equal(moveClipToLayer(show, A.id, 'nope', B.id, 0), show);
 });
 
 // --- changeClipGenerator ---

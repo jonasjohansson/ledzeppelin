@@ -329,6 +329,40 @@ export function moveClip(show, layerId, clipId, delta) {
   });
 }
 
+// Move a clip from one layer to another, inserting at `toIndex` (a clip slot;
+// -1 / past the end = append). Same source and target layer collapses to a plain
+// reorder. The clip keeps its id (still unique — removed from the source before
+// it's added to the target). It becomes the destination's active clip if it was
+// active in the source, or if the destination had no active clip yet.
+export function moveClipToLayer(show, fromLayerId, clipId, toLayerId, toIndex = -1) {
+  const layers = show?.composition?.layers || [];
+  const src = layers.find((l) => l.id === fromLayerId);
+  const clip = src?.clips?.find((c) => c.id === clipId);
+  if (!clip) return show;
+  if (fromLayerId === toLayerId) {
+    const from = src.clips.findIndex((c) => c.id === clipId);
+    const to = toIndex < 0 || toIndex >= src.clips.length ? src.clips.length - 1 : toIndex;
+    return moveClip(show, fromLayerId, clipId, to - from);
+  }
+  const wasActive = src.activeClipId === clipId;
+  const nextLayers = layers.map((l) => {
+    if (l.id === fromLayerId) {
+      const clips = l.clips.filter((c) => c.id !== clipId);
+      const activeClipId = l.activeClipId === clipId ? (clips[0]?.id ?? null) : l.activeClipId;
+      return { ...l, clips, activeClipId };
+    }
+    if (l.id === toLayerId) {
+      const clips = (l.clips || []).slice();
+      const at = toIndex < 0 || toIndex > clips.length ? clips.length : toIndex;
+      clips.splice(at, 0, clip);
+      const activeClipId = wasActive || l.activeClipId == null ? clipId : l.activeClipId;
+      return { ...l, clips, activeClipId };
+    }
+    return l;
+  });
+  return { ...show, composition: { ...show.composition, layers: nextLayers } };
+}
+
 // The "trigger": set the layer's active clip (crossfade timing is the
 // compositor's job later). Pass null to clear.
 export function setActiveClip(show, layerId, clipId) {
