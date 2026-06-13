@@ -56,10 +56,11 @@ function defaultShow() {
   // first frame (autoFire loops on uT). Prefixed manifest defaults.
   const clip = { ...makeClip('radial', undefined, 'r1'), params: prefixedDefaults('radial') };
   show.composition.layers = [
-    { id: 'l1', name: 'Layer 1', blend: 'add', opacity: 1,
+    { id: 'l1', name: 'Layer 1', blend: 'alpha', opacity: 1,
       clips: [clip], activeClipId: clip.id,
       effects: [], params: {}, transitionMs: 500 },
   ];
+  show.composition.blendV2 = true;   // born on the new default — no migration needed
   return show;
 }
 

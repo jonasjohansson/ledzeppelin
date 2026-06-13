@@ -828,7 +828,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       // Capitalised labels (Add / Screen / Multiply / Alpha); values stay the
       // lowercase keys the compositor expects.
       const blendOpts = BLEND_MODES.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }));
-      b.append(field('Blend Mode', selectInput(blendOpts, layer.blend ?? 'add',
+      b.append(field('Blend Mode', selectInput(blendOpts, layer.blend ?? 'alpha',
         (m) => commit(patchLayer(show(), id, { blend: m })))));
       const opacityRow = sliderField('Opacity', layer.opacity ?? 1, 0, 1,
         (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
@@ -837,7 +837,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       // Crossfade (ms) — this layer's clip-change fade time (per-layer; default 500).
       b.append(sliderField('Crossfade', layer.transitionMs ?? 500, 0, 5000,
         (v) => commitLive(patchLayer(show(), id, { transitionMs: Math.round(v) })), 500, 10));
-    }, () => commit(patchLayer(show(), id, { blend: 'add', opacity: 1, transitionMs: 500 }))));
+    }, () => commit(patchLayer(show(), id, { blend: 'alpha', opacity: 1, transitionMs: 500 }))));
 
     // Layer effect chain (applied to the whole layer's output, after its active
     // clip + that clip's effects). Locked open while empty so the drop target stays.

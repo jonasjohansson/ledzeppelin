@@ -36,7 +36,7 @@ test('normalizeComposition upgrades an OLD-shape layer to a one-clip layer', () 
   const layer = out.composition.layers[0];
   // layer-level shape
   assert.equal(layer.id, 'l1');
-  assert.equal(layer.blend, 'add');
+  assert.equal(layer.blend, 'alpha');
   assert.equal(layer.opacity, 1);
   assert.deepEqual(layer.effects, []);          // layer effects empty
   assert.deepEqual(layer.params, {});           // layer params empty
@@ -51,6 +51,22 @@ test('normalizeComposition upgrades an OLD-shape layer to a one-clip layer', () 
   assert.equal(clip.params['line.pos'], 0.9);
   assert.equal(clip.params['displace.amt'], 0.3);
   assert.equal(layer.activeClipId, clip.id);
+});
+
+test('normalizeComposition migrates legacy add→alpha once, then respects explicit add', () => {
+  // First load (no blendV2): the legacy default 'add' flips to 'alpha'.
+  const once = normalizeComposition(oldShow());
+  assert.equal(once.composition.layers[0].blend, 'alpha');
+  assert.equal(once.composition.blendV2, true);
+  // After migration, a deliberate 'add' is preserved (not re-flipped).
+  const setAdd = { ...once, composition: { ...once.composition,
+    layers: once.composition.layers.map((l) => ({ ...l, blend: 'add' })) } };
+  const again = normalizeComposition(setAdd);
+  assert.equal(again.composition.layers[0].blend, 'add');
+  // Other explicit modes are never touched, migrated or not.
+  const screen = normalizeComposition({ composition: { layers: [
+    { id: 'l1', blend: 'screen', clips: [{ id: 'c1', generator: 'line' }] }] } });
+  assert.equal(screen.composition.layers[0].blend, 'screen');
 });
 
 test('normalizeComposition is idempotent (twice == once)', () => {
@@ -134,7 +150,7 @@ test('addLayer creates an empty new-shape layer (bottom of stack)', () => {
   assert.equal(show.composition.layers.length, 0);   // immutable
   assert.equal(next.composition.layers.length, 1);
   const layer = next.composition.layers[0];
-  assert.equal(layer.blend, 'add');
+  assert.equal(layer.blend, 'alpha');
   assert.equal(layer.opacity, 1);
   assert.equal(layer.transitionMs, 500);
   assert.deepEqual(layer.effects, []);
@@ -397,7 +413,7 @@ test('patchLayer patches blend/opacity/name/transitionMs immutably', () => {
 test('makeLayer builds a one-clip active new-shape layer', () => {
   const l = makeLayer('l1');
   assert.equal(l.id, 'l1');
-  assert.equal(l.blend, 'add');
+  assert.equal(l.blend, 'alpha');
   assert.equal(l.opacity, 1);
   assert.equal(l.transitionMs, 500);
   assert.deepEqual(l.effects, []);
