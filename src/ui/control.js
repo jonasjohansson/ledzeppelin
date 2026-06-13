@@ -43,39 +43,22 @@ export function createControlPanel({ mount, getShow, send, status }) {
     if (!force && sig === lastSig) return;     // structure unchanged → don't disturb a finger on a fader
     lastSig = sig;
     body.textContent = '';
-    for (const L of m.layers) {
-      const card = el('div', { className: 'ctrl-layer' });
-      const blk = el('button', { className: 'ctrl-blk' + (L.bypass ? ' on' : ''), textContent: 'B', title: 'block (mute) this layer' });
-      blk.onclick = () => { const next = !blk.classList.contains('on'); send(`/layer/${L.n}/bypass`, next ? 1 : 0); };
-      card.append(el('div', { className: 'ctrl-layer-head' }, [el('div', { className: 'ctrl-layer-name', textContent: L.name }), blk]));
-      if ((L.clips || []).length) {
-        const grid = el('div', { className: 'ctrl-clips' });
-        for (const c of L.clips) {
-          const btn = el('button', { className: 'ctrl-clip' + (c.active ? ' active' : ''), textContent: c.name });
-          btn.onclick = () => send(`/layer/${L.n}/clip/${c.m}/trigger`, 1);
-          grid.append(btn);
-        }
-        card.append(grid);
-      }
-      // Opacity uses the SAME slider as the rest of the editor (compact track +
-      // readout + shift-snap + right-click reset). The phone keeps its big fader.
-      card.append(Slider('Opacity', L.opacity ?? 1, { min: 0, max: 1, default: 1, onInput: (v) => send(`/layer/${L.n}/opacity`, v) }));
-      body.append(card);
-    }
+    // Control is PARAMETERS ONLY — clip launching / layer mixing stays in the
+    // deck (Design). Here you adjust the params you exposed via the ⚙ Companion
+    // tick, with the same sliders as the rest of the editor.
     if (m.controls.length) {
-      body.append(el('div', { className: 'ctrl-section', textContent: 'Parameters' }));
       const card = el('div', { className: 'ctrl-layer' });
       for (const c of m.controls) {
         const span = (c.max - c.min) || 1;
-        // Editor slider in the param's own units; the canonical address wants 0..1.
         card.append(Slider(c.label, c.value ?? c.min, {
           min: c.min, max: c.max, default: c.def ?? c.min,
-          onInput: (v) => send(c.address, (v - c.min) / span),
+          onInput: (v) => send(c.address, (v - c.min) / span),   // canonical address wants 0..1
         }));
       }
       body.append(card);
+    } else {
+      body.append(el('div', { className: 'ctrl-empty', textContent: 'No parameters yet — tick a parameter’s ⚙ → Companion to add it here.' }));
     }
-    if (!m.layers.length) body.append(el('div', { className: 'ctrl-empty', textContent: 'No layers yet.' }));
   }
 
   return {

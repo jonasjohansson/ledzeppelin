@@ -84,7 +84,9 @@ function indexParams(show) {
 // The full manifest the editor broadcasts to the phone:
 //   master: every layer's opacity + bypass and its clips (for the trigger grid)
 //   controls: the ticked custom params, in tick order, resolved to label/range
-export function buildRemoteManifest(show) {
+// `thumbs` (optional, generator → dataURL) lets the phone show deck-style clip
+// thumbnails; the in-editor Control pane doesn't need them.
+export function buildRemoteManifest(show, thumbs) {
   const layers = deckLayers(show);
   const master = layers.map((layer, li) => ({
     n: li + 1,
@@ -93,6 +95,7 @@ export function buildRemoteManifest(show) {
     bypass: !!layer.bypass,
     clips: (layer.clips || []).map((c, ci) => ({
       m: ci + 1, name: c.name || c.id, active: c.id === layer.activeClipId,
+      thumb: thumbs?.[c.generator] || null,
     })),
   }));
   const idx = indexParams(show);

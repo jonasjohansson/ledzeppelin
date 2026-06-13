@@ -27,11 +27,18 @@
   .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2);
         color:var(--muted); font-family:var(--mono); font-size:15px; }
   .blk.on{ background:var(--danger); border-color:var(--danger); color:#1a0e0e; }
-  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:8px; }
-  .clip{ height:54px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2); color:var(--text);
-         font-family:var(--mono); font-size:13px; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; line-height:1.2; }
-  .clip:active{ background:var(--accent); border-color:var(--accent); color:#1a120a; }
-  .clip.active{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+  /* Deck-style clip cells: a thumbnail with a name bar underneath, like the
+     editor's Composition deck. Tap to trigger; the active clip gets an accent ring. */
+  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:8px; }
+  .clip{ border:1px solid var(--line-2); border-radius:6px; overflow:hidden; background:var(--panel-2);
+         padding:0; cursor:pointer; }
+  .clip-thumb{ display:block; width:100%; aspect-ratio:16/9; background:#000 center/cover no-repeat; }
+  .clip-name{ font-family:var(--mono); font-size:12px; color:var(--text); padding:5px 6px; text-align:left;
+              overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .clip:active{ border-color:var(--accent); }
+  .clip:active .clip-name{ background:var(--accent); color:#1a120a; }
+  .clip.active{ border-color:var(--accent); }
+  .clip.active .clip-name{ background:var(--accent-soft); color:var(--accent); }
   .ctrl{ margin-top:12px; }
   .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; }
   .ctrl-row .lab{ color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

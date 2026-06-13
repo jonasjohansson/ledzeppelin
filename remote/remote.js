@@ -92,7 +92,10 @@ function render(manifest) {
     if ((L.clips || []).length) {
       const grid = el('div', { className: 'clips' });
       for (const c of L.clips) {
-        const btn = el('button', { className: 'clip' + (c.active ? ' active' : ''), textContent: c.name });
+        const btn = el('button', { className: 'clip' + (c.active ? ' active' : '') });
+        const thumb = el('div', { className: 'clip-thumb' });
+        if (c.thumb) thumb.style.backgroundImage = `url(${c.thumb})`;
+        btn.append(thumb, el('div', { className: 'clip-name', textContent: c.name }));
         btn.onclick = () => send(`/layer/${L.n}/clip/${c.m}/trigger`, 1);
         grid.append(btn);
       }

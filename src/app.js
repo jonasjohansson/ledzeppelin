@@ -203,9 +203,10 @@ let manifestTimer = null;
 function broadcastManifest(now = false) {
   const cp = document.getElementById('control-pane');
   const refreshControl = () => { if (controlPanel && cp && !cp.hidden) controlPanel.refresh(); };
-  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); refreshControl(); return; }
+  const publish = () => bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show, thumbnails) });
+  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; publish(); refreshControl(); return; }
   if (manifestTimer) return;
-  manifestTimer = setTimeout(() => { manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); refreshControl(); }, 200);
+  manifestTimer = setTimeout(() => { manifestTimer = null; publish(); refreshControl(); }, 200);
 }
 
 // External messages (OSC over UDP / socket JSON), relayed by the daemon. FIRST
