@@ -678,7 +678,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     for (let ci = 0; ci < clips.length; ci++) {
       const clip = clips[ci];
       const isActive = clip.id === layer.activeClipId;
-      const isSelected = clip.id === selectedClipId;
+      // Only show the clip as SELECTED (accent label fill) when the deck
+      // selection is actually a clip. selectedClipId always points at *some*
+      // clip (the Clip inspector needs one), so without this gate a clip stayed
+      // highlighted even after selecting the composition or a layer — making two
+      // things look selected at once. `.clip-active` (the live/playing outline)
+      // is independent and stays.
+      const isSelected = deckSel === 'clip' && clip.id === selectedClipId;
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : '') + (isSelected ? ' clip-selected' : ''),
         title: 'click to select · double-click to trigger · drag to reorder / move',
