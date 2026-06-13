@@ -11,6 +11,7 @@ import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
+import { Section } from './ui/section.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
@@ -634,43 +635,50 @@ function positionEditor(sel) {
   }
   portSel.disabled = !isHead;
   portSel.addEventListener('change', () => moveRun({ port: Number(portSel.value) }));
+  // Two collapsible groups (same accent-header + rule + chevron as the Clip
+  // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
+  // PATCH = which controller/output it's wired to + its pixel range + the chain.
   return oel('div', { className: 'output-edit' }, [
-    oel('div', { className: 'fx-pts', textContent: 'geometry' }),
-    oel('div', { className: 'output-grid' }, [
-      txField('X', tf.x, (v) => setT({ x: v })),
-      txField('Y', tf.y, (v) => setT({ y: v })),
-      txField('Length', tf.w, (v) => setT({ w: v })),
-      // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
-      // fixture's px-per-meter). The field shows the effective px; typing a
-      // value overrides, 0 (or clearing) returns to auto.
-      (() => {
-        const eff = Math.round(thicknessOf(sel, show.composition?.canvas) * 10) / 10;
-        const manual = !isAutoThickness(tf.h);
-        const fld = txField('Height', manual ? tf.h : eff, (v) => setT({ h: v > 0 ? v : 0 }));
-        fld.title = manual
-          ? 'manual height (px) — set 0 to return to physical auto (10 mm strip)'
-          : `auto — physical scale (10 mm strip ≈ ${eff}px on this fixture); type a value to override`;
-        return fld;
-      })(),
-      txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
-    ]),
-    oel('div', { className: 'dir-btns out-transform' }, [
-      oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
-        onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
-      oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ flip',
-        title: 'reverse pixel direction (which end is pixel 0) — the canvas arrow points at pixel 0',
-        onclick: () => apply(flipFixture(show, sel.id)) }),
-    ]),
-    // PATCH: controller + output/port (= the daisy-chain it's on) + the pixel
-    // range it lands on (offset auto-packed per device, ports in order).
-    oel('div', { className: 'fx-pts', textContent: 'patch' }),
-    oel('div', { className: 'output-grid' }, [
-      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
-      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
-      oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
-    ]),
-    // CHAIN status — is this fixture daisy-chained, and where in the run.
-    chainStatusRow(sel),
+    Section('Position', 'position', (body) => {
+      body.append(
+        oel('div', { className: 'output-grid' }, [
+          txField('X', tf.x, (v) => setT({ x: v })),
+          txField('Y', tf.y, (v) => setT({ y: v })),
+          txField('Length', tf.w, (v) => setT({ w: v })),
+          // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
+          // fixture's px-per-meter). The field shows the effective px; typing a
+          // value overrides, 0 (or clearing) returns to auto.
+          (() => {
+            const eff = Math.round(thicknessOf(sel, show.composition?.canvas) * 10) / 10;
+            const manual = !isAutoThickness(tf.h);
+            const fld = txField('Height', manual ? tf.h : eff, (v) => setT({ h: v > 0 ? v : 0 }));
+            fld.title = manual
+              ? 'manual height (px) — set 0 to return to physical auto (10 mm strip)'
+              : `auto — physical scale (10 mm strip ≈ ${eff}px on this fixture); type a value to override`;
+            return fld;
+          })(),
+          txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
+        ]),
+        oel('div', { className: 'dir-btns out-transform' }, [
+          oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
+            onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
+          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ flip',
+            title: 'reverse pixel direction (which end is pixel 0) — the canvas arrow points at pixel 0',
+            onclick: () => apply(flipFixture(show, sel.id)) }),
+        ]),
+      );
+    }),
+    Section('Patch', 'routing', (body) => {
+      body.append(
+        oel('div', { className: 'output-grid' }, [
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
+        ]),
+        // CHAIN status + wiring — is this fixture daisy-chained, and where in the run.
+        chainStatusRow(sel),
+      );
+    }),
   ]);
 }
 
