@@ -818,9 +818,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .deck-comp-group { display: inline-block; border: 1px solid var(--line); }
 .deck-comp-head {
   display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px;
-  background: var(--panel-2); border-bottom: 1px solid var(--line);
+  background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer;
 }
-.deck-comp-titlewrap { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; cursor: pointer; }
+.deck-comp-head:hover .deck-comp-title { color: var(--accent-text); }   /* whole bar reacts */
+.deck-comp-titlewrap { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; }
 .deck-comp-title {
   font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--accent);
 }

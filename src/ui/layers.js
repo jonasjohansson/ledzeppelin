@@ -525,12 +525,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // the layer rows. The header carries an "fx" marker (composition effect chain),
     // (No B/✕ master controls here — use the per-layer B/✕.)
     const comp = getShow().composition || {};
-    const compHead = el('div', { className: 'deck-comp-head' + (deckSel === 'comp' ? ' is-sel' : '') });
+    const compHead = el('div', { className: 'deck-comp-head lh-clickable' + (deckSel === 'comp' ? ' is-sel' : '') });
     const titleWrap = el('div', { className: 'deck-comp-titlewrap' }, [
       el('span', { className: 'deck-comp-title', textContent: (comp.title || '').trim() || 'Composition' }),
     ]);
     if ((comp.effects || []).length) titleWrap.append(el('span', { className: 'deck-fx', textContent: 'fx', title: 'composition has effects' }));
-    titleWrap.addEventListener('click', () => { deckSel = 'comp'; onCompositionSelect?.(); render(); });
+    // The WHOLE header bar selects the composition (like a layer head), not just
+    // the title text.
+    compHead.addEventListener('click', () => { deckSel = 'comp'; onCompositionSelect?.(); render(); });
     compHead.append(titleWrap);
     const group = el('div', { className: 'deck-comp-group' }, [compHead, deckBox]);
     deckEl.append(group);
@@ -840,17 +842,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addLayerEffect(show(), id, name)));
       b.append(addBtn);
     }, undefined, layerFx.length === 0));
-
-    // Delete this layer (only when more than one exists — keep at least one).
-    if ((show().composition?.layers || []).length > 1) {
-      box.append(el('button', {
-        className: 'fx-del-link', textContent: 'Delete Layer',
-        onclick: () => {
-          if (!window.confirm(`Delete "${layer.name ?? 'layer'}" and its clips?`)) return;
-          selectedLayerId = null; commit(removeLayer(show(), id));
-        },
-      }));
-    }
+    // (Delete is the ✕ in the header now — the bottom "Delete Layer" link was removed.)
     return box;
   }
 
