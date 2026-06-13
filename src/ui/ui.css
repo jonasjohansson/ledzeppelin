@@ -322,17 +322,21 @@ body.deck-hidden #side { margin-left: auto; }
 .ctrl-url { font: var(--fs-body) var(--mono); color: var(--accent); text-decoration: none; word-break: break-all; }
 .ctrl-url:hover { color: var(--accent-text); }
 .ctrl-hint { font-size: var(--fs-micro); color: var(--faint); }
-.ctrl-layer { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-bottom: 10px; }
-.ctrl-layer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.ctrl-layer-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.ctrl-blk { flex: 0 0 auto; width: 34px; height: 30px; border-radius: var(--radius); border: 1px solid var(--line-2);
+.ctrl-layer { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; }
+.ctrl-layer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.ctrl-layer-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
+.ctrl-blk { flex: 0 0 auto; width: 26px; height: var(--ctrl-h); border-radius: var(--radius); border: 1px solid var(--line-2);
   background: var(--field-bg); color: var(--muted); font: var(--fs-body) var(--mono); cursor: pointer; }
 .ctrl-blk.on { background: var(--danger); border-color: var(--danger); color: #1a0e0e; }
-.ctrl-clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; margin-bottom: 8px; }
-.ctrl-clip { height: 44px; border-radius: var(--radius); border: 1px solid var(--line-2); background: var(--field-bg);
-  color: var(--text); font: var(--fs-body) var(--mono); padding: 3px 5px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
+/* Clip triggers: compact, flat chips (one accent, hairline) — not chunky filled
+   blocks. Active clip = accent text + hairline; press = brief accent fill. */
+.ctrl-clips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
+.ctrl-clip { height: var(--ctrl-h); border-radius: var(--radius); border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font: var(--fs-body) var(--mono); padding: 0 10px; cursor: pointer; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ctrl-clip:hover { color: var(--accent-text); border-color: var(--line-2); }
 .ctrl-clip:active { background: var(--accent); border-color: var(--accent); color: #1a120a; }
-.ctrl-clip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.ctrl-clip.active { color: var(--accent); border-color: var(--accent-line); }
 /* (Opacity + param sliders in Control reuse the editor's standard .ly-row Slider.) */
 .ctrl-section { font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); margin: 14px 2px 8px; }
 .ctrl-empty { color: var(--muted); text-align: center; padding: 30px 10px; }
