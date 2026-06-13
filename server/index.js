@@ -89,8 +89,10 @@ const http = createServer(async (req, res) => {
 const OUTPUT_FPS = 42, FRAME_MS = 1000 / OUTPUT_FPS, KEEPALIVE_MS = 1000;
 const wss = new WebSocketServer({ server: http, path: '/frames', perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
 let frames = 0;
+let lastManifest = null;   // cache the editor's latest companion manifest, so a phone gets the show the moment it connects
 wss.on('connection', (ws) => {
   console.log('[ws] client connected');
+  if (lastManifest) { try { ws.send(lastManifest); } catch { /* closing */ } }   // hand a new phone the last known show
   // Hold the LATEST frame + route and emit DDP on the daemon's OWN fixed-rate
   // timer (not on WS arrival). This is the authoritative clock: bursts from a
   // fast/uneven browser coalesce to the newest frame, a backgrounded tab can't
@@ -106,10 +108,15 @@ wss.on('connection', (ws) => {
       // script) can send { type:'ext', channel, value } — relay it to the OTHER
       // clients so the UI(s) pick it up. Same shape the OSC listener broadcasts.
       else if (m.type === 'ext') broadcastExt(m.channel, m.value, ws);
-      // Companion remote: the editor publishes { type:'manifest', … }; a phone
-      // asks with { type:'manifest-req' }. Relay both verbatim to every OTHER
-      // client (editor ⇄ phones), same fan-out as ext.
-      else if (m.type === 'manifest' || m.type === 'manifest-req') relayRaw(data.toString(), ws);
+      // Companion remote: the editor publishes { type:'manifest', … } (cached so
+      // late-joining phones get it instantly); a phone asks with
+      // { type:'manifest-req' } — answered from cache AND relayed to the editor
+      // so it republishes fresh values.
+      else if (m.type === 'manifest') { lastManifest = data.toString(); relayRaw(lastManifest, ws); }
+      else if (m.type === 'manifest-req') {
+        if (lastManifest && ws.readyState === 1) { try { ws.send(lastManifest); } catch { /* closing */ } }
+        relayRaw(data.toString(), ws);
+      }
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
   const timer = setInterval(() => {
