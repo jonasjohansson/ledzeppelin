@@ -147,6 +147,7 @@ function restoreShow(s) {
     compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
   }
   rebuild(s);
+  saveShow(show);   // persist the reverted state — else a reload resurrects the pre-undo show
   panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
   undoSuppress = false;
   undoLastAt = 0;
@@ -197,16 +198,29 @@ function setComposition(next) {
 }
 
 // Publish the companion-remote manifest (master layers + ticked params) to any
-// connected phone. Coalesced (rapid edits collapse to one send); `now` forces an
-// immediate publish (a phone just connected and asked).
+// connected phone. Coalesced (rapid edits collapse to one send). A VALUE-only
+// change (a streaming OSC fader) doesn't re-send — only a STRUCTURAL change
+// (layers/clips/active/bypass/exposed params) does, so live modulation can't
+// spam the socket or churn the phone/Control DOM. `now` forces a full publish
+// with current values (a phone just connected and asked).
 let manifestTimer = null;
+let lastManifestSig = '';
+// Signature of the manifest's STRUCTURE only (ignores opacity/param values).
+const manifestSig = (d) => JSON.stringify([
+  (d.layers || []).map((L) => [L.n, L.name, L.bypass, (L.clips || []).map((c) => [c.m, c.name, c.active])]),
+  (d.controls || []).map((c) => c.address),
+]);
 function broadcastManifest(now = false) {
-  const cp = document.getElementById('control-pane');
-  const refreshControl = () => { if (controlPanel && cp && !cp.hidden) controlPanel.refresh(); };
-  const publish = () => bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show, thumbnails) });
-  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; publish(); refreshControl(); return; }
+  const run = () => {
+    const data = buildRemoteManifest(show, thumbnails);
+    const sig = manifestSig(data);
+    if (now || sig !== lastManifestSig) { lastManifestSig = sig; bridge?.sendJson?.({ type: 'manifest', data }); }
+    const cp = document.getElementById('control-pane');
+    if (controlPanel && cp && !cp.hidden) controlPanel.refresh();   // itself structural-gated → cheap
+  };
+  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; run(); return; }
   if (manifestTimer) return;
-  manifestTimer = setTimeout(() => { manifestTimer = null; publish(); refreshControl(); }, 200);
+  manifestTimer = setTimeout(() => { manifestTimer = null; run(); }, 200);
 }
 
 // External messages (OSC over UDP / socket JSON), relayed by the daemon. FIRST
@@ -218,7 +232,7 @@ function handleExt(channel, value) {
   if (!r) { extSet(channel, value); return; }
   if (r.trigger) {
     // Same path as a deck double-click: activate the clip (compositor crossfades).
-    setComposition(setActiveClip(show, r.trigger.layerId, r.trigger.clipId));
+    applyExternal(setActiveClip(show, r.trigger.layerId, r.trigger.clipId));
     layerPanel?.refresh?.();
     return;
   }
@@ -226,7 +240,19 @@ function handleExt(channel, value) {
   // reads the show each frame so output follows immediately. An open slider may
   // read stale until the next re-render — acceptable; re-rendering at OSC
   // message rate would churn the DOM and fight a focused drag.
-  if (r.show !== show) setComposition(r.show);
+  if (r.show !== show) applyExternal(r.show);
+}
+
+// External/companion writes are LIVE PERFORMANCE control, not edits: they must
+// NOT enter undo history (a streaming fader would spam undo + wipe redo) and
+// must not hammer localStorage at message rate. So set the live show, debounce
+// the save, and publish the manifest (which itself only re-sends on a structural
+// change like a trigger).
+let extSaveTimer = null;
+function applyExternal(next) {
+  show = next;
+  if (!extSaveTimer) extSaveTimer = setTimeout(() => { extSaveTimer = null; saveShow(show); }, 400);
+  broadcastManifest();
 }
 
 // Resolution-change path. Updates composition.canvas (clamped, immutable),

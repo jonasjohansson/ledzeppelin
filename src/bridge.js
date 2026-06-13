@@ -29,6 +29,9 @@ export function connectBridge(route, { onExt, onManifestReq } = {}) {
       ws.addEventListener('open', () => {
         backoff = 500; everOpen = true; lastErr = null;
         try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ }
+        // (Re)publish the companion manifest on connect so phones get the current
+        // show immediately (and after an editor restart they aren't left stale).
+        onManifestReq?.();
       });
       // Inbound JSON from the daemon (binary never arrives browser-side).
       ws.addEventListener('message', (ev) => {

@@ -69,6 +69,18 @@ test('normalizeComposition migrates legacy add→alpha once, then respects expli
   assert.equal(screen.composition.layers[0].blend, 'screen');
 });
 
+test('normalizeComposition flags a video clip whose blob URL is dead on reload', () => {
+  const show = { composition: { layers: [{ id: 'l1', activeClipId: 'c1', clips: [
+    { id: 'c1', generator: 'video', videoUrl: 'blob:http://x/abc' },
+    { id: 'c2', generator: 'video', videoUrl: 'https://cdn/v.mp4' },
+  ] }] } };
+  const out = normalizeComposition(show).composition.layers[0].clips;
+  assert.equal(out[0].videoMissing, true);          // blob: dropped + flagged
+  assert.equal(out[0].videoUrl, undefined);
+  assert.equal(out[1].videoUrl, 'https://cdn/v.mp4'); // real URL kept, not flagged
+  assert.equal(out[1].videoMissing, undefined);
+});
+
 test('normalizeComposition is idempotent (twice == once)', () => {
   const once = normalizeComposition(oldShow());
   const twice = normalizeComposition(once);

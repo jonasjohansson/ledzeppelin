@@ -339,6 +339,9 @@ body.deck-hidden #side { margin-left: auto; }
 .ctrl-clip.active { color: var(--accent); border-color: var(--accent-line); }
 /* (Opacity + param sliders in Control reuse the editor's standard .ly-row Slider.) */
 .ctrl-section { font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); margin: 14px 2px 8px; }
+/* A clip whose video file was lost on reload. */
+.clip-missing { position: absolute; left: 3px; top: 3px; font: var(--fs-micro) var(--mono); color: var(--danger);
+  background: rgba(0,0,0,.6); padding: 1px 4px; border-radius: var(--radius-sm); }
 .ctrl-empty { color: var(--muted); text-align: center; padding: 30px 10px; }
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;

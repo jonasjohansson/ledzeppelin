@@ -163,7 +163,11 @@ export function normalizeComposition(show) {
         opacity: c.opacity == null ? DEFAULT_OPACITY : Number(c.opacity),
         durationMs: c.durationMs == null ? DEFAULT_DURATION_MS : Number(c.durationMs),
         ...(c.anim ? { anim: { ...c.anim } } : {}),       // preserve per-param animations across reloads
-        ...(c.videoUrl ? { videoUrl: c.videoUrl } : {}),  // keep video clip reference too
+        // Video clips reference a file via an object URL. blob: URLs are
+        // session-only — dead after a reload — so drop them and flag the clip as
+        // missing (the deck shows a re-pick badge instead of a silent dead clip).
+        ...(c.videoUrl && !c.videoUrl.startsWith('blob:') ? { videoUrl: c.videoUrl } : {}),
+        ...(c.generator === 'video' && (!c.videoUrl || c.videoUrl.startsWith('blob:')) ? { videoMissing: true } : {}),
       }));
       // Repair a dangling activeClipId (points at a clip that no longer exists)
       // by falling back to the first clip, so downstream always has a valid target.

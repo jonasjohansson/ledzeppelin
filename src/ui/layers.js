@@ -745,6 +745,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (thumb) thumbWrap.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       // Triggerable source (e.g. Pulse) → a ⚡ badge so you know it fires.
       if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable — fire from the Clip inspector' }));
+      // A video clip whose file didn't survive a reload (object URLs are
+      // session-only) — flag it instead of showing a silent black clip.
+      if (clip.videoMissing) thumbWrap.append(el('div', { className: 'clip-missing', textContent: '⚠ video', title: 'video file lost on reload — drop a new source onto this clip' }));
       cell.append(thumbWrap);
       // Modulation badges on the THUMBNAIL corner (the label bar is too narrow):
       // A = a param follows the audio input, E = a param follows an external
