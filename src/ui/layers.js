@@ -38,7 +38,7 @@ import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
-import { el, field, selectInput } from './dom.js';
+import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
@@ -137,8 +137,10 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
   typeCommit(inBub, inEl, onFrom); typeCommit(outBub, outEl, onTo);
   inEl.addEventListener('pointerdown', showBubbles);
   outEl.addEventListener('pointerdown', showBubbles);
-  inEl.addEventListener('input', () => { layout(); place(inBub, inEl); onLiveFrom?.(Number(inEl.value)); });
-  outEl.addEventListener('input', () => { layout(); place(outBub, outEl); onLiveTo?.(Number(outEl.value)); });
+  // Shift snaps either handle to 10 coarse stops across the range (like the sliders).
+  const coarse = (rangeEl) => { if (shiftDown) rangeEl.value = String(coarseSnap(Number(rangeEl.value), min, max)); };
+  inEl.addEventListener('input', () => { coarse(inEl); layout(); place(inBub, inEl); onLiveFrom?.(Number(inEl.value)); });
+  outEl.addEventListener('input', () => { coarse(outEl); layout(); place(outBub, outEl); onLiveTo?.(Number(outEl.value)); });
   inEl.addEventListener('change', () => onFrom(Number(inEl.value)));
   outEl.addEventListener('change', () => onTo(Number(outEl.value)));
   wrap.append(el('div', { className: 'rt-base' }), fill, live, inEl, outEl, inBub, outBub);

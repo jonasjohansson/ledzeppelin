@@ -9,7 +9,7 @@
 //           'release'— onInput fires only on pointer-up (avoids rebuild mid-drag)
 //   default: right-click the track to reset to this value (omit = not resettable)
 
-import { el } from './dom.js';
+import { el, shiftDown, coarseSnap } from './dom.js';
 
 // 3-decimal trim (integers stay bare). Shared so readouts format the same.
 const fmtDefault = (v) => {
@@ -30,8 +30,13 @@ export function Slider(label, value, opts = {}) {
   const paint = () => range.style.setProperty('--fill', (max > min ? (Number(range.value) - min) / (max - min) * 100 : 50) + '%');
   paint();
 
-  // Drag: always repaint + sync the readout; fire onInput live, or defer to release.
-  range.addEventListener('input', () => { const v = Number(range.value); out.value = fmt(v); paint(); if (commit === 'live') onInput(v); });
+  // Drag: always repaint + sync the readout; fire onInput live, or defer to
+  // release. Holding Shift snaps to 10 coarse stops across the range.
+  range.addEventListener('input', () => {
+    let v = Number(range.value);
+    if (shiftDown) { v = coarseSnap(v, min, max); range.value = String(v); }
+    out.value = fmt(v); paint(); if (commit === 'live') onInput(v);
+  });
   if (commit === 'release') range.addEventListener('change', () => onInput(Number(range.value)));
 
   // Type-to-edit: allow only a number (digits, one '.', leading '-' when negative).
