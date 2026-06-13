@@ -5,6 +5,17 @@ import { buildLut, isIdentity } from './calibrate.js';
 const sock = dgram.createSocket('udp4');
 sock.on('error', (err) => console.error('[output] socket error', err.message));
 let seq = 0;
+// Per-send errors (a single dead/unreachable device) were silently swallowed —
+// surface them, but rate-limited so one bad controller on a 120-fixture rig
+// can't flood the log every frame.
+let lastSendErrAt = 0;
+function udpSend(pkt, port, ip) {
+  sock.send(pkt, port, ip, (err) => {
+    if (!err) return;
+    const t = Date.now();
+    if (t - lastSendErrAt > 2000) { lastSendErrAt = t; console.error(`[output] send to ${ip}:${port} failed: ${err.message}`); }
+  });
+}
 const artSeq = new Map();   // `${ip}:${port}` → last ArtDmx sequence (rolls 1..255, never 0)
 const IDX = { R: 0, G: 1, B: 2 };
 
@@ -23,7 +34,10 @@ function deviceLut(d) {
 // buffers: reorder-temp + per-segment copy + LUT copy). Allocated fresh per frame
 // so the in-flight UDP sends that reference it stay valid.
 function buildDeviceBytes(slice, d, lut) {
-  const out = Buffer.allocUnsafe(slice.length);
+  // Zero-filled (not allocUnsafe): if a device's segments don't fully tile its
+  // slice (stale/partial route), the uncovered pixels stay dark instead of
+  // shipping whatever garbage was in memory.
+  const out = Buffer.alloc(slice.length);
   const segs = d.segments?.length ? d.segments : [{ start: 0, count: slice.length / 3, colorOrder: d.colorOrder }];
   for (const s of segs) {
     const order = s.colorOrder || d.colorOrder || 'RGB';
@@ -60,10 +74,10 @@ export function sendFrame(rgb, devices) {
       const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
       artSeq.set(key, s);
       for (const pkt of buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s }))
-        sock.send(pkt, port, d.ip);   // pkt = [header, chunk] gather list
+        udpSend(pkt, port, d.ip);   // pkt = [header, chunk] gather list
     } else {
       for (const pkt of buildPackets(bytes, { sequence: seq }))
-        sock.send(pkt, d.port ?? 4048, d.ip);   // pkt = [header, chunk] gather list
+        udpSend(pkt, d.port ?? 4048, d.ip);   // pkt = [header, chunk] gather list
     }
   }
 }

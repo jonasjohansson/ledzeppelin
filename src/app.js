@@ -186,6 +186,25 @@ function recomputeHiddenSpans() {
   });
 }
 
+// Count (device, port) outputs whose summed pixels exceed the controller's
+// maxPerOutput. Over-capacity isn't invalid (the route still builds) — it just
+// underruns the hardware framerate, so it's a warning, not a load-blocking error.
+function overCapacityOutputs(s) {
+  let n = 0;
+  for (const d of s.devices || []) {
+    const cap = Number(d.maxPerOutput) || 0;
+    if (cap <= 0) continue;
+    const byPort = new Map();
+    for (const f of s.fixtures || []) {
+      if ((f.output?.deviceId || '') !== d.id) continue;
+      const p = f.output?.port ?? 1;
+      byPort.set(p, (byPort.get(p) || 0) + (f.pixelCount || 0));
+    }
+    for (const px of byPort.values()) if (px > cap) n++;
+  }
+  return n;
+}
+
 // Composition-only edit path (layers/effects/params): the compositor reads
 // show.composition.layers every frame, so we only need to swap in the new show
 // and persist it — NO sampler/route/bridge rebuild (that's expensive and only
@@ -1478,10 +1497,14 @@ function loop(ts) {
     // (e.g. a fresh Kagora import) it reads a calm "output idle", not a red error.
     const configured = (show.devices || []).some((d) => d.ip && d.ip.trim());
     const out = live ? '● output live' : configured ? '◐ output offline — start the daemon' : '○ output idle';
-    hud.classList.toggle('hud-offline', !live && configured);
+    // Over-capacity outputs underrun the controller's framerate — surface a count
+    // here so it's visible without expanding the Output list (rows are badged ⚠).
+    const over = overCapacityOutputs(show);
+    hud.classList.toggle('hud-offline', (!live && configured) || over > 0);
     hud.classList.toggle('hud-live', !!live);
     if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
-    hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`;
+    hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
+      + (over > 0 ? `  ·  ⚠ ${over} output${over === 1 ? '' : 's'} over capacity` : '');
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);
