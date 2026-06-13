@@ -466,7 +466,7 @@ export const REGISTRY = {
   repeat: {
     name: 'repeat', type: 'effect', src: REPEAT,
     params: [
-      { key: 'count', type: 'float', min: 1, max: 16, default: 2 },
+      { key: 'count', type: 'float', min: 1, max: 16, default: 2, step: 1 },   // whole tiles only
     ],
   },
   strobe: {
