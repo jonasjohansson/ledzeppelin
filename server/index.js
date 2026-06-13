@@ -57,6 +57,14 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 7070;
 const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  // Companion discovery: the editor asks for the daemon's LAN address so it can
+  // show a phone-reachable /remote/ URL + QR (localhost wouldn't work on a phone).
+  if (url.pathname === '/api/info') {
+    const lan = Object.values(networkInterfaces()).flat()
+      .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
+    res.setHeader('content-type', 'application/json');
+    return res.end(JSON.stringify({ lan, port: PORT }));
+  }
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));
   if (url.pathname === '/api/wled/scan') {
     res.setHeader('content-type', 'application/json');

@@ -9,6 +9,7 @@ import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
+import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip,
@@ -105,6 +106,7 @@ let show = syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())));
 // don't require recreating it — only a RESOLUTION change does (see setCanvasSize).
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
+let controlPanel = null;   // Control-tab panel (assigned once built; null-safe before)
 
 // On-screen blit so the composited output is visible on the real framebuffer.
 const SCREEN_FS = `#version 300 es
@@ -199,9 +201,11 @@ function setComposition(next) {
 // immediate publish (a phone just connected and asked).
 let manifestTimer = null;
 function broadcastManifest(now = false) {
-  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); return; }
+  const cp = document.getElementById('control-pane');
+  const refreshControl = () => { if (controlPanel && cp && !cp.hidden) controlPanel.refresh(); };
+  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); refreshControl(); return; }
   if (manifestTimer) return;
-  manifestTimer = setTimeout(() => { manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); }, 200);
+  manifestTimer = setTimeout(() => { manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); refreshControl(); }, 200);
 }
 
 // External messages (OSC over UDP / socket JSON), relayed by the daemon. FIRST
@@ -1239,18 +1243,38 @@ outputTabsEl?.addEventListener('click', (ev) => {
 // --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
 //     Output (Fixtures/Chains/Devices). Only one shows at a time.
 //     (Element lookups are hoisted to the overlay section — see note there.) ---
+const controlPaneEl = document.getElementById('control-pane');
+// The companion URL the QR/link point at. Prefer the daemon's LAN IP (a phone
+// can't use localhost); fall back to this page's origin (works if the editor was
+// itself opened via the LAN IP).
+let companionUrl = `${location.origin}/remote/`;
+fetch('/api/info').then((r) => r.json()).then((info) => {
+  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/remote/`; if (!controlPaneEl?.hidden) controlPanel.rebuild(); }
+}).catch(() => { /* no daemon — keep the origin-based URL */ });
+
+controlPanel = createControlPanel({
+  mount: controlPaneEl,
+  getShow: () => show,
+  // Apply a companion command locally (same canonical addresses the phone uses),
+  // then reflect it in the panel + on the canvas.
+  send: (address, value) => { handleExt(address, value); controlPanel.refresh(); redrawOverlay(); },
+  status: () => ({ connected: !!bridge?.connected?.(), url: companionUrl }),
+});
+
 function setSection(which) {
   sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
     x.classList.toggle('section-active', x.dataset.section === which));
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
-  // The clip deck (layers/clips) is a DESIGN concern — hide it in Output so the
-  // canvas + fixture editor own the space (the fixture inspector takes its place
-  // on the left). body.output-mode also lets CSS react if needed.
+  if (controlPaneEl) controlPaneEl.hidden = which !== 'control';
+  // The clip deck (layers/clips) is a DESIGN concern — hide it in Output AND
+  // Control so the canvas owns the space. body.output-mode also lets CSS react.
   document.body.classList.toggle('output-mode', which === 'output');
+  document.body.classList.toggle('deck-hidden', which !== 'design');   // pin #side right when the deck is gone
   const leftEl = document.getElementById('left');
-  if (leftEl) leftEl.hidden = which === 'output';
+  if (leftEl) leftEl.hidden = which !== 'design';
   updateInspector();   // left sidebar only shows in Output
+  if (which === 'control') controlPanel.rebuild();
 }
 sectionSwitchEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.section-tab');
