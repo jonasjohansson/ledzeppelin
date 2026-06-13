@@ -12,7 +12,7 @@
 //   snap: { enabled(), setEnabled(b), grid(), setGrid(n), dist(), setDist(n) }
 
 import { setShowAudioGain, setCompositionTransition } from '../model/layers.js';
-import { el, field } from './dom.js';
+import { el, field, shiftDown, coarseSnap } from './dom.js';
 
 // A titled section: an accent-underline header + a row body. All inter-row and
 // inter-section rhythm lives in CSS (.set-sec / .set-body), not inline here.
@@ -40,6 +40,7 @@ export function createSettingsPanel({ getShow, setShow, loadComposition, snap })
     const gRange = el('input', { type: 'range', min: '0', max: '8', step: '0.05', value: String(gain) });
     fill(gRange);
     gRange.addEventListener('input', () => {
+      if (shiftDown) gRange.value = String(coarseSnap(Number(gRange.value), 0, 8));   // Shift → 0.8 steps
       gOut.textContent = `×${Number(gRange.value).toFixed(2)}`;
       fill(gRange);
       setShow?.(setShowAudioGain(getShow(), Number(gRange.value)));
@@ -61,6 +62,7 @@ export function createSettingsPanel({ getShow, setShow, loadComposition, snap })
     const xfRange = el('input', { type: 'range', min: '0', max: '5000', step: '10', value: String(xf) });
     fill(xfRange);
     xfRange.addEventListener('input', () => {
+      if (shiftDown) xfRange.value = String(coarseSnap(Number(xfRange.value), 0, 5000));   // Shift → 500 steps
       xfOut.textContent = String(Math.round(Number(xfRange.value)));
       fill(xfRange);
       setShow?.(setCompositionTransition(getShow(), Number(xfRange.value)));

@@ -861,6 +861,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       className: 'lh-op-range', title: 'layer opacity',
     });
     opRange.addEventListener('input', () => {
+      if (shiftDown) opRange.value = String(coarseSnap(Number(opRange.value), 0, 1));   // Shift → 0.1 steps
       const v = Number(opRange.value);
       commitLive(patchLayer(show(), id, { opacity: v }));
       syncLayerOpacity(id, v);

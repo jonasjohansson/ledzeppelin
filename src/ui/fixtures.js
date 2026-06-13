@@ -3,7 +3,7 @@ import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
 import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
-import { el, field, selectInput } from './dom.js';
+import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
@@ -152,7 +152,10 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     const pct = Math.round((d.brightness ?? 1) * 100);
     const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range' });
     const briVal = el('span', { className: 'ctrl-val', textContent: `${pct}%` });
-    slider.addEventListener('input', () => { briVal.textContent = `${slider.value}%`; });
+    slider.addEventListener('input', () => {
+      if (shiftDown) slider.value = String(coarseSnap(Number(slider.value), 0, 100));   // Shift → 10% steps
+      briVal.textContent = `${slider.value}%`;
+    });
     slider.addEventListener('change', () => {
       const show = getShow(); const di = show.devices.indexOf(d);
       if (di < 0) return;
