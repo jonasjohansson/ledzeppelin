@@ -212,7 +212,7 @@ test('addClip becomes active when layer had no active clip', () => {
   assert.equal(layer.activeClipId, layer.clips[layer.clips.length - 1].id);
 });
 
-test('removeClip reassigns activeClipId when removing the active clip', () => {
+test('removeClip clears activeClipId when removing the active clip (no sibling promotion)', () => {
   let show = deckShow();
   const lid = show.composition.layers[0].id;
   show = addClip(show, lid, 'gradient');           // 2 clips; first (line) stays active
@@ -222,9 +222,8 @@ test('removeClip reassigns activeClipId when removing the active clip', () => {
   // Removing a non-trailing clip leaves a positional hole (deck slots don't shift).
   assert.equal(layer.clips.length, 2);
   assert.equal(layer.clips[0], null);              // the removed slot is now a hole
-  const survivor = layer.clips.find((c) => c);
-  assert.equal(layer.activeClipId, survivor.id);   // reassigned to survivor
-  assert.notEqual(layer.activeClipId, activeId);
+  // Deleting the live clip does NOT activate the surviving sibling — nothing plays.
+  assert.equal(layer.activeClipId, null);
 });
 
 test('removeClip on last clip → activeClipId null, no crash', () => {
@@ -318,6 +317,39 @@ test('moveClipToLayer fills a hole in the target at toIndex', () => {
   const B = show.composition.layers.find((L) => L.id === b);
   assert.equal(B.clips[0].id, aClip);
   assert.equal(B.clips[1].generator, 'solid');
+});
+
+test('normalizeComposition keeps an intentional null active (no sibling promotion on reload)', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  const c0 = show.composition.layers[0].clips[0];
+  show = {
+    ...show,
+    composition: {
+      ...show.composition,
+      layers: show.composition.layers.map((L) =>
+        L.id === lid ? { ...L, clips: [c0, makeClip('solid', undefined, 'cS')], activeClipId: null } : L),
+    },
+  };
+  const norm = normalizeComposition(show);
+  const layer = norm.composition.layers.find((L) => L.id === lid);
+  assert.equal(layer.activeClipId, null);   // stayed blank; the surviving clips were NOT promoted
+});
+
+test('normalizeComposition repairs a dangling (non-null) active id to the first clip', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  const c0 = show.composition.layers[0].clips[0];
+  show = {
+    ...show,
+    composition: {
+      ...show.composition,
+      layers: show.composition.layers.map((L) =>
+        L.id === lid ? { ...L, clips: [c0], activeClipId: 'ghost' } : L),
+    },
+  };
+  const norm = normalizeComposition(show);
+  assert.equal(norm.composition.layers.find((L) => L.id === lid).activeClipId, c0.id);
 });
 
 test('normalizeComposition trims trailing holes and keeps interior ones', () => {

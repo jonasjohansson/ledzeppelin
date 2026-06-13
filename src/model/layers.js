@@ -171,12 +171,14 @@ export function normalizeComposition(show) {
         ...(c.generator === 'video' && (!c.videoUrl || c.videoUrl.startsWith('blob:')) ? { videoMissing: true } : {}),
       }));
       while (clips.length && clips[clips.length - 1] == null) clips.pop();   // never persist trailing holes
-      // Repair a dangling activeClipId (points at a clip that no longer exists)
-      // by falling back to the first real clip, so downstream always has a valid target.
+      // Resolve activeClipId:
+      //   null  → intentional "nothing playing" (e.g. the live clip was deleted) — keep it.
+      //   valid → respected.
+      //   dangling / legacy-undefined → fall back to the first real clip.
       const clipIds = new Set(clips.filter(Boolean).map((c) => c.id));
-      const activeClipId = clipIds.has(layer.activeClipId)
-        ? layer.activeClipId
-        : (clips.find((c) => c)?.id ?? null);
+      const activeClipId = layer.activeClipId === null
+        ? null
+        : (clipIds.has(layer.activeClipId) ? layer.activeClipId : (clips.find((c) => c)?.id ?? null));
       return {
         id: layer.id ?? 'l' + (i + 1),
         name: layer.name ?? 'Layer ' + (i + 1),
@@ -315,7 +317,9 @@ export function removeClip(show, layerId, clipId) {
     clips[idx] = null;                                   // leave the slot blank
     while (clips.length && clips[clips.length - 1] == null) clips.pop();   // trim trailing holes
     let activeClipId = layer.activeClipId;
-    if (activeClipId === clipId) activeClipId = clips.find((c) => c)?.id ?? null;
+    // Deleting the live clip leaves the layer with NOTHING playing — don't promote
+    // a sibling into the active slot (the output just goes blank for that layer).
+    if (activeClipId === clipId) activeClipId = null;
     return { ...layer, clips, activeClipId };
   });
 }
