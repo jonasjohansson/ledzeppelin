@@ -1269,12 +1269,13 @@ function setSection(which) {
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
   if (controlPaneEl) controlPaneEl.hidden = which !== 'control';
-  // The clip deck (layers/clips) is a DESIGN concern — hide it in Output AND
-  // Control so the canvas owns the space. body.output-mode also lets CSS react.
+  // The clip deck stays visible in Design AND Control (you keep the composition
+  // in view while tweaking params); only Output hides it to give the canvas +
+  // fixture editor the room. body.output-mode also lets CSS react.
   document.body.classList.toggle('output-mode', which === 'output');
-  document.body.classList.toggle('deck-hidden', which !== 'design');   // pin #side right when the deck is gone
+  document.body.classList.toggle('deck-hidden', which === 'output');   // pin #side right only when the deck is gone
   const leftEl = document.getElementById('left');
-  if (leftEl) leftEl.hidden = which !== 'design';
+  if (leftEl) leftEl.hidden = which === 'output';
   updateInspector();   // left sidebar only shows in Output
   if (which === 'control') controlPanel.rebuild();
 }
