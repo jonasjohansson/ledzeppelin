@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   prefixedDefaults, normalizeComposition,
-  makeClip, addClip, removeClip, moveClip, moveClipToLayer, setActiveClip,
+  makeClip, addClip, addClipAt, removeClip, moveClip, moveClipToLayer, setActiveClip,
   changeClipGenerator, setClipParam,
   setClipTransform, setClipOpacity, setClipDuration, playheadClip,
   addClipEffect, removeClipEffect, moveClipEffect,
@@ -215,12 +215,15 @@ test('addClip becomes active when layer had no active clip', () => {
 test('removeClip reassigns activeClipId when removing the active clip', () => {
   let show = deckShow();
   const lid = show.composition.layers[0].id;
-  show = addClip(show, lid, 'gradient');
+  show = addClip(show, lid, 'gradient');           // 2 clips; first (line) stays active
   const activeId = show.composition.layers[0].activeClipId;
   show = removeClip(show, lid, activeId);
   const layer = show.composition.layers[0];
-  assert.equal(layer.clips.length, 1);
-  assert.equal(layer.activeClipId, layer.clips[0].id);  // reassigned to survivor
+  // Removing a non-trailing clip leaves a positional hole (deck slots don't shift).
+  assert.equal(layer.clips.length, 2);
+  assert.equal(layer.clips[0], null);              // the removed slot is now a hole
+  const survivor = layer.clips.find((c) => c);
+  assert.equal(layer.activeClipId, survivor.id);   // reassigned to survivor
   assert.notEqual(layer.activeClipId, activeId);
 });
 
@@ -232,6 +235,109 @@ test('removeClip on last clip → activeClipId null, no crash', () => {
   const layer = show.composition.layers[0];
   assert.deepEqual(layer.clips, []);
   assert.equal(layer.activeClipId, null);
+});
+
+// --- positional holes (deleted slots stay blank; deck slots don't shift) ---
+test('removeClip on a non-trailing clip leaves a hole; later clips keep their slot', () => {
+  let show = deckShow();                    // slot 0: line
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');    // slot 1: gradient
+  show = addClip(show, lid, 'solid');       // slot 2: solid
+  const midId = show.composition.layers[0].clips[1].id;
+  show = removeClip(show, lid, midId);
+  const clips = show.composition.layers[0].clips;
+  assert.equal(clips.length, 3);
+  assert.equal(clips[1], null);             // the deleted slot is a hole
+  assert.equal(clips[0].generator, 'line'); // neighbours did NOT shift up
+  assert.equal(clips[2].generator, 'solid');
+});
+
+test('removeClip trims trailing holes (no dangling blanks at the end)', () => {
+  let show = deckShow();                    // slot 0: line
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');    // slot 1: gradient
+  const lastId = show.composition.layers[0].clips[1].id;
+  show = removeClip(show, lid, lastId);     // removing the trailing clip
+  const clips = show.composition.layers[0].clips;
+  assert.equal(clips.length, 1);            // trailing hole popped, not kept
+  assert.equal(clips[0].generator, 'line');
+});
+
+test('addClipAt fills an existing hole at that index', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  show = addClip(show, lid, 'gradient');
+  show = addClip(show, lid, 'solid');
+  const midId = show.composition.layers[0].clips[1].id;
+  show = removeClip(show, lid, midId);      // [line, null, solid]
+  show = addClipAt(show, lid, 1, 'radial'); // fill the hole
+  const clips = show.composition.layers[0].clips;
+  assert.equal(clips.length, 3);
+  assert.equal(clips[1].generator, 'radial');
+  assert.equal(clips[0].generator, 'line');
+  assert.equal(clips[2].generator, 'solid');
+});
+
+test('addClipAt appends when the index is not a hole', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  show = addClipAt(show, lid, 0, 'gradient'); // slot 0 is occupied → append
+  const clips = show.composition.layers[0].clips;
+  assert.equal(clips.length, 2);
+  assert.equal(clips[1].generator, 'gradient');
+});
+
+test('moveClipToLayer leaves a hole at the source slot (non-trailing)', () => {
+  let show = deckShow();                    // layer A slot 0: line
+  const a = show.composition.layers[0].id;
+  show = addLayer(show);
+  const b = show.composition.layers.find((L) => L.id !== a).id;
+  show = addClip(show, a, 'gradient');      // A: [line, gradient]
+  show = addClip(show, a, 'solid');         // A: [line, gradient, solid]
+  const midId = show.composition.layers.find((L) => L.id === a).clips[1].id;
+  show = moveClipToLayer(show, a, midId, b);
+  const A = show.composition.layers.find((L) => L.id === a);
+  const B = show.composition.layers.find((L) => L.id === b);
+  assert.equal(A.clips.length, 3);
+  assert.equal(A.clips[1], null);           // vacated slot is a hole
+  assert.equal(B.clips.find((c) => c && c.generator === 'gradient')?.id, midId);
+});
+
+test('moveClipToLayer fills a hole in the target at toIndex', () => {
+  let show = deckShow();
+  const a = show.composition.layers[0].id;
+  show = addLayer(show);
+  const b = show.composition.layers.find((L) => L.id !== a).id;
+  // Build target B with a hole at slot 0: add two, remove the first.
+  show = addClip(show, b, 'gradient');
+  show = addClip(show, b, 'solid');
+  const bFirst = show.composition.layers.find((L) => L.id === b).clips[0].id;
+  show = removeClip(show, b, bFirst);       // B: [null, solid]
+  const aClip = show.composition.layers.find((L) => L.id === a).clips[0].id;
+  show = moveClipToLayer(show, a, aClip, b, 0); // drop into the hole at slot 0
+  const B = show.composition.layers.find((L) => L.id === b);
+  assert.equal(B.clips[0].id, aClip);
+  assert.equal(B.clips[1].generator, 'solid');
+});
+
+test('normalizeComposition trims trailing holes and keeps interior ones', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  // Hand-craft a layer with interior + trailing holes.
+  const c0 = show.composition.layers[0].clips[0];
+  show = {
+    ...show,
+    composition: {
+      ...show.composition,
+      layers: show.composition.layers.map((L) =>
+        L.id === lid ? { ...L, clips: [c0, null, makeClip('solid', undefined, 'cX'), null, null], activeClipId: c0.id } : L),
+    },
+  };
+  const norm = normalizeComposition(show);
+  const clips = norm.composition.layers.find((L) => L.id === lid).clips;
+  assert.equal(clips.length, 3);            // trailing holes trimmed
+  assert.equal(clips[1], null);             // interior hole preserved
+  assert.equal(clips[2].generator, 'solid');
 });
 
 test('setActiveClip sets the target', () => {

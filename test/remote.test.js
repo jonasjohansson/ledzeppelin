@@ -61,6 +61,25 @@ test('buildRemoteManifest drops a ticked address whose clip no longer exists', (
   assert.deepEqual(buildRemoteManifest(s).controls, []);
 });
 
+test('buildRemoteManifest skips layers with no clips (phone shows only usable rows)', () => {
+  const s = show2();
+  // Add an empty layer at the top of the deck (last array entry).
+  s.composition.layers.push({ id: 'l3', name: 'Empty', blend: 'alpha', opacity: 1, transitionMs: 500, clips: [], effects: [], params: {} });
+  const m = buildRemoteManifest(s);
+  assert.equal(m.layers.length, 2);                       // the empty layer is dropped
+  assert.ok(!m.layers.some((L) => L.name === 'Empty'));
+});
+
+test('buildRemoteManifest skips clip holes but keeps stable 1-based slot index m', () => {
+  const s = show2();
+  // Put a hole in l1's deck: [c1, null, c2].
+  const l1 = s.composition.layers.find((L) => L.id === 'l1');
+  l1.clips = [l1.clips[0], null, l1.clips[1]];
+  const m = buildRemoteManifest(s);
+  const top = m.layers.find((L) => L.name === 'Layer 1');
+  assert.deepEqual(top.clips.map((c) => c.m), [1, 3]);    // m=2 (the hole) is omitted, slots stay positional
+});
+
 test('a phone-style /layer/n/bypass message toggles the layer bypass', () => {
   const r = routeOsc(show2(), null, '/layer/1/bypass', 0);   // un-bypass l1
   assert.ok(r && r.show);

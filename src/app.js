@@ -1347,7 +1347,7 @@ const videoMap = new Map(); // clipId → { url, el, tex }
 function syncVideos() {
   const clips = [];
   for (const L of show.composition?.layers || []) for (const c of L.clips || []) {
-    if (c.generator === 'video' && c.videoUrl) clips.push(c);
+    if (c && c.generator === 'video' && c.videoUrl) clips.push(c);
   }
   if (!clips.length && !videoMap.size) return;   // no video clips, nothing mapped → nothing to do
   const live = new Set(clips.map((c) => c.id));
@@ -1422,7 +1422,7 @@ function loop(ts) {
       const ph = playheadClip(order, ts - transport.startTs, transport.loop);
       if (ph) {
         renderLayers = [{ ...base, activeClipId: ph.clip.id }, ...renderLayers.slice(1)];
-        layerPanel.setPlayhead(clips.findIndex((c) => c.id === ph.clip.id));   // real deck index
+        layerPanel.setPlayhead(clips.findIndex((c) => c && c.id === ph.clip.id));   // real deck index
       }
     }
     // Per-parameter animations run on a free-running clock (Timeline), off the
@@ -1435,7 +1435,7 @@ function loop(ts) {
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, signals);
       let clips = L.clips;
-      if (clips && clips.some((c) => c.anim && Object.keys(c.anim).length)) {
+      if (clips && clips.some((c) => c && c.anim && Object.keys(c.anim).length)) {
         clips = clips.map((c) => {
           const a = c.anim;
           if (!(a && Object.keys(a).length)) return c;

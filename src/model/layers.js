@@ -121,7 +121,7 @@ function uniqueId(prefix, used) {
 
 function allClipIds(layers) {
   const ids = new Set();
-  for (const l of layers) for (const c of l.clips || []) ids.add(c.id);
+  for (const l of layers) for (const c of l.clips || []) if (c) ids.add(c.id);
   return ids;
 }
 
@@ -152,8 +152,9 @@ export function normalizeComposition(show) {
 
   const layers = inLayers.map((layer, i) => {
     if (Array.isArray(layer.clips)) {
-      // Already new-shape: fill any missing defaults.
-      const clips = layer.clips.map((c) => ({
+      // Already new-shape: fill any missing defaults. `null` entries are HOLES
+      // (deleted grid slots) — preserved so positions stay stable across reload.
+      let clips = layer.clips.map((c) => (!c ? null : {
         id: c.id,
         name: c.name ?? 'clip',
         generator: c.generator,
@@ -169,12 +170,13 @@ export function normalizeComposition(show) {
         ...(c.videoUrl && !c.videoUrl.startsWith('blob:') ? { videoUrl: c.videoUrl } : {}),
         ...(c.generator === 'video' && (!c.videoUrl || c.videoUrl.startsWith('blob:')) ? { videoMissing: true } : {}),
       }));
+      while (clips.length && clips[clips.length - 1] == null) clips.pop();   // never persist trailing holes
       // Repair a dangling activeClipId (points at a clip that no longer exists)
-      // by falling back to the first clip, so downstream always has a valid target.
-      const clipIds = new Set(clips.map((c) => c.id));
+      // by falling back to the first real clip, so downstream always has a valid target.
+      const clipIds = new Set(clips.filter(Boolean).map((c) => c.id));
       const activeClipId = clipIds.has(layer.activeClipId)
         ? layer.activeClipId
-        : (clips[0]?.id ?? null);
+        : (clips.find((c) => c)?.id ?? null);
       return {
         id: layer.id ?? 'l' + (i + 1),
         name: layer.name ?? 'Layer ' + (i + 1),
@@ -243,7 +245,7 @@ function updateLayer(show, layerId, fn) {
 // Replace the clip with id `clipId` inside layer `layerId` via `fn(clip)`.
 function updateClip(show, layerId, clipId, fn) {
   return updateLayer(show, layerId, (layer) => {
-    const idx = (layer.clips || []).findIndex((c) => c.id === clipId);
+    const idx = (layer.clips || []).findIndex((c) => c && c.id === clipId);
     if (idx < 0) return layer;
     const next = fn(layer.clips[idx]);
     if (next === layer.clips[idx]) return layer;
@@ -301,14 +303,19 @@ export function addVideoClip(show, layerId, name, url) {
   });
 }
 
-// Remove a clip. If it was active, reassign activeClipId to a surviving clip
-// (or null if none remain). Safe to call on the last clip.
+// Remove a clip. The deck is a positional GRID (Resolume-style): deleting a clip
+// leaves a HOLE (null) at its slot so the clips after it don't shift up; only
+// trailing holes are trimmed. If it was active, reassign to a surviving clip.
 export function removeClip(show, layerId, clipId) {
   return updateLayer(show, layerId, (layer) => {
-    const clips = (layer.clips || []).filter((c) => c.id !== clipId);
-    if (clips.length === (layer.clips || []).length) return layer; // not found
+    const cur = layer.clips || [];
+    const idx = cur.findIndex((c) => c && c.id === clipId);
+    if (idx < 0) return layer; // not found
+    let clips = cur.slice();
+    clips[idx] = null;                                   // leave the slot blank
+    while (clips.length && clips[clips.length - 1] == null) clips.pop();   // trim trailing holes
     let activeClipId = layer.activeClipId;
-    if (activeClipId === clipId) activeClipId = clips[0]?.id ?? null;
+    if (activeClipId === clipId) activeClipId = clips.find((c) => c)?.id ?? null;
     return { ...layer, clips, activeClipId };
   });
 }
@@ -318,7 +325,7 @@ export function removeClip(show, layerId, clipId) {
 export function duplicateClip(show, layerId, clipId) {
   return updateLayer(show, layerId, (layer) => {
     const clips = layer.clips || [];
-    const idx = clips.findIndex((c) => c.id === clipId);
+    const idx = clips.findIndex((c) => c && c.id === clipId);
     if (idx < 0) return layer;
     const src = clips[idx];
     const newId = uniqueId('c', allClipIds(show.composition?.layers || []));
@@ -337,12 +344,35 @@ export function duplicateClip(show, layerId, clipId) {
 export function moveClip(show, layerId, clipId, delta) {
   return updateLayer(show, layerId, (layer) => {
     const clips = (layer.clips || []).slice();
-    const from = clips.findIndex((c) => c.id === clipId);
+    const from = clips.findIndex((c) => c && c.id === clipId);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= clips.length) return layer;
     const [item] = clips.splice(from, 1);
     clips.splice(to, 0, item);
     return { ...layer, clips };
+  });
+}
+
+// Trim trailing holes + keep activeClipId pointing at a real clip.
+function tidyClips(layer, clips) {
+  const t = clips.slice();
+  while (t.length && t[t.length - 1] == null) t.pop();
+  let activeClipId = layer.activeClipId;
+  if (!t.some((c) => c && c.id === activeClipId)) activeClipId = t.find((c) => c)?.id ?? null;
+  return { ...layer, clips: t, activeClipId };
+}
+
+// Add a clip at a SPECIFIC slot: fill a hole there if present, else append. Used
+// when clicking an empty (deleted) slot in the deck.
+export function addClipAt(show, layerId, index, generator) {
+  return updateLayer(show, layerId, (layer) => {
+    const id = uniqueId('c', allClipIds(show.composition.layers));
+    const clip = makeClip(generator, undefined, id);
+    const clips = (layer.clips || []).slice();
+    if (Number.isInteger(index) && index >= 0 && index < clips.length && clips[index] == null) clips[index] = clip;
+    else clips.push(clip);
+    const activeClipId = layer.activeClipId == null ? id : layer.activeClipId;
+    return { ...layer, clips, activeClipId };
   });
 }
 
@@ -354,26 +384,36 @@ export function moveClip(show, layerId, clipId, delta) {
 export function moveClipToLayer(show, fromLayerId, clipId, toLayerId, toIndex = -1) {
   const layers = show?.composition?.layers || [];
   const src = layers.find((l) => l.id === fromLayerId);
-  const clip = src?.clips?.find((c) => c.id === clipId);
-  if (!clip) return show;
-  if (fromLayerId === toLayerId) {
-    const from = src.clips.findIndex((c) => c.id === clipId);
-    const to = toIndex < 0 || toIndex >= src.clips.length ? src.clips.length - 1 : toIndex;
-    return moveClip(show, fromLayerId, clipId, to - from);
-  }
+  const from = src ? (src.clips || []).findIndex((c) => c && c.id === clipId) : -1;
+  if (from < 0) return show;
+  const clip = src.clips[from];
   const wasActive = src.activeClipId === clipId;
   const nextLayers = layers.map((l) => {
+    if (l.id === fromLayerId && l.id === toLayerId) {
+      // Same layer: dropping onto a HOLE fills it (vacating the source slot);
+      // dropping onto a clip reorders before it. Either way slots stay positional.
+      const clips = (l.clips || []).slice();
+      let to = toIndex;
+      if (to >= 0 && to < clips.length && clips[to] == null) { clips[to] = clip; clips[from] = null; }
+      else {
+        clips.splice(from, 1);
+        let at = to < 0 || to > clips.length ? clips.length : (to > from ? to - 1 : to);
+        clips.splice(at, 0, clip);
+      }
+      return tidyClips(l, clips);
+    }
     if (l.id === fromLayerId) {
-      const clips = l.clips.filter((c) => c.id !== clipId);
-      const activeClipId = l.activeClipId === clipId ? (clips[0]?.id ?? null) : l.activeClipId;
-      return { ...l, clips, activeClipId };
+      const clips = (l.clips || []).slice(); clips[from] = null;   // leave a hole behind
+      return tidyClips(l, clips);
     }
     if (l.id === toLayerId) {
       const clips = (l.clips || []).slice();
-      const at = toIndex < 0 || toIndex > clips.length ? clips.length : toIndex;
-      clips.splice(at, 0, clip);
-      const activeClipId = wasActive || l.activeClipId == null ? clipId : l.activeClipId;
-      return { ...l, clips, activeClipId };
+      let to = toIndex;
+      if (to >= 0 && to < clips.length && clips[to] == null) clips[to] = clip;   // fill a hole
+      else { if (to < 0 || to > clips.length) to = clips.length; clips.splice(to, 0, clip); }
+      const activeClipId = wasActive || l.activeClipId == null ? clip.id : l.activeClipId;
+      const t = clips.slice(); while (t.length && t[t.length - 1] == null) t.pop();
+      return { ...l, clips: t, activeClipId };
     }
     return l;
   });

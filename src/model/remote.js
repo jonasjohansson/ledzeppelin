@@ -54,6 +54,7 @@ function indexParams(show) {
     const clips = layer.clips || [];
     for (let ci = 0; ci < clips.length; ci++) {
       const m = ci + 1, clip = clips[ci];
+      if (!clip) continue;   // deleted slot (hole)
       const entry = getEntry(clip.generator);
       for (const p of entry?.params || []) {
         if (p.type === 'color') continue;        // a single float can't drive a colour
@@ -88,16 +89,21 @@ function indexParams(show) {
 // thumbnails; the in-editor Control pane doesn't need them.
 export function buildRemoteManifest(show, thumbs) {
   const layers = deckLayers(show);
-  const master = layers.map((layer, li) => ({
-    n: li + 1,
-    name: layer.name || `Layer ${li + 1}`,
-    opacity: layer.opacity ?? 1,
-    bypass: !!layer.bypass,
-    clips: (layer.clips || []).map((c, ci) => ({
-      m: ci + 1, name: c.name || c.id, active: c.id === layer.activeClipId,
-      thumb: thumbs?.[c.generator] || null,
-    })),
-  }));
+  const master = layers
+    .map((layer, li) => ({
+      n: li + 1,
+      name: layer.name || `Layer ${li + 1}`,
+      opacity: layer.opacity ?? 1,
+      bypass: !!layer.bypass,
+      // 1-based slot index `m` stays stable across holes; holes (deleted slots)
+      // aren't sent to the phone.
+      clips: (layer.clips || []).map((c, ci) => (c ? {
+        m: ci + 1, name: c.name || c.id, active: c.id === layer.activeClipId,
+        thumb: thumbs?.[c.generator] || null,
+      } : null)).filter(Boolean),
+    }))
+    .filter((L) => L.clips.length);   // the phone skips layers with no clips
+
   const idx = indexParams(show);
   const controls = (show?.remote?.controls || [])
     .map((address) => { const e = idx.get(address); return e ? { address, ...e } : null; })

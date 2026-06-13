@@ -22,7 +22,7 @@ import {
   generatorNames, effectNames, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
-  addClip, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
+  addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
@@ -411,7 +411,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (!layers.length) return;
     // The selected clip can live in any layer; the composition FX shown is the top layer's.
     let sel = null;
-    for (const L of layers) { sel = (L.clips || []).find((c) => c.id === selectedClipId); if (sel) break; }
+    for (const L of layers) { sel = (L.clips || []).find((c) => c && c.id === selectedClipId); if (sel) break; }
     applyLive(mounts?.inspectorClip || root, sel?.anim, t, signals);
     applyLive(mounts?.inspectorComposition || root, layers[layers.length - 1].anim, t, signals);
   }
@@ -445,10 +445,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   const show = () => getShow();
   const firstLayer = () => getShow().composition?.layers?.[0] || null;
   const layerById = (lid) => (getShow().composition?.layers || []).find((L) => L.id === lid) || null;
-  const layerOfClip = (cid) => (getShow().composition?.layers || []).find((L) => (L.clips || []).some((c) => c.id === cid)) || null;
+  const layerOfClip = (cid) => (getShow().composition?.layers || []).find((L) => (L.clips || []).some((c) => c && c.id === cid)) || null;
   const topLayer = () => { const ls = getShow().composition?.layers || []; return ls[ls.length - 1] || null; };
   // Live clip lookup (presets read CURRENT params, not the captured render-time clip).
-  const liveClip = (cid) => layerOfClip(cid)?.clips.find((c) => c.id === cid) || null;
+  const liveClip = (cid) => layerOfClip(cid)?.clips.find((c) => c && c.id === cid) || null;
 
   // The param subset of `params` whose keys are prefixed by `name + '.'`.
   const paramsForPrefix = (params, name) => {
@@ -564,16 +564,16 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // selection is gone (deleted, fresh load, or a layer/comp click left it
     // pointing nowhere) fall back to the current layer's active clip, else the
     // first clip of the topmost layer that has any.
-    let selLayer = layers.find((L) => (L.clips || []).some((c) => c.id === selectedClipId));
+    let selLayer = layers.find((L) => (L.clips || []).some((c) => c && c.id === selectedClipId));
     if (!selLayer) {
-      const pick = (L) => L && ((L.clips || []).find((c) => c.id === L.activeClipId)?.id ?? (L.clips || [])[0]?.id);
+      const pick = (L) => L && ((L.clips || []).find((c) => c && c.id === L.activeClipId)?.id ?? (L.clips || [])[0]?.id);
       selLayer = layers.find((L) => L.id === selectedLayerId);
       let cid = pick(selLayer);
       for (let i = layers.length - 1; i >= 0 && !cid; i--) { if (layers[i].clips?.length) { selLayer = layers[i]; cid = pick(layers[i]); } }
       if (cid) { selectedClipId = cid; selectedLayerId = selLayer.id; }
     }
     if (!selLayer) selLayer = layers.find((L) => L.id === selectedLayerId) || layers[layers.length - 1];
-    const selClip = (selLayer.clips || []).find((c) => c.id === selectedClipId);
+    const selClip = (selLayer.clips || []).find((c) => c && c.id === selectedClipId);
     if (selClip) clipEl.append(selectedClipEditor(selLayer.id, selClip));
     else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clips — add one with +' }));
 
@@ -696,8 +696,32 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const deck = el('div', { className: 'clip-deck' });
     deckCells = [];
     const clips = layer.clips || [];
+    // An empty grid slot — a hole (a deleted clip, `index ≥ 0`) or the trailing
+    // add slot (`index < 0`). Click → pick a source to fill it; drop a clip → move
+    // it into this slot; drop a source → new clip here.
+    const emptySlot = (index) => {
+      const slot = el('div', { className: 'clip-cell clip-empty', title: 'add a source' }, [
+        el('div', { className: 'clip-empty-plus', textContent: '+' }),
+      ]);
+      slot.addEventListener('click', () => openPicker(slot, 'source', (name) => {
+        const next = index >= 0 ? addClipAt(show(), id, index, name) : addClip(show(), id, name);
+        const lay = next.composition.layers.find((x) => x.id === id);
+        selectedClipId = (index >= 0 ? lay?.clips[index] : lay?.clips[lay.clips.length - 1])?.id;
+        onClipSelect?.();
+        commit(next);
+      }, { onVideo: () => pickVideo(id) }));
+      deckZone(slot, (pl) => pl.kind === 'clip', (pl) => {
+        selectedClipId = pl.clipId; selectedLayerId = id;
+        commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, index));
+      });
+      makeDropTarget(slot, (payload) => {
+        if (payload.kind === 'source') commit(index >= 0 ? addClipAt(show(), id, index, payload.name) : addClip(show(), id, payload.name));
+      });
+      return slot;
+    };
     for (let ci = 0; ci < clips.length; ci++) {
       const clip = clips[ci];
+      if (!clip) { const s = emptySlot(ci); deckCells.push(s); deck.append(s); continue; }   // deleted slot (hole)
       const isActive = clip.id === layer.activeClipId;
       // Only show the clip as SELECTED (accent label fill) when the deck
       // selection is actually a clip. selectedClipId always points at *some*
@@ -723,7 +747,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       deckDraggable(cell, () => ({ kind: 'clip', clipId: clip.id, layerId: id, label: clip.name || clip.id }));
       // Accept an incoming clip onto THIS clip's slot (place it here).
       deckZone(cell, (pl) => pl.kind === 'clip' && pl.clipId !== clip.id, (pl) => {
-        const to = (layerById(id)?.clips || []).findIndex((c) => c.id === clip.id);
+        const to = (layerById(id)?.clips || []).findIndex((c) => c && c.id === clip.id);
         if (to < 0) return;
         selectedClipId = pl.clipId; selectedLayerId = id;
         commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, to));
@@ -767,32 +791,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       deck.append(cell);
     }
 
-    // Exactly ONE trailing empty slot — a drop target / "+" to add the next clip.
-    // (Filling it makes a new clip, and a fresh empty slot reappears after it.)
-    const emptyCount = Math.max(1, (columns - clips.length) + 1);
-    for (let e = 0; e < emptyCount; e++) {
-      const slot = el('div', { className: 'clip-cell clip-empty', title: 'add a source' }, [
-        el('div', { className: 'clip-empty-plus', textContent: '+' }),
-      ]);
-      // Click the "+" → a source picker; choosing one adds a clip here and selects it.
-      slot.addEventListener('click', () => openPicker(slot, 'source', (name) => {
-        const next = addClip(show(), id, name);
-        const layer = next.composition.layers.find((x) => x.id === id);
-        selectedClipId = layer?.clips[layer.clips.length - 1]?.id;
-        onClipSelect?.();
-        commit(next);
-      }, { onVideo: () => pickVideo(id) }));
-      // A dropped clip lands here → append to THIS layer (reorder-to-end from the
-      // same layer, else a cross-layer move).
-      deckZone(slot, (pl) => pl.kind === 'clip', (pl) => {
-        selectedClipId = pl.clipId; selectedLayerId = id;
-        commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, -1));
-      });
-      makeDropTarget(slot, (payload) => {
-        if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
-      });
-      deck.append(slot);
-    }
+    // Trailing empty slots — pad to the grid's column count + one "+" to append.
+    // (Holes above are rendered inline by the loop; these are the append cells.)
+    const realCount = clips.length;
+    const emptyCount = Math.max(1, (columns - realCount) + 1);
+    for (let e = 0; e < emptyCount; e++) deck.append(emptySlot(-1));
     return deck;
   }
 
@@ -955,7 +958,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // array end — matches osc-map.js), clips left→right.
     const allLayers = getShow().composition?.layers || [];
     const layerIndex = allLayers.length - allLayers.findIndex((L) => L.id === id);
-    const clipIndex = ((layerById(id)?.clips || []).findIndex((c) => c.id === clip.id)) + 1;
+    const clipIndex = ((layerById(id)?.clips || []).findIndex((c) => c && c.id === clip.id)) + 1;
 
     const nameInput = el('input', {
       className: 'ly-nameedit', value: clip.name || clip.id, title: 'clip name',
@@ -978,7 +981,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         onDuplicate: () => {
           const next = duplicateClip(show(), id, clip.id);
           const layer = next.composition.layers.find((l) => l.id === id);
-          const dup = layer.clips[layer.clips.findIndex((c) => c.id === clip.id) + 1];
+          const dup = layer.clips[layer.clips.findIndex((c) => c && c.id === clip.id) + 1];
           if (dup) { selectedClipId = dup.id; onClipSelect?.(); }
           commit(next);
         },
@@ -1288,7 +1291,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (totalClips <= 1) return;
     // Keep a clip selected: hop to the next clip (or the previous if it was last).
     const clips = l.clips || [];
-    const i = clips.findIndex((c) => c.id === target);
+    const i = clips.findIndex((c) => c && c.id === target);
     selectedClipId = clips[i + 1]?.id ?? clips[i - 1]?.id ?? null;
     commit(removeClip(show(), l.id, target));
   }
@@ -1323,7 +1326,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 function patchClipName(show, layerId, clipId, name) {
   const layers = (show.composition?.layers || []).map((l) => {
     if (l.id !== layerId) return l;
-    return { ...l, clips: (l.clips || []).map((c) => c.id === clipId ? { ...c, name } : c) };
+    return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId ? { ...c, name } : c) };
   });
   return { ...show, composition: { ...show.composition, layers } };
 }
