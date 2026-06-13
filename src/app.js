@@ -1262,6 +1262,7 @@ controlPanel = createControlPanel({
 });
 
 function setSection(which) {
+  try { localStorage.setItem('lz.section', which); } catch { /* private mode */ }   // restore on reload
   sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
     x.classList.toggle('section-active', x.dataset.section === which));
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
@@ -1281,10 +1282,11 @@ sectionSwitchEl?.addEventListener('click', (ev) => {
   if (b) setSection(b.dataset.section);
 });
 
-// Initial layout: Design section, IO column on its Fixtures tab, overlay SHOWN by
-// default (you see your fixture layout on load; the canvas toggle hides it for a
-// clean composite preview).
-setSection('design');
+// Initial layout: restore the last section (Design/Output/Control) across
+// reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
+// default (you see your fixture layout on load; the canvas toggle hides it).
+const savedSection = (() => { try { return localStorage.getItem('lz.section'); } catch { return null; } })();
+setSection(['design', 'output', 'control'].includes(savedSection) ? savedSection : 'design');
 setOutputTab('fixtures');
 setOverlay(true);
 
