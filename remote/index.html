@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#101114">
+<title>Led Zeppelin — Remote</title>
+<style>
+  :root{
+    --bg:#101114; --panel:#1c1e22; --panel-2:#26282d; --line:#33363e; --line-2:#474c55;
+    --text:#f4f5f7; --muted:#a3aab4; --accent:#e8a35c; --accent-soft:#33271a; --danger:#ff6b6b;
+    --mono:"Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --radius:8px;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:15px; }
+  body{ padding:12px 12px calc(24px + env(safe-area-inset-bottom)); }
+  header{ display:flex; align-items:center; gap:8px; padding:4px 2px 12px; }
+  header .dot{ width:9px; height:9px; border-radius:50%; background:var(--danger); flex:0 0 auto; }
+  header .dot.on{ background:var(--accent); }
+  header h1{ font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:400; margin:0; }
+  .empty{ color:var(--muted); text-align:center; padding:40px 16px; line-height:1.5; }
+  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:12px; }
+  .layer-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .layer-name{ flex:1 1 auto; font-size:15px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2);
+        color:var(--muted); font-family:var(--mono); font-size:15px; }
+  .blk.on{ background:var(--danger); border-color:var(--danger); color:#1a0e0e; }
+  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(92px,1fr)); gap:8px; }
+  .clip{ height:54px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2); color:var(--text);
+         font-family:var(--mono); font-size:13px; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; line-height:1.2; }
+  .clip:active{ background:var(--accent); border-color:var(--accent); color:#1a120a; }
+  .clip.active{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+  .ctrl{ margin-top:12px; }
+  .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; }
+  .ctrl-row .lab{ color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ctrl-row .val{ color:var(--text); font-size:13px; font-variant-numeric:tabular-nums; }
+  /* Big touch sliders */
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; margin:0; }
+  input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line-2); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:26px; height:26px; margin-top:-9px;
+        border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
+  input[type=range]::-moz-range-track{ height:10px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line-2); }
+  input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
+  .section-label{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:18px 2px 8px; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="dot"></span>
+    <h1 id="title">Remote — connecting…</h1>
+  </header>
+  <main id="app">
+    <div class="empty" id="empty">Waiting for the show…<br><small>Open the editor on this network.</small></div>
+  </main>
+  <script type="module" src="./remote.js"></script>
+</body>
+</html>

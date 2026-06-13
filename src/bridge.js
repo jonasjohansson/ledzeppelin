@@ -11,7 +11,7 @@
 // relays OSC + socket-JSON channel values as { type:'ext', channel, value } —
 // pass an onExt(channel, value) handler to consume them (optional; the old
 // single-argument call still works).
-export function connectBridge(route, { onExt } = {}) {
+export function connectBridge(route, { onExt, onManifestReq } = {}) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   let ws = null;
   let closed = false;     // explicit close() → stop reconnecting
@@ -36,6 +36,8 @@ export function connectBridge(route, { onExt } = {}) {
         try {
           const m = JSON.parse(ev.data);
           if (m.type === 'ext' && onExt) onExt(m.channel, m.value);
+          // A phone companion just connected and asked for the control manifest.
+          else if (m.type === 'manifest-req' && onManifestReq) onManifestReq();
         } catch { /* not JSON — ignore */ }
       });
       ws.addEventListener('error', () => { lastErr = 'connection error'; });   // a failed connect fires 'close' next
@@ -64,6 +66,12 @@ export function connectBridge(route, { onExt } = {}) {
       if (!rgbBuf || rgbBuf.length !== n * 3) rgbBuf = new Uint8Array(n * 3);
       for (let i = 0; i < n; i++) { rgbBuf[i * 3] = rgba[i * 4]; rgbBuf[i * 3 + 1] = rgba[i * 4 + 1]; rgbBuf[i * 3 + 2] = rgba[i * 4 + 2]; }
       ws.send(rgbBuf);
+    },
+    // Send an arbitrary JSON message (the companion-remote manifest). No-op
+    // until the socket is open — the daemon relays it to the phone clients.
+    sendJson(obj) {
+      if (!ws || ws.readyState !== 1) return;
+      try { ws.send(JSON.stringify(obj)); } catch { /* race */ }
     },
     // Live route update over the EXISTING socket — no teardown/reconnect blip
     // (the daemon just reassigns its route). Used on every geometry edit.

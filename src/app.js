@@ -15,6 +15,7 @@ import {
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
+import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
@@ -163,10 +164,11 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt });   // canonical OSC addresses + ext channels
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true) });   // canonical OSC addresses + ext channels; phone asks → publish
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
+  broadcastManifest();   // geometry change can rename/restructure → refresh the phone
 }
 
 // Hidden ("eye"-off) fixtures must go DARK on the wall, not just in the preview —
@@ -189,6 +191,17 @@ function setComposition(next) {
   snapshotForUndo(show);   // capture the pre-change state for undo (coalesced)
   show = next;
   saveShow(show);
+  broadcastManifest();
+}
+
+// Publish the companion-remote manifest (master layers + ticked params) to any
+// connected phone. Coalesced (rapid edits collapse to one send); `now` forces an
+// immediate publish (a phone just connected and asked).
+let manifestTimer = null;
+function broadcastManifest(now = false) {
+  if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); return; }
+  if (manifestTimer) return;
+  manifestTimer = setTimeout(() => { manifestTimer = null; bridge?.sendJson?.({ type: 'manifest', data: buildRemoteManifest(show) }); }, 200);
 }
 
 // External messages (OSC over UDP / socket JSON), relayed by the daemon. FIRST

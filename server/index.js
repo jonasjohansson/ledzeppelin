@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
+import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { parseOsc } from './osc.js';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +98,10 @@ wss.on('connection', (ws) => {
       // script) can send { type:'ext', channel, value } — relay it to the OTHER
       // clients so the UI(s) pick it up. Same shape the OSC listener broadcasts.
       else if (m.type === 'ext') broadcastExt(m.channel, m.value, ws);
+      // Companion remote: the editor publishes { type:'manifest', … }; a phone
+      // asks with { type:'manifest-req' }. Relay both verbatim to every OTHER
+      // client (editor ⇄ phones), same fan-out as ext.
+      else if (m.type === 'manifest' || m.type === 'manifest-req') relayRaw(data.toString(), ws);
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
   const timer = setInterval(() => {
@@ -114,6 +119,12 @@ setInterval(() => { if (frames) { console.log(`[ws] ${frames} fps out`); frames 
 // Push an external channel value to every connected ws client (except the
 // sender, when it came in over the socket itself). The browser maps these onto
 // 'external'-mode params (src/model/external.js).
+// Relay a raw JSON string to every client except the sender (companion manifest).
+function relayRaw(str, except) {
+  for (const c of wss.clients) {
+    if (c !== except && c.readyState === 1) { try { c.send(str); } catch { /* closing */ } }
+  }
+}
 function broadcastExt(channel, value, except) {
   if (typeof channel !== 'string' || !Number.isFinite(Number(value))) return;
   const msg = JSON.stringify({ type: 'ext', channel, value: Number(value) });
@@ -135,5 +146,9 @@ osc.bind(OSC_PORT);
 http.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`ledzeppelin ${url}`);
+  // The phone companion: print the LAN URL so anyone on the network can open it.
+  const lan = Object.values(networkInterfaces()).flat()
+    .find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
+  if (lan) console.log(`companion  http://${lan}:${PORT}/remote/  (open on a phone on this Wi-Fi)`);
   if (process.env.OPEN) openBrowser(url);
 });
