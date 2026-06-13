@@ -1509,7 +1509,7 @@ function loop(ts) {
     hud.classList.toggle('hud-live', !!live);
     if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
     hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
-      + (over > 0 ? `  ·  ⚠ ${over} output${over === 1 ? '' : 's'} over capacity` : '');
+      + (over > 0 ? `  ·  ⚠ ${over} over cap` : '');
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);

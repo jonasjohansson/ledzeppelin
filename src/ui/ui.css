@@ -53,6 +53,7 @@
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
   --radius:3px; --radius-sm:2px;
+  --side-w:332px;    /* right panel (Design/Output/Control) width — shared so the HUD can dodge it */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
   --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) */
@@ -298,7 +299,7 @@ body.deck-hidden #side { margin-left: auto; }
 /* No outer panel padding — the tab rows span edge to edge and content keeps
    only its OWN inset (#insp-panes), so the side margin isn't doubled and the
    DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
-#side { flex: 0 0 332px; max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
+#side { flex: 0 0 var(--side-w); max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
@@ -385,6 +386,14 @@ body.gui-hidden #layout { display: none; }
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
   font-variant-numeric: tabular-nums;
+  flex: 0 0 auto; white-space: nowrap;   /* never shrink/wrap a glyph+label onto two lines */
+}
+/* Telemetry lives in the OPEN bottom-right of the canvas (left of the side panel),
+   not crammed into the left control cluster — one muted, non-wrapping line. */
+#hud {
+  position: fixed; bottom: 12px; right: calc(var(--side-w) + 16px); left: auto; z-index: 5;
+  pointer-events: none; white-space: nowrap; justify-content: flex-end; gap: 12px;
+  font-size: var(--fs-micro); opacity: .9;
 }
 #corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
 #corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
