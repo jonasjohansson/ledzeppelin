@@ -390,11 +390,13 @@ body.gui-hidden #layout { display: none; }
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto; white-space: nowrap;   /* never shrink/wrap a glyph+label onto two lines */
 }
-/* Telemetry lives in the OPEN bottom-right of the canvas (left of the side panel),
-   not crammed into the left control cluster — one muted, non-wrapping line. */
+/* Telemetry sits just ABOVE the bottom-left control cluster — its own muted,
+   non-wrapping line that grows rightward from the left edge, so a long readout
+   never overruns the side panel or collides with the buttons (which it did when
+   right-anchored on a narrow window). */
 #hud {
-  position: fixed; bottom: 12px; right: calc(var(--side-w) + 16px); left: auto; z-index: 5;
-  pointer-events: none; white-space: nowrap; justify-content: flex-end; gap: 12px;
+  position: fixed; left: 10px; bottom: calc(10px + var(--ctrl-h) + 7px); right: auto; z-index: 5;
+  pointer-events: none; white-space: nowrap; justify-content: flex-start; gap: 12px;
   font-size: var(--fs-micro); opacity: .9;
 }
 #corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
