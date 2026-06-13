@@ -333,13 +333,7 @@ body.deck-hidden #side { margin-left: auto; }
   color: var(--text); font: var(--fs-body) var(--mono); padding: 3px 5px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; }
 .ctrl-clip:active { background: var(--accent); border-color: var(--accent); color: #1a120a; }
 .ctrl-clip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.ctrl-row { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 2px; }
-.ctrl-lab { color: var(--muted); font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ctrl-val { color: var(--text); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
-.ctrl-fader { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; }
-.ctrl-fader::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--field-bg); border: 1px solid var(--line-2); }
-.ctrl-fader::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
-.ctrl-fader::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+/* (Opacity + param sliders in Control reuse the editor's standard .ly-row Slider.) */
 .ctrl-section { font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); margin: 14px 2px 8px; }
 .ctrl-empty { color: var(--muted); text-align: center; padding: 30px 10px; }
 #library {

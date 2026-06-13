@@ -6,6 +6,7 @@
 // doubles as the "point your phone here" screen.
 
 import { el } from './dom.js';
+import { Slider } from './controls.js';
 import { buildRemoteManifest } from '../model/remote.js';
 import { qrSvg } from './qr.js';
 
@@ -20,12 +21,6 @@ export function createControlPanel({ mount, getShow, send, status }) {
     (m.controls || []).map((c) => [c.address, c.label]),
   ]);
 
-  function fader(value, onInput) {
-    const r = el('input', { type: 'range', min: '0', max: '1', step: '0.001', value: String(value), className: 'ctrl-fader' });
-    r.addEventListener('input', () => onInput(Number(r.value)));
-    return r;
-  }
-  const fmt = (v) => { const n = Number(v); return Number.isInteger(n) ? String(n) : n.toFixed(2); };
 
   function renderHead() {
     head.textContent = '';
@@ -62,9 +57,9 @@ export function createControlPanel({ mount, getShow, send, status }) {
         }
         card.append(grid);
       }
-      const val = el('span', { className: 'ctrl-val', textContent: Math.round((L.opacity ?? 1) * 100) + '%' });
-      card.append(el('div', { className: 'ctrl-row' }, [el('span', { className: 'ctrl-lab', textContent: 'Opacity' }), val]));
-      card.append(fader(L.opacity ?? 1, (v) => { val.textContent = Math.round(v * 100) + '%'; send(`/layer/${L.n}/opacity`, v); }));
+      // Opacity uses the SAME slider as the rest of the editor (compact track +
+      // readout + shift-snap + right-click reset). The phone keeps its big fader.
+      card.append(Slider('Opacity', L.opacity ?? 1, { min: 0, max: 1, default: 1, onInput: (v) => send(`/layer/${L.n}/opacity`, v) }));
       body.append(card);
     }
     if (m.controls.length) {
@@ -72,10 +67,11 @@ export function createControlPanel({ mount, getShow, send, status }) {
       const card = el('div', { className: 'ctrl-layer' });
       for (const c of m.controls) {
         const span = (c.max - c.min) || 1;
-        const norm = Math.max(0, Math.min(1, ((c.value ?? c.min) - c.min) / span));
-        const val = el('span', { className: 'ctrl-val', textContent: fmt(c.value ?? c.min) });
-        card.append(el('div', { className: 'ctrl-row' }, [el('span', { className: 'ctrl-lab', textContent: c.label }), val]));
-        card.append(fader(norm, (v) => { val.textContent = fmt(c.min + span * v); send(c.address, v); }));
+        // Editor slider in the param's own units; the canonical address wants 0..1.
+        card.append(Slider(c.label, c.value ?? c.min, {
+          min: c.min, max: c.max, default: c.def ?? c.min,
+          onInput: (v) => send(c.address, (v - c.min) / span),
+        }));
       }
       body.append(card);
     }

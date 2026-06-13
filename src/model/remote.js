@@ -62,19 +62,19 @@ function indexParams(show) {
         const value = clip.params?.[key] ?? p.default ?? min;
         map.set(`/layer/${n}/clip/${m}/${p.key}`, {
           label: `${clip.name || clip.id} · ${prettyKey(p.key)}`,
-          kind: p.type === 'bool' ? 'bool' : 'param', min, max, value,
+          kind: p.type === 'bool' ? 'bool' : 'param', min, max, value, def: p.default ?? min,
         });
       }
       const t = clip.transform || {};
       for (const k of ['x', 'y', 'scale', 'rotation']) {
-        const r = TF_RANGES[k];
+        const r = TF_RANGES[k], dflt = k === 'scale' ? 1 : 0;
         map.set(`/layer/${n}/clip/${m}/tf/${k}`, {
           label: `${clip.name || clip.id} · ${prettyKey(k)}`, kind: 'param', min: r.min, max: r.max,
-          value: t[k] ?? (k === 'scale' ? 1 : 0),
+          value: t[k] ?? dflt, def: dflt,
         });
       }
       map.set(`/layer/${n}/clip/${m}/tf/opacity`, {
-        label: `${clip.name || clip.id} · Opacity`, kind: 'param', min: 0, max: 1, value: clip.opacity ?? 1,
+        label: `${clip.name || clip.id} · Opacity`, kind: 'param', min: 0, max: 1, value: clip.opacity ?? 1, def: 1,
       });
     }
   }
