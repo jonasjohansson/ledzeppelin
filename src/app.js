@@ -841,11 +841,13 @@ function renderOutput() {
       selectedFixtureIds = new Set(show.fixtures.filter((f) => (f.output?.deviceId || '') === dg.deviceId).map((f) => f.id));
       renderOutput(); redrawOverlay();
     };
-    const dhead = oel('div', { className: 'out-group out-dev', title: devName }, [
+    const dhead = oel('div', { className: 'out-group out-dev', title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, [
       oel('span', { className: 'out-caret', textContent: devOpen ? '▾' : '▸' }),
       swatch(deviceColor(dg.deviceId)),
       devNameEl,
-      oel('span', { className: 'fx-badge' + (devOver ? ' out-over' : ''), textContent: `${dg.groups.length} out · ${devFx} fx · ${devPx}px${devOver ? ' ⚠' : ''}` }),
+      // One number — the controller's pixel load. Out/fx counts live on the
+      // hover title; the outputs themselves appear when you expand.
+      oel('span', { className: 'fx-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` }),
     ]);
     dhead.onclick = () => { expandedDevices.has(dg.deviceId) ? expandedDevices.delete(dg.deviceId) : expandedDevices.add(dg.deviceId); renderOutput(); };
     outputListEl.append(dhead);
@@ -857,13 +859,15 @@ function renderOutput() {
       const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
       const over = gcap > 0 && totalPx > gcap;
       const collapsed = !expandedGroups.has(g.key);
-      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · output ${g.port}` }, [
+      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
         oel('span', { className: 'out-caret', textContent: collapsed ? '▸' : '▾' }),
         swatch(runColor(g.deviceId, g.port)),
         oel('span', { className: 'out-group-port', textContent: `out ${g.port}` }),
-        oel('span', { className: 'fx-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${totalPx}${gcap > 0 ? '/' + gcap : ''}px${over ? ' ⚠' : ''}` }),
+        // Pixels only show the capacity when the output is OVER it (the common
+        // case isn't); the ⛓ "chain" tag is dropped — multiple fixtures under one
+        // output already mean a chain.
+        oel('span', { className: 'fx-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${over ? totalPx + '/' + gcap : totalPx}px${over ? ' ⚠' : ''}` }),
       ]);
-      if (g.items.length > 1) ohead.append(oel('span', { className: 'fx-badge out-chain', textContent: '⛓ chain' }));
       ohead.onclick = () => { expandedGroups.has(g.key) ? expandedGroups.delete(g.key) : expandedGroups.add(g.key); renderOutput(); };
       outputListEl.append(ohead);
       if (collapsed) continue;
@@ -876,6 +880,14 @@ function renderOutput() {
 }
 
 const renderOutputList = renderOutput; // back-compat alias
+
+// This is an app surface, not a document — suppress the OS right-click menu
+// everywhere EXCEPT editable text fields (where copy/paste is wanted). Sliders
+// keep their own right-click-to-reset (that handler still runs).
+document.addEventListener('contextmenu', (e) => {
+  if (e.target.closest?.('input:not([type=range]), textarea, [contenteditable]')) return;
+  e.preventDefault();
+});
 
 // --- Workspace layout: there are NO top-level tabs. The deck, the Clip/Layer/
 //     Composition inspector, and the Output/Fixtures column are all visible at

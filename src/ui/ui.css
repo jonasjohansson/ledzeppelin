@@ -169,6 +169,14 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .dev-noip { background: transparent; box-shadow: inset 0 0 0 1px var(--faint); }
 .output-dev { color: var(--cyan); font-size: var(--fs-micro); }
 .output-row .ly-rmfx { padding: 0 6px; line-height: var(--lh-ctrl); }
+/* Declutter a long list: the per-fixture delete ✕ and the (lit/●) eye stay
+   hidden until the row is hovered or selected — a HIDDEN fixture keeps its eye
+   shown so you can still see/restore it. (Touch has no hover, but fixture
+   editing is a desktop task.) */
+.output-row .ly-rmfx, .output-row .output-eye { opacity: 0; transition: opacity .1s; }
+.output-row:hover .ly-rmfx, .output-row:hover .output-eye,
+.output-row.selected .ly-rmfx, .output-row.selected .output-eye,
+.output-row .output-eye.off { opacity: 1; }
 /* Selected = quiet TEXT emphasis only — no border, no bar, no fill (Jonas: don't
    use borders/highlights to show focus). The name brightens to the accent. */
 .output-row.selected > span:first-of-type { color: var(--accent); }
