@@ -677,8 +677,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const isSelected = clip.id === selectedClipId;
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : '') + (isSelected ? ' clip-selected' : ''),
-        title: 'click to select · double-click to trigger · drag to reorder',
-        draggable: true,
+        title: 'click to select · double-click to trigger · drag to reorder / move',
       });
       // Click = SELECT (edit in inspector) without activating; double-click = trigger.
       // Selecting also focuses the Clip inspector tab (onClipSelect) and makes the
@@ -687,15 +686,18 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const selectThis = () => { selectedClipId = clip.id; selectedLayerId = id; deckSel = 'clip'; onClipSelect?.(); };
       cell.addEventListener('click', () => { selectThis(); render(); });
       cell.addEventListener('dblclick', () => { selectThis(); commit(setActiveClip(show(), id, clip.id)); });
-      // Drag this clip to reorder it (within a layer) OR move it to another layer
-      // (drop on a cell / empty slot in any row). The payload carries the SOURCE
-      // layer so the drop knows whether it's a reorder or a cross-layer move.
-      cell.addEventListener('dragstart', (e) => {
-        drag = { kind: 'clip', clipId: clip.id, layerId: id };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', 'clip:' + clip.id);
+      // Drag this clip (pointer-based) to reorder it within a layer OR move it to
+      // another layer — drop on any cell / empty slot in any row. The payload
+      // carries the SOURCE layer so the drop tells reorder from cross-layer move.
+      deckDraggable(cell, () => ({ kind: 'clip', clipId: clip.id, layerId: id, label: clip.name || clip.id }));
+      // Accept an incoming clip onto THIS clip's slot (place it here).
+      deckZone(cell, (pl) => pl.kind === 'clip' && pl.clipId !== clip.id, (pl) => {
+        const to = (layerById(id)?.clips || []).findIndex((c) => c.id === clip.id);
+        if (to < 0) return;
+        selectedClipId = pl.clipId; selectedLayerId = id;
+        commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, to));
       });
-      cell.addEventListener('dragend', () => { drag = null; });
+      // Native drop target ONLY for source/effect drags from the picker rail.
       makeDropTarget(cell, (payload) => {
         if (payload.kind === 'source') {
           // Replace the source AND select it (no auto-trigger).
@@ -704,11 +706,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         } else if (payload.kind === 'effect') {
           selectThis();   // dropping an effect also selects the clip you dropped on
           commit(addClipEffect(show(), id, clip.id, payload.name));
-        } else if (payload.kind === 'clip' && payload.clipId !== clip.id) {
-          // Drop onto this cell → place the dragged clip at this clip's slot,
-          // in THIS layer (a reorder when it came from here, else a move across).
-          const to = (layerById(id)?.clips || []).findIndex((c) => c.id === clip.id);
-          if (to >= 0) { selectedClipId = payload.clipId; selectedLayerId = id; commit(moveClipToLayer(show(), payload.layerId ?? id, payload.clipId, id, to)); }
         }
       });
       // Thumbnail (top) + a label bar UNDERNEATH (Resolume-style).
@@ -751,14 +748,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         onClipSelect?.();
         commit(next);
       }, { onVideo: () => pickVideo(id) }));
+      // A dropped clip lands here → append to THIS layer (reorder-to-end from the
+      // same layer, else a cross-layer move).
+      deckZone(slot, (pl) => pl.kind === 'clip', (pl) => {
+        selectedClipId = pl.clipId; selectedLayerId = id;
+        commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, -1));
+      });
       makeDropTarget(slot, (payload) => {
         if (payload.kind === 'source') commit(addClip(show(), id, payload.name));
-        else if (payload.kind === 'clip') {
-          // Drop on the trailing slot → append to THIS layer's deck (a reorder to
-          // the end when from here, else a move from another layer).
-          selectedClipId = payload.clipId; selectedLayerId = id;
-          commit(moveClipToLayer(show(), payload.layerId ?? id, payload.clipId, id, -1));
-        }
       });
       deck.append(slot);
     }
@@ -840,24 +837,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const head = el('div', {
       className: 'layer-head-box lh-clickable',
       title: canReorder ? 'click to edit · double-click to minimise · drag to reorder' : 'click to edit · double-click to minimise',
-      draggable: canReorder,
     });
     // Click → select this layer (Layer inspector) · double-click → minimise.
     // Selecting the layer clears any clip selection, so the layer is now the sole
     // delete target and no clip stays highlighted underneath it.
     head.addEventListener('click', () => { selectedLayerId = id; deckSel = 'layer'; onLayerSelect?.(); render(); });
-    // Drag the head to reorder layers (drop onto another layer row).
-    head.addEventListener('dragstart', (e) => {
-      drag = { kind: 'layer', layerId: id, index };
-      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'layer:' + id);
-    });
-    head.addEventListener('dragend', () => { drag = null; });
-    // Drop another layer's head here → reorder it to this layer's position.
-    makeDropTarget(head, (payload) => {
-      if (payload.kind === 'layer' && payload.layerId !== id) {
-        commit(moveLayer(show(), payload.layerId, index - payload.index));
-      }
-    });
+    // Pointer-drag the head to reorder layers (drop onto another layer row). The
+    // deckDraggable threshold + the `.lh-op`/button guard mean a click still
+    // selects and the opacity fader still drags without starting a reorder.
+    if (canReorder) {
+      deckDraggable(head, () => ({ kind: 'layer', layerId: id, index, label: layer.name || id }));
+      deckZone(head, (pl) => pl.kind === 'layer' && pl.layerId !== id,
+        (pl) => commit(moveLayer(show(), pl.layerId, index - pl.index)));
+    }
     const body = el('div', { className: 'lh-body' });
 
     // Vertical opacity fader (no numeric readout — the slider IS the value).
@@ -871,15 +863,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       commitLive(patchLayer(show(), id, { opacity: v }));
       syncLayerOpacity(id, v);
     });
-    // The fader lives inside the draggable head, so a press on it can otherwise
-    // start a native layer-reorder drag. Suspend draggable while the fader is
-    // grabbed; restore it on release.
-    opRange.addEventListener('pointerdown', (e) => {
-      e.stopPropagation();
-      head.draggable = false;
-      const restore = () => { head.draggable = canReorder; window.removeEventListener('pointerup', restore); };
-      window.addEventListener('pointerup', restore);
-    });
+    // The fader sits inside the drag-to-reorder head; stop its press from also
+    // reaching the head (deckDraggable already ignores presses on `.lh-op`, but
+    // this keeps the layer-select click from firing too).
+    opRange.addEventListener('pointerdown', (e) => e.stopPropagation());
     opCol.append(opRange);
 
     // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
@@ -1160,6 +1147,60 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const payload = drag;
       drag = null;
       onDrop(payload);
+    });
+  }
+
+  // --- POINTER-based drag for DECK items (clips + layer heads). Native HTML5 DnD
+  //     fires dragstart/dragover but the `drop` is unreliable under the global
+  //     `user-select:none` and across browsers — so the deck rolls its own:
+  //     press + move past a threshold floats a ghost; the registered zone under
+  //     the pointer (elementFromPoint, walking up to a __deckZone) is the live
+  //     drop target. (Effects/sources keep the native makeDropTarget — they're
+  //     dragged in from the picker rail, not from inside the deck.) Pointer drag
+  //     also fixes the long-standing "reorder doesn't take" reports. ---
+  function deckZone(node, accepts, onDrop) {
+    node.__deckZone = true; node.__deckAccepts = accepts; node.__deckDrop = onDrop;
+  }
+  const findZone = (x, y, payload) => {
+    let n = document.elementFromPoint(x, y);
+    while (n) { if (n.__deckZone && n.__deckAccepts(payload)) return n; n = n.parentElement; }
+    return null;
+  };
+  function deckDraggable(node, makePayload) {
+    node.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      // Don't hijack a press on an interactive child (opacity fader, B/S/✕, etc.).
+      if (e.target.closest('input, button, select, textarea, a, .lh-op')) return;
+      const sx = e.clientX, sy = e.clientY;
+      let live = false, ghost = null, hover = null, payload = null;
+      const setHover = (z) => { if (z === hover) return; hover?.classList.remove('drop-hover'); hover = z; hover?.classList.add('drop-hover'); };
+      const move = (ev) => {
+        if (!live) {
+          if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 5) return;   // threshold
+          live = true; payload = makePayload();
+          ghost = el('div', { className: 'deck-ghost', textContent: payload.label || '' });
+          document.body.append(ghost);
+          node.classList.add('deck-dragging');
+        }
+        ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 8}px)`;
+        ghost.style.display = 'none';                     // don't let the ghost shadow elementFromPoint
+        setHover(findZone(ev.clientX, ev.clientY, payload));
+        ghost.style.display = '';
+      };
+      const up = (ev) => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        window.removeEventListener('pointercancel', up);
+        if (!live) return;
+        node.classList.remove('deck-dragging'); ghost?.remove();
+        ghost && (ghost.style.display = 'none');
+        const z = findZone(ev.clientX, ev.clientY, payload);
+        hover?.classList.remove('drop-hover');
+        if (z) z.__deckDrop(payload);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
     });
   }
 

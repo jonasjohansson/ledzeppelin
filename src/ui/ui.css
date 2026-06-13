@@ -980,6 +980,16 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   box-shadow: inset 0 0 0 1px var(--accent) !important;
   background: var(--accent-soft) !important;
 }
+/* Pointer-drag (deck clips + layer heads): the grabbed item dims, and a small
+   chip rides the cursor as the ghost. */
+.deck-dragging { opacity: .4; }
+.deck-ghost {
+  position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 3px 8px; font: var(--fs-body) var(--mono); color: var(--accent-text);
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius);
+  box-shadow: 0 4px 14px rgba(0,0,0,.5);
+}
 .composer-drop {
   grid-column: 1 / -1; text-align: center; font-size: var(--fs-body); color: var(--faint);
   border: 1px dashed var(--field-border); border-radius: var(--radius); padding: 8px; margin-top: 4px;
