@@ -769,7 +769,26 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const box = el('div', { className: 'clip-editor' });
     const name = el('input', { className: 'ly-nameedit', value: layer.name ?? 'Layer 1', title: 'layer name' });
     name.addEventListener('change', () => commit(patchLayer(show(), id, { name: name.value })));
-    box.append(el('div', { className: 'clip-editor-head' }, [name]));
+    const layerHeadRow = el('div', { className: 'clip-editor-head' }, [name]);
+    // Delete THIS layer — danger ✕ top-right. Refuses the last remaining layer.
+    {
+      const nLayers = (getShow().composition?.layers || []).length;
+      const del = el('button', {
+        className: 'fx-act fx-act-danger insp-del', textContent: '✕',
+        title: nLayers <= 1 ? 'can’t delete the last layer' : 'delete this layer',
+      });
+      del.disabled = nLayers <= 1;
+      del.onclick = (e) => {
+        e.stopPropagation();
+        const layers = show().composition?.layers || [];
+        if (layers.length <= 1) return;
+        const i = layers.findIndex((l) => l.id === id);
+        selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;
+        commit(removeLayer(show(), id));
+      };
+      layerHeadRow.append(del);
+    }
+    box.append(layerHeadRow);
 
     // Autopilot (Resolume-style): play-through of the clip deck with a direction
     // (off / ▶ forward / ◀ backward / ⤨ shuffle) + a loop toggle.
@@ -798,7 +817,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
 
     box.append(Section('Composition', 'layer-comp', (b) => {
-      b.append(field('Blend Mode', selectInput(BLEND_MODES, layer.blend ?? 'add',
+      // Capitalised labels (Add / Screen / Multiply / Alpha); values stay the
+      // lowercase keys the compositor expects.
+      const blendOpts = BLEND_MODES.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }));
+      b.append(field('Blend Mode', selectInput(blendOpts, layer.blend ?? 'add',
         (m) => commit(patchLayer(show(), id, { blend: m })))));
       const opacityRow = sliderField('Opacity', layer.opacity ?? 1, 0, 1,
         (v) => { commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); }, 1);
@@ -945,6 +967,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           commit(s);
         },
       }));
+    }
+    // Delete THIS clip — a danger ✕ pinned to the header's top-right. Refuses the
+    // last remaining clip across all layers (a project must keep one), matching
+    // the Delete-key behaviour.
+    {
+      const totalClips = (getShow().composition?.layers || []).reduce((n, L) => n + (L.clips?.length || 0), 0);
+      const del = el('button', {
+        className: 'fx-act fx-act-danger insp-del', textContent: '✕',
+        title: totalClips <= 1 ? 'can’t delete the last clip' : 'delete this clip',
+      });
+      del.disabled = totalClips <= 1;
+      del.onclick = (e) => { e.stopPropagation(); selectedClipId = clip.id; deleteActiveClip(); };
+      clipHead.append(del);
     }
     box.append(clipHead);
 

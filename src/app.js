@@ -1217,6 +1217,12 @@ function setSection(which) {
     x.classList.toggle('section-active', x.dataset.section === which));
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
+  // The clip deck (layers/clips) is a DESIGN concern — hide it in Output so the
+  // canvas + fixture editor own the space (the fixture inspector takes its place
+  // on the left). body.output-mode also lets CSS react if needed.
+  document.body.classList.toggle('output-mode', which === 'output');
+  const leftEl = document.getElementById('left');
+  if (leftEl) leftEl.hidden = which === 'output';
   updateInspector();   // left sidebar only shows in Output
 }
 sectionSwitchEl?.addEventListener('click', (ev) => {
