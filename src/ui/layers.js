@@ -866,10 +866,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       commitLive(patchLayer(show(), id, { opacity: v }));
       syncLayerOpacity(id, v);
     });
-    // The fader sits inside the drag-to-reorder head; stop its press from also
-    // reaching the head (deckDraggable already ignores presses on `.lh-op`, but
-    // this keeps the layer-select click from firing too).
+    // The fader sits inside the drag-to-reorder, click-to-select head. Stop both
+    // its press (would start a reorder) AND its click (would SELECT the layer)
+    // from reaching the head — adjusting opacity is not selecting the layer.
     opRange.addEventListener('pointerdown', (e) => e.stopPropagation());
+    opRange.addEventListener('click', (e) => e.stopPropagation());
     opCol.append(opRange);
 
     // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
