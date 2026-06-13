@@ -143,6 +143,12 @@ export function normalizeComposition(show) {
   // (blendV2 set) an explicit 'add' is respected.
   const migrateBlend = !comp.blendV2;
   const blendOf = (b) => { const v = b ?? 'alpha'; return migrateBlend && v === 'add' ? 'alpha' : v; };
+  // Companion one-time migration: with Alpha blend, a 100% layer fully covers
+  // below. Default layers now START at 50% so the layers beneath show through;
+  // flip existing full-opacity (1) layers to 0.5 once, preserving any opacity
+  // someone deliberately set to a non-default value.
+  const migrateOpacity = !comp.opacityV2;
+  const opacityOf = (layer) => { const o = layer.opacity ?? 1; return migrateOpacity && o === 1 ? 0.5 : o; };
 
   const layers = inLayers.map((layer, i) => {
     if (Array.isArray(layer.clips)) {
@@ -169,7 +175,7 @@ export function normalizeComposition(show) {
         id: layer.id ?? 'l' + (i + 1),
         name: layer.name ?? 'Layer ' + (i + 1),
         blend: blendOf(layer.blend),
-        opacity: layer.opacity ?? 1,
+        opacity: opacityOf(layer),
         clips,
         activeClipId,
         effects: Array.isArray(layer.effects) ? [...layer.effects] : [],
@@ -194,7 +200,7 @@ export function normalizeComposition(show) {
       id: layer.id ?? 'l' + (i + 1),
       name: layer.name ?? 'Layer ' + (i + 1),
       blend: blendOf(layer.blend),
-      opacity: layer.opacity ?? 1,
+      opacity: opacityOf(layer),
       clips: [clip],
       activeClipId: clipId,
       effects: [],
@@ -207,7 +213,7 @@ export function normalizeComposition(show) {
     ? { ...comp.canvas }
     : { ...DEFAULT_CANVAS };
 
-  return { ...src, composition: { ...comp, canvas, layers, blendV2: true } };
+  return { ...src, composition: { ...comp, canvas, layers, blendV2: true, opacityV2: true } };
 }
 
 // --- internal: locate + immutably replace a layer / clip ---------------------
@@ -533,7 +539,7 @@ export function makeLayer(id, clipId = 'c1') {
     id,
     name: 'Layer 1',
     blend: 'alpha',
-    opacity: 1,
+    opacity: 0.5,
     clips: [clip],
     activeClipId: clip.id,
     effects: [],
@@ -554,7 +560,7 @@ export function addLayer(show) {
   // New layer starts EMPTY (no clips, nothing active) and goes UNDERNEATH the
   // stack — the deck renders array-end as the TOP row, so prepend = bottom.
   const layer = {
-    id, name: `Layer ${maxN + 1}`, blend: 'alpha', opacity: 1, transitionMs: TRANSITION_MS,
+    id, name: `Layer ${maxN + 1}`, blend: 'alpha', opacity: 0.5, transitionMs: TRANSITION_MS,
     clips: [], activeClipId: null, effects: [], params: {},
   };
   return { ...show, composition: { ...show.composition, layers: [layer, ...layers] } };

@@ -37,7 +37,7 @@ test('normalizeComposition upgrades an OLD-shape layer to a one-clip layer', () 
   // layer-level shape
   assert.equal(layer.id, 'l1');
   assert.equal(layer.blend, 'alpha');
-  assert.equal(layer.opacity, 1);
+  assert.equal(layer.opacity, 0.5);
   assert.deepEqual(layer.effects, []);          // layer effects empty
   assert.deepEqual(layer.params, {});           // layer params empty
   assert.equal(layer.transitionMs, 500);        // default crossfade
@@ -151,7 +151,7 @@ test('addLayer creates an empty new-shape layer (bottom of stack)', () => {
   assert.equal(next.composition.layers.length, 1);
   const layer = next.composition.layers[0];
   assert.equal(layer.blend, 'alpha');
-  assert.equal(layer.opacity, 1);
+  assert.equal(layer.opacity, 0.5);
   assert.equal(layer.transitionMs, 500);
   assert.deepEqual(layer.effects, []);
   assert.deepEqual(layer.params, {});
@@ -403,18 +403,18 @@ test('removeLayer / moveLayer are immutable and clamp', () => {
 test('patchLayer patches blend/opacity/name/transitionMs immutably', () => {
   let show = deckShow();
   const lid = show.composition.layers[0].id;
-  const p = patchLayer(show, lid, { opacity: 0.5, transitionMs: 250, name: 'foo' });
-  assert.equal(p.composition.layers[0].opacity, 0.5);
+  const p = patchLayer(show, lid, { opacity: 0.25, transitionMs: 250, name: 'foo' });
+  assert.equal(p.composition.layers[0].opacity, 0.25);
   assert.equal(p.composition.layers[0].transitionMs, 250);
   assert.equal(p.composition.layers[0].name, 'foo');
-  assert.equal(show.composition.layers[0].opacity, 1);       // original untouched
+  assert.equal(show.composition.layers[0].opacity, 0.5);     // original untouched (new-layer default)
 });
 
 test('makeLayer builds a one-clip active new-shape layer', () => {
   const l = makeLayer('l1');
   assert.equal(l.id, 'l1');
   assert.equal(l.blend, 'alpha');
-  assert.equal(l.opacity, 1);
+  assert.equal(l.opacity, 0.5);
   assert.equal(l.transitionMs, 500);
   assert.deepEqual(l.effects, []);
   assert.deepEqual(l.params, {});
