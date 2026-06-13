@@ -300,9 +300,6 @@ body.deck-hidden #side { margin-left: auto; }
    DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
 #side { flex: 0 0 332px; max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-#settings-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; }   /* third tab — scrolls as a whole */
-#settings-file { margin-bottom: var(--s3); }
-#settings-file .fx-io { flex-direction: column; align-items: stretch; gap: 4px; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
 #insp-panes, #io-body {
@@ -604,7 +601,6 @@ input[type=checkbox]:checked::after {
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
 /* Action rows: buttons SHARE the row width equally (never intrinsic-width chips). */
 .fx-io > button { flex: 1 1 0; min-width: 0; height: var(--ctrl-h); }
-#settings-file .fx-io > button { flex: 0 0 auto; }   /* stacked column variant — full width via stretch */
 
 /* --- Composition (canvas resolution) panel --- */
 .cmp-panel { margin-bottom: var(--s4); }
@@ -1119,51 +1115,5 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Symmetric breath, aligned with the head padding. */
 .modal-body { overflow-y: auto; padding: 14px 16px 16px; }
 
-/* Settings page: the inspector rail mounted in a dialog. Section wrappers drive
-   ALL inter-section spacing; headers carry only their global accent underline;
-   rows fall back to the canonical row height + ledger seams. */
-.settings-panel.fx-panel { gap: 0; }
-.settings-panel .set-sec { margin: 0 0 18px; }
-.settings-panel .set-sec:last-child { margin-bottom: 0; }
-.settings-panel .fx-pts { margin: 0 0 8px; }
-.settings-panel .set-body { display: flex; flex-direction: column; }
-.settings-panel .set-body > .fx-field { min-height: var(--row-h); padding: 2px 0; }
-.settings-panel .set-body > .fx-field + .fx-field {
-  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
-}
-
-/* Colour grid: an even two-column swatch grid (the swatch governs width). */
-.settings-panel .cmp-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 16px; row-gap: 6px;
-}
-.settings-panel .cmp-grid > .fx-field + .fx-field { border-top: none; }   /* grid, not a list */
-.settings-panel .swatch-field > span:first-child { flex: 1 1 auto; }
-/* Swatch chip — the native well reads as a flat colour tile. */
-.swatch {
-  flex: 0 0 auto; width: 46px; height: var(--ctrl-h); display: block; overflow: hidden;
-  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg);
-}
-.swatch input[type=color] {
-  width: 100%; height: 100%; padding: 0; margin: 0; border: none; background: none; cursor: pointer;
-}
-.swatch input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
-.swatch input[type=color]::-webkit-color-swatch { border: none; border-radius: 0; }
-.swatch input[type=color]::-moz-color-swatch { border: none; }
-
-/* Number fields align their right edge to the slider / checkbox rail above. */
-.settings-panel .num-field > span:first-child { flex: 1 1 auto; }
-.settings-panel .num-field input[type=number] {
-  flex: 0 0 var(--slider-w); width: var(--slider-w); text-align: right;
-}
-
-/* Section footer (e.g. 'reset colors') — right-aligned under a hairline. */
-.settings-panel .set-foot {
-  display: flex; justify-content: flex-end; padding-top: 8px; margin-top: 6px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
-}
-.settings-panel .set-foot .fx-del-link { grid-column: auto; padding: 0; }
-
-/* File I/O — equal-width docked pair. */
-.settings-panel .set-io { display: flex; gap: var(--s4); margin-top: 2px; }
-.settings-panel .set-io button { flex: 1 1 0; }
+/* (The Settings tab + its .settings-panel/.swatch/.set-* styles were removed;
+   project file actions live in the corner File menu.) */

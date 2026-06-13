@@ -35,39 +35,57 @@ npm start
 # open http://localhost:7070
 ```
 
-On first run a default show renders a moving line across two demo fixtures. The
-editor (right panel) is split into **two tabs**, mirroring the input/output
-split — *what you render* vs. *where it goes*:
+On first run a default show renders a radial ripple across a fan of demo tubes.
+The editor (right panel) has **three top-level sections** — **Design ·
+Output · Control**:
 
-**Composition tab** — the creative side, shown over a clean composite (no
-fixture overlay):
+**Design** — the creative side, shown over a clean composite. Three sub-tabs:
 
-- **Composition** — set the canvas resolution / aspect (16:9, 1:1, 4:3, custom).
-  Fixtures sample normalized space, so resolution changes source detail, never
-  pixel addressing.
-- **Layers** (Resolume-style) — each layer holds a **deck of clips**; a clip is a
-  source (generator) with its own params and effects. Click a clip to trigger it;
-  switching clips **crossfades** over the layer's transition time. Effects live
-  per-clip *and* per-layer; stack layers with blend modes + opacity. Every shader
-  param gets an auto-generated slider.
+- **Clip** — the selected clip's source (generator) params, transform, and
+  effects. Every shader param gets an auto-generated slider; the ⚙ cog beside a
+  param sets its modulation (Basic / Timeline / Audio / External) and exposes it
+  to the Companion.
+- **Layer** — the layer's autopilot (deck play-through), blend mode, opacity,
+  crossfade. New layers default to **Alpha** blend at **50%** so stacked layers
+  show through. The clip **deck** (one row of clips per layer) sits on the left;
+  click a clip to select, double-click to trigger (switching **crossfades**), and
+  drag clips between layers / reorder layers.
+- **Composition** — canvas resolution / aspect (16:9, 1:1, 4:3, custom) +
+  composition-level effects. Fixtures sample normalized space, so resolution
+  changes source detail, never pixel addressing.
 
-**Output tab** — the wiring side, with the fixture overlay drawn on the preview.
-An **Input / Output** toggle splits the two halves of a fixture's routing:
+**Output** — the wiring side, with the fixture overlay on the preview and the
+fixture editor docked left. Sub-tabs:
 
-- **Input** — where each fixture *samples* the canvas. Drag fixture endpoints on
-  the overlay to reposition what they sample.
-- **Output** — each fixture's *DDP target*: device, pixel offset, color order,
-  and per-controller IP. Drag placement is locked in this mode.
-- **Import from Kagora** — load a Kagora preset `.json`, assign controller IPs
-  (with sequential auto-fill), and run the whole installation.
+- **Fixtures** — place & wire each strip: drag endpoints on the canvas to set
+  what it samples; its device / output / pixel range / color order are edited in
+  the left panel. Daisy-chain fixtures on one output.
+- **Devices** — the controller instances (name / IP / model / protocol).
+- **Inventory** — the catalog of controller + fixture-type definitions.
+- **Import from LEDger** — load a LEDger preset `.json`, assign controller IPs
+  (sequential auto-fill), and run the whole installation.
 
-Switching tabs only toggles visibility — the render loop, sampler, and output
-keep running regardless of which tab is shown. The show autosaves to
-`localStorage`; use the Save/Load buttons for files.
+**Control** — a live shortcut surface: the parameters you exposed via the cog's
+**Companion** tick, plus the phone-companion **QR code / URL / connection
+status**. (The deck stays visible on the left so you keep the composition in
+view.)
+
+Switching sections only toggles visibility — the render loop, sampler, and output
+keep running regardless. The show autosaves to `localStorage`; the corner **File**
+menu has New / Save / Load / Import.
+
+### Phone companion
+
+The daemon serves a lightweight remote at **`/remote/`** that anyone on the same
+network can open (it prints the LAN URL on start; the **Control** tab shows a QR).
+It mirrors the **Composition deck** — clip thumbnails to trigger, a Block (mute)
+toggle and opacity fader per layer — plus the params you ticked for Companion,
+and drives the show through the same canonical OSC addresses over the daemon's
+WebSocket relay. (Open to anyone on the LAN — intended for a trusted install.)
 
 ### Pointing at real hardware
 
-Set each controller's **IP** under the Output tab (or via Kagora import +
+Set each controller's **IP** under Output › Devices (or via LEDger import +
 assign-IPs). Controllers must run WLED with DDP enabled (it listens on UDP
 4048). Color order for WS2815 is **GRB**. The daemon unicasts to each
 controller independently — one IP per DigQuad.
@@ -136,12 +154,13 @@ ws.on('open', () => {
 #### Bound channels (custom mapping)
 
 Per binding, the raw signal maps onto the param as
-`from + (to − from) · clamp(value × gain, 0, 1)` — so a 0..1 fader can drive any
-slider range, and `gain` rescales hotter/colder signals. The External controls
-row offers a select of live channels (`/fader1 · 0.42`) plus a free-text field
-for an address that hasn't sent anything yet. The four audio band names
-(`level`, `bass`, `mid`, `high`) are **reserved** by the Audio input — don't
-name external channels after them.
+`from + (to − from) · clamp(value, 0, 1)` — so a 0..1 fader drives the param's
+`in`..`out` range. The External controls row offers a select of **live channels**
+(`/fader1 · 0.42` — anything that has actually sent a message) and shows the
+param's fixed canonical address as a copyable chip; you bind by picking a channel
+(addresses are not retyped). The four audio band names (`level`, `bass`, `mid`,
+`high`) are **reserved** by the Audio input — don't name external channels after
+them.
 
 ### Output protocols
 
@@ -158,14 +177,15 @@ Each device picks its protocol in the Output tab's device editor:
 
 | Layer | Files |
 |---|---|
-| Daemon | `server/{index,static,ddp,colororder,output}.js` |
-| Engine | `src/engine/{gl,sampler,compositor}.js`, `shaders/manifest.js` |
-| Model (pure) | `src/model/{show,sampling,pipeline,layers,kagora-import,ip}.js` |
-| UI | `src/ui/{fixtures,preview,layers,import}.js` |
+| Daemon | `server/{index,static,ddp,artnet,osc,colororder,output,wled,calibrate}.js` |
+| Engine | `src/engine/{gl,sampler,compositor,thumbs}.js`, `shaders/manifest.js` |
+| Model (pure) | `src/model/{show,sampling,pipeline,chains,layers,fixture-transform,osc-map,remote,external,anim,audio,kagora-import,ip}.js` |
+| UI | `src/ui/{fixtures,preview,layers,composition,control,import,controls,section,dom,qr,theme}.js` |
+| Companion | `remote/{index.html,remote.js}` (phone page) |
 | Bridge | `src/bridge.js` (browser ws client) |
 
 Pure logic is unit-tested (`node --test`): DDP packing, color order, show
-validation, sampling math, multi-device pipeline routing, Kagora import, IPv4
+validation, sampling math, multi-device pipeline routing, LEDger import, IPv4
 helpers. GPU/UI is verified visually.
 
 ```bash
@@ -178,15 +198,16 @@ npm test
   gigabit. The daemon unicasts per controller (~4 Mbps each).
 - The framerate ceiling is **WS2815 data timing per output** (~683 px/output →
   ~48fps), not DDP. Target **40fps**.
-- `readPixels` of the sampled buffer is a synchronous GPU stall. It's fine at
-  this scale, but if FPS dips when scaling to all 12 controllers, switch to an
-  async **PBO** readback (WebGL2 `PIXEL_PACK_BUFFER` + fence).
+- The sampled buffer is read back via an **async PBO** path (WebGL2
+  `PIXEL_PACK_BUFFER` + fence, double-buffered) so there's no GPU→CPU stall on the
+  frame loop. Output is paced by the daemon's own 42fps clock (it coalesces bursts
+  to the newest frame), not by browser timing.
 
 ## Hardware scale test (the M4.3 milestone)
 
 Run on the real rig once controllers are reachable:
 
-1. Import the full Kagora preset; assign the 12 real DigQuad IPs.
+1. Import the full LEDger preset; assign the 12 real DigQuad IPs.
 2. Confirm the HUD holds ≥40fps and the daemon's fps log matches.
 3. Verify a moving line sweeps the whole installation, then a 2-layer effect
    show. If `readPixels` stalls below 40fps, apply the PBO readback above.
@@ -194,7 +215,7 @@ Run on the real rig once controllers are reachable:
 ## Status
 
 MVP complete: M0 skeleton → M1 DDP output → M2 fixtures/sampling/CRUD →
-M3 layers/effects → M4 Kagora import + multi-device routing. See
+M3 layers/effects → M4 LEDger import + multi-device routing. See
 `docs/plans/` for the design and implementation plan.
 
 Deferred (post-MVP): audio/mic modulation bus, timeline/clip deck with

@@ -246,7 +246,7 @@ function animModeMenu({ animated, isAudio, isExternal, onPick, oscAddress }) {
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External)',
+    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External) · or expose it to the phone Companion',
   });
   btn.onclick = (e) => {
     e.stopPropagation();

@@ -1008,8 +1008,8 @@ setWallView(wallView);
 // (Play/transport UI and the keyboard cheat-sheet were removed — not needed.)
 
 
-// (Settings is the third top-level tab now — see setSection; its file actions
-//  + prefs panel mount into #settings-pane near the end of this module.)
+// (The three top-level sections are Design · Output · Control — see setSection.
+//  Project file actions live in the corner File menu.)
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 
@@ -1516,7 +1516,7 @@ function loop(ts) {
 }
 requestAnimationFrame(loop);
 
-// --- Settings tab: project file I/O (New / Save / Load / Import) -----------
+// --- Project file I/O (New / Save / Load / Import) — bound to the File menu ---
 // Apply a whole show (open/import): resize the stage to its canvas if it changed,
 // then rebuild + persist + refresh panels.
 function applyFullShow(next) {
@@ -1595,21 +1595,8 @@ openCompInput.addEventListener('change', async () => {
   openCompInput.value = '';
 });
 
-// File-actions block at the top of the Settings tab: Save show / Open show /
-// Import from Kagora. (Import jumps to Output › Library and triggers the picker.)
-const settingsFileEl = document.getElementById('settings-file');
-if (settingsFileEl) {
-  settingsFileEl.append(
-    oel('div', { className: 'fx-section', textContent: 'project' }),
-    oel('div', { className: 'fx-io' }, [
-      oel('button', { className: 'fx-add', textContent: 'new project', onclick: newProject }),
-      oel('button', { className: 'fx-add', textContent: 'save…', onclick: saveShowToFile }),
-      oel('button', { className: 'fx-add', textContent: 'load…', onclick: () => openShowInput?.click() }),
-      oel('button', { className: 'fx-add', textContent: 'import from LEDger…',
-        onclick: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } }),
-    ]),
-  );
-}
+// (Project file actions — new/save/load/import — live in the corner File menu
+// below; the old Settings-tab file block was removed with that tab.)
 
 // ⌘S save / ⌘O open — kept as shortcuts.
 document.addEventListener('keydown', (e) => {
