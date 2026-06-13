@@ -97,6 +97,10 @@ export function routeOsc(show, selectedClipId, address, value) {
     if (parts.length === 3 && parts[2] === 'opacity') {
       return { show: patchLayer(show, layer.id, { opacity: v }) };
     }
+    // Master "Block" (B): bypass/un-bypass the layer (≥0.5 = bypassed/muted).
+    if (parts.length === 3 && parts[2] === 'bypass') {
+      return { show: patchLayer(show, layer.id, { bypass: v >= 0.5 }) };
+    }
     if (parts[2] === 'clip') {
       const m = Number(parts[3]);
       const clip = Number.isInteger(m) && m >= 1 ? (layer.clips || [])[m - 1] : null;
