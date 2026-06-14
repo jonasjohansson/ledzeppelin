@@ -214,7 +214,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   ]);
   wrap.append(head);
   wrap.append(track);
-  wrap.append(animControls(anim, onAnim, oscAddress));
+  wrap.append(animControls(anim, onAnim, oscAddress, onAnimLive));
   return wrap;
 }
 
@@ -290,9 +290,19 @@ function dirButtons(current, onPick) {
 // carries only what's left:
 //   Timeline → direction buttons · s    Audio → band · gain
 //   External → channel select · canonical-address chip (fixed, copy-only)
-function animControls(anim, onAnim, oscAddress) {
-  const mini = (label, val, commit) => {
+function animControls(anim, onAnim, oscAddress, onAnimLive) {
+  const mini = (label, val, commit, { commitLive, step = 0.1 } = {}) => {
     const i = el('input', { type: 'number', value: fmt(val), step: 'any', className: 'anim-num' });
+    // Arrow keys step the value LIVE (no re-render) so focus stays on the field and
+    // you can keep pressing up/down. (A native number input fires `change` on each
+    // arrow press, which would rebuild this control and yank focus elsewhere.)
+    i.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      const cur = i.value === '' ? 0 : Number(i.value);
+      const v = Math.round((cur + (e.key === 'ArrowUp' ? step : -step)) * 1000) / 1000;
+      i.value = fmt(v); (commitLive || commit)(v);
+    });
     i.addEventListener('change', () => commit(i.value === '' ? 0 : Number(i.value)));
     const lab = el('label', { className: 'anim-mini' }, [el('span', { textContent: label }), i]);
     lab.dataset.mini = label;   // lets the range-track thumbs sync this field live
@@ -305,7 +315,7 @@ function animControls(anim, onAnim, oscAddress) {
     // (in/out live on the track handles — grab a thumb for its value bubble)
     kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
       (bnd) => onAnim({ ...anim, band: bnd })));
-    kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
+    kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v }), { commitLive: onAnimLive && ((v) => onAnimLive({ ...anim, gain: v })) }));
   } else if (isExternal) {
     // The channel + OSC address now live in System › Mapping (one overview for
     // all params). Here we just show the in/out range track (above) + a hint;
@@ -346,7 +356,10 @@ function animControls(anim, onAnim, oscAddress) {
         (v) => { const b = Number(v); onAnim(retimeAnim(anim, { ...anim, beats: b, durationMs: Math.round((b * 60000) / bpm) }, animClock())); }));
     } else {
       kids.push(mini('s', anim.durationMs / 1000, (v) =>
-        onAnim(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock()))));
+        onAnim(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock())), {
+        commitLive: onAnimLive && ((v) => onAnimLive(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock()))),
+        step: 0.1,
+      }));
     }
   }
   return el('div', { className: 'anim-ctrls' }, kids);
