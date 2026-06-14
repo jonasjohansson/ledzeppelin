@@ -100,6 +100,15 @@ export function setShowAudioGain(show, gain) {
   return { ...show, composition: { ...comp, audioGain: Number.isFinite(g) ? g : 1 } };
 }
 
+// Global musical tempo (beats per minute). Drives beat-synced Timeline modulation
+// (a spec's `beats` count → seconds via 60000/bpm). Clamped to a sane range.
+export const BPM_MIN = 20, BPM_MAX = 300, BPM_DEFAULT = 120;
+export function setShowBpm(show, bpm) {
+  const comp = show.composition || {};
+  const b = Math.round(Number(bpm));
+  return { ...show, composition: { ...comp, bpm: Number.isFinite(b) ? Math.max(BPM_MIN, Math.min(BPM_MAX, b)) : BPM_DEFAULT } };
+}
+
 // Prefix a flat { key: value } default map with the entry name → { 'name.key': value }.
 export function prefixedDefaults(name) {
   const out = {};
@@ -221,7 +230,8 @@ export function normalizeComposition(show) {
     ? { ...comp.canvas }
     : { ...DEFAULT_CANVAS };
 
-  return { ...src, composition: { ...comp, canvas, layers, blendV2: true, opacityV2: true } };
+  const bpm = Number.isFinite(Number(comp.bpm)) ? Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(Number(comp.bpm)))) : BPM_DEFAULT;
+  return { ...src, composition: { ...comp, canvas, layers, bpm, blendV2: true, opacityV2: true } };
 }
 
 // --- internal: locate + immutably replace a layer / clip ---------------------

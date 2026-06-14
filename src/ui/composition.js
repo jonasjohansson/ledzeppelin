@@ -18,8 +18,9 @@ import { el, field } from './dom.js';
 //   Canvas resolution only. Composition-global preferences (crossfade, audio
 //   gain, theme, file I/O) moved to the global Settings panel; master opacity
 //   moved to the Composition group head + its inspector.
-export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTitle }) {
+export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTitle, setBpm }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
+  let taps = [];   // recent tap-tempo timestamps (ms)
 
   // Working draft of the fields (not yet applied). Seeded from the show.
   function currentCanvas() {
@@ -37,6 +38,26 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
       const title = el('input', { type: 'text', placeholder: 'untitled', value: getShow().composition?.title || '' });
       title.addEventListener('change', () => setTitle(title.value.trim()));
       root.append(el('div', { className: 'fx-card cmp-grid' }, [field('Title', title)]));
+    }
+
+    // --- Tempo (BPM) — drives beat-synced Timeline modulation; TAP sets by ear. ---
+    if (setBpm) {
+      const bpmInput = el('input', { type: 'number', value: String(getShow().composition?.bpm ?? 120), step: '1', min: '20', max: '300' });
+      bpmInput.addEventListener('change', () => { const v = Number(bpmInput.value); if (Number.isFinite(v)) setBpm(v); });
+      const tap = el('button', { className: 'cmp-tap', textContent: 'TAP', title: 'tap in time with the music to set the tempo' });
+      tap.addEventListener('click', () => {
+        const t = performance.now();
+        taps = taps.filter((x) => t - x < 2000); taps.push(t);
+        if (taps.length >= 2) {
+          const ivs = []; for (let i = 1; i < taps.length; i++) ivs.push(taps[i] - taps[i - 1]);
+          const avg = ivs.reduce((a, b) => a + b, 0) / ivs.length;
+          const next = Math.round(60000 / avg);
+          if (next >= 20 && next <= 300) { setBpm(next); bpmInput.value = String(next); }
+        }
+      });
+      root.append(el('div', { className: 'fx-card cmp-grid' }, [
+        el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]),
+      ]));
     }
 
     // --- Width / height fields (reflect the draft) ---

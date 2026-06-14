@@ -683,6 +683,21 @@ input[type=checkbox]:checked::after {
 .fx-menu-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
 .is-audio input[type=range] { accent-color: var(--green); }
 .is-animated input[type=range] { accent-color: var(--green); }
+/* BPM field + TAP button (Composition inspector). */
+.cmp-bpm > input { flex: 1 1 0; min-width: 0; }
+.cmp-tap {
+  flex: 0 0 auto; padding: 0 10px; height: var(--ctrl-h); cursor: pointer;
+  background: var(--field-bg); color: var(--accent); border: 1px solid var(--line-2);
+  border-radius: var(--radius); font: var(--fw-med) var(--fs-ctrl) var(--mono); letter-spacing: var(--ls-ui);
+}
+.cmp-tap:active { background: var(--accent-soft); }
+/* Timeline duration unit toggle (s ⇄ ♪ beat-synced). */
+.anim-unit {
+  flex: 0 0 auto; min-width: 22px; padding: 0 5px; height: var(--ctrl-h); cursor: pointer;
+  background: var(--field-bg); color: var(--muted); border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm); font-size: var(--fs-ctrl);
+}
+.anim-unit.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; flex-wrap: wrap; }
 .anim-ctrls select {
   flex: 0 0 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);

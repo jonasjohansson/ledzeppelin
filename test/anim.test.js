@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { animPhase, animatedValue, resolveParams, makeAnim, makeAudioAnim } from '../src/model/anim.js';
+import { animPhase, animatedValue, resolveParams, makeAnim, makeAudioAnim, specDurationMs } from '../src/model/anim.js';
 
 test('animPhase forward wraps 0..1 over the duration', () => {
   assert.equal(animPhase(0, 4000, 'forward'), 0);
@@ -51,6 +51,24 @@ test('audio anim maps a band (×gain, clamped) onto from..to', () => {
   assert.equal(animatedValue(spec, 0, { bass: 0.25 }), 5);   // 0.25*2 = 0.5 → 5
   assert.equal(animatedValue(spec, 0, { bass: 0.9 }), 10);   // 1.8 clamps to 1 → 10
   assert.equal(animatedValue(spec, 0, {}), 0);               // missing band → 0
+});
+
+test('makeAnim with beats marks the spec beat-synced; specDurationMs derives from bpm', () => {
+  const a = makeAnim(0, 1, 1000, 'forward', 4);    // 4 beats
+  assert.equal(a.beats, 4);
+  assert.equal(specDurationMs(a, 120), 2000);      // 4 beats @ 120bpm = 2000ms
+  assert.equal(specDurationMs(a, 60), 4000);       // tempo halves → loop doubles
+  const plain = makeAnim(0, 1, 1500);              // no beats → fixed duration
+  assert.equal(plain.beats, undefined);
+  assert.equal(specDurationMs(plain, 120), 1500);
+});
+
+test('beat-synced timeline phase tracks bpm via signals.__bpm', () => {
+  const a = makeAnim(0, 10, 1000, 'forward', 2);   // 2-beat loop
+  // @120bpm a 2-beat loop = 1000ms; at t=0.5s that is half way → value 5.
+  assert.ok(Math.abs(animatedValue(a, 0.5, { __bpm: 120 }) - 5) < 1e-6);
+  // @60bpm a 2-beat loop = 2000ms; at t=0.5s that is a quarter → value 2.5.
+  assert.ok(Math.abs(animatedValue(a, 0.5, { __bpm: 60 }) - 2.5) < 1e-6);
 });
 
 test('makeAudioAnim carries a source (default external)', () => {

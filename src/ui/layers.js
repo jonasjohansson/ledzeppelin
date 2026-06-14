@@ -345,8 +345,36 @@ function animControls(anim, onAnim, oscAddress) {
     // Direction/duration edits are RETIMED against the clock so the sweep
     // continues from its current position instead of jumping.
     kids.push(dirButtons(anim.direction, (d) => onAnim(retimeAnim(anim, { ...anim, direction: d }, animClock()))));
-    kids.push(mini('s', anim.durationMs / 1000, (v) =>
-      onAnim(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock()))));
+    // Duration unit: free SECONDS or BEAT-synced (locks the loop to the tempo).
+    const beatSync = anim.beats != null;
+    const bpm = animBpm();
+    const beatLabel = (d) => (d < 1 ? `1/${Math.round(1 / d)}` : String(d));
+    const unit = el('button', {
+      className: 'anim-unit' + (beatSync ? ' on' : ''), type: 'button', textContent: beatSync ? '♪' : 's',
+      title: beatSync ? 'beat-synced to tempo — click for free seconds' : 'free seconds — click to sync to tempo',
+      onclick: (e) => {
+        e.stopPropagation();
+        if (beatSync) {
+          const dur = Math.max(1, Math.round((anim.beats * 60000) / bpm));
+          const { beats, ...rest } = anim;   // eslint-disable-line no-unused-vars
+          onAnim(retimeAnim(anim, { ...rest, durationMs: dur }, animClock()));
+        } else {
+          const DIVS = [0.25, 0.5, 1, 2, 4, 8, 16];
+          const wantBeats = ((anim.durationMs / 1000) * bpm) / 60;
+          const beats = DIVS.reduce((a, b) => (Math.abs(b - wantBeats) < Math.abs(a - wantBeats) ? b : a), 1);
+          onAnim(retimeAnim(anim, { ...anim, beats, durationMs: Math.round((beats * 60000) / bpm) }, animClock()));
+        }
+      },
+    });
+    kids.push(unit);
+    if (beatSync) {
+      const DIVS = [0.25, 0.5, 1, 2, 4, 8, 16];
+      kids.push(selectInput(DIVS.map((d) => ({ value: String(d), label: beatLabel(d) })), String(anim.beats),
+        (v) => { const b = Number(v); onAnim(retimeAnim(anim, { ...anim, beats: b, durationMs: Math.round((b * 60000) / bpm) }, animClock())); }));
+    } else {
+      kids.push(mini('s', anim.durationMs / 1000, (v) =>
+        onAnim(retimeAnim(anim, { ...anim, durationMs: Math.max(0, Math.round(v * 1000)) }, animClock()))));
+    }
   }
   return el('div', { className: 'anim-ctrls' }, kids);
 }
@@ -360,6 +388,8 @@ let drag = null; // { kind: 'source' | 'effect', name }
 // The animation clock — set from the transport by createLayerPanel so the
 // module-level control builders (animControls) can retime sweep edits.
 let animClock = () => 0;
+// Live tempo (bpm) getter — lets the Timeline controls convert beats↔seconds.
+let animBpm = () => 120;
 
 // Companion-remote hook — set by createLayerPanel so the (module-level) cog menu
 // can read/toggle whether a parameter is published to the phone companion.
@@ -371,6 +401,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 // highlight as the playhead advances (cheap class toggle, no re-render).
 export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect }) {
   if (transport?.now) animClock = transport.now;
+  animBpm = () => getShow().composition?.bpm ?? 120;
   // Wire the cog-menu Companion tick to the show's exposed-controls set.
   remoteHook = {
     has: (addr) => hasRemoteControl(getShow(), addr),

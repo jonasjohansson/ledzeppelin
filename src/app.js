@@ -14,7 +14,7 @@ import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
 import { buildRemoteManifest } from './model/remote.js';
@@ -382,6 +382,8 @@ const compositionPanel = createCompositionPanel({
   setSize: (w, h) => setCanvasSize(w, h),
   fitToFixtures: () => fitToFixtures(),   // hoisted fn decl defined later in this module
   setTitle: (t) => { setComposition({ ...show, composition: { ...show.composition, title: t } }); layerPanel.refresh(); },   // reflect in the deck's composition-group header now
+  // BPM is read live from show.composition.bpm each frame — no rebuild needed.
+  setBpm: (b) => { show = setShowBpm(show, b); saveShow(show); },
 });
 // Output selection + snap state. Declared here (before the Settings panel, whose
 // initial render reads snap state) to avoid a temporal-dead-zone access.
@@ -1545,7 +1547,7 @@ function loop(ts) {
     // compositing. No-op (same ref) when nothing is animated. The signals map
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
-    const signals = { ...updateAudio(), ...extChannels() };
+    const signals = { ...updateAudio(), ...extChannels(), __bpm: show.composition?.bpm ?? 120 };
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, signals);
       let clips = L.clips;

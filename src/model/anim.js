@@ -19,8 +19,20 @@ export const DIRECTIONS = ['forward', 'backward', 'mirror'];
 // A param spec is BASIC (no entry), TIMELINE (mode 'timeline', default),
 // AUDIO (mode 'audio', driven by an audio band 0..1 scaled by gain), or
 // EXTERNAL (mode 'external', driven by a live OSC / socket-JSON channel).
-export function makeAnim(from, to, durationMs = 10000, direction = 'forward') {
-  return { mode: 'timeline', from: Number(from) || 0, to: Number(to) || 0, durationMs: Math.max(0, Math.round(durationMs)), direction };
+// `beats` (optional): when set, the loop length is musical — the effective
+// duration is beats × 60000/bpm (bpm comes from signals.__bpm), so the sweep
+// locks to the global tempo. durationMs stays as a fallback (no bpm / retime).
+export function makeAnim(from, to, durationMs = 10000, direction = 'forward', beats = null) {
+  const a = { mode: 'timeline', from: Number(from) || 0, to: Number(to) || 0, durationMs: Math.max(0, Math.round(durationMs)), direction };
+  if (beats != null && Number(beats) > 0) a.beats = Number(beats);
+  return a;
+}
+
+// Effective loop duration (ms) for a timeline spec: beat-synced specs derive it
+// from the live bpm, otherwise it's the fixed durationMs.
+export function specDurationMs(spec, bpm) {
+  if (spec && spec.beats && Number(bpm) > 0) return spec.beats * 60000 / bpm;
+  return spec ? spec.durationMs : 0;
 }
 
 // `source`: 'external' (a hardware input) or 'composition' (the comp's clip
@@ -94,7 +106,9 @@ export function animatedValue(spec, timeSec, signals) {
     const v = (signals && signals[key]) || 0;
     p = Math.max(0, Math.min(1, v * (spec.gain ?? 1)));
   } else {
-    p = animPhase(timeSec, spec.durationMs, spec.direction, spec.phase);
+    // Timeline: beat-synced specs derive their loop length from the live tempo.
+    const dur = specDurationMs(spec, signals && signals.__bpm);
+    p = animPhase(timeSec, dur, spec.direction, spec.phase);
   }
   return spec.from + (spec.to - spec.from) * p;
 }
