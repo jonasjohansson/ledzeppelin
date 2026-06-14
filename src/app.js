@@ -39,13 +39,14 @@ const thumbnails = renderSourceThumbnails(gl);
 // --- Default show: one device, two fixtures (single-device M2 target). ---
 function defaultShow() {
   let show = emptyShow();
-  const cv = show.composition.canvas;        // 1280×720
-  // Bench QuinLED (WLED), RGB passthrough. One controller for the first run.
-  show = addDevice(show, { id: 'c1', name: 'DQ1', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
-  // ONE definition, placed as a centred FAN of instances radiating from the
-  // middle — a Kagora-like centred layout (the real rig is centred on origin) so
-  // a radial source lights from the centre OUTWARD. All share the one definition.
-  show.fixtureTypes = [{ id: 't1', name: '1.6m · 96px', ledsPerMeter: 60, meters: 1.6, pixelCount: 96, colorOrder: 'RGB' }];
+  const cv = show.composition.canvas;
+  cv.w = 1024; cv.h = 1024;        // square default canvas
+  // Generic placeholder hardware so the first run shows SOMETHING on the wall —
+  // the user reconfigures (or scans) these to match their real rig.
+  show = addDevice(show, { id: 'c1', name: 'Generic Controller', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
+  // ONE generic fixture definition, placed as a centred FAN of instances radiating
+  // from the middle so the square canvas lights middle-out. All share the one def.
+  show.fixtureTypes = [{ id: 't1', name: 'Generic Fixture', ledsPerMeter: 60, meters: 1.6, pixelCount: 96, colorOrder: 'RGB' }];
   const N = 8, run = 230, mid = 160, ccx = cv.w / 2, ccy = cv.h / 2;
   for (let i = 0; i < N; i++) {
     const deg = i * (360 / N), a = deg * Math.PI / 180;
@@ -57,12 +58,16 @@ function defaultShow() {
     });
   }
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
-  // A radial ripple expanding from the centre — the fan lights middle-out on the
-  // first frame (autoFire loops on uT). Prefixed manifest defaults.
-  const clip = { ...makeClip('radial', undefined, 'r1'), params: prefixedDefaults('radial') };
+  // A clear two-layer starter: Checkered on the bottom, Lines on top (half
+  // opacity so both read). Prefixed manifest defaults per source.
+  const checkers = { ...makeClip('checkers', undefined, 'c1'), params: prefixedDefaults('checkers') };
+  const lines = { ...makeClip('line', undefined, 'l1c'), params: prefixedDefaults('line') };
   show.composition.layers = [
-    { id: 'l1', name: 'Layer 1', blend: 'alpha', opacity: 0.5,
-      clips: [clip], activeClipId: clip.id,
+    { id: 'l1', name: 'Checkered', blend: 'alpha', opacity: 1,
+      clips: [checkers], activeClipId: checkers.id,
+      effects: [], params: {}, transitionMs: 500 },
+    { id: 'l2', name: 'Lines', blend: 'alpha', opacity: 0.5,
+      clips: [lines], activeClipId: lines.id,
       effects: [], params: {}, transitionMs: 500 },
   ];
   show.composition.blendV2 = true;     // born on the new defaults — no migration needed
