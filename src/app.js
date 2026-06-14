@@ -399,6 +399,7 @@ let selectedFixtureIds = new Set();
 let SNAP_GRID = 20;     // grid step (px) fixtures snap to when not aligning to a neighbour
 let SNAP_DIST = 10;     // px tolerance for aligning to another fixture / centre
 let snapEnabled = false;
+let showGrid = false;   // draw the alignment grid on the overlay (independent of snap)
 let snapGuides = [];    // alignment guide lines to draw during a snapped drag
 let marqueeRect = null; // active rubber-band selection box (normalized), or null
 let marqueeBase = new Set();   // selection to keep when a Shift-marquee is additive
@@ -505,7 +506,7 @@ function snapPoint(x, y, fid, excludeIds) {
   else { const g = Math.round(y / SNAP_GRID) * SNAP_GRID; if (Math.abs(y - g) <= SNAP_DIST) sy = g; }
   return [sx, sy];
 }
-const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
+const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, (showGrid || snapEnabled) ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
 // Update the selection from a click. shift = toggle; clicking an already-selected
 // fixture keeps the group (so it can be dragged); a new one selects just it.
@@ -597,6 +598,18 @@ const SNAP_KEY = 'lz.snap';
 function saveSnap() { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ on: snapEnabled, grid: SNAP_GRID, dist: SNAP_DIST })); } catch { /* private */ } }
 (() => { try { const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); if (s) { snapEnabled = !!s.on; SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; } } catch { /* ignore */ } })();
 setSnapEnabled(snapEnabled);   // reflect the loaded state on the corner button
+
+// Grid overlay toggle (show the alignment grid without enabling snap).
+const gridBtn = document.getElementById('grid-btn');
+function setShowGrid(v) {
+  showGrid = !!v;
+  if (gridBtn) { gridBtn.classList.toggle('on', showGrid); gridBtn.textContent = (showGrid ? '▣' : '▢') + ' grid'; }
+  try { localStorage.setItem('lz.grid', showGrid ? '1' : '0'); } catch { /* private */ }
+  redrawOverlay();
+}
+gridBtn?.addEventListener('click', () => setShowGrid(!showGrid));
+try { if (localStorage.getItem('lz.grid') === '1') showGrid = true; } catch { /* ignore */ }
+setShowGrid(showGrid);
 
 // MIDI: clock drives the global BPM (debounced save — the clock fires ~1×/beat);
 // CC/notes arrive as external channels (cc<n>/note<n>) via the external store.
@@ -1500,6 +1513,7 @@ async function buildSettings(mount) {
   // --- Recording: bake the live output stream to disk → standalone playback
   // (server/play.js, or the daemon Play below) with no browser/GPU. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'recording' }));
+  mount.append(oel('div', { className: 'seg-hint', textContent: 'Bakes the live output — the exact per-frame pixel data sent over DDP/Art-Net. Replays headless (Play below, or `npm run play`) with no editor/GPU. Our own format, not a MiniMad file.' }));
   const recName = oel('input', { type: 'text', placeholder: 'show name' });
   const recBtn = oel('button', { className: 'fx-add' });
   const paintRec = () => { recBtn.textContent = recording ? 'stop recording ●' : 'record'; recBtn.classList.toggle('rec-on', recording); };
@@ -1521,29 +1535,18 @@ async function buildSettings(mount) {
         try { await fetch(playing ? '/api/recordings/stop' : '/api/recordings/play', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: rc.name }) }); } catch { /* daemon offline */ }
         setTimeout(() => buildSettings(mount), 300);
       };
+      const px = Math.round((rc.frameBytes || 0) / 3);
+      const uni = Math.ceil(px / 170);   // Art-Net universes (170 RGB px each)
+      const mb = (rc.sizeBytes || 0) / 1048576;
+      const size = mb >= 1 ? `${mb.toFixed(1)}MB` : `${Math.round((rc.sizeBytes || 0) / 1024)}KB`;
       recList.append(oel('div', { className: 'rec-row' }, [
-        oel('span', { className: 'rec-name', textContent: `${rc.name} · ${(rc.durationMs / 1000).toFixed(1)}s @ ${rc.fps}fps` }),
+        oel('span', { className: 'rec-name', textContent: `${rc.name} · ${(rc.durationMs / 1000).toFixed(1)}s @ ${rc.fps}fps · ${px}px (${uni}u) · ${size}` }),
         play,
       ]));
     }
   }).catch(() => { /* daemon offline */ });
 
-  // --- MIDI: enable input (clock → BPM; CC/notes → external channels cc<n>/note<n>). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'midi' }));
-  const midiBtn = oel('button', { className: 'fx-add' });
-  const midiStatus = oel('div', { className: 'seg-hint' });
-  const refreshMidi = () => {
-    const on = midiEnabled();
-    midiBtn.textContent = on ? 'MIDI enabled ✓' : 'enable MIDI';
-    midiBtn.disabled = on;
-    const ins = on ? midiInputs() : [];
-    midiStatus.textContent = on
-      ? (ins.length ? `inputs: ${ins.map((i) => i.name).join(', ')}` : 'no MIDI inputs connected')
-      : 'clock syncs the tempo; CC/notes become external channels';
-  };
-  midiBtn.onclick = async () => { const ok = await enableMidi(); if (ok) { try { localStorage.setItem(MIDI_KEY, '1'); } catch { /* ignore */ } } refreshMidi(); };
-  mount.append(midiBtn, midiStatus);
-  refreshMidi();
+  // (MIDI enable + input lives in the Mapping window now — not duplicated here.)
 
   // --- Accent colour (least priority → last): 8 preset swatches. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
@@ -1710,7 +1713,7 @@ function loop(ts) {
     // here naturally — muted layers composite to black, which samples/sends dark.
     // Skip the overlay draw entirely when it's hidden (its canvas is display:none) —
     // no point spending CPU drawing thousands of LEDs you can't see.
-    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, snapEnabled ? SNAP_GRID : 0, snapGuides, marqueeRect);
+    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, (showGrid || snapEnabled) ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
