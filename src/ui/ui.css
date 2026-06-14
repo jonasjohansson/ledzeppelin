@@ -930,18 +930,22 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .lh-op-range {
   -webkit-appearance: none; appearance: none; cursor: pointer;
   writing-mode: vertical-lr; direction: rtl;   /* 0 at bottom, 1 at top */
-  width: 14px; flex: 1 1 0; min-height: 0; margin: 0; background: transparent;
+  width: 100%; flex: 1 1 0; min-height: 0; margin: 0; background: transparent;
 }
+/* Track fills the whole box width — a wide accent fill rising to --fill — with a
+   round thumb riding on it. */
 .lh-op-range::-webkit-slider-runnable-track {
-  width: 4px; border-radius: var(--radius-sm);
+  width: 100%; border-radius: 0;
   background: linear-gradient(to top, var(--accent) var(--fill, 100%), var(--line-2) var(--fill, 100%));
 }
 .lh-op-range::-webkit-slider-thumb {
   -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--bg); margin-left: -4px;   /* centre the 12px thumb on the 4px track */
+  background: var(--accent); border: 2px solid var(--bg);
+  /* vertical+rtl anchors the thumb to the right edge — pull it back to centre. */
+  transform: translateX(-9px);
 }
-.lh-op-range::-moz-range-track { width: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
-.lh-op-range::-moz-range-progress { width: 4px; border-radius: var(--radius-sm); background: var(--accent); }
+.lh-op-range::-moz-range-track { width: 100%; border-radius: 0; background: var(--line-2); }
+.lh-op-range::-moz-range-progress { width: 100%; border-radius: 0; background: var(--accent); }
 .lh-op-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); }
 .lh-clear {
   padding: 0; border-radius: 0;
