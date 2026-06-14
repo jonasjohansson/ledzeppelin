@@ -36,7 +36,7 @@ test('buildPipelineInputs builds one route entry per device with byte range', ()
       { start: 0, count: 2, colorOrder: 'GRB' },
       { start: 2, count: 2, colorOrder: 'GRB' },
     ],
-    gamma: 1, brightness: 1,
+    gamma: 1, brightness: 1, delayMs: 0,
   });
 });
 
@@ -104,7 +104,7 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
       { start: 0, count: 100, colorOrder: 'GRB' },
       { start: 100, count: 100, colorOrder: 'GRB' },
     ],
-    gamma: 1, brightness: 1,
+    gamma: 1, brightness: 1, delayMs: 0,
   });
   // devB: global base 200 (NOT device-local 0), 90 pixels
   assert.deepEqual(route[1], {
@@ -113,7 +113,7 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
       { start: 0, count: 50, colorOrder: 'RGB' },
       { start: 50, count: 40, colorOrder: 'RGB' },
     ],
-    gamma: 1, brightness: 1,
+    gamma: 1, brightness: 1, delayMs: 0,
   });
   // 2 floats per pixel, (200 + 90) pixels
   assert.equal(sampleUVs.length, (200 + 90) * 2);

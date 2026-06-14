@@ -331,6 +331,9 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
       ] : []),
+      // Output delay (ms) — hold this controller's packets back to time-align it
+      // with the rest of the rig (e.g. against projection). 0 = immediate.
+      field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))),
       // Default colour — the idle colour shown on the strip after "save to device",
       // so you can tell controllers apart physically. Seeds from this controller's
       // auto-assigned identity hue (same colour as its preview/swatch) until set.

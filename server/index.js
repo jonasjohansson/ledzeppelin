@@ -86,7 +86,7 @@ const http = createServer(async (req, res) => {
 // permessage-deflate OFF: RGB pixel frames are high-entropy (near-incompressible),
 // so deflate would burn CPU both ends for ~zero gain. maxPayload caps a malformed
 // frame. The daemon, not the browser, paces output (below).
-const OUTPUT_FPS = 42, FRAME_MS = 1000 / OUTPUT_FPS, KEEPALIVE_MS = 1000;
+const OUTPUT_FPS = 42, KEEPALIVE_MS = 1000;   // default cap; the editor can override per route (m.fps)
 const wss = new WebSocketServer({ server: http, path: '/frames', perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
 let frames = 0;
 let lastManifest = null;   // cache the editor's latest companion manifest, so a phone gets the show the moment it connects
@@ -99,11 +99,28 @@ wss.on('connection', (ws) => {
   // freeze the wall (we keep-alive the last frame so WLED stays in realtime), and
   // slow downstream can't pile frames up in the receive path.
   let route = null, latest = null, dirty = false, lastSent = 0;
+  let outFps = OUTPUT_FPS, timer = null;
+  const startTimer = () => {
+    if (timer) clearInterval(timer);
+    const frameMs = 1000 / outFps;
+    timer = setInterval(() => {
+      if (!route || !latest) return;
+      const now = Date.now();
+      if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at outFps; else ~1Hz keep-alive
+      dirty = false; lastSent = now; frames++;
+      try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
+    }, frameMs);
+  };
   ws.on('message', (data, isBinary) => {
     if (isBinary) { if (route) { latest = data; dirty = true; } return; }   // ws gives a fresh Buffer per msg → no copy
     try {
       const m = JSON.parse(data.toString());
-      if (m.type === 'route') { route = m.route; console.log(`[ws] route set: ${route.length} device(s)`); }
+      if (m.type === 'route') {
+        route = m.route; console.log(`[ws] route set: ${route.length} device(s)`);
+        // Optional global output framerate cap (clamped); rebuild the pacer if it changed.
+        const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps) || OUTPUT_FPS)));
+        if (fps !== outFps) { outFps = fps; console.log(`[ws] output fps → ${outFps}`); startTimer(); }
+      }
       // External-channel ingest over the socket: any client (an app, a sensor
       // script) can send { type:'ext', channel, value } — relay it to the OTHER
       // clients so the UI(s) pick it up. Same shape the OSC listener broadcasts.
@@ -119,14 +136,8 @@ wss.on('connection', (ws) => {
       }
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
-  const timer = setInterval(() => {
-    if (!route || !latest) return;
-    const now = Date.now();
-    if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at OUTPUT_FPS; else ~1Hz keep-alive
-    dirty = false; lastSent = now; frames++;
-    try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
-  }, FRAME_MS);
-  ws.on('close', () => { clearInterval(timer); console.log('[ws] client disconnected'); });
+  startTimer();
+  ws.on('close', () => { if (timer) clearInterval(timer); console.log('[ws] client disconnected'); });
 });
 setInterval(() => { if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
 

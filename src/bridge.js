@@ -11,8 +11,9 @@
 // relays OSC + socket-JSON channel values as { type:'ext', channel, value } —
 // pass an onExt(channel, value) handler to consume them (optional; the old
 // single-argument call still works).
-export function connectBridge(route, { onExt, onManifestReq } = {}) {
+export function connectBridge(route, { onExt, onManifestReq, fps } = {}) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  let outFps = Number(fps) || 42;   // global output framerate cap sent to the daemon
   let ws = null;
   let closed = false;     // explicit close() → stop reconnecting
   let backoff = 500;      // ms; doubles per failed attempt, capped at 5s
@@ -28,7 +29,7 @@ export function connectBridge(route, { onExt, onManifestReq } = {}) {
       // On (re)connect, (re)send the current route so the daemon knows where bytes go.
       ws.addEventListener('open', () => {
         backoff = 500; everOpen = true; lastErr = null;
-        try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ }
+        try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ }
         // (Re)publish the companion manifest on connect so phones get the current
         // show immediately (and after an editor restart they aren't left stale).
         onManifestReq?.();
@@ -80,7 +81,12 @@ export function connectBridge(route, { onExt, onManifestReq } = {}) {
     // (the daemon just reassigns its route). Used on every geometry edit.
     setRoute(next) {
       route = next;
-      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route })); } catch { /* race */ } }
+      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ } }
+    },
+    // Set the global output framerate cap (re-sent to the daemon via a route msg).
+    setOutputFps(n) {
+      outFps = Math.max(1, Math.min(60, Math.round(Number(n) || 42)));
+      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ } }
     },
     connected: () => !!ws && ws.readyState === 1,
     lastError: () => lastErr,

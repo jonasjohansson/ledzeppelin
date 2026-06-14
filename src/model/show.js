@@ -50,7 +50,9 @@ export function syncDeviceTypes(show) {
     // universe (int ≥ 0; the device spans consecutive universes from it).
     const protocol = d.protocol === 'artnet' ? 'artnet' : 'ddp';
     const universe = Math.max(0, Math.round(Number(d.universe) || 0));
-    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe };
+    // Per-device output delay (ms) — time-aligns this controller against the rig.
+    const syncDelayMs = Math.max(0, Math.min(1000, Math.round(Number(d.syncDelayMs) || 0)));
+    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe, syncDelayMs };
   });
   return { ...show, deviceTypes: types, devices };
 }

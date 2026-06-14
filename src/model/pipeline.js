@@ -68,6 +68,9 @@ export function buildPipelineInputs(show) {
       // perceptual gamma + a max-brightness cap. Defaults are no-ops.
       gamma: d.gamma ?? 1,
       brightness: d.brightness ?? 1,
+      // Per-device output delay (ms) — holds this controller's packets back to
+      // time-align it with the rest of the rig. 0 = immediate.
+      delayMs: d.syncDelayMs ?? 0,
     });
   }
 

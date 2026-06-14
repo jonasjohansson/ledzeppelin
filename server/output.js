@@ -57,8 +57,11 @@ function buildDeviceBytes(slice, d, lut) {
 const suppressUntil = new Map();
 export function suppressOutput(ip, ms = 6000) { suppressUntil.set(ip, Date.now() + ms); }
 
-// devices: [{ ip, port=4048, colorOrder, byteStart, byteEnd, segments?, protocol?, universe? }]
+// devices: [{ ip, port=4048, colorOrder, byteStart, byteEnd, segments?, protocol?, universe?, delayMs? }]
 // protocol 'artnet' streams ArtDmx (universes from `universe`); anything else = DDP.
+// delayMs (optional) holds a device's packets back by N ms to time-align it with
+// the rest of the rig (e.g. against video/projection); bytes are built NOW so the
+// delayed send still ships THIS frame.
 export function sendFrame(rgb, devices) {
   seq = (seq + 1) & 0x0f;
   const now = Date.now();
@@ -68,16 +71,20 @@ export function sendFrame(rgb, devices) {
     const slice = rgb.subarray(d.byteStart, d.byteEnd);
     if (!slice.length) continue;
     const bytes = buildDeviceBytes(slice, d, deviceLut(d));   // reorder + gamma/brightness, one pass
+    let emit;
     if (d.protocol === 'artnet') {
       const port = d.port ?? ARTNET_PORT;
       const key = `${d.ip}:${port}`;
       const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
       artSeq.set(key, s);
-      for (const pkt of buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s }))
-        udpSend(pkt, port, d.ip);   // pkt = [header, chunk] gather list
+      const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s });
+      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };   // pkt = [header, chunk] gather list
     } else {
-      for (const pkt of buildPackets(bytes, { sequence: seq }))
-        udpSend(pkt, d.port ?? 4048, d.ip);   // pkt = [header, chunk] gather list
+      const port = d.port ?? 4048;
+      const pkts = buildPackets(bytes, { sequence: seq });
+      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };
     }
+    const delay = Number(d.delayMs) || 0;
+    if (delay > 0) setTimeout(emit, delay); else emit();
   }
 }

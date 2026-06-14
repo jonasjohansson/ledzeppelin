@@ -109,6 +109,9 @@ let show = syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())));
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
 let controlPanel = null;   // Control-tab panel (assigned once built; null-safe before)
+// Global output framerate cap sent to the daemon (System › Settings; persisted).
+const OUTFPS_KEY = 'lz.outfps';
+const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
 
 // On-screen blit so the composited output is visible on the real framebuffer.
 const SCREEN_FS = `#version 300 es
@@ -169,7 +172,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true) });   // canonical OSC addresses + ext channels; phone asks → publish
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -1440,6 +1443,13 @@ async function buildSettings(mount) {
   mount.append(Slider('Distance (px)', SNAP_DIST, {
     min: 1, max: 40, step: 1, default: 10, commit: 'live',
     onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
+  }));
+
+  // --- Output: global framerate cap sent to the daemon (caps the DDP/Art-Net rate). ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'output' }));
+  mount.append(Slider('Max FPS', savedOutFps(), {
+    min: 1, max: 60, step: 1, default: 42, commit: 'live',
+    onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
   }));
 
   // --- MIDI: enable input (clock → BPM; CC/notes → external channels cc<n>/note<n>). ---
