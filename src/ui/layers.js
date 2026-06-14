@@ -635,7 +635,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       presetName: entry?.name || name,
       getParams: () => paramsForPrefix(getShow().composition?.params, name),
       applyParams: (p) => commit(mergeCompositionParams(show(), p)),
-      onReset: () => commit(mergeCompositionParams(show(), prefixedDefaults(name))),
+      onReset: () => commit(mergeCompositionParams(show(), prefixedDefaults(name), true)),
       onRemove: () => commit(removeCompositionEffect(show(), fx)),
     }));
     block.append(head);
@@ -679,7 +679,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       presetName: entry?.name || name,
       getParams: () => paramsForPrefix(layerById(id)?.params, name),
       applyParams: (p) => commit(mergeLayerParams(show(), id, p)),
-      onReset: () => commit(mergeLayerParams(show(), id, prefixedDefaults(name))),
+      onReset: () => commit(mergeLayerParams(show(), id, prefixedDefaults(name), true)),
       onRemove: () => commit(removeLayerEffect(show(), id, fx)),
     }));
     block.append(head);
@@ -1139,7 +1139,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       presetName: entry?.name || name,
       getParams: () => paramsForPrefix(liveClip(clip.id)?.params, name),
       applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
-      onReset: () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(name))),
+      onReset: () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(name), true)),
       onRemove: () => commit(removeClipEffect(show(), id, clip.id, fx)),
     }));
     block.append(head);

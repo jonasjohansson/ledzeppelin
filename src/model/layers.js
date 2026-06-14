@@ -435,6 +435,9 @@ export function setActiveClip(show, layerId, clipId) {
 
 // Change a clip's generator: reset that generator's params to defaults but KEEP
 // the clip's effect params (anything whose prefix is one of the clip's effects).
+// Also resets the source params' ANIMATIONS back to basic (keeping transform `tf.*`
+// and effect-param anims) — so "reset" on the Source group also clears timeline/
+// audio modulation on those params.
 export function changeClipGenerator(show, layerId, clipId, generator) {
   return updateClip(show, layerId, clipId, (clip) => {
     const effectSet = new Set(clip.effects || []);
@@ -442,24 +445,39 @@ export function changeClipGenerator(show, layerId, clipId, generator) {
     for (const k of Object.keys(clip.params || {})) {
       if (effectSet.has(k.split('.')[0])) kept[k] = clip.params[k];
     }
+    // Keep only transform + effect-param anims; the source's own param anims reset.
+    const anim = {};
+    for (const k of Object.keys(clip.anim || {})) {
+      const prefix = k.split('.')[0];
+      if (prefix === 'tf' || effectSet.has(prefix)) anim[k] = clip.anim[k];
+    }
     // Rename to the new source unless the user gave the clip a custom name (i.e.
     // it still carries the previous source's auto-name, or a legacy "clip N").
     const autoNamed = !clip.name || clip.name === labelOf(clip.generator) || /^clip\s*\d+$/i.test(clip.name);
     const name = autoNamed ? labelOf(generator) : clip.name;
-    return { ...clip, generator, name, params: { ...kept, ...prefixedDefaults(generator) } };
+    return { ...clip, generator, name, params: { ...kept, ...prefixedDefaults(generator) }, anim };
   });
 }
 
-// Merge a batch of (namespaced) params into a clip (e.g. loading a preset).
-export function mergeClipParams(show, layerId, clipId, patch) {
-  return updateClip(show, layerId, clipId, (clip) =>
-    ({ ...clip, params: { ...clip.params, ...patch } }));
+// Merge a batch of (namespaced) params into a clip (e.g. loading a preset). When
+// `clearAnim` is set (a group RESET), also drop any animation on the patched keys
+// so those params return to basic.
+export function mergeClipParams(show, layerId, clipId, patch, clearAnim = false) {
+  return updateClip(show, layerId, clipId, (clip) => {
+    const next = { ...clip, params: { ...clip.params, ...patch } };
+    if (clearAnim && clip.anim) { const anim = { ...clip.anim }; for (const k of Object.keys(patch)) delete anim[k]; next.anim = anim; }
+    return next;
+  });
 }
 
-// Merge a batch of params into a layer (composition FX presets).
-export function mergeLayerParams(show, layerId, patch) {
-  return updateLayer(show, layerId, (layer) =>
-    ({ ...layer, params: { ...layer.params, ...patch } }));
+// Merge a batch of params into a layer (composition FX presets). `clearAnim` (a
+// group RESET) also drops animation on the patched keys.
+export function mergeLayerParams(show, layerId, patch, clearAnim = false) {
+  return updateLayer(show, layerId, (layer) => {
+    const next = { ...layer, params: { ...layer.params, ...patch } };
+    if (clearAnim && layer.anim) { const anim = { ...layer.anim }; for (const k of Object.keys(patch)) delete anim[k]; next.anim = anim; }
+    return next;
+  });
 }
 
 // Set (or clear, when spec is null) a per-parameter animation on a clip. The
@@ -673,8 +691,12 @@ export function moveCompositionEffect(show, fxIndex, delta) {
 export function setCompositionParam(show, key, value) {
   return updateComp(show, (c) => ({ ...c, params: { ...c.params, [key]: value } }));
 }
-export function mergeCompositionParams(show, patch) {
-  return updateComp(show, (c) => ({ ...c, params: { ...c.params, ...patch } }));
+export function mergeCompositionParams(show, patch, clearAnim = false) {
+  return updateComp(show, (c) => {
+    const next = { ...c, params: { ...c.params, ...patch } };
+    if (clearAnim && c.anim) { const anim = { ...c.anim }; for (const k of Object.keys(patch)) delete anim[k]; next.anim = anim; }
+    return next;
+  });
 }
 export function setCompositionAnim(show, key, spec) {
   return updateComp(show, (c) => {

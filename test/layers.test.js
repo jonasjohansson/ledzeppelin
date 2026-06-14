@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   prefixedDefaults, normalizeComposition,
   makeClip, addClip, addClipAt, removeClip, moveClip, moveClipToLayer, setActiveClip,
-  changeClipGenerator, setClipParam,
+  changeClipGenerator, setClipParam, setClipAnim, mergeClipParams,
   setClipTransform, setClipOpacity, setClipDuration, playheadClip,
   addClipEffect, removeClipEffect, moveClipEffect,
   makeLayer, addLayer, removeLayer, moveLayer, patchLayer,
@@ -464,6 +464,41 @@ test('changeClipGenerator resets generator params, keeps clip effect params', ()
   assert.equal(clip.params['gradient.angle'], 0);     // new gen default seeded
   assert.equal(clip.params['line.pos'], undefined);   // old gen params dropped
   assert.equal(clip.params['displace.amt'], 0.7);     // clip effect params kept
+});
+
+test('changeClipGenerator clears source-param anims, keeps tf + effect anims', () => {
+  let show = deckShow();   // 'line' clip
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  show = addClipEffect(show, lid, cid, 'displace');
+  const spec = { mode: 'timeline', from: 0, to: 1 };
+  show = setClipAnim(show, lid, cid, 'line.speed', spec);     // source-param anim
+  show = setClipAnim(show, lid, cid, 'tf.x', spec);           // transform anim
+  show = setClipAnim(show, lid, cid, 'displace.amt', spec);   // effect-param anim
+  show = changeClipGenerator(show, lid, cid, 'gradient');     // = Source / reset-all path
+  const clip = show.composition.layers[0].clips[0];
+  assert.equal(clip.anim['line.speed'], undefined);   // source anim → basic
+  assert.ok(clip.anim['tf.x']);                        // transform anim kept
+  assert.ok(clip.anim['displace.amt']);                // effect anim kept
+});
+
+test('mergeClipParams clearAnim drops anims on patched keys only (else keeps them)', () => {
+  const lid0 = 'l1';
+  const mk = () => { let s = deckShow(); const lid = s.composition.layers[0].id; const cid = s.composition.layers[0].clips[0].id;
+    s = setClipAnim(s, lid, cid, 'displace.amt', { mode: 'timeline', from: 0, to: 1 });
+    s = setClipAnim(s, lid, cid, 'line.x', { mode: 'timeline', from: 0, to: 1 });
+    return { s, lid, cid }; };
+  // clearAnim = true → patched key's anim removed, others kept
+  let { s, lid, cid } = mk();
+  s = mergeClipParams(s, lid, cid, { 'displace.amt': 0.2 }, true);
+  let clip = s.composition.layers[0].clips[0];
+  assert.equal(clip.anim['displace.amt'], undefined);
+  assert.ok(clip.anim['line.x']);
+  // default (no clearAnim) → anim preserved (e.g. loading a preset)
+  ({ s, lid, cid } = mk());
+  s = mergeClipParams(s, lid, cid, { 'displace.amt': 0.2 });
+  clip = s.composition.layers[0].clips[0];
+  assert.ok(clip.anim['displace.amt']);
 });
 
 // --- clip effect chain ---
