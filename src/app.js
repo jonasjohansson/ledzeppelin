@@ -22,6 +22,7 @@ import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromT
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
+import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 // Appearance/theme overrides removed — the app ships one curated base design
@@ -589,6 +590,17 @@ const SNAP_KEY = 'lz.snap';
 function saveSnap() { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ on: snapEnabled, grid: SNAP_GRID, dist: SNAP_DIST })); } catch { /* private */ } }
 (() => { try { const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); if (s) { snapEnabled = !!s.on; SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; } } catch { /* ignore */ } })();
 setSnapEnabled(snapEnabled);   // reflect the loaded state on the corner button
+
+// MIDI: clock drives the global BPM (debounced save — the clock fires ~1×/beat);
+// CC/notes arrive as external channels (cc<n>/note<n>) via the external store.
+const MIDI_KEY = 'lz.midi';
+let midiBpmSaveTimer = null;
+setBpmCallback((b) => {
+  show = setShowBpm(show, b);
+  const f = document.querySelector('.cmp-bpm input'); if (f && document.activeElement !== f) f.value = String(b);
+  if (!midiBpmSaveTimer) midiBpmSaveTimer = setTimeout(() => { midiBpmSaveTimer = null; saveShow(show); }, 1000);
+});
+(() => { try { if (localStorage.getItem(MIDI_KEY) === '1') enableMidi(); } catch { /* ignore */ } })();
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
@@ -1429,6 +1441,23 @@ async function buildSettings(mount) {
     min: 1, max: 40, step: 1, default: 10, commit: 'live',
     onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
   }));
+
+  // --- MIDI: enable input (clock → BPM; CC/notes → external channels cc<n>/note<n>). ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'midi' }));
+  const midiBtn = oel('button', { className: 'fx-add' });
+  const midiStatus = oel('div', { className: 'seg-hint' });
+  const refreshMidi = () => {
+    const on = midiEnabled();
+    midiBtn.textContent = on ? 'MIDI enabled ✓' : 'enable MIDI';
+    midiBtn.disabled = on;
+    const ins = on ? midiInputs() : [];
+    midiStatus.textContent = on
+      ? (ins.length ? `inputs: ${ins.map((i) => i.name).join(', ')}` : 'no MIDI inputs connected')
+      : 'clock syncs the tempo; CC/notes become external channels';
+  };
+  midiBtn.onclick = async () => { const ok = await enableMidi(); if (ok) { try { localStorage.setItem(MIDI_KEY, '1'); } catch { /* ignore */ } } refreshMidi(); };
+  mount.append(midiBtn, midiStatus);
+  refreshMidi();
 
   // --- Accent colour (least priority → last) ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
