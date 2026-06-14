@@ -235,8 +235,8 @@ function broadcastManifest(now = false) {
     const data = buildRemoteManifest(show, thumbnails);
     const sig = manifestSig(data);
     if (now || sig !== lastManifestSig) { lastManifestSig = sig; bridge?.sendJson?.({ type: 'manifest', data }); }
-    const cp = document.getElementById('control-pane');
-    if (controlPanel && cp && !cp.hidden) controlPanel.refresh();   // itself structural-gated → cheap
+    const cp = document.getElementById('system-control');
+    if (controlPanel && cp && !cp.hidden && !cp.closest('#system-pane')?.hidden) controlPanel.refresh();   // structural-gated → cheap
   };
   if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; run(); return; }
   if (manifestTimer) return;
@@ -1016,7 +1016,7 @@ setWallView(wallView);
 // (Play/transport UI and the keyboard cheat-sheet were removed — not needed.)
 
 
-// (The three top-level sections are Design · Output · Control — see setSection.
+// (The three top-level sections are Design · Output · System — see setSection.
 //  Project file actions live in the corner File menu.)
 
 const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
@@ -1300,17 +1300,19 @@ outputTabsEl?.addEventListener('click', (ev) => {
 // --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
 //     Output (Fixtures/Chains/Devices). Only one shows at a time.
 //     (Element lookups are hoisted to the overlay section — see note there.) ---
-const controlPaneEl = document.getElementById('control-pane');
+const systemPaneEl = document.getElementById('system-pane');
+const systemControlEl = document.getElementById('system-control');
+const systemSettingsEl = document.getElementById('system-settings');
 // The companion URL the QR/link point at. Prefer the daemon's LAN IP (a phone
 // can't use localhost); fall back to this page's origin (works if the editor was
 // itself opened via the LAN IP).
 let companionUrl = `${location.origin}/remote/`;
 fetch('/api/info').then((r) => r.json()).then((info) => {
-  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/remote/`; if (!controlPaneEl?.hidden) controlPanel.rebuild(); }
+  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/remote/`; if (!systemPaneEl?.hidden) controlPanel.rebuild(); }
 }).catch(() => { /* no daemon — keep the origin-based URL */ });
 
 controlPanel = createControlPanel({
-  mount: controlPaneEl,
+  mount: systemControlEl,
   getShow: () => show,
   // Apply a companion command locally (same canonical addresses the phone uses),
   // then reflect it in the panel + on the canvas.
@@ -1324,8 +1326,8 @@ function setSection(which) {
     x.classList.toggle('section-active', x.dataset.section === which));
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
-  if (controlPaneEl) controlPaneEl.hidden = which !== 'control';
-  // The clip deck stays visible in Design AND Control (you keep the composition
+  if (systemPaneEl) systemPaneEl.hidden = which !== 'system';
+  // The clip deck stays visible in Design AND System (you keep the composition
   // in view while tweaking params); only Output hides it to give the canvas +
   // fixture editor the room. body.output-mode also lets CSS react.
   document.body.classList.toggle('output-mode', which === 'output');
@@ -1333,7 +1335,7 @@ function setSection(which) {
   const leftEl = document.getElementById('left');
   if (leftEl) leftEl.hidden = which === 'output';
   updateInspector();   // left sidebar only shows in Output
-  if (which === 'control') controlPanel.rebuild();
+  if (which === 'system' && systemTab === 'control') controlPanel.rebuild();
 }
 sectionSwitchEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.section-tab');
@@ -1343,8 +1345,72 @@ sectionSwitchEl?.addEventListener('click', (ev) => {
 // Initial layout: restore the last section (Design/Output/Control) across
 // reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
 // default (you see your fixture layout on load; the canvas toggle hides it).
-const savedSection = (() => { try { return localStorage.getItem('lz.section'); } catch { return null; } })();
-setSection(['design', 'output', 'control'].includes(savedSection) ? savedSection : 'design');
+const savedSectionRaw = (() => { try { return localStorage.getItem('lz.section'); } catch { return null; } })();
+const savedSection = savedSectionRaw === 'control' ? 'system' : savedSectionRaw;   // migrate old name
+setSection(['design', 'output', 'system'].includes(savedSection) ? savedSection : 'design');
+
+// --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
+const ACCENT_KEY = 'lz.accent';
+const ACCENT_DEFAULT = '#e8a35c';
+const ACCENT_PRESETS = ['#e8a35c', '#5cb8e8', '#6ee07d', '#e85c9e', '#b98cff', '#e8d65c', '#ff6b6b'];
+const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
+// --accent cascades (green/amber/cyan + every color-mix(--accent …) follow); the
+// soft/line/text variants are fixed values in CSS, so derive + override them here.
+function applyAccent(hex) {
+  const s = document.documentElement.style;
+  s.setProperty('--accent', hex);
+  s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
+  s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
+  s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
+}
+const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
+function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
+applyAccent(savedAccent());   // apply the saved accent on boot
+
+// --- System pane: Control / Settings subtabs ---------------------------------
+let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
+systemTab = systemTab === 'settings' ? 'settings' : 'control';
+function setSystemTab(which) {
+  systemTab = which === 'settings' ? 'settings' : 'control';
+  try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
+  document.querySelectorAll('#system-tabs .subtab').forEach((b) => b.classList.toggle('subtab-active', b.dataset.systab === systemTab));
+  if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
+  if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
+  if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
+}
+document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
+  const b = ev.target.closest('.subtab');
+  if (b) setSystemTab(b.dataset.systab);
+});
+
+// Settings pane: accent colour (more preferences can join here later).
+function buildSettings(mount) {
+  if (!mount) return;
+  mount.textContent = '';
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
+  const cur = savedAccent();
+  const swatches = [];
+  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
+  const row = oel('div', { className: 'accent-swatches' });
+  for (const p of ACCENT_PRESETS) {
+    const sw = oel('button', { className: 'accent-swatch', title: p });
+    sw.dataset.hex = p; sw.style.background = p;
+    sw.onclick = () => { setAccent(p); picker.value = p; mark(p); };
+    swatches.push(sw); row.append(sw);
+  }
+  mount.append(row);
+  const picker = oel('input', { type: 'color', value: cur, className: 'accent-picker', title: 'custom accent colour' });
+  picker.addEventListener('input', () => { setAccent(picker.value); mark(picker.value); });
+  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Custom' }), picker]));
+  const reset = oel('button', { className: 'fx-add', textContent: 'reset to default' });
+  reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; mark(ACCENT_DEFAULT); };
+  mount.append(reset);
+  mark(cur);
+}
+buildSettings(systemSettingsEl);
+setSystemTab(systemTab);
 setOutputTab('fixtures');
 setOverlay(true);
 

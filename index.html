@@ -59,7 +59,7 @@ canvas{display:block}
     <div id="section-switch" class="section-switch">
       <button class="section-tab section-active" data-section="design">Design</button>
       <button class="section-tab" data-section="output">Output</button>
-      <button class="section-tab" data-section="control">Control<span class="tab-dot" id="control-dot" title="companion / daemon status"></span></button>
+      <button class="section-tab" data-section="system">System<span class="tab-dot" id="control-dot" title="companion / daemon status"></span></button>
     </div>
 
     <!-- DESIGN -->
@@ -100,9 +100,16 @@ canvas{display:block}
       </div>
     </div>
 
-    <!-- CONTROL: the companion surface, in the editor — a live shortcut to the
-         master controls + ticked params, plus the phone-companion URL/QR/status. -->
-    <div id="control-pane" hidden></div>
+    <!-- SYSTEM: Control (the companion surface — master controls + ticked params +
+         the phone URL/QR/status) and Settings (accent colour + app preferences). -->
+    <div id="system-pane" hidden>
+      <div class="subtabs" id="system-tabs">
+        <button class="subtab subtab-active" data-systab="control">Control</button>
+        <button class="subtab" data-systab="settings">Settings</button>
+      </div>
+      <div id="system-control"></div>
+      <div id="system-settings" hidden></div>
+    </div>
   </aside>
 
 </div>
