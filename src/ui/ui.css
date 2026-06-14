@@ -712,13 +712,15 @@ input[type=checkbox]:checked::after {
   -webkit-appearance: none; appearance: none; background: none; pointer-events: none;
 }
 .range-track input[type=range]::-webkit-slider-runnable-track { background: none; border: none; }
+/* Triangle grips (Resolume trim style): a ▽ at each end of the active span. */
 .range-track input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: ew-resize;
-  width: 11px; height: 14px; border-radius: var(--radius-sm); background: var(--accent); border: 1px solid var(--bg);
+  width: 12px; height: 9px; border: none; border-radius: 0; background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 .range-track input[type=range]::-moz-range-thumb {
-  pointer-events: auto; cursor: ew-resize; width: 11px; height: 14px; border-radius: var(--radius-sm);
-  background: var(--accent); border: 1px solid var(--bg);
+  pointer-events: auto; cursor: ew-resize; width: 12px; height: 9px; border: none; border-radius: 0;
+  background: var(--accent); clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
 /* The handles BRACKET the active span (Resolume trim-grip style): the in-grip
@@ -726,10 +728,10 @@ input[type=checkbox]:checked::after {
    the grips read as the edges of the range, and both stay grabbable even when
    in == out. (Transform moves the painted box; the native hit area is wider
    than the visual shift, so grabbing is unaffected.) */
-.range-track .rt-in::-webkit-slider-thumb { transform: translateX(-5px); }
-.range-track .rt-out::-webkit-slider-thumb { transform: translateX(5px); }
-.range-track .rt-in::-moz-range-thumb { transform: translateX(-5px); }
-.range-track .rt-out::-moz-range-thumb { transform: translateX(5px); }
+.range-track .rt-in::-webkit-slider-thumb { transform: translate(-5px, -4px); }
+.range-track .rt-out::-webkit-slider-thumb { transform: translate(5px, -4px); }
+.range-track .rt-in::-moz-range-thumb { transform: translate(-5px, -4px); }
+.range-track .rt-out::-moz-range-thumb { transform: translate(5px, -4px); }
 /* Distinguish the END (out) handle from the START (in) handle. */
 /* Handle value bubble: a tiny editable readout that pops above a grabbed thumb
    and follows it — type into it to set an exact in/out value. */
@@ -772,7 +774,16 @@ input[type=checkbox]:checked::after {
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
 .ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
-.ly-row .anim-cog-wrap { order: 3; }
+/* − / + step buttons (Resolume layout: label · value · − · + · slider). */
+.ly-row .ly-step {
+  order: 2; flex: 0 0 auto; width: 20px; height: var(--ctrl-h); padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  background: var(--field-bg); color: var(--muted); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); font-size: var(--fs-ctrl); cursor: pointer;
+}
+.ly-row .ly-step-plus { order: 3; }
+.ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
+.ly-row .anim-cog-wrap { order: 5; }
 /* Editable readout: a borderless number field that reads as plain text until you
    hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
@@ -782,25 +793,35 @@ input.ly-readout {
   border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: text;
 }
 input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); }
-/* Param-row slider: a custom track whose ACCENT fill is value-based (--fill set
-   in JS) so it reaches the very ends (native ranges inset the fill by half a
-   thumb). Small thumb → minimal edge inset. */
+/* Param-row slider (Resolume style): a chunky dark track with a DIM accent fill
+   to --fill, capped by a 2px BRIGHT accent edge line at the value. No round thumb
+   — the thumb is a transparent grab strip; the edge line tracks the value exactly. */
 .ly-row input.ly-readout { flex: 0 0 var(--col-val); text-align: right; }   /* fixed value column → sliders align */
 .ly-row input[type=range] {
-  order: 2; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
-  -webkit-appearance: none; appearance: none; height: 14px; background: transparent; cursor: pointer;
+  order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
+  -webkit-appearance: none; appearance: none; height: var(--ctrl-h); background: transparent; cursor: pointer;
 }
 .ly-row input[type=range]::-webkit-slider-runnable-track {
-  height: 4px; border-radius: var(--radius-sm);
-  background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--line-2) var(--fill, 50%));
+  height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--accent) 28%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
+    var(--accent) calc(var(--fill, 50%) - 2px),
+    var(--accent) var(--fill, 50%),
+    var(--field-bg) var(--fill, 50%));
 }
 .ly-row input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--bg);
+  -webkit-appearance: none; width: 10px; height: var(--ctrl-h); margin-top: 0; background: transparent; border: none;
 }
-.ly-row input[type=range]::-moz-range-track { height: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
-.ly-row input[type=range]::-moz-range-progress { height: 4px; border-radius: var(--radius-sm); background: var(--accent); }
-.ly-row input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); }
+.ly-row input[type=range]::-moz-range-track {
+  height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--accent) 28%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
+    var(--accent) calc(var(--fill, 50%) - 2px),
+    var(--accent) var(--fill, 50%),
+    var(--field-bg) var(--fill, 50%));
+}
+.ly-row input[type=range]::-moz-range-progress { background: transparent; }
+.ly-row input[type=range]::-moz-range-thumb { width: 10px; height: var(--ctrl-h); border: none; background: transparent; }
 
 .ly-fx { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: var(--s2) 0 0; background: transparent; }
 /* Selected effect (click its header) — Backspace deletes it. */

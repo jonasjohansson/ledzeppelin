@@ -31,6 +31,18 @@ export function Slider(label, value, opts = {}) {
   const paint = () => range.style.setProperty('--fill', (max > min ? (Number(range.value) - min) / (max - min) * 100 : 50) + '%');
   paint();
 
+  // − / + step buttons (Resolume layout: value · − · + · slider). Nudge by a
+  // sensible tick (not the fine drag step), clamped; commits like a discrete edit.
+  const clamp = (v) => Math.min(max, Math.max(min, v));
+  const tick = (max - min) <= 2 ? 0.01 : (max - min) <= 50 ? 0.1 : 1;
+  const nudge = (dir) => { const v = clamp(Number(range.value) + dir * tick); range.value = String(v); out.value = fmt(v); paint(); onInput(v); };
+  const stepBtn = (cls, txt, dir) => el('button', {
+    className: 'ly-step ' + cls, type: 'button', textContent: txt, tabIndex: -1,
+    onclick: (e) => { e.preventDefault(); e.stopPropagation(); nudge(dir); },
+  });
+  const minus = stepBtn('ly-step-minus', '−', -1);
+  const plus = stepBtn('ly-step-plus', '+', 1);
+
   // Drag: always repaint + sync the readout; fire onInput live, or defer to
   // release. Holding Shift snaps to 10 coarse stops across the range.
   range.addEventListener('input', () => {
@@ -63,7 +75,7 @@ export function Slider(label, value, opts = {}) {
   });
 
   const row = el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : '') }, [
-    el('span', { className: 'ly-plabel', textContent: label }), out, range,
+    el('span', { className: 'ly-plabel', textContent: label }), out, minus, plus, range,
   ]);
   // Right-click ANYWHERE on the row resets to the default (when one exists) and
   // always suppresses the OS menu, so a slider feels like a control, not text.
