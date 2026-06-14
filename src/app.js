@@ -1357,6 +1357,7 @@ outputTabsEl?.addEventListener('click', (ev) => {
 const systemPaneEl = document.getElementById('system-pane');
 const systemControlEl = document.getElementById('system-control');
 const systemSettingsEl = document.getElementById('system-settings');
+const systemMappingEl = document.getElementById('system-mapping');
 // The companion URL the QR/link point at. Prefer the daemon's LAN IP (a phone
 // can't use localhost); fall back to this page's origin (works if the editor was
 // itself opened via the LAN IP).
@@ -1398,7 +1399,7 @@ sectionSwitchEl?.addEventListener('click', (ev) => {
 
 // System subtab (declared BEFORE the initial setSection() below, which reads it).
 let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
-systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
+systemTab = ['control', 'mapping'].includes(systemTab) ? systemTab : 'settings';   // default to Settings
 
 // Initial layout: restore the last section (Design/Output/System) across
 // reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
@@ -1427,15 +1428,31 @@ const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACC
 function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
 applyAccent(savedAccent());   // apply the saved accent on boot
 
-// --- System pane: Control / Settings subtabs ---------------------------------
+// --- System pane: Settings / Control / Mapping subtabs -----------------------
+const VALID_SYSTABS = ['settings', 'control', 'mapping'];
+function buildMappingPane() {
+  if (!systemMappingEl || systemMappingEl.dataset.built) return;
+  systemMappingEl.dataset.built = '1';
+  // The same mappings page, embedded — talks to the editor over BroadcastChannel
+  // (works across iframes). A "pop out" opens it as a separate window for a 2nd
+  // monitor. One UI, two homes.
+  const bar = oel('div', { className: 'map-tab-bar' }, [
+    oel('button', { className: 'fx-add', textContent: 'pop out ↗', title: 'open the mapping surface in its own window',
+      onclick: () => { try { window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { /* blocked */ } } }),
+  ]);
+  const frame = oel('iframe', { className: 'map-frame', src: 'mappings/', title: 'control mapping' });
+  systemMappingEl.append(bar, frame);
+}
 function setSystemTab(which) {
-  systemTab = which === 'settings' ? 'settings' : 'control';
+  systemTab = VALID_SYSTABS.includes(which) ? which : 'settings';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
   document.querySelectorAll('#system-tabs .subtab').forEach((b) => b.classList.toggle('subtab-active', b.dataset.systab === systemTab));
   if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
   if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
+  if (systemMappingEl) systemMappingEl.hidden = systemTab !== 'mapping';
   if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
   if (systemTab === 'settings') buildSettings(systemSettingsEl);   // refresh device list / accent state
+  if (systemTab === 'mapping') buildMappingPane();                 // lazy iframe build
 }
 document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
@@ -1535,13 +1552,6 @@ async function buildSettings(mount) {
   midiBtn.onclick = async () => { const ok = await enableMidi(); if (ok) { try { localStorage.setItem(MIDI_KEY, '1'); } catch { /* ignore */ } } refreshMidi(); };
   mount.append(midiBtn, midiStatus);
   refreshMidi();
-
-  // --- Mappings: a separate window — live channel monitor + bind MIDI / keyboard
-  // to parameters and see every OSC address + value. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'mappings' }));
-  const mapBtn = oel('button', { className: 'fx-add', textContent: 'open mappings window ↗' });
-  mapBtn.onclick = () => { try { window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { /* popup blocked */ } };
-  mount.append(mapBtn);
 
   // --- Accent colour (least priority → last): 8 preset swatches. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));

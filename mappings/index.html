@@ -8,6 +8,13 @@
 <style>
   html, body { margin: 0; background: var(--bg, #0a0a0a); color: var(--text, #eee); font: 12px var(--sans, system-ui, sans-serif); }
   .map-wrap { padding: 14px 16px 40px; max-width: 920px; margin: 0 auto; }
+  /* Narrow (embedded in the sidebar tab): stack each row onto two lines. */
+  @media (max-width: 560px) {
+    .map-wrap { padding: 10px 10px 30px; }
+    .row { grid-template-columns: 1fr auto; grid-template-areas: "label acts" "osc chan"; row-gap: 2px; }
+    .row-label { grid-area: label; } .row-acts { grid-area: acts; }
+    .row-osc { grid-area: osc; } .row-chan { grid-area: chan; justify-self: end; }
+  }
   .map-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
   .map-title { font-weight: 600; letter-spacing: var(--ls-caps, .08em); text-transform: uppercase; color: var(--accent, #e8a35c); }
   .map-status { margin-left: auto; font-size: 11px; color: var(--muted, #888); }

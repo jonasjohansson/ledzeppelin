@@ -307,39 +307,12 @@ function animControls(anim, onAnim, oscAddress) {
       (bnd) => onAnim({ ...anim, band: bnd })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v })));
   } else if (isExternal) {
-    // ONE row: WHERE the signal comes from. Addresses are FIXED — the canonical
-    // OSC address (chip below) is the contract and is not editable; anything
-    // else (socket-JSON channels, sensor feeds, foreign OSC) appears in the
-    // dropdown once it has sent a message. Live channels read `/fader1 · 0.42`
-    // (name + current value; refreshes on re-render). The bound channel stays
-    // listed even before its first message, so the selection never vanishes.
-    const live = extList();
-    const opts = live.map(({ channel, value }) => ({ value: channel, label: `${channel} · ${fmtLive(value)}` }));
-    if (anim.channel && !live.some((c) => c.channel === anim.channel)) {
-      opts.unshift({ value: anim.channel, label: `${anim.channel} · —` });
-    }
-    if (!opts.length) opts.push({ value: '', label: 'no channels yet' });
-    const srcRow = el('div', { className: 'anim-ctrls' }, [
-      selectInput(opts, anim.channel || '', (ch) => onAnim({ ...anim, channel: ch })),
+    // The channel + OSC address now live in System › Mapping (one overview for
+    // all params). Here we just show the in/out range track (above) + a hint;
+    // the binding's source is managed in the Mapping tab.
+    return el('div', { className: 'anim-ctrls' }, [
+      el('span', { className: 'seg-hint', textContent: anim.channel ? `mapped: ${anim.channel} · set in Mapping` : 'set the source in System › Mapping' }),
     ]);
-    // The canonical address is ALWAYS live (no binding needed) — show it as a
-    // muted, click-to-copy chip so controllers know exactly where to send.
-    if (oscAddress) {
-      const chip = el('button', {
-        type: 'button', className: 'osc-addr', textContent: oscAddress,
-        title: 'this param’s always-active OSC address — click to copy',
-      });
-      chip.onclick = (e) => {
-        e.stopPropagation();
-        navigator.clipboard?.writeText(oscAddress).catch(() => { /* clipboard denied */ });
-        chip.textContent = 'copied ✓';
-        setTimeout(() => { chip.textContent = oscAddress; }, 700);
-      };
-      srcRow.append(chip);
-    }
-    // (no in/out row — the mapping lives on the track handles; no gain either:
-    //  external senders own their scaling)
-    return srcRow;
   } else {
     // (in/out live on the track handles — grab a thumb for its value bubble)
     // Direction/duration edits are RETIMED against the clock so the sweep
