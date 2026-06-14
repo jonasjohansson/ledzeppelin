@@ -7,6 +7,7 @@
 //   • 'immigrant'  — DEFAULT. A ~6s full-band intro: galloping distorted guitar +
 //                    locked bass/kick, snare backbeats, a tom fill into a crash
 //                    stab, and two scooping banshee wails.
+//   • 'cry'        — a short stinger: one big power chord, then a soaring wail
 //   • 'kashmir'    — slow, majestic modal swell over a drone (Eastern colour)
 //   • 'wholelotta' — a bluesy pentatonic riff that ends on a big chord stab
 //
@@ -15,7 +16,7 @@
 // pointer/key interaction (once per launch).
 // Control via localStorage 'lz.riff':
 //   unset                                   → 'immigrant'
-//   'immigrant' | 'kashmir' | 'wholelotta'  → always that one
+//   'immigrant' | 'cry' | 'kashmir' | 'wholelotta'  → always that one
 //   'random'                                → a random style each launch
 //   '0'                                     → off
 // For live testing, call window.lzRiff('immigrant') from the console anytime.
@@ -311,7 +312,65 @@ function wholelotta(ac) {
   return (t - t0) + 1.0;
 }
 
-const STYLES = { immigrant, kashmir, wholelotta };
+// CRY — a short dramatic stinger: one big power chord, then the war-cry wail
+// soaring over it. ~3s.
+function cry(ac) {
+  const t0 = ac.currentTime + 0.06;
+  const G = (v) => { const g = ac.createGain(); g.gain.value = v; return g; };
+  const bq = (type, freq, Q = 0.7, gain = 0) => { const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; f.gain.value = gain; return f; };
+
+  const master = G(0.45); const mlp = bq('lowpass', 12000); master.connect(mlp).connect(ac.destination);
+  const conv = ac.createConvolver();
+  { const rate = ac.sampleRate, len = Math.floor(rate * 2.6), ir = ac.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8); }
+    conv.buffer = ir; }
+  const revRet = G(0.22); conv.connect(revRet).connect(master);
+  const send = (node, amt) => { const g = G(amt); node.connect(g).connect(conv); };
+
+  // heavy power chord through an amp cabinet
+  const pre = G(1.6); const sh = ac.createWaveShaper(); sh.curve = distortionCurve(40); sh.oversample = '4x';
+  const hp = bq('highpass', 90), mid = bq('peaking', 800, 1.2, 6), dip = bq('peaking', 3000, 2, -8), camp = bq('lowpass', 5000);
+  const gtrBus = G(0.9); pre.connect(sh).connect(hp).connect(mid).connect(dip).connect(camp).connect(gtrBus).connect(master); send(gtrBus, 0.14);
+  const chord = (midis, t, durSec) => {
+    for (const m of midis) {
+      const f = mtof(m), amp = G(0);
+      amp.gain.setValueAtTime(0, t);
+      amp.gain.linearRampToValueAtTime(0.9, t + 0.008);
+      amp.gain.exponentialRampToValueAtTime(0.6, t + 0.5);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + durSec + 0.8);
+      amp.connect(pre);
+      for (const det of [-7, 0, 7]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det; const g = G(0.45); o.connect(g).connect(amp); o.start(t); o.stop(t + durSec + 0.9); }
+      const sub = ac.createOscillator(); sub.type = 'square'; sub.frequency.value = f / 2; const sg = G(0.4); sub.connect(sg).connect(amp); sub.start(t); sub.stop(t + durSec + 0.9);
+    }
+  };
+
+  const wail = (t, durSec, startMidi, peakMidi) => {
+    const target = mtof(peakMidi);
+    const src = ac.createOscillator(); src.type = 'sawtooth';
+    src.frequency.setValueAtTime(mtof(startMidi - 2), t);
+    src.frequency.exponentialRampToValueAtTime(target, t + 0.28);
+    const vowel = G(0);
+    vowel.gain.linearRampToValueAtTime(0.55, t + 0.1);
+    vowel.gain.setValueAtTime(0.55, t + durSec * 0.7);
+    vowel.gain.exponentialRampToValueAtTime(0.0001, t + durSec);
+    for (const fm of [{ f: 700, Q: 6, g: 1.0 }, { f: 1220, Q: 8, g: 0.7 }, { f: 2600, Q: 9, g: 0.4 }]) {
+      const bp = bq('bandpass', fm.f, fm.Q), g = G(fm.g); src.connect(bp).connect(g).connect(vowel);
+    }
+    const grit = ac.createWaveShaper(); grit.curve = distortionCurve(12); grit.oversample = '2x';
+    const pres = bq('peaking', 3500, 1.5, 5), vhp = bq('highpass', 200);
+    vowel.connect(grit).connect(pres).connect(vhp).connect(master); send(vhp, 0.32);
+    const lfo = ac.createOscillator(); lfo.frequency.value = 5.5; const lg = G(0);
+    lg.gain.setValueAtTime(0, t + 0.2); lg.gain.linearRampToValueAtTime(40, t + 0.55);
+    lfo.connect(lg).connect(src.detune);
+    const end = t + durSec + 0.05; src.start(t); src.stop(end); lfo.start(t); lfo.stop(end);
+  };
+
+  chord([42, 49, 54], t0, 2.4);          // F# power chord, let ring
+  wail(t0 + 0.45, 1.9, 66, 81);          // the cry soars up over it
+  return 3.4;
+}
+
+const STYLES = { immigrant, cry, kashmir, wholelotta };
 const NAMES = Object.keys(STYLES);
 
 function pickStyle() {
