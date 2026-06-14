@@ -933,21 +933,21 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     opCol.addEventListener('pointercancel', opEnd);
     opCol.addEventListener('click', (e) => e.stopPropagation());
 
-    // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
-    // stopPropagation so the buttons don't also fire the layer-select click.
+    // Body = FOUR equal quarters, Resolume order: ✕ · B · S · opacity. ✕ (eject)
+    // is far left; stopPropagation so the buttons don't also fire layer-select.
     const tog = (label, on, title, fn) => el('button', {
       className: 'lh-tog' + (on ? ' on' : ''), textContent: label, title,
       onclick: (e) => { e.stopPropagation(); fn(); },
     });
     body.append(
-      tog('B', !!layer.bypass, layer.bypass ? 'un-bypass layer' : 'bypass (mute) this layer',
-        () => commit(patchLayer(show(), id, { bypass: !layer.bypass }))),
-      tog('S', !!layer.solo, layer.solo ? 'un-solo layer' : 'solo this layer',
-        () => commit(patchLayer(show(), id, { solo: !layer.solo }))),
       el('button', {
         className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
         onclick: (e) => { e.stopPropagation(); commit(setActiveClip(show(), id, null)); },
       }),
+      tog('B', !!layer.bypass, layer.bypass ? 'un-bypass layer' : 'bypass (mute) this layer',
+        () => commit(patchLayer(show(), id, { bypass: !layer.bypass }))),
+      tog('S', !!layer.solo, layer.solo ? 'un-solo layer' : 'solo this layer',
+        () => commit(patchLayer(show(), id, { solo: !layer.solo }))),
       opCol,
     );
     head.append(body);

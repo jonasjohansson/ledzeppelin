@@ -229,8 +229,8 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   z-index: 0; pointer-events: none; overflow: hidden;
   background-color: var(--bg);
   background-image:
-    linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%),
-    linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%);
+    linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%);
   background-size: 26px 26px;
   background-position: 0 0, 13px 13px;
 }
@@ -407,12 +407,14 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }
+/* B · S · ✕ : larger, cleaner letters (Resolume vibe). */
 .lh-tog {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: var(--fs-body); font-weight: var(--fw-med);
-  color: var(--faint); background: var(--field-bg); border: 1px solid var(--line);
+  font-size: var(--fs-ctrl); font-weight: var(--fw-bold); letter-spacing: var(--ls-ui);
+  color: var(--muted); background: var(--field-bg); border: 1px solid var(--line);
 }
+.lh-tog:hover { color: var(--text); background: var(--hover); }
 .lh-tog.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
 /* Autopilot (play/loop) block in the Layer inspector. */
 .autopilot { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
@@ -914,10 +916,11 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* No top/side inset — the B·S·✕ bar reaches the head-box edges; a small bottom
    gap keeps it off the name label. */
 .lh-body { display: flex; gap: 0; flex: 1 1 auto; padding: 0 0 4px; align-items: stretch; }
-/* All FOUR quarters are equal width: B · S · ✕ · opacity. */
+/* All FOUR quarters are equal width: ✕ · B · S · opacity. */
 .lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
-/* B · S · ✕ · opacity read as ONE segmented bar — flush, sharing borders. */
-.lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear, .lh-body > .lh-op { border-left: 0; }
+/* Read as ONE segmented bar — flush, sharing borders (every segment after the
+   first drops its left border). */
+.lh-body > *:not(:first-child) { border-left: 0; }
 /* Opacity quarter = a custom vertical fader: a segment box (matching the B·S·✕
    chrome) with a bottom-up accent fill to --fill and a full-width rounded handle
    bar riding at the value. Built from divs (not a native range) for a clean,
@@ -941,8 +944,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .lh-clear {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--muted); border-color: var(--line);
+  font-size: var(--fs-ctrl);
+  color: var(--muted); background: var(--field-bg); border: 1px solid var(--line);
 }
+.lh-clear:hover { color: var(--text); background: var(--hover); }
 .lh-blend-label { color: var(--muted); margin-top: 2px; }   /* size/caps/tracking from the shared header recipe */
 .lh-ctrls select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
