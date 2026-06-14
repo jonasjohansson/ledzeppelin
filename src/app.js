@@ -582,8 +582,11 @@ function setSnapEnabled(v) {
   if (snapBtn) { snapBtn.classList.toggle('on', snapEnabled); snapBtn.textContent = (snapEnabled ? '▣' : '▢') + ' snap'; }
   redrawOverlay();
 }
-// (snap button opens a settings menu — enabled toggle + grid/distance — wired in
-//  the corner-menu section below, alongside File/Audio.)
+// Snap prefs persist (corner toggle on/off + the grid/distance config in Settings).
+const SNAP_KEY = 'lz.snap';
+function saveSnap() { try { localStorage.setItem(SNAP_KEY, JSON.stringify({ on: snapEnabled, grid: SNAP_GRID, dist: SNAP_DIST })); } catch { /* private */ } }
+(() => { try { const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null'); if (s) { snapEnabled = !!s.on; SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; } } catch { /* ignore */ } })();
+setSnapEnabled(snapEnabled);   // reflect the loaded state on the corner button
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
@@ -1433,6 +1436,18 @@ async function buildSettings(mount) {
     min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
     onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },
   }));
+
+  // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
+  // on/off lives on the viewport corner button (a quick toggle while placing). ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'snap' }));
+  mount.append(Slider('Grid (px)', SNAP_GRID, {
+    min: 2, max: 100, step: 1, default: 20, commit: 'live',
+    onInput: (v) => { SNAP_GRID = Math.round(v); saveSnap(); redrawOverlay(); },
+  }));
+  mount.append(Slider('Distance (px)', SNAP_DIST, {
+    min: 1, max: 40, step: 1, default: 10, commit: 'live',
+    onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
+  }));
 }
 setSystemTab(systemTab);
 setOutputTab('fixtures');
@@ -1745,29 +1760,13 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Load composition…', act: () => openCompInput.click() },
   ]));
 });
-// (Audio input + gain moved to System › Settings — see buildSettings.)
-// Snap menu: the on/off toggle + the grid/distance dimensions (which moved out of
-// the removed Settings tab). Snap only bites while placing fixtures, so the button
-// is disabled with the overlay off.
+// (Audio input + gain and the snap grid/distance config moved to System ›
+// Settings — see buildSettings.) The corner snap button is now a quick on/off
+// toggle; it only bites while placing fixtures, so it's disabled with the overlay off.
 snapBtn?.addEventListener('click', (e) => {
   if (snapBtn.disabled) return;
   e.stopPropagation();
-  const body = oel('div', { className: 'menu-pad' }, [oel('div', { className: 'menu-title', textContent: 'snap' })]);
-  const tog = oel('div', { className: 'menu-item' }, [
-    oel('span', { textContent: 'enabled' }),
-    oel('span', { className: 'menu-key', textContent: snapEnabled ? 'on' : 'off' }),
-  ]);
-  tog.onclick = () => { setSnapEnabled(!snapEnabled); tog.lastChild.textContent = snapEnabled ? 'on' : 'off'; };
-  body.append(tog);
-  body.append(Slider('Grid (px)', SNAP_GRID, {
-    min: 2, max: 100, step: 1, default: 20, commit: 'live',
-    onInput: (v) => { SNAP_GRID = Math.round(v); redrawOverlay(); },
-  }));
-  body.append(Slider('Distance (px)', SNAP_DIST, {
-    min: 1, max: 40, step: 1, default: 10, commit: 'live',
-    onInput: (v) => { SNAP_DIST = Math.round(v); },
-  }));
-  openMenu(snapBtn, body);
+  setSnapEnabled(!snapEnabled); saveSnap();
 });
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
