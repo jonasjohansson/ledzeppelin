@@ -1363,7 +1363,11 @@ sectionSwitchEl?.addEventListener('click', (ev) => {
   if (b) setSection(b.dataset.section);
 });
 
-// Initial layout: restore the last section (Design/Output/Control) across
+// System subtab (declared BEFORE the initial setSection() below, which reads it).
+let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
+systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
+
+// Initial layout: restore the last section (Design/Output/System) across
 // reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
 // default (you see your fixture layout on load; the canvas toggle hides it).
 const savedSectionRaw = (() => { try { return localStorage.getItem('lz.section'); } catch { return null; } })();
@@ -1391,8 +1395,6 @@ function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KE
 applyAccent(savedAccent());   // apply the saved accent on boot
 
 // --- System pane: Control / Settings subtabs ---------------------------------
-let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
-systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
 function setSystemTab(which) {
   systemTab = which === 'settings' ? 'settings' : 'control';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
