@@ -634,7 +634,7 @@ if (mapBus) {
     else if (m.type === 'key') setKeyChannel(m.code, m.down);              // a key pressed in the Mappings window
     else if (m.type === 'enableMidi') { enableMidi().then(postMapMidi); }
     else if (m.type === 'bind' || m.type === 'clear') {
-      show = m.type === 'bind' ? bindMapping(show, m.id, m.channel) : clearMapping(show, m.id);
+      show = m.type === 'bind' ? bindMapping(show, m.id, m.channel, m.slot) : clearMapping(show, m.id, m.slot);
       saveShow(show); layerPanel?.refresh?.(); postMapParams();
     }
     else if (m.type === 'mode') { show = setMappingMode(show, m.id, m.mode); saveShow(show); postMapParams(); }

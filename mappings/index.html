@@ -28,24 +28,29 @@
   .chip-fill { height: 100%; background: var(--accent, #e8a35c); width: 0; }
   .chip-empty { color: var(--faint, #777); font-style: italic; }
   .sec-aside { color: var(--faint, #777); text-transform: none; letter-spacing: 0; font-weight: 400; }
-  /* parameter table — each row is click-to-arm */
-  .grp { margin: 10px 0 3px; color: var(--muted, #aaa); font-weight: 600; font-size: 11px; }
-  .row { display: grid; grid-template-columns: 1.2fr 1.6fr 1.2fr; align-items: center; gap: 10px; padding: 5px 6px; margin: 0 -6px; border-top: 1px solid color-mix(in srgb, var(--line, #333) 50%, transparent); cursor: pointer; border-radius: 4px; }
-  .row:hover { background: color-mix(in srgb, var(--line, #333) 40%, transparent); }
-  .row.armed { background: var(--accent-soft, #33271a); box-shadow: inset 0 0 0 1px var(--accent-line, #54402b); }
-  .row-label { color: var(--text, #eee); }
+  /* parameter table — columns: label · OSC · MIDI · Key (· mode) */
+  .grp { margin: 11px 0 2px; color: var(--muted, #aaa); font-weight: 600; font-size: 11px; }
+  .row { display: grid; grid-template-columns: 1.1fr 1.5fr 116px 116px 64px; align-items: center; gap: 10px; padding: 4px 6px; margin: 0 -6px; border-top: 1px solid color-mix(in srgb, var(--line, #333) 50%, transparent); border-radius: 4px; }
   .row.bound .row-label { color: var(--accent-text, #f1d6bb); }
-  .row-osc { font-family: var(--mono, monospace); color: var(--muted, #999); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-head { border-top: none; color: var(--faint,#777); font-size: 10px; letter-spacing: var(--ls-caps,.08em); text-transform: uppercase; padding-bottom: 0; }
+  .row-label { color: var(--text, #eee); }
+  .row-osc { font-family: var(--mono, monospace); color: var(--muted, #999); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: copy; }
   .row-osc:hover { color: var(--accent, #e8a35c); }
-  .row-chan { display: flex; align-items: center; gap: 6px; justify-self: end; font-family: var(--mono, monospace); }
-  .row-arm { color: var(--accent, #e8a35c); }
-  .row-none { color: var(--faint, #777); }
-  .row-channame { color: var(--accent-text, #f1d6bb); }
-  .row-bar { width: 46px; height: 6px; border-radius: 3px; background: var(--line-2, #444); overflow: hidden; }
-  .row-fill { height: 100%; width: 0; background: var(--accent, #e8a35c); }
-  .row-mode { background: var(--field-bg,#1a1a1a); border: 1px solid var(--line,#333); border-radius: 4px; color: var(--muted,#aaa); cursor: pointer; font: 10px var(--mono,monospace); padding: 1px 6px; }
+  .cell-h { font-family: var(--sans); color: var(--faint,#777); }
+  /* a MIDI / Key cell */
+  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; border: 1px solid var(--line,#333); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-family: var(--mono, monospace); }
+  .cell:hover { border-color: var(--line-2,#555); }
+  .cell.armed { background: var(--accent-soft,#33271a); border-color: var(--accent-line,#54402b); }
+  .cell.disabled { border-color: transparent; cursor: default; }
+  .cell.disabled:hover { border-color: transparent; }
+  .cell-arm { color: var(--accent,#e8a35c); }
+  .cell-none { color: var(--faint,#777); }
+  .cell-chan { color: var(--accent-text,#f1d6bb); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-bar { flex: 1 1 auto; min-width: 14px; height: 5px; border-radius: 3px; background: var(--line-2,#444); overflow: hidden; }
+  .cell-fill { height: 100%; width: 0; background: var(--accent,#e8a35c); }
+  .row-mode { background: var(--field-bg,#1a1a1a); border: 1px solid var(--line,#333); border-radius: 4px; color: var(--muted,#aaa); cursor: pointer; font: 10px var(--mono,monospace); padding: 1px 6px; justify-self: start; }
   .row-mode:hover { color: var(--text,#eee); }
-  .m-x { background: none; border: none; color: var(--faint, #777); cursor: pointer; font: inherit; padding: 0 2px; }
+  .m-x { background: none; border: none; color: var(--faint, #777); cursor: pointer; font: inherit; padding: 0; }
   .m-x:hover { color: var(--danger, #e66); }
   button.m-btn { background: var(--field-bg, #1a1a1a); color: var(--muted, #aaa); border: 1px solid var(--line, #333); border-radius: 4px; padding: 3px 9px; cursor: pointer; font: inherit; }
   button.m-btn:hover { color: var(--text, #eee); }

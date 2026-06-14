@@ -19,30 +19,52 @@ test('listMappables lists a clip\'s source + transform params with OSC + null ch
   const tfx = rows.find((r) => r.animKey === 'tf.x');
   assert.ok(tfx, 'has a tf.x row');
   assert.equal(tfx.osc, '/layer/1/clip/1/tf/x');
-  assert.equal(tfx.channel, null);
+  assert.equal(tfx.midi, null); assert.equal(tfx.key, null);
   // a source param row exists and carries an OSC address + range
   const src = rows.find((r) => r.animKey && r.animKey.startsWith('line.'));
   assert.ok(src, 'has a line.* source row');
   assert.match(src.osc, /^\/layer\/1\/clip\/1\//);
-  assert.equal(src.channel, null);
+  assert.equal(src.midi, null);
 });
 
-test('bindMapping binds a channel via External anim; listMappables reflects it; clear removes', () => {
+test('bindMapping a param → External anim, shown in the MIDI column; clear removes', () => {
   let s = show1();
   const lid = s.composition.layers[s.composition.layers.length - 1].id;
   s = addClip(s, lid, 'line');
   const id = listMappables(s).find((r) => r.animKey === 'tf.scale').id;
-  s = bindMapping(s, id, 'cc7');
+  s = bindMapping(s, id, 'cc7', 'midi');
   let row = listMappables(s).find((r) => r.id === id);
-  assert.equal(row.channel, 'cc7');
-  // the underlying anim is External on tf.scale
+  assert.equal(row.midi, 'cc7'); assert.equal(row.key, null);
   const clip = s.composition.layers[s.composition.layers.length - 1].clips[0];
   assert.equal(clip.anim['tf.scale'].mode, 'external');
   assert.equal(clip.anim['tf.scale'].channel, 'cc7');
-  // clear
-  s = clearMapping(s, id);
+  s = clearMapping(s, id, 'midi');
   row = listMappables(s).find((r) => r.id === id);
-  assert.equal(row.channel, null);
+  assert.equal(row.midi, null);
+});
+
+test('a key cannot be bound to a continuous param (keyable false → no-op)', () => {
+  let s = show1();
+  const lid = s.composition.layers[s.composition.layers.length - 1].id;
+  s = addClip(s, lid, 'line');
+  const id = listMappables(s).find((r) => r.animKey === 'tf.scale').id;
+  assert.equal(bindMapping(s, id, 'key:KeyA', 'key'), s);   // rejected
+});
+
+test('a trigger can hold BOTH a MIDI and a key binding (fires on either)', () => {
+  let s = show1();
+  const lid = s.composition.layers[s.composition.layers.length - 1].id;
+  s = addClip(s, lid, 'line'); s = addClip(s, lid, 'gradient');
+  const lay0 = s.composition.layers.find((L) => L.id === lid);
+  const c2 = lay0.clips[1].id;
+  const tid = `t|${lid}|${c2}`;
+  s = bindMapping(s, tid, 'note36', 'midi');
+  s = bindMapping(s, tid, 'key:KeyZ', 'key');
+  const row = listMappables(s).find((r) => r.id === tid);
+  assert.equal(row.midi, 'note36'); assert.equal(row.key, 'key:KeyZ');
+  // the key fires it
+  const r = applyBindings(s, { 'key:KeyZ': 1 }, { 'key:KeyZ': 0 });
+  assert.equal(r.show.composition.layers.find((L) => L.id === lid).activeClipId, c2);
 });
 
 test('bindMapping on an unknown id is a no-op (same reference)', () => {

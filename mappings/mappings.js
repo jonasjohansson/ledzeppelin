@@ -1,22 +1,23 @@
-// Mappings window — talks to the editor over BroadcastChannel. Click a parameter
-// row to ARM it (Ableton-style), then move a control / press a key to bind. Bound
-// rows show the live value moving. The editor owns the show.
+// Mappings window — talks to the editor over BroadcastChannel. Each row has an
+// OSC address plus a MIDI cell and a Key cell: click a cell to ARM it, then move
+// a control (MIDI) or press a key. Continuous params have no Key cell (a key
+// can't sweep a value). Bound cells show the live value; the editor owns the show.
 
 const bus = new BroadcastChannel('lz-mappings');
 const $ = (id) => document.getElementById(id);
 const statusEl = $('status'), chipsEl = $('chips'), paramsEl = $('params');
 
-let params = [];                 // [{ id, group, label, osc, channel, min, max }]
+let params = [];                 // [{ id, kind, keyable, group, label, osc, midi, key, mode }]
 let channels = {};               // { channel: value }
-let learnId = null;              // row currently armed
+let learn = null;                // { id, slot } currently armed
 let learnBaseline = null;        // channel snapshot at arm time
-let rowFills = [];               // [{ channel, el }] live value bars to update
+let rowFills = [];               // [{ channel, el }] live value bars
 let lastBus = 0;
 
 bus.postMessage({ type: 'hello' });
 $('enable-midi').addEventListener('click', () => bus.postMessage({ type: 'enableMidi' }));
 addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { if (learnId) { learnId = null; renderParams(); } return; }
+  if (e.key === 'Escape') { if (learn) { learn = null; renderParams(); } return; }
   if (!e.repeat && !typing(e.target)) bus.postMessage({ type: 'key', code: e.code, down: true });
 });
 addEventListener('keyup', (e) => { if (!typing(e.target)) bus.postMessage({ type: 'key', code: e.code, down: false }); });
@@ -41,60 +42,73 @@ function renderChips() {
   if (!names.length) { chipsEl.innerHTML = '<span class="chip-empty">touch a knob · press a key · send OSC</span>'; return; }
   chipsEl.textContent = '';
   for (const name of names) {
-    const v = clamp01(channels[name]);
-    const chip = document.createElement('div'); chip.className = 'chip';
-    chip.append(el('span', 'chip-name', name));
-    const bar = el('div', 'chip-bar'); const fill = el('div', 'chip-fill'); fill.style.width = (v * 100) + '%';
+    const chip = el('div', 'chip'); chip.append(el('span', 'chip-name', name));
+    const bar = el('div', 'chip-bar'); const fill = el('div', 'chip-fill'); fill.style.width = (clamp01(channels[name]) * 100) + '%';
     bar.append(fill); chip.append(bar); chipsEl.append(chip);
   }
+}
+
+// One MIDI/Key cell: armed prompt, bound channel + live bar + clear, or click-to-arm.
+function cell(p, slot) {
+  const c = el('div', 'cell');
+  const disabled = slot === 'key' && !p.keyable;
+  if (disabled) { c.classList.add('disabled'); c.append(el('span', 'cell-none', '—')); return c; }
+  const ch = slot === 'midi' ? p.midi : p.key;
+  const armed = learn && learn.id === p.id && learn.slot === slot;
+  if (armed) { c.classList.add('armed'); c.append(el('span', 'cell-arm', slot === 'midi' ? 'move…' : 'press…')); }
+  else if (ch) {
+    c.append(el('span', 'cell-chan', slot === 'key' ? ch.replace(/^key:/, '') : ch));
+    const bar = el('div', 'cell-bar'); const fill = el('div', 'cell-fill'); bar.append(fill); c.append(bar); rowFills.push({ channel: ch, el: fill });
+    const x = el('button', 'm-x', '×'); x.title = 'clear'; x.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'clear', id: p.id, slot }); }); c.append(x);
+  } else c.append(el('span', 'cell-none', '+'));
+  c.addEventListener('click', () => { learn = armed ? null : { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); });
+  return c;
 }
 
 function renderParams() {
   rowFills = [];
   if (!params.length) { paramsEl.innerHTML = '<span class="chip-empty">add a clip in the editor</span>'; return; }
   paramsEl.textContent = '';
+  paramsEl.append(headerRow());
   let lastGroup = null;
   for (const p of params) {
     if (p.group !== lastGroup) { lastGroup = p.group; paramsEl.append(el('div', 'grp', p.group)); }
-    const armed = learnId === p.id;
-    const row = el('div', 'row' + (armed ? ' armed' : '') + (p.channel ? ' bound' : ''));
+    const row = el('div', 'row' + ((p.midi || p.key) ? ' bound' : ''));
     row.append(el('span', 'row-label', p.label));
-    // OSC address — click to copy (doesn't arm the row).
     const osc = el('span', 'row-osc', p.osc); osc.title = 'copy';
     osc.addEventListener('click', (ev) => { ev.stopPropagation(); navigator.clipboard?.writeText(p.osc).catch(() => {}); const o = osc.textContent; osc.textContent = '✓'; setTimeout(() => { osc.textContent = o; }, 600); });
-    // Value/binding cell: armed → prompt; bound → channel name + live bar; else —.
-    const cell = el('div', 'row-chan');
-    if (armed) { cell.append(el('span', 'row-arm', 'move a control…')); }
-    else if (p.channel) {
-      cell.append(el('span', 'row-channame', p.channel));
-      const bar = el('div', 'row-bar'); const fill = el('div', 'row-fill'); bar.append(fill); cell.append(bar);
-      rowFills.push({ channel: p.channel, el: fill });
-      if (p.kind === 'bypass') {   // toggle (flip on press) ⇄ momentary (held)
-        const mb = el('button', 'row-mode', p.mode); mb.title = 'toggle / momentary';
-        mb.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'mode', id: p.id, mode: p.mode === 'toggle' ? 'momentary' : 'toggle' }); });
-        cell.append(mb);
-      }
-      const x = el('button', 'm-x', '×'); x.title = 'clear'; x.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'clear', id: p.id }); }); cell.append(x);
-    } else { cell.append(el('span', 'row-none', '—')); }
-    row.append(osc, cell);
-    row.addEventListener('click', () => { learnId = armed ? null : p.id; learnBaseline = { ...channels }; renderParams(); });
+    row.append(osc, cell(p, 'midi'), cell(p, 'key'));
+    // Bypass: toggle ⇄ momentary.
+    if (p.kind === 'bypass' && (p.midi || p.key)) {
+      const mb = el('button', 'row-mode', p.mode); mb.title = 'toggle / momentary';
+      mb.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'mode', id: p.id, mode: p.mode === 'toggle' ? 'momentary' : 'toggle' }); });
+      row.append(mb);
+    } else row.append(el('span', 'row-mode-spacer'));
     paramsEl.append(row);
   }
   updateValues();
 }
+function headerRow() {
+  const h = el('div', 'row row-head');
+  h.append(el('span', 'row-label', ''), el('span', 'row-osc', 'OSC'), el('span', 'cell-h', 'MIDI'), el('span', 'cell-h', 'Key'), el('span', 'row-mode-spacer'));
+  return h;
+}
 
 function updateValues() { for (const r of rowFills) r.el.style.width = (clamp01(channels[r.channel]) * 100) + '%'; }
 
-// While armed, bind the channel that moves clearly from its baseline.
+// While armed, bind the moving channel — filtered to the armed slot (MIDI ignores
+// keys; Key only accepts keys).
 function tickLearn() {
-  if (!learnId) return;
+  if (!learn) return;
   let best = null, bestDelta = 0.2;
   for (const name of Object.keys(channels)) {
+    if (learn.slot === 'midi' && name.startsWith('key:')) continue;
+    if (learn.slot === 'key' && !name.startsWith('key:')) continue;
     const d = Math.abs(clamp01(channels[name]) - (learnBaseline?.[name] ?? 0));
     if (d > bestDelta) { bestDelta = d; best = name; }
   }
-  if (best) { bus.postMessage({ type: 'bind', id: learnId, channel: best }); learnId = null; }
+  if (best) { bus.postMessage({ type: 'bind', id: learn.id, channel: best, slot: learn.slot }); learn = null; }
 }
 
 function clamp01(v) { v = Number(v) || 0; return v < 0 ? 0 : v > 1 ? 1 : v; }
-function el(tag, cls, text) { const n = document.createElement(tag === 'span' || tag === 'div' || tag === 'button' ? tag : 'div'); n.className = cls; if (text != null) n.textContent = text; return n; }
+function el(tag, cls, text) { const n = document.createElement(tag === 'button' || tag === 'span' ? tag : 'div'); n.className = cls; if (text != null) n.textContent = text; return n; }
