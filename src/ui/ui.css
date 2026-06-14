@@ -874,6 +874,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .fx-act:hover { color: var(--accent); }
 .fx-act-danger:hover { color: var(--danger); }
+.fx-act:disabled { opacity: .25; cursor: default; }
+.fx-act:disabled:hover { color: var(--faint); }
 .fx-acts .fx-menu-wrap { margin-left: 0; }
 
 /* Effect options "⋯" popover menu. */

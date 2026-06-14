@@ -498,7 +498,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // any exist, fold into one small ▾ popover (a list can't be inline buttons).
   // Shared by effect rows and the clip preset control; `kind` selects the preset
   // namespace ('effect' | 'source'); pass onRemove only for effects.
-  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove, onDuplicate, resetLabel = 'reset' }) {
+  function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove, onDuplicate, resetLabel = 'reset', dirty }) {
     const wrap = el('div', { className: 'fx-acts' });
     const act = (glyph, title, onClick, cls = '') => {
       const b = el('button', { type: 'button', className: 'fx-act ' + cls, textContent: glyph, title });
@@ -532,7 +532,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (pn && pn.trim()) { savePreset(kind, presetName, pn.trim(), getParams()); render(); }
     }));
     if (onDuplicate) wrap.append(act('⧉', 'duplicate', () => onDuplicate()));
-    wrap.append(act('↺', resetLabel, () => onReset()));   // commits → re-renders
+    // Reset — disabled (inert) when there's nothing to reset (dirty() false).
+    const rst = act('↺', resetLabel, () => { if (!rst.disabled) onReset(); });   // commits → re-renders
+    if (dirty) {
+      // Re-evaluated live: the params edited elsewhere commit without a re-render
+      // (commitLive), so the caller wires wrap.evalReset to the inspector body.
+      wrap.evalReset = () => { const d = !!dirty(); rst.disabled = !d; rst.title = d ? resetLabel : 'nothing to reset'; };
+      wrap.evalReset();
+    }
+    wrap.append(rst);
     if (onRemove) wrap.append(act('✕', 'remove', () => onRemove(), 'fx-act-danger'));
     return wrap;
   }
@@ -1035,8 +1043,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Header: clip name + a "⋯" preset menu in the corner (load/save/reset a
     // saved look), mirroring how effect rows carry their options menu.
     const clipHead = el('div', { className: 'clip-editor-head' }, [nameInput]);
+    let headMenu = null;
     if (gen && gen.params.length) {
-      clipHead.append(fxMenu({
+      headMenu = fxMenu({
         kind: 'source', presetName: gen.name, resetLabel: 'reset all',
         getParams: () => paramsForPrefix(liveClip(clip.id)?.params, gen.name),
         applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
@@ -1053,7 +1062,23 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           s = resetClipTransform(s, id, clip.id);
           commit(s);
         },
-      }));
+        // Dirty iff a reset would actually change something (source params or
+        // transform/opacity differ from defaults).
+        dirty: () => {
+          const cur = liveClip(clip.id); if (!cur) return false;
+          let s = changeClipGenerator(show(), id, clip.id, clip.generator);
+          s = resetClipTransform(s, id, clip.id);
+          const after = s.composition.layers.find((l) => l.id === id)?.clips.find((c) => c && c.id === clip.id);
+          if (!after) return false;
+          const k = (c) => JSON.stringify({ p: c.params || {}, t: c.transform || {}, o: c.opacity });
+          return k(cur) !== k(after);
+        },
+      });
+      clipHead.append(headMenu);
+      // Live edits in the sections below commit without a re-render, so refresh the
+      // master reset's enabled state whenever anything in the inspector changes.
+      box.addEventListener('input', () => headMenu.evalReset?.());
+      box.addEventListener('change', () => headMenu.evalReset?.());
     }
     // Delete THIS clip — a danger ✕ pinned to the header's top-right. Refuses the
     // last remaining clip across all layers (a project must keep one), matching
