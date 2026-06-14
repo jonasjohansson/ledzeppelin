@@ -11,10 +11,11 @@
 
 import { el, shiftDown, coarseSnap } from './dom.js';
 
-// 3-decimal trim (integers stay bare). Shared so readouts format the same.
+// 2-decimal max (integers stay bare, trailing zeros trimmed): 0.124 → "0.12",
+// 0.5 → "0.5", 3 → "3". Shared so every readout formats the same.
 const fmtDefault = (v) => {
   const n = Number(v);
-  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 };
 
 export function Slider(label, value, opts = {}) {
