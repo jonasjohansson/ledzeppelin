@@ -1377,7 +1377,6 @@ setSection(['design', 'output', 'system'].includes(savedSection) ? savedSection 
 // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
 const ACCENT_KEY = 'lz.accent';
 const ACCENT_DEFAULT = '#e8a35c';
-const ACCENT_PRESETS = ['#e8a35c', '#5cb8e8', '#6ee07d', '#e85c9e', '#b98cff', '#e8d65c', '#ff6b6b'];
 const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
@@ -1503,26 +1502,14 @@ async function buildSettings(mount) {
   mount.append(midiBtn, midiStatus);
   refreshMidi();
 
-  // --- Accent colour (least priority → last) ---
+  // --- Accent colour (least priority → last): just a custom picker + reset. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
-  const cur = savedAccent();
-  const swatches = [];
-  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
-  const row = oel('div', { className: 'accent-swatches' });
-  for (const p of ACCENT_PRESETS) {
-    const sw = oel('button', { className: 'accent-swatch', title: p });
-    sw.dataset.hex = p; sw.style.background = p;
-    sw.onclick = () => { setAccent(p); picker.value = p; mark(p); };
-    swatches.push(sw); row.append(sw);
-  }
-  mount.append(row);
-  const picker = oel('input', { type: 'color', value: cur, className: 'accent-picker', title: 'custom accent colour' });
-  picker.addEventListener('input', () => { setAccent(picker.value); mark(picker.value); });
+  const picker = oel('input', { type: 'color', value: savedAccent(), className: 'accent-picker', title: 'custom accent colour' });
+  picker.addEventListener('input', () => setAccent(picker.value));
   mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Custom' }), picker]));
   const reset = oel('button', { className: 'fx-add', textContent: 'reset to default' });
-  reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; mark(ACCENT_DEFAULT); };
+  reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; };
   mount.append(reset);
-  mark(cur);
 }
 setSystemTab(systemTab);
 setOutputTab('fixtures');
