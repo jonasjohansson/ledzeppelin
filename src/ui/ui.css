@@ -928,13 +928,21 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   writing-mode: vertical-lr; direction: rtl;   /* 0 at bottom, 1 at top */
   width: 100%; flex: 1 1 0; min-height: 0; margin: 0; box-sizing: border-box;
   border: 1px solid var(--line);
-  background: linear-gradient(to top, var(--accent) var(--fill, 100%), var(--field-bg) var(--fill, 100%));
+  /* Accent fill rising to --fill, capped by a 2px handle line that marks the
+     filled/unfilled boundary, then the empty track above. */
+  background: linear-gradient(to top,
+    var(--accent) calc(var(--fill, 100%) - 2px),
+    var(--text) calc(var(--fill, 100%) - 2px),
+    var(--text) var(--fill, 100%),
+    var(--field-bg) var(--fill, 100%));
 }
+/* Thumb stays as the (invisible) drag target — the gradient line is the visible
+   handle, and it tracks the value exactly (no native half-thumb inset). */
 .lh-op-range::-webkit-slider-runnable-track { background: transparent; border: none; }
-.lh-op-range::-webkit-slider-thumb { -webkit-appearance: none; width: 100%; height: 3px; border: none; border-radius: 0; background: var(--text); }
+.lh-op-range::-webkit-slider-thumb { -webkit-appearance: none; width: 100%; height: 8px; border: none; background: transparent; }
 .lh-op-range::-moz-range-track { background: transparent; border: none; }
 .lh-op-range::-moz-range-progress { background: transparent; }
-.lh-op-range::-moz-range-thumb { width: 100%; height: 3px; border: none; border-radius: 0; background: var(--text); }
+.lh-op-range::-moz-range-thumb { width: 100%; height: 8px; border: none; background: transparent; }
 .lh-clear {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
