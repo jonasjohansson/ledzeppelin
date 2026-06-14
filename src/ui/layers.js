@@ -810,11 +810,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       deck.append(cell);
     }
 
-    // Trailing empty slots — pad to the grid's column count + one "+" to append.
-    // (Holes above are rendered inline by the loop; these are the append cells.)
+    // Trailing empty slots — pad to the grid's column count + one more "+" cell.
+    // Each carries its real COLUMN index so dropping a clip/source there places it
+    // in that exact cell (padding earlier columns with holes), e.g. moving a lone
+    // clip from column 0 into column 1. (Inline holes above are rendered by the loop.)
     const realCount = clips.length;
     const emptyCount = Math.max(1, (columns - realCount) + 1);
-    for (let e = 0; e < emptyCount; e++) deck.append(emptySlot(-1));
+    for (let e = 0; e < emptyCount; e++) deck.append(emptySlot(realCount + e));
     return deck;
   }
 

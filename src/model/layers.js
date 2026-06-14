@@ -392,8 +392,11 @@ export function addClipAt(show, layerId, index, generator) {
     const id = uniqueId('c', allClipIds(show.composition.layers));
     const clip = makeClip(generator, undefined, id);
     const clips = (layer.clips || []).slice();
-    if (Number.isInteger(index) && index >= 0 && index < clips.length && clips[index] == null) clips[index] = clip;
-    else clips.push(clip);
+    if (Number.isInteger(index) && index >= 0) {
+      while (clips.length < index) clips.push(null);          // pad with holes up to the target column
+      if (index >= clips.length || clips[index] == null) clips[index] = clip;   // land on an empty column
+      else clips.push(clip);                                  // occupied → append (legacy contract)
+    } else clips.push(clip);
     const activeClipId = layer.activeClipId == null ? id : layer.activeClipId;
     return { ...layer, clips, activeClipId };
   });
@@ -413,16 +416,21 @@ export function moveClipToLayer(show, fromLayerId, clipId, toLayerId, toIndex = 
   const wasActive = src.activeClipId === clipId;
   const nextLayers = layers.map((l) => {
     if (l.id === fromLayerId && l.id === toLayerId) {
-      // Same layer: dropping onto a HOLE fills it (vacating the source slot);
-      // dropping onto a clip reorders before it. Either way slots stay positional.
+      // Same layer: dropping onto an EMPTY column (a hole, or a column past the
+      // end) places the clip there and vacates the source slot — so you can move a
+      // clip into any grid cell, leaving a gap. Dropping onto an occupied clip
+      // reorders before it. Either way slots stay positional.
       const clips = (l.clips || []).slice();
       let to = toIndex;
-      if (to >= 0 && to < clips.length && clips[to] == null) { clips[to] = clip; clips[from] = null; }
-      else {
-        clips.splice(from, 1);
-        let at = to < 0 || to > clips.length ? clips.length : (to > from ? to - 1 : to);
-        clips.splice(at, 0, clip);
-      }
+      if (to >= 0 && to !== from) {
+        while (clips.length <= to) clips.push(null);          // pad to reach the target column
+        if (clips[to] == null) { clips[to] = clip; clips[from] = null; }   // land on an empty column
+        else {                                                // occupied → reorder before it
+          clips.splice(from, 1);
+          let at = to > from ? to - 1 : to; if (at > clips.length) at = clips.length;
+          clips.splice(at, 0, clip);
+        }
+      } else if (to < 0) { clips.splice(from, 1); clips.push(clip); }   // append
       return tidyClips(l, clips);
     }
     if (l.id === fromLayerId) {
@@ -432,8 +440,11 @@ export function moveClipToLayer(show, fromLayerId, clipId, toLayerId, toIndex = 
     if (l.id === toLayerId) {
       const clips = (l.clips || []).slice();
       let to = toIndex;
-      if (to >= 0 && to < clips.length && clips[to] == null) clips[to] = clip;   // fill a hole
-      else { if (to < 0 || to > clips.length) to = clips.length; clips.splice(to, 0, clip); }
+      if (to >= 0) {
+        while (clips.length < to) clips.push(null);            // pad with holes up to the target column
+        if (to >= clips.length || clips[to] == null) clips[to] = clip;   // land on an empty column
+        else clips.splice(to, 0, clip);                       // occupied → insert before it
+      } else clips.push(clip);                                 // append
       const activeClipId = wasActive || l.activeClipId == null ? clip.id : l.activeClipId;
       const t = clips.slice(); while (t.length && t[t.length - 1] == null) t.pop();
       return { ...l, clips: t, activeClipId };
