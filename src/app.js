@@ -859,7 +859,6 @@ function addFixtureControl() {
   }
   wrap.append(
     oel('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addInstance(sel.value) }),
-    oel('span', { className: 'seg-hint', textContent: 'type' }),
     sel
   );
   return wrap;
@@ -913,7 +912,6 @@ function renderOutput() {
 
   // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
   if (!fixtures.length) {
-    outputListEl.append(oel('div', { className: 'seg-hint', textContent: 'no fixtures placed yet — pick a definition to add' }));
     outputListEl.append(addFixtureControl());
     return;
   }

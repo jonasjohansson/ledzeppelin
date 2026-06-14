@@ -12,9 +12,9 @@
 //   • 'kashmir'    — slow, majestic modal swell over a drone (Eastern colour)
 //   • 'wholelotta' — a bluesy pentatonic riff that ends on a big chord stab
 //
-// Browser autoplay policy blocks sound until a user gesture. We TRY to play on
-// load; if the browser blocks it, we fall back to firing on the first
-// pointer/key interaction (once per launch).
+// Plays only on the FIRST visit (a localStorage flag silences it afterwards).
+// Browser autoplay policy blocks sound until a user gesture, so we TRY to play on
+// load and fall back to the first pointer/key interaction.
 // Control via localStorage 'lz.riff':
 //   unset                                   → 'cry'
 //   'immigrant' | 'cry' | 'kashmir' | 'wholelotta'  → always that one
@@ -423,14 +423,23 @@ function playStyle(name) {
   } catch { /* no audio — silent */ }
 }
 
-// Public: try to play on load; if autoplay is blocked, fire on first gesture.
+const PLAYED_KEY = 'lz.riff.played';   // set once it has played, so it's a FIRST-VISIT-only greeting
+
+// Public: on the FIRST visit only, try to play on load; if autoplay is blocked,
+// fire on the first gesture. Subsequent visits stay silent. (window.lzRiff()
+// always plays, for testing — and doesn't set the played flag.)
 export function armStartupRiff() {
   try { window.lzRiff = (name) => playStyle(name || pickStyle() || 'immigrant'); } catch { /* ignore */ }
   const style = pickStyle();
   if (!style) return;   // disabled
+  try { if (localStorage.getItem(PLAYED_KEY)) return; } catch { /* private mode → greet anyway */ }
 
   let done = false;
-  const playOnce = () => { if (done) return; done = true; cleanup(); playStyle(style); };
+  const playOnce = () => {
+    if (done) return; done = true; cleanup();
+    try { localStorage.setItem(PLAYED_KEY, '1'); } catch { /* private mode */ }
+    playStyle(style);
+  };
   const onGesture = () => playOnce();
   const cleanup = () => { document.removeEventListener('pointerdown', onGesture, true); document.removeEventListener('keydown', onGesture, true); };
   // arm the gesture fallback first (capture-phase, never preventDefault)

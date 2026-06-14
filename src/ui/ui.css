@@ -580,6 +580,9 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .ctrl-stat-k { color: var(--faint); text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .ctrl-stat-v { color: var(--readout); }
 .ctrl-push { display: flex; flex-direction: column; gap: 3px; }
+/* In this COLUMN flex, .ctrl-btn's `flex: 1 1 0` would zero its height-basis and
+   collapse it to text height — pin it so it matches the row buttons (--ctrl-h). */
+.ctrl-push > .ctrl-btn { flex: 0 0 auto; }
 .ip-open { flex: 0 0 auto; display: inline-flex; align-items: center; box-sizing: border-box; height: var(--ctrl-h); color: var(--cyan); text-decoration: none; padding: 0 6px; font-size: var(--fs-ctrl); border: 1px solid var(--field-border); border-radius: var(--radius); }
 .ip-open:hover { background: var(--hover); }
 .ctrl-row { display: flex; gap: 5px; }
