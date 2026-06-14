@@ -1855,3 +1855,10 @@ snapBtn?.addEventListener('click', (e) => {
 });
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
+
+// --- PWA: register the service worker so the editor installs as an app and runs
+// offline (cached app shell). Best-effort — needs a secure context (https or
+// localhost); a failure or unsupported browser just leaves it as a normal tab. ---
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  navigator.serviceWorker.register('./service-worker.js').catch(() => { /* offline support unavailable — non-fatal */ });
+}

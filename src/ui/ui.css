@@ -384,7 +384,10 @@ body.gui-hidden #layout { display: none; }
 /* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
    overlay toggle + hide UI. Decoupled from any tab. */
 #corner-controls {
-  position: fixed; left: 10px; bottom: 10px; z-index: 5; pointer-events: auto;
+  position: fixed; z-index: 5; pointer-events: auto;
+  /* Offset by the device safe-area (notch / home indicator) when installed as a
+     standalone PWA with viewport-fit=cover; falls back to 10px on normal screens. */
+  left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
   display: inline-flex; align-items: center; gap: 6px;   /* center, not stretch — buttons keep one intrinsic height whether alone (Show UI) or among taller siblings */
 }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
