@@ -17,6 +17,7 @@ import {
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
+import { listMappables, bindMapping, clearMapping } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
@@ -605,6 +606,38 @@ setBpmCallback((b) => {
   if (!midiBpmSaveTimer) midiBpmSaveTimer = setTimeout(() => { midiBpmSaveTimer = null; saveShow(show); }, 1000);
 });
 (() => { try { if (localStorage.getItem(MIDI_KEY) === '1') enableMidi(); } catch { /* ignore */ } })();
+
+// --- Mappings: keyboard → channels + a bus to the separate Mappings window -----
+// Keyboard keys become external channels `key:<code>` (0/1), so they can drive
+// params via the External modulator just like MIDI. Skip while typing in a field.
+// The Mappings window (a separate same-origin browser window) talks to the editor
+// over a BroadcastChannel: the editor streams live channel values + the parameter
+// list, and applies the bind/clear it sends back. The editor stays the single
+// owner of the show.
+let mapBus = null;
+try { mapBus = new BroadcastChannel('lz-mappings'); } catch { /* unsupported */ }
+function postMapParams() { if (mapBus) { try { mapBus.postMessage({ type: 'params', data: listMappables(show) }); } catch { /* closed */ } } }
+function pushMapChannels() { if (mapBus) { try { mapBus.postMessage({ type: 'channels', data: { ...extChannels() } }); } catch { /* closed */ } } }
+
+const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+const setKeyChannel = (code, on) => { extSet('key:' + code, on ? 1 : 0); pushMapChannels(); };   // immediate push so Learn catches a momentary key
+document.addEventListener('keydown', (e) => { if (!e.repeat && !isTyping(e.target)) setKeyChannel(e.code, true); });
+document.addEventListener('keyup', (e) => { if (!isTyping(e.target)) setKeyChannel(e.code, false); });
+
+if (mapBus) {
+  mapBus.onmessage = (e) => {
+    const m = e.data || {};
+    if (m.type === 'hello') postMapParams();
+    else if (m.type === 'key') setKeyChannel(m.code, m.down);              // a key pressed in the Mappings window
+    else if (m.type === 'enableMidi') enableMidi();
+    else if (m.type === 'bind' || m.type === 'clear') {
+      show = m.type === 'bind' ? bindMapping(show, m.id, m.channel) : clearMapping(show, m.id);
+      saveShow(show); layerPanel?.refresh?.(); postMapParams();
+    }
+  };
+  setInterval(pushMapChannels, 100);   // stream live channel values @10Hz
+  setInterval(postMapParams, 2000);    // catch structural show changes (clips added/removed)
+}
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
@@ -1502,6 +1535,13 @@ async function buildSettings(mount) {
   midiBtn.onclick = async () => { const ok = await enableMidi(); if (ok) { try { localStorage.setItem(MIDI_KEY, '1'); } catch { /* ignore */ } } refreshMidi(); };
   mount.append(midiBtn, midiStatus);
   refreshMidi();
+
+  // --- Mappings: a separate window — live channel monitor + bind MIDI / keyboard
+  // to parameters and see every OSC address + value. ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'mappings' }));
+  const mapBtn = oel('button', { className: 'fx-add', textContent: 'open mappings window ↗' });
+  mapBtn.onclick = () => { try { window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { /* popup blocked */ } };
+  mount.append(mapBtn);
 
   // --- Accent colour (least priority → last): 8 preset swatches. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
