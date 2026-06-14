@@ -1379,16 +1379,21 @@ function setSystemTab(which) {
   if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
   if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
   if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
+  if (systemTab === 'settings') buildSettings(systemSettingsEl);   // refresh device list / accent state
 }
 document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
   if (b) setSystemTab(b.dataset.systab);
 });
 
-// Settings pane: accent colour (more preferences can join here later).
-function buildSettings(mount) {
+// Settings pane: accent colour + audio input (more preferences can join later).
+// Async because the audio device list needs enumerateDevices(); re-run whenever
+// the Settings subtab is opened so the device list (and any granted labels) refresh.
+async function buildSettings(mount) {
   if (!mount) return;
   mount.textContent = '';
+
+  // --- Accent colour ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
   const cur = savedAccent();
   const swatches = [];
@@ -1408,8 +1413,27 @@ function buildSettings(mount) {
   reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; mark(ACCENT_DEFAULT); };
   mount.append(reset);
   mark(cur);
+
+  // --- Audio input (the hardware device for the "Audio External" modulator + gain) ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'audio input' }));
+  const inputs = await listInputs();
+  const curDev = show.composition?.audioDevice || 'default';
+  const sel = oel('select', { title: 'hardware input device for the Audio External modulator' });
+  const opt = (value, label, on) => { const o = oel('option', { value, textContent: label }); if (on) o.selected = true; sel.append(o); };
+  opt('default', 'System default', curDev === 'default');
+  inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, curDev === d.deviceId));
+  sel.addEventListener('change', async () => {
+    const ok = await enableAudio('external', sel.value);
+    show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
+    saveShow(show);
+    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input — check permissions';
+  });
+  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
+  mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
+    min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
+    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },
+  }));
 }
-buildSettings(systemSettingsEl);
 setSystemTab(systemTab);
 setOutputTab('fixtures');
 setOverlay(true);
@@ -1720,31 +1744,7 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Load composition…', act: () => openCompInput.click() },
   ]));
 });
-document.getElementById('menu-audio')?.addEventListener('click', async (e) => {
-  e.stopPropagation();
-  const body = oel('div', { className: 'menu-pad' }, [oel('div', { className: 'menu-title', textContent: 'audio input' })]);
-  // The hardware INPUT device for the "Audio External" modulator. ("Audio
-  // Composition" taps clip audio and needs no device.) Choosing one is the user
-  // gesture that opens that device.
-  const inputs = await listInputs();
-  const cur = show.composition?.audioDevice || 'default';
-  const sel = oel('select', { title: 'hardware input device for the Audio External modulator' });
-  const opt = (value, label, on) => { const o = oel('option', { value, textContent: label }); if (on) o.selected = true; sel.append(o); };
-  opt('default', 'System default', cur === 'default');
-  inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, cur === d.deviceId));
-  sel.addEventListener('change', async () => {
-    const ok = await enableAudio('external', sel.value);
-    show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
-    saveShow(show);
-    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input — check permissions';
-  });
-  body.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
-  body.append(Slider('Gain', show.composition?.audioGain ?? 1, {
-    min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
-    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },
-  }));
-  openMenu(e.currentTarget, body);
-});
+// (Audio input + gain moved to System › Settings — see buildSettings.)
 // Snap menu: the on/off toggle + the grid/distance dimensions (which moved out of
 // the removed Settings tab). Snap only bites while placing fixtures, so the button
 // is disabled with the overlay off.
