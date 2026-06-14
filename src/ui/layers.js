@@ -548,10 +548,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Pad every layer's deck to the same column count so clips line up vertically
     // into a Resolume-style grid (max clips across layers + 1 trailing empty).
     const maxClips = layers.reduce((m, L) => Math.max(m, (L.clips || []).length), 0);
+    // When ANY layer is soloed, the others aren't rendering — dim them so the deck
+    // mirrors what the compositor actually outputs.
+    const anySolo = layers.some((L) => L && L.solo);
     for (let i = layers.length - 1; i >= 0; i--) {
       const layer = layers[i];
       deckBox.append(el('div', {
-        className: 'deck-layer' + (deckSel === 'layer' && layer.id === selectedLayerId ? ' is-sel' : ''),
+        className: 'deck-layer'
+          + (deckSel === 'layer' && layer.id === selectedLayerId ? ' is-sel' : '')
+          + (anySolo && !layer.solo ? ' is-muted' : ''),
         'data-layer': layer.id,
       }, [layerHead(layer, layer.id, i, layers.length > 1), clipDeck(layer, layer.id, maxClips)]));
     }

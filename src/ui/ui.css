@@ -903,6 +903,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    takes its top line from the header and the last row drops its bottom line (no
    doubled hairline against the group border). */
 .deck-layer:last-child { border-bottom: none; }
+/* Solo active elsewhere → this layer isn't rendering. Dim the whole row so the
+   deck mirrors the output; the row stays clickable (its S still un-solos it). */
+.deck-layer.is-muted { opacity: .4; transition: opacity .12s; }
 /* "fx" marker next to a layer / clip name when it carries an effect chain.
    Inherits the bar's text colour (dimmed) so it stays legible on the accent
    highlight of a selected row too. */
