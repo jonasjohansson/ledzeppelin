@@ -26,10 +26,10 @@ test('defaultParams of an unknown name is empty', () => {
 });
 
 test('registry contains the expected generators and effects', () => {
-  assert.deepEqual(generatorNames().sort(), ['chase', 'checkers', 'gradient', 'grid', 'kelvin', 'line', 'pulse', 'radial', 'sine', 'solid', 'wave']);
+  assert.deepEqual(generatorNames().sort(), ['chase', 'checkers', 'gradient', 'grid', 'line', 'pulse', 'radial', 'sine', 'solid', 'wave']);
   assert.deepEqual(effectNames().sort(),
     ['cascade', 'color', 'colorize', 'displace', 'hue', 'invert', 'repeat', 'rgb', 'segmenter', 'strobe', 'threshold']);
-  for (const name of ['line', 'gradient', 'solid', 'kelvin', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize']) {
+  for (const name of ['line', 'gradient', 'solid', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize']) {
     const e = REGISTRY[name];
     assert.ok(e, `${name} missing`);
     assert.match(e.src, /^#version 300 es/, `${name} src must start with #version 300 es`);

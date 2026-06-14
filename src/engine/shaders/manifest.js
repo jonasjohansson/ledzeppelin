@@ -34,16 +34,12 @@ uniform float angle; uniform vec3 colorA; uniform vec3 colorB;
 void main(){ float a=radians(angle); float g=clamp(uv.x*cos(a)+uv.y*sin(a),0.0,1.0); frag=vec4(mix(colorA,colorB,g),1.0); }`;
 
 // Solid COLOUR × brightness (the go-to wash). Default white × 1 = full white.
+// Solid colour × brightness, with an optional Kelvin white-balance mode: when
+// `useKelvin` is on, the colour comes from a blackbody temperature (warm→cool)
+// instead of the picker. Tanner Helland's blackbody approximation, in-shader.
 const SOLID = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
-uniform vec3 color; uniform float level;
-void main(){ frag=vec4(color*level,1.0); }`;
-
-// White balance: a Kelvin colour temperature (warm→cool) × brightness. Tanner
-// Helland's blackbody approximation, in-shader.
-const KELVIN = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform float kelvin; uniform float level;
+uniform vec3 color; uniform float level; uniform float useKelvin; uniform float kelvin;
 vec3 k2rgb(float k){
   float t = clamp(k, 1000.0, 40000.0) / 100.0; float r, g, b;
   if (t <= 66.0) { r = 1.0; g = clamp((99.4708025861*log(t) - 161.1195681661)/255.0, 0.0, 1.0); }
@@ -53,7 +49,7 @@ vec3 k2rgb(float k){
   else b = clamp((138.5177312231*log(t-10.0) - 305.0447927307)/255.0, 0.0, 1.0);
   return vec3(r, g, b);
 }
-void main(){ frag = vec4(k2rgb(kelvin) * level, 1.0); }`;
+void main(){ vec3 c = (useKelvin > 0.5) ? k2rgb(kelvin) : color; frag = vec4(c*level, 1.0); }`;
 
 // Colorize: map luminance between two colours (low→high). Drop it on any of the
 // grayscale sources (Lines, Pulse, Grid…) to instantly tint the whole look.
@@ -377,12 +373,7 @@ export const REGISTRY = {
     name: 'solid', type: 'generator', src: SOLID,
     params: [
       { key: 'color', type: 'color', default: '#ffffff' },
-      { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
-    ],
-  },
-  kelvin: {
-    name: 'kelvin', type: 'generator', src: KELVIN,
-    params: [
+      { key: 'useKelvin', type: 'bool', default: false },
       { key: 'kelvin', type: 'float', min: 1800, max: 12000, default: 3200, step: 50 },
       { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
     ],
@@ -551,7 +542,7 @@ export function hexToRgb(hex) {
 // Display labels (Resolume-style). The registry `name` stays the stable key
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
-  line: 'Lines', gradient: 'Gradient', solid: 'Solid Color', kelvin: 'White (Kelvin)',
+  line: 'Lines', gradient: 'Gradient', solid: 'Color',
   chase: 'Chase', wave: 'Wave', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',

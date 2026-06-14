@@ -141,6 +141,17 @@ function allClipIds(layers) {
 // - old layers ({generator,effects,params}) become a single-clip layer.
 // - composition.canvas is ensured.
 // Returns a NEW show; safe to run repeatedly and on an empty composition.
+// Generator migration: the standalone 'kelvin' source was merged into 'solid'
+// (Color) as a temperature option. Old shows referencing it map to solid with
+// useKelvin on. Returns { generator, params }.
+function migrateGenerator(generator, params) {
+  const p = params ? { ...params } : {};
+  if (generator === 'kelvin') {
+    return { generator: 'solid', params: { useKelvin: true, kelvin: p.kelvin ?? 3200, level: p.level ?? 1 } };
+  }
+  return { generator, params: p };
+}
+
 export function normalizeComposition(show) {
   const src = show && typeof show === 'object' ? show : {};
   const comp = src.composition && typeof src.composition === 'object' ? src.composition : {};
@@ -166,8 +177,7 @@ export function normalizeComposition(show) {
       let clips = layer.clips.map((c) => (!c ? null : {
         id: c.id,
         name: c.name ?? 'clip',
-        generator: c.generator,
-        params: c.params ? { ...c.params } : {},
+        ...migrateGenerator(c.generator, c.params),
         effects: Array.isArray(c.effects) ? [...c.effects] : [],
         transform: normTransform(c.transform),
         opacity: c.opacity == null ? DEFAULT_OPACITY : Number(c.opacity),
@@ -206,8 +216,7 @@ export function normalizeComposition(show) {
     const clip = {
       id: clipId,
       name: 'clip 1',
-      generator: layer.generator,
-      params: layer.params ? { ...layer.params } : {},
+      ...migrateGenerator(layer.generator, layer.params),
       effects: Array.isArray(layer.effects) ? [...layer.effects] : [],
       transform: { ...DEFAULT_TRANSFORM },
       opacity: DEFAULT_OPACITY,
@@ -622,6 +631,19 @@ export function makeLayer(id, clipId = 'c1') {
     params: {},
     transitionMs: TRANSITION_MS,
   };
+}
+
+// Keep an empty layer at the BOTTOM of the stack (deck index 0, since addLayer
+// prepends) so there's always a fresh layer ready to drop a clip into — which is
+// why there's no manual "+ layer" button. Idempotent: a no-op when the bottom
+// layer is already empty, otherwise adds one below. Seeds a layer if there are none.
+export function ensureTrailingEmptyLayer(show) {
+  const comp = show?.composition;
+  if (!comp) return show;
+  const layers = Array.isArray(comp.layers) ? comp.layers : [];
+  const isEmpty = (L) => L && (!L.clips || L.clips.filter(Boolean).length === 0);
+  if (layers.length && isEmpty(layers[0])) return show;   // already an empty bottom layer
+  return addLayer(show);
 }
 
 // Append a new default layer (one active clip on the first generator), auto-named

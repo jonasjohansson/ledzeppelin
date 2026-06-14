@@ -13,7 +13,7 @@ import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
 import {
-  prefixedDefaults, normalizeComposition, makeClip, setActiveClip,
+  prefixedDefaults, normalizeComposition, makeClip, setActiveClip, ensureTrailingEmptyLayer,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
@@ -90,7 +90,7 @@ function initialShow() {
 
 // On load: migrate legacy flat fixtures into definitions + instances (so the
 // Library shows definitions immediately), then sync fixture geometry.
-let show = syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())));
+let show = ensureTrailingEmptyLayer(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow()))));
 
 // --- Canvas resolution (composition.canvas drives source render + stage) ---
 // The canvas resolution affects ONLY the source render targets + on-screen
@@ -217,7 +217,7 @@ function overCapacityOutputs(s) {
 // fixture/device GEOMETRY changes require it).
 function setComposition(next) {
   snapshotForUndo(show);   // capture the pre-change state for undo (coalesced)
-  show = next;
+  show = ensureTrailingEmptyLayer(next);   // always keep a fresh empty layer at the bottom
   saveShow(show);
   broadcastManifest();
 }
@@ -421,7 +421,7 @@ function fixturesInRect(r) {
 // keeping devices/fixtures. Resizes the stage + recreates the compositor for the
 // new canvas, then refreshes every panel.
 function applyComposition(comp) {
-  const next = normalizeComposition({ ...show, composition: comp });
+  const next = ensureTrailingEmptyLayer(normalizeComposition({ ...show, composition: comp }));
   const c = next.composition.canvas || { w: 1280, h: 720 };
   canvas.width = c.w; canvas.height = c.h;
   if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }

@@ -29,7 +29,7 @@ import {
   setCompositionParam, mergeCompositionParams, setCompositionAnim,
   setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
   setClipAnim, setLayerAnim, patchLayer,
-  addLayer, removeLayer, moveLayer,
+  removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
 } from '../model/layers.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
@@ -537,13 +537,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
     if (!layers.length) {
       deckEl.append(el('div', { className: 'ly-hint', textContent: 'no composition layer' }));
-      deckEl.append(el('button', { className: 'fx-add deck-addlayer', textContent: '+ layer', onclick: () => commit(addLayer(show())) }));
       return;
     }
 
     // --- DECK region: one row per layer, TOP-of-stack first (Resolume-style:
-    //     the top row renders on top — it's the LAST layer in the array), then a
-    //     "+ layer" button. Master opacity is edited in the Composition inspector.
+    //     the top row renders on top — it's the LAST layer in the array). An empty
+    //     layer is always kept at the bottom (ensureTrailingEmptyLayer), so there's
+    //     no manual "+ layer" button. Master opacity is in the Composition inspector.
     const deckBox = el('div', { className: 'deck-layers' });
     // Pad every layer's deck to the same column count so clips line up vertically
     // into a Resolume-style grid (max clips across layers + 1 trailing empty).
@@ -576,7 +576,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     compHead.append(titleWrap);
     const group = el('div', { className: 'deck-comp-group' }, [compHead, deckBox]);
     deckEl.append(group);
-    deckEl.append(el('button', { className: 'fx-add deck-addlayer', textContent: '+ layer', onclick: () => commit(addLayer(show())) }));
 
     // --- CLIP inspector: the SELECTED clip, found across ALL layers ----------
     // There is ALWAYS a clip selected when any clip exists: if the current
