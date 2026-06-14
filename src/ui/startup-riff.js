@@ -1,31 +1,37 @@
 // Synthesized hard-rock startup intros — procedural HOMAGES to the heavy
 // blues-rock the app is named after. Nothing here is a sample or a copy of any
-// real song's riff: every note is generated live with oscillators, and the
-// motifs are original (evoking a *style*, not reproducing a *composition*).
+// real song: every note is generated live with oscillators, and the motifs are
+// original (evoking a *style*, not reproducing a *composition*).
 //
-// Three styles you can A/B:
+// Styles you can A/B:
+//   • 'immigrant'  — DEFAULT. A ~6s full-band intro: galloping distorted guitar +
+//                    locked bass/kick, snare backbeats, a tom fill into a crash
+//                    stab, and two scooping banshee wails.
 //   • 'kashmir'    — slow, majestic modal swell over a drone (Eastern colour)
-//   • 'immigrant'  — fast galloping low riff with a high banshee wail
 //   • 'wholelotta' — a bluesy pentatonic riff that ends on a big chord stab
 //
-// Browser autoplay policy blocks sound until a user gesture, so the riff is ARMED
-// on load and fires on the first pointer/key interaction (once per launch).
+// Browser autoplay policy blocks sound until a user gesture. We TRY to play on
+// load; if the browser blocks it, we fall back to firing on the first
+// pointer/key interaction (once per launch).
 // Control via localStorage 'lz.riff':
-//   unset / 'random'                  → a random style each launch
-//   'kashmir' | 'immigrant' | 'wholelotta' → always that one
-//   '0'                               → off
-// For live testing, call window.lzRiff('kashmir') from the console anytime.
+//   unset                                   → 'immigrant'
+//   'immigrant' | 'kashmir' | 'wholelotta'  → always that one
+//   'random'                                → a random style each launch
+//   '0'                                     → off
+// For live testing, call window.lzRiff('immigrant') from the console anytime.
 
 const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);   // MIDI note → Hz
 
 // Soft-clip curve → overdriven-guitar grit.
 function distortionCurve(k) {
-  const n = 256, c = new Float32Array(n);
+  const n = 2048, c = new Float32Array(n);
   for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = ((1 + k) * x) / (1 + k * Math.abs(x)); }
   return c;
 }
 
-// Build the shared amp chain: [input] → distortion → tone → (dry + slap delay) → out.
+// ---------------------------------------------------------------------------
+// Shared simple chain + helpers used by the two lighter styles (kashmir/wholelotta)
+// ---------------------------------------------------------------------------
 function makeChain(ac, { drive = 8, tone = 3200, vol = 0.22, delay = 0.16, fb = 0.25, wet = 0.18 } = {}) {
   const input = ac.createGain(); input.gain.value = vol;
   const dist = ac.createWaveShaper(); dist.curve = distortionCurve(drive); dist.oversample = '4x';
@@ -39,7 +45,6 @@ function makeChain(ac, { drive = 8, tone = 3200, vol = 0.22, delay = 0.16, fb = 
   return input;
 }
 
-// A fat guitar note: detuned saws + a sub-octave + (optionally) the fifth → power chord.
 function guitar(ac, dest, freq, t, dur, { power = false, level = 1, sustain = 0.28 } = {}) {
   const amp = ac.createGain();
   amp.gain.setValueAtTime(0, t);
@@ -52,7 +57,7 @@ function guitar(ac, dest, freq, t, dur, { power = false, level = 1, sustain = 0.
     { f: freq, det: +6, type: 'sawtooth', g: 0.6 },
     { f: freq / 2, det: 0, type: 'square', g: 0.35 },
   ];
-  if (power) voices.push({ f: freq * 1.4983, det: 0, type: 'sawtooth', g: 0.5 });   // perfect fifth
+  if (power) voices.push({ f: freq * 1.4983, det: 0, type: 'sawtooth', g: 0.5 });
   for (const v of voices) {
     const o = ac.createOscillator(); o.type = v.type;
     o.frequency.setValueAtTime(v.f, t); o.detune.setValueAtTime(v.det, t);
@@ -61,11 +66,10 @@ function guitar(ac, dest, freq, t, dur, { power = false, level = 1, sustain = 0.
   }
 }
 
-// A sustained pad/drone (for the modal swell) — two slow saws through an opening filter.
 function pad(ac, dest, freq, t, dur, level = 0.5) {
   const amp = ac.createGain();
   amp.gain.setValueAtTime(0, t);
-  amp.gain.linearRampToValueAtTime(level, t + dur * 0.4);   // slow swell
+  amp.gain.linearRampToValueAtTime(level, t + dur * 0.4);
   amp.gain.setValueAtTime(level, t + dur * 0.8);
   amp.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.2);
   const lp = ac.createBiquadFilter(); lp.type = 'lowpass';
@@ -78,8 +82,7 @@ function pad(ac, dest, freq, t, dur, level = 0.5) {
   }
 }
 
-// A high banshee wail — slides up into pitch, vibrato, long sustain (the "aaah").
-function wail(ac, dest, t, dur, fStart, fEnd) {
+function simpleWail(ac, dest, t, dur, fStart, fEnd) {
   const amp = ac.createGain();
   amp.gain.setValueAtTime(0, t);
   amp.gain.linearRampToValueAtTime(0.5, t + 0.08);
@@ -89,69 +92,215 @@ function wail(ac, dest, t, dur, fStart, fEnd) {
   bp.connect(amp).connect(dest);
   const o = ac.createOscillator(); o.type = 'sawtooth';
   o.frequency.setValueAtTime(fStart, t);
-  o.frequency.exponentialRampToValueAtTime(fEnd, t + 0.18);   // scoop up to pitch
-  // vibrato
+  o.frequency.exponentialRampToValueAtTime(fEnd, t + 0.18);
   const lfo = ac.createOscillator(); lfo.frequency.value = 5.5;
-  const lfoG = ac.createGain(); lfoG.gain.value = 14;         // ±14 cents
+  const lfoG = ac.createGain(); lfoG.gain.value = 14;
   lfo.connect(lfoG).connect(o.detune);
   o.connect(bp); o.start(t); o.stop(t + dur + 0.05); lfo.start(t); lfo.stop(t + dur + 0.05);
 }
 
-// --- the three styles -------------------------------------------------------
-// Each schedules onto a fresh chain and returns its total length in seconds.
+// ---------------------------------------------------------------------------
+// IMMIGRANT — the full-band flagship intro (its own self-contained engine).
+// ---------------------------------------------------------------------------
+function immigrant(ac) {
+  const BEAT = 0.4;                 // 150 BPM
+  const t0 = ac.currentTime + 0.06;
+  const at = (beat) => t0 + beat * BEAT;
+  const bq = (type, freq, Q = 0.7, gain = 0) => { const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; f.gain.value = gain; return f; };
+  const G = (v) => { const g = ac.createGain(); g.gain.value = v; return g; };
 
+  // --- master bus + a synthesized "stadium" reverb on a send ---
+  const master = G(0.42);
+  const mlp = bq('lowpass', 12000); master.connect(mlp).connect(ac.destination);
+  const conv = ac.createConvolver();
+  { const rate = ac.sampleRate, len = Math.floor(rate * 2.4), ir = ac.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.0); }
+    conv.buffer = ir; }
+  const revRet = G(0.18); conv.connect(revRet).connect(master);
+  const send = (node, amt) => { const g = G(amt); node.connect(g).connect(conv); };
+
+  // --- shared guitar "amp cabinet" (one stack, like a real amp) ---
+  const pre = G(1.6);
+  const sh = ac.createWaveShaper(); sh.curve = distortionCurve(40); sh.oversample = '4x';
+  const hp = bq('highpass', 90), mid = bq('peaking', 800, 1.2, 6), dip = bq('peaking', 3000, 2, -8), camp = bq('lowpass', 5000);
+  const gtrBus = G(0.9);
+  pre.connect(sh).connect(hp).connect(mid).connect(dip).connect(camp).connect(gtrBus).connect(master);
+  send(gtrBus, 0.12);
+
+  // a guitar note → per-note tone (palm-mute = darker) → enveloped amp → cabinet
+  const noteG = (freq, t, durSec, { power = false, palmMute = false, accent = false } = {}) => {
+    const amp = G(0); const tone = bq('lowpass', palmMute ? 1800 : 7000);
+    tone.connect(amp).connect(pre);
+    const level = accent ? 1.0 : 0.62;
+    if (palmMute) {
+      amp.gain.setValueAtTime(0, t);
+      amp.gain.linearRampToValueAtTime(level, t + 0.003);
+      amp.gain.exponentialRampToValueAtTime(level * 0.25, t + 0.06);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(durSec, 0.1) + 0.05);
+    } else {
+      amp.gain.setValueAtTime(0, t);
+      amp.gain.linearRampToValueAtTime(level, t + 0.008);
+      amp.gain.exponentialRampToValueAtTime(level * 0.7, t + 0.4);
+      amp.gain.exponentialRampToValueAtTime(0.0001, t + durSec + 0.7);
+    }
+    const voices = [{ f: freq, det: -7, g: 0.5 }, { f: freq, det: 0, g: 0.5 }, { f: freq, det: 7, g: 0.5 }, { f: freq / 2, det: 0, g: 0.45, sq: true }];
+    if (power) { voices.push({ f: freq * 1.4983, det: 0, g: 0.42 }); voices.push({ f: freq * 2, det: 0, g: 0.38 }); }
+    const end = t + durSec + 0.8;
+    for (const v of voices) {
+      const o = ac.createOscillator(); o.type = v.sq ? 'square' : 'sawtooth';
+      o.frequency.setValueAtTime(v.f, t); o.detune.setValueAtTime(v.det, t);
+      const g = G(v.g); o.connect(g).connect(tone); o.start(t); o.stop(end);
+    }
+  };
+
+  // --- drums + bass bus ---
+  const drumBus = G(0.95); drumBus.connect(master); send(drumBus, 0.06);
+  const noise = (() => { const len = Math.floor(ac.sampleRate * 2), b = ac.createBuffer(1, len, ac.sampleRate), d = b.getChannelData(0); for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1; return b; })();
+  const noiseSrc = () => { const s = ac.createBufferSource(); s.buffer = noise; return s; };
+
+  const kick = (t) => {
+    const o = ac.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.06);
+    const g = G(0.9); g.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+    o.connect(g).connect(drumBus); o.start(t); o.stop(t + 0.45);
+    const c = ac.createOscillator(); c.type = 'sine'; c.frequency.value = 1200;
+    const cg = G(0.5); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.012);
+    c.connect(cg).connect(drumBus); c.start(t); c.stop(t + 0.02);
+  };
+  const snare = (t) => {
+    const n = noiseSrc(), hpf = bq('highpass', 1500), bpf = bq('bandpass', 2200, 0.7), g = G(0.8);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    n.connect(hpf).connect(bpf).connect(g).connect(drumBus); n.start(t); n.stop(t + 0.2);
+    for (const f of [185, 330]) { const o = ac.createOscillator(); o.type = 'triangle'; o.frequency.value = f; const bg = G(0.4); bg.gain.exponentialRampToValueAtTime(0.001, t + 0.12); o.connect(bg).connect(drumBus); o.start(t); o.stop(t + 0.14); }
+  };
+  const tom = (t, f0, f1, dec) => {
+    const o = ac.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + 0.1);
+    const g = G(0.8); g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+    o.connect(g).connect(drumBus); o.start(t); o.stop(t + dec + 0.05);
+    const n = noiseSrc(), ng = G(0.15); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    n.connect(ng).connect(drumBus); n.start(t); n.stop(t + 0.04);
+  };
+  const crash = (t, level, dec) => {
+    const n = noiseSrc(), hpf = bq('highpass', 4000), bpf = bq('bandpass', 8000, 0.5), g = G(level);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+    n.connect(hpf).connect(bpf).connect(g).connect(drumBus); n.start(t); n.stop(t + dec + 0.05);
+  };
+  const bass = (t, durSec, midi) => {
+    const f = mtof(midi), lp = bq('lowpass', 600, 4);
+    lp.frequency.setValueAtTime(1400, t); lp.frequency.exponentialRampToValueAtTime(500, t + 0.12);
+    const amp = G(0);
+    amp.gain.linearRampToValueAtTime(0.7, t + 0.004);
+    amp.gain.setValueAtTime(0.7, t + Math.max(durSec - 0.05, 0.02));
+    amp.gain.exponentialRampToValueAtTime(0.001, t + durSec + 0.05);
+    lp.connect(amp).connect(drumBus);
+    const saw = ac.createOscillator(); saw.type = 'sawtooth'; saw.frequency.value = f;
+    const sub = ac.createOscillator(); sub.type = 'sine'; sub.frequency.value = f / 2; const sg = G(0.5);
+    saw.connect(lp); sub.connect(sg).connect(lp);
+    const end = t + durSec + 0.1; saw.start(t); saw.stop(end); sub.start(t); sub.stop(end);
+  };
+
+  // the wailing "war cry": glottal saw → parallel vowel formants → grit → master
+  const wail = (t, durSec, startMidi, peakMidi) => {
+    const target = mtof(peakMidi);
+    const src = ac.createOscillator(); src.type = 'sawtooth';
+    src.frequency.setValueAtTime(mtof(startMidi - 2), t);
+    src.frequency.exponentialRampToValueAtTime(target, t + 0.2);
+    const vowel = G(0);
+    vowel.gain.linearRampToValueAtTime(0.5, t + 0.08);
+    vowel.gain.setValueAtTime(0.5, t + durSec * 0.7);
+    vowel.gain.exponentialRampToValueAtTime(0.0001, t + durSec);
+    for (const fm of [{ f: 700, Q: 6, g: 1.0 }, { f: 1220, Q: 8, g: 0.7 }, { f: 2600, Q: 9, g: 0.4 }]) {
+      const bp = bq('bandpass', fm.f, fm.Q), g = G(fm.g);
+      src.connect(bp).connect(g).connect(vowel);
+    }
+    const grit = ac.createWaveShaper(); grit.curve = distortionCurve(12); grit.oversample = '2x';
+    const pres = bq('peaking', 3500, 1.5, 5), vhp = bq('highpass', 200);
+    vowel.connect(grit).connect(pres).connect(vhp).connect(master); send(vhp, 0.3);
+    const lfo = ac.createOscillator(); lfo.frequency.value = 5.5; const lfoG = G(0);
+    lfoG.gain.setValueAtTime(0, t + 0.18); lfoG.gain.linearRampToValueAtTime(35, t + 0.5);
+    lfo.connect(lfoG).connect(src.detune);
+    const end = t + durSec + 0.05; src.start(t); src.stop(end); lfo.start(t); lfo.stop(end);
+  };
+
+  // --- the score (beats @ 150 BPM) ---------------------------------------
+  // guitar/bass gallop: [midi, startBeat, durBeats, accent, palmMute]
+  const GTR = [
+    [42, 0, 1.5, 1, 0], [49, 0, 1.5, 1, 0],
+    [42, 2, 0.25, 1, 1], [42, 2.25, 0.25, 0, 1], [42, 2.5, 0.5, 1, 1],
+    [42, 3, 0.25, 1, 1], [42, 3.25, 0.25, 0, 1], [45, 3.5, 0.5, 1, 0],
+    [42, 4, 0.25, 1, 1], [42, 4.25, 0.25, 0, 1], [47, 4.5, 0.5, 1, 0],
+    [42, 5, 0.25, 1, 1], [42, 5.25, 0.25, 0, 1], [42, 5.5, 0.5, 1, 1],
+    [42, 6, 0.25, 1, 1], [42, 6.25, 0.25, 0, 1], [45, 6.5, 0.5, 1, 0],
+    [42, 7, 0.25, 1, 1], [42, 7.25, 0.25, 0, 1], [49, 7.5, 0.5, 1, 0],
+    [47, 8, 0.25, 1, 1], [47, 8.25, 0.25, 0, 1], [47, 8.5, 0.5, 1, 1],
+    [49, 9, 0.25, 1, 1], [49, 9.25, 0.25, 0, 1], [52, 9.5, 0.5, 1, 0],
+    [42, 10, 0.25, 1, 1], [42, 10.25, 0.25, 0, 1], [42, 10.5, 0.5, 1, 1],
+    [42, 11, 0.25, 1, 1], [42, 11.25, 0.25, 0, 1], [45, 11.5, 0.5, 1, 0],
+    [42, 12, 0.25, 1, 1], [42, 12.25, 0.25, 1, 1], [42, 12.5, 0.25, 1, 1], [42, 12.75, 0.25, 1, 1],
+    [45, 13, 0.25, 1, 1], [47, 13.25, 0.25, 1, 1], [49, 13.5, 0.25, 1, 1], [52, 13.75, 0.25, 1, 1],
+    [42, 14, 1.0, 1, 0], [49, 14, 1.0, 1, 0], [54, 14, 1.0, 1, 0],
+  ];
+  for (const [m, b, d, acc, pm] of GTR) noteG(mtof(m), at(b), d * BEAT, { power: !pm, palmMute: !!pm, accent: !!acc });
+
+  // bass: root-following, on the eighth positions so it locks with the kick
+  const bassSeen = new Set();
+  for (const [m, b] of GTR) { if (Math.abs((b * 2) % 1) < 1e-6 && !bassSeen.has(b)) { bassSeen.add(b); bass(at(b), 0.22, m - 12); } }
+
+  // drums
+  const kicks = [0, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14];
+  for (const b of kicks) kick(at(b));
+  for (const b of [3, 5, 7, 9, 11, 14]) snare(at(b));
+  for (const [b, k] of [[12, 't1'], [12.5, 't1'], [13, 't2'], [13.25, 't2'], [13.5, 't3'], [13.75, 't3']]) {
+    if (k === 't1') tom(at(b), 220, 130, 0.3); else if (k === 't2') tom(at(b), 165, 98, 0.34); else tom(at(b), 110, 62, 0.4);
+  }
+  crash(at(0), 0.3, 1.2); crash(at(14), 0.9, 1.9);
+
+  // the two war cries
+  wail(at(5), 1.05, 66, 73);
+  wail(at(10), 1.45, 73, 81);
+
+  return 15 * BEAT + 1.0;   // total incl. ring-out
+}
+
+// ---------------------------------------------------------------------------
+// The two lighter styles
+// ---------------------------------------------------------------------------
 function kashmir(ac) {
   const dest = makeChain(ac, { drive: 6, tone: 2800, vol: 0.2, delay: 0.28, fb: 0.3, wet: 0.22 });
   const t0 = ac.currentTime + 0.05;
-  pad(ac, dest, mtof(38), t0, 3.3, 0.45);          // D2 drone underneath
-  // Majestic ascending modal power chords (D phrygian-dominant colour: D F G Bb A).
-  const seq = [[50, 0.7], [53, 0.7], [55, 0.7], [58, 0.55], [57, 0.9]];  // D3 F3 G3 Bb3 A3
+  pad(ac, dest, mtof(38), t0, 3.3, 0.45);
+  const seq = [[50, 0.7], [53, 0.7], [55, 0.7], [58, 0.55], [57, 0.9]];
   let t = t0 + 0.15;
   for (const [m, d] of seq) { guitar(ac, dest, mtof(m), t, d * 0.95, { power: true, level: 1, sustain: 0.5 }); t += d; }
   return (t - t0) + 0.3;
 }
 
-function immigrant(ac) {
-  const dest = makeChain(ac, { drive: 10, tone: 3400, vol: 0.2, delay: 0.12, fb: 0.18, wet: 0.12 });
-  const t0 = ac.currentTime + 0.05;
-  // Driving gallop on a low root with octave snaps (F#2 ~ midi 42).
-  const STEP = 0.13, root = 42;
-  const pat = [0, 0, 12, 0, 0, 12, 0, 0, 0, 12, 0, 0, 12, 0];   // offsets from root
-  let t = t0;
-  for (const off of pat) { guitar(ac, dest, mtof(root + off), t, STEP * 0.9, { power: off === 0, level: 0.9, sustain: 0.2 }); t += STEP; }
-  // The banshee wail sailing over the top (F#5 → up), arrives just after the gallop kicks.
-  wail(ac, dest, t0 + 0.25, 1.5, mtof(72), mtof(78));
-  return Math.max(t - t0, 1.8) + 0.3;
-}
-
 function wholelotta(ac) {
   const dest = makeChain(ac, { drive: 9, tone: 3200, vol: 0.22, delay: 0.16, fb: 0.25, wet: 0.18 });
   const t0 = ac.currentTime + 0.05;
-  const B = 0.2;   // eighth-note
-  // Bluesy E-pentatonic riff: E (G E) D E … then a big stab.
-  const seq = [[40, 2], [43, 1], [40, 1], [38, 1], [40, 2], [43, 1], [40, 1]];  // E2 G2 E2 D2 E2 G2 E2
+  const B = 0.2;
+  const seq = [[40, 2], [43, 1], [40, 1], [38, 1], [40, 2], [43, 1], [40, 1]];
   let t = t0;
   for (const [m, b] of seq) { guitar(ac, dest, mtof(m), t, b * B * 0.92, { power: false, level: 1, sustain: 0.3 }); t += b * B; }
-  // a lead note, then the big chord stab
-  guitar(ac, dest, mtof(47), t, 0.5, { level: 1, sustain: 0.4 });           // B2 lead
+  guitar(ac, dest, mtof(47), t, 0.5, { level: 1, sustain: 0.4 });
   t += 0.55;
-  guitar(ac, dest, mtof(40), t, 0.9, { power: true, level: 1.1, sustain: 0.5 }); // E power-chord stab
+  guitar(ac, dest, mtof(40), t, 0.9, { power: true, level: 1.1, sustain: 0.5 });
   return (t - t0) + 1.0;
 }
 
-const STYLES = { kashmir, immigrant, wholelotta };
+const STYLES = { immigrant, kashmir, wholelotta };
 const NAMES = Object.keys(STYLES);
 
 function pickStyle() {
   let sel; try { sel = localStorage.getItem('lz.riff'); } catch { sel = null; }
   if (sel === '0') return null;
   if (sel && STYLES[sel]) return sel;
-  // random each launch (vary by time isn't allowed in headless; use perf counter)
-  return NAMES[Math.floor((performance.now() / 7) % NAMES.length)];
+  if (sel === 'random') return NAMES[Math.floor((performance.now() / 7) % NAMES.length)];
+  return 'immigrant';   // default
 }
 
-// One shared AudioContext, lazily created (browsers cap the number of contexts,
-// so reuse it across repeated A/B plays via window.lzRiff()).
+// One shared AudioContext (browsers cap how many you can create).
 let sharedAc = null;
 function audioCtx() {
   if (sharedAc) return sharedAc;
@@ -161,30 +310,32 @@ function audioCtx() {
   return sharedAc;
 }
 
-// Play a given style now (used by both the armed trigger and window.lzRiff()).
 function playStyle(name) {
   try {
-    const ac = audioCtx();
-    if (!ac) return;
-    const go = () => { try { (STYLES[name] || kashmir)(ac); } catch { /* synthesis failed — silent */ } };
+    const ac = audioCtx(); if (!ac) return;
+    const go = () => { try { (STYLES[name] || immigrant)(ac); } catch { /* synthesis failed — silent */ } };
     if (ac.state === 'suspended') ac.resume().then(go).catch(() => {}); else go();
   } catch { /* no audio — silent */ }
 }
 
-// Public: arm the startup riff to fire on the first user gesture (once).
+// Public: try to play on load; if autoplay is blocked, fire on first gesture.
 export function armStartupRiff() {
-  // Console helper for A/B testing without reloading.
-  try { window.lzRiff = (name) => playStyle(name || pickStyle() || 'kashmir'); } catch { /* ignore */ }
+  try { window.lzRiff = (name) => playStyle(name || pickStyle() || 'immigrant'); } catch { /* ignore */ }
   const style = pickStyle();
   if (!style) return;   // disabled
-  let fired = false;
-  const fire = () => {
-    if (fired) return; fired = true;
-    document.removeEventListener('pointerdown', fire, true);
-    document.removeEventListener('keydown', fire, true);
-    playStyle(style);
-  };
-  // capture-phase, never preventDefault — the same click still selects/triggers.
-  document.addEventListener('pointerdown', fire, true);
-  document.addEventListener('keydown', fire, true);
+
+  let done = false;
+  const playOnce = () => { if (done) return; done = true; cleanup(); playStyle(style); };
+  const onGesture = () => playOnce();
+  const cleanup = () => { document.removeEventListener('pointerdown', onGesture, true); document.removeEventListener('keydown', onGesture, true); };
+  // arm the gesture fallback first (capture-phase, never preventDefault)
+  document.addEventListener('pointerdown', onGesture, true);
+  document.addEventListener('keydown', onGesture, true);
+
+  // …then TRY to play immediately. If the context resumes (allowed), play now;
+  // otherwise the gesture fallback above covers it.
+  const ac = audioCtx();
+  if (!ac) return;
+  if (ac.state === 'running') { playOnce(); return; }
+  ac.resume().then(() => { if (ac.state === 'running') playOnce(); }).catch(() => { /* blocked — wait for gesture */ });
 }

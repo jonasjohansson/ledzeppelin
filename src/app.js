@@ -1857,8 +1857,9 @@ snapBtn?.addEventListener('click', (e) => {
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
 
-// A short synthesized hard-rock riff on first interaction — a procedural homage,
-// not a sample. Disable with localStorage 'lz.riff' = '0'.
+// A ~6s synthesized full-band hard-rock intro on launch (procedural homage, not a
+// sample). Tries to play on load; if autoplay is blocked, fires on first input.
+// Pick a style / disable via localStorage 'lz.riff' (see startup-riff.js).
 armStartupRiff();
 
 // --- PWA: register the service worker so the editor installs as an app and runs
