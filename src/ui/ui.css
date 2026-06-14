@@ -911,7 +911,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   background: var(--panel-2); border: none; border-right: 1px solid var(--line); border-radius: 0; padding: 0;
 }
 /* Head body = four equal quarters (B · S · ✕ · opacity), filling the height. */
-.lh-body { display: flex; gap: 0; flex: 1 1 auto; padding: 4px; align-items: stretch; }
+/* No top/side inset — the B·S·✕ bar reaches the head-box edges; a small bottom
+   gap keeps it off the name label. */
+.lh-body { display: flex; gap: 0; flex: 1 1 auto; padding: 0 0 4px; align-items: stretch; }
 .lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
 /* B · S · ✕ read as ONE segmented bar — flush, sharing borders (no double line). */
 .lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear { border-left: 0; }
