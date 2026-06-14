@@ -77,6 +77,11 @@ export function connectBridge(route, { onExt, onManifestReq, fps } = {}) {
       if (!ws || ws.readyState !== 1) return;
       try { ws.send(JSON.stringify(obj)); } catch { /* race */ }
     },
+    // Start/stop baking the live output stream to disk (daemon-side recorder).
+    record(action, name) {
+      if (!ws || ws.readyState !== 1) return;
+      try { ws.send(JSON.stringify({ type: 'record', action, name, fps: outFps })); } catch { /* race */ }
+    },
     // Live route update over the EXISTING socket — no teardown/reconnect blip
     // (the daemon just reassigns its route). Used on every geometry edit.
     setRoute(next) {

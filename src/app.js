@@ -112,6 +112,7 @@ let controlPanel = null;   // Control-tab panel (assigned once built; null-safe 
 // Global output framerate cap sent to the daemon (System › Settings; persisted).
 const OUTFPS_KEY = 'lz.outfps';
 const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
+let recording = false;   // baking the live output to disk (daemon-side recorder)
 
 // On-screen blit so the composited output is visible on the real framebuffer.
 const SCREEN_FS = `#version 300 es
@@ -1451,6 +1452,37 @@ async function buildSettings(mount) {
     min: 1, max: 60, step: 1, default: 42, commit: 'live',
     onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
   }));
+
+  // --- Recording: bake the live output stream to disk → standalone playback
+  // (server/play.js, or the daemon Play below) with no browser/GPU. ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'recording' }));
+  const recName = oel('input', { type: 'text', placeholder: 'show name' });
+  const recBtn = oel('button', { className: 'fx-add' });
+  const paintRec = () => { recBtn.textContent = recording ? 'stop recording ●' : 'record'; recBtn.classList.toggle('rec-on', recording); };
+  recBtn.onclick = () => {
+    if (recording) { bridge?.record?.('stop'); recording = false; paintRec(); setTimeout(() => buildSettings(mount), 500); }
+    else { bridge?.record?.('start', recName.value.trim() || `show-${Math.floor(performance.now())}`); recording = true; paintRec(); }
+  };
+  paintRec();
+  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Name' }), recName]), recBtn);
+  const recList = oel('div', { className: 'rec-list' });
+  mount.append(recList);
+  fetch('/api/recordings').then((r) => r.json()).then((info) => {
+    const recs = info?.recordings || [];
+    if (!recs.length) { recList.append(oel('div', { className: 'seg-hint', textContent: 'no recordings yet' })); return; }
+    for (const rc of recs) {
+      const playing = info.playing === rc.name;
+      const play = oel('button', { className: 'fx-add' + (playing ? ' rec-on' : ''), textContent: playing ? 'stop' : 'play' });
+      play.onclick = async () => {
+        try { await fetch(playing ? '/api/recordings/stop' : '/api/recordings/play', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: rc.name }) }); } catch { /* daemon offline */ }
+        setTimeout(() => buildSettings(mount), 300);
+      };
+      recList.append(oel('div', { className: 'rec-row' }, [
+        oel('span', { className: 'rec-name', textContent: `${rc.name} · ${(rc.durationMs / 1000).toFixed(1)}s @ ${rc.fps}fps` }),
+        play,
+      ]));
+    }
+  }).catch(() => { /* daemon offline */ });
 
   // --- MIDI: enable input (clock → BPM; CC/notes → external channels cc<n>/note<n>). ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'midi' }));
