@@ -930,11 +930,12 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 100%);
   background: var(--accent); pointer-events: none;
 }
-/* Handle: a full-width rounded bar centred on the fill's top edge. */
+/* Handle: a round accent knob with a dark ring (param-slider vibe), centred on
+   the fill's top edge. */
 .lh-op-handle {
-  position: absolute; left: 1px; right: 1px; height: 6px; border-radius: 3px;
-  bottom: var(--fill, 100%); transform: translateY(50%);
-  background: var(--text); pointer-events: none;
+  position: absolute; left: 50%; width: 12px; height: 12px; border-radius: 50%;
+  bottom: var(--fill, 100%); transform: translate(-50%, 50%);
+  background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; pointer-events: none;
 }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
 .lh-clear {
