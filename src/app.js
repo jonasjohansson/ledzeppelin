@@ -52,11 +52,13 @@ function defaultShow() {
   // opacity so both read). Prefixed manifest defaults per source.
   const checkers = { ...makeClip('checkers', undefined, 'c1'), params: prefixedDefaults('checkers') };
   const lines = { ...makeClip('line', undefined, 'l1c'), params: prefixedDefaults('line') };
+  // Array order is bottom → top (the deck renders the array END as the top row,
+  // and addLayer prepends new layers UNDER the stack). So Layer 1 is on top.
   show.composition.layers = [
-    { id: 'l1', name: 'Layer 1', blend: 'alpha', opacity: 1,
+    { id: 'l2', name: 'Layer 2', blend: 'alpha', opacity: 1,
       clips: [checkers], activeClipId: checkers.id,
       effects: [], params: {}, transitionMs: 500 },
-    { id: 'l2', name: 'Layer 2', blend: 'alpha', opacity: 0.5,
+    { id: 'l1', name: 'Layer 1', blend: 'alpha', opacity: 0.5,
       clips: [lines], activeClipId: lines.id,
       effects: [], params: {}, transitionMs: 500 },
   ];
