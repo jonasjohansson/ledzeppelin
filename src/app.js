@@ -1430,20 +1430,18 @@ applyAccent(savedAccent());   // apply the saved accent on boot
 
 // --- System pane: Settings / Control / Mapping subtabs -----------------------
 const VALID_SYSTABS = ['settings', 'control', 'mapping'];
+// The mapping surface always lives in its own window (a named target → one
+// reused window; the click is the user gesture that satisfies the popup blocker).
+function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
 function buildMappingPane() {
   if (!systemMappingEl || systemMappingEl.dataset.built) return;
   systemMappingEl.dataset.built = '1';
-  // The same mappings page, embedded — talks to the editor over BroadcastChannel
-  // (works across iframes). A "pop out" opens it as a separate window for a 2nd
-  // monitor. One UI, two homes.
-  const bar = oel('div', { className: 'map-tab-bar' }, [
-    oel('button', { className: 'fx-add', textContent: 'pop out ↗', title: 'open the mapping surface in its own window',
-      onclick: () => { try { window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { /* blocked */ } } }),
-  ]);
-  const frame = oel('iframe', { className: 'map-frame', src: 'mappings/', title: 'control mapping' });
-  systemMappingEl.append(bar, frame);
+  systemMappingEl.append(oel('div', { className: 'map-tab-pane' }, [
+    oel('div', { className: 'seg-hint', textContent: 'Mapping opens in its own window so you can keep it beside the editor (e.g. a second screen) while you touch a controller.' }),
+    oel('button', { className: 'fx-add', textContent: 'open mappings window ↗', onclick: () => openMappingsWindow() }),
+  ]));
 }
-function setSystemTab(which) {
+function setSystemTab(which, userGesture = false) {
   systemTab = VALID_SYSTABS.includes(which) ? which : 'settings';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
   document.querySelectorAll('#system-tabs .subtab').forEach((b) => b.classList.toggle('subtab-active', b.dataset.systab === systemTab));
@@ -1452,11 +1450,11 @@ function setSystemTab(which) {
   if (systemMappingEl) systemMappingEl.hidden = systemTab !== 'mapping';
   if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
   if (systemTab === 'settings') buildSettings(systemSettingsEl);   // refresh device list / accent state
-  if (systemTab === 'mapping') buildMappingPane();                 // lazy iframe build
+  if (systemTab === 'mapping') { buildMappingPane(); if (userGesture) openMappingsWindow(); }   // pop-out only on a click (popup blocker)
 }
 document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
-  if (b) setSystemTab(b.dataset.systab);
+  if (b) setSystemTab(b.dataset.systab, true);   // a click → user gesture (lets Mapping pop the window)
 });
 
 // Settings pane: accent colour + audio input (more preferences can join later).
