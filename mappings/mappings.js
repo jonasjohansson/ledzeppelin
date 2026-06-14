@@ -69,6 +69,11 @@ function renderParams() {
       cell.append(el('span', 'row-channame', p.channel));
       const bar = el('div', 'row-bar'); const fill = el('div', 'row-fill'); bar.append(fill); cell.append(bar);
       rowFills.push({ channel: p.channel, el: fill });
+      if (p.kind === 'bypass') {   // toggle (flip on press) ⇄ momentary (held)
+        const mb = el('button', 'row-mode', p.mode); mb.title = 'toggle / momentary';
+        mb.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'mode', id: p.id, mode: p.mode === 'toggle' ? 'momentary' : 'toggle' }); });
+        cell.append(mb);
+      }
       const x = el('button', 'm-x', '×'); x.title = 'clear'; x.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'clear', id: p.id }); }); cell.append(x);
     } else { cell.append(el('span', 'row-none', '—')); }
     row.append(osc, cell);

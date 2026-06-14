@@ -17,7 +17,7 @@ import {
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm,
 } from './model/layers.js';
 import { routeOsc } from './model/osc-map.js';
-import { listMappables, bindMapping, clearMapping } from './model/mappings.js';
+import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
@@ -114,6 +114,8 @@ let controlPanel = null;   // Control-tab panel (assigned once built; null-safe 
 const OUTFPS_KEY = 'lz.outfps';
 const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
 let recording = false;   // baking the live output to disk (daemon-side recorder)
+let prevBindCh = {};     // last frame's channel values, for action-binding rising edges
+let bindSaveTimer = null;
 
 // On-screen blit so the composited output is visible on the real framebuffer.
 const SCREEN_FS = `#version 300 es
@@ -635,6 +637,7 @@ if (mapBus) {
       show = m.type === 'bind' ? bindMapping(show, m.id, m.channel) : clearMapping(show, m.id);
       saveShow(show); layerPanel?.refresh?.(); postMapParams();
     }
+    else if (m.type === 'mode') { show = setMappingMode(show, m.id, m.mode); saveShow(show); postMapParams(); }
   };
   setInterval(pushMapChannels, 100);   // stream live channel values @10Hz
   setInterval(postMapParams, 2000);    // catch structural show changes (clips added/removed)
@@ -1620,6 +1623,15 @@ function loop(ts) {
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
   lastTs = ts;
   const t = (ts - t0) / 1000;
+  // Action bindings (clip triggers, layer opacity/bypass) driven by MIDI/key/OSC
+  // channels — applied each frame, rising-edge for triggers/toggles. Non-undoable,
+  // debounced save (like external input).
+  {
+    const chNow = extChannels();
+    const ab = applyBindings(show, chNow, prevBindCh);
+    if (ab.show !== show) { show = ab.show; if (!bindSaveTimer) bindSaveTimer = setTimeout(() => { bindSaveTimer = null; saveShow(show); }, 400); if (ab.fired) layerPanel?.refresh?.(); }
+    prevBindCh = { ...chNow };
+  }
   syncVideos(); uploadVideos();
   if (sampler) {
     // When the transport is playing, derive the active clip from the playhead and
