@@ -26,6 +26,7 @@ import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElemen
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
+import { armStartupRiff } from './ui/startup-riff.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -1855,6 +1856,10 @@ snapBtn?.addEventListener('click', (e) => {
 });
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
+
+// A short synthesized hard-rock riff on first interaction — a procedural homage,
+// not a sample. Disable with localStorage 'lz.riff' = '0'.
+armStartupRiff();
 
 // --- PWA: register the service worker so the editor installs as an app and runs
 // offline (cached app shell). Best-effort — needs a secure context (https or
