@@ -788,19 +788,25 @@ input[type=checkbox]:checked::after {
 /* Matte-style param row: label fills the LEFT, then the value, then a fixed
    slider, and (for animatable params) the contextual cog on the FAR RIGHT.
    Flex `order` reorders the DOM [label, value, slider, cog]. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 8px; min-height: var(--row-h); }
-.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; }
-/* − / + step buttons (Resolume layout: label · value · − · + · slider). */
+/* Value · − · + · slider read as ONE connected segmented control (no gaps,
+   shared borders); the label gaps before it and the cog sits apart after. */
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); }
+.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; }
+.ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+/* − / + step buttons; + drops its left border so − and + join as one stepper. */
 .ly-row .ly-step {
   order: 2; flex: 0 0 auto; width: 20px; height: var(--ctrl-h); padding: 0;
   display: inline-flex; align-items: center; justify-content: center; line-height: 1;
   background: var(--field-bg); color: var(--muted); border: 1px solid var(--line);
-  border-radius: var(--radius-sm); font-size: var(--fs-ctrl); cursor: pointer;
+  border-radius: 0; font-size: var(--fs-ctrl); cursor: pointer;
 }
-.ly-row .ly-step-plus { order: 3; }
+.ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
-.ly-row .anim-cog-wrap { order: 5; }
+.ly-row .anim-cog-wrap { order: 5; margin-left: 8px; }
+/* Selected param: clicking the label/row focuses it → arrow keys nudge. */
+.ly-row:focus { outline: none; }
+.ly-row:focus .ly-plabel { color: var(--accent); }
+.ly-row:focus .ly-readout { border-color: var(--accent-line); }
 /* Editable readout: a borderless number field that reads as plain text until you
    hover/focus it (then a subtle recessed fill). No spinner arrows (type=text). */
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
@@ -819,7 +825,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .ly-row input[type=range] {
   order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
   -webkit-appearance: none; appearance: none; height: var(--ctrl-h); cursor: pointer; box-sizing: border-box;
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  border: 1px solid var(--line); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;   /* joins the + (shared border) */
   background: linear-gradient(to right,
     color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
     var(--accent) calc(var(--fill, 50%) - 2px),

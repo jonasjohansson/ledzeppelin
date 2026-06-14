@@ -74,9 +74,20 @@ export function Slider(label, value, opts = {}) {
     else out.value = fmt(Number(range.value));
   });
 
-  const row = el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : '') }, [
-    el('span', { className: 'ly-plabel', textContent: label }), out, minus, plus, range,
+  const label0 = el('span', { className: 'ly-plabel', textContent: label });
+  const row = el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : ''), tabIndex: 0 }, [
+    label0, out, minus, plus, range,
   ]);
+  // SELECT a parameter by clicking its label/empty area (focuses the row); then
+  // ← / ↓ nudge down and → / ↑ nudge up by the tick. Clicks on the readout or the
+  // slider keep their own native arrow behaviour (caret / drag), so only handle
+  // arrows when the ROW itself is the focus target.
+  row.addEventListener('mousedown', (e) => { if (e.target === row || e.target === label0) row.focus(); });
+  row.addEventListener('keydown', (e) => {
+    if (e.target !== row) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); nudge(1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); nudge(-1); }
+  });
   // Right-click ANYWHERE on the row resets to the default (when one exists) and
   // always suppresses the OS menu, so a slider feels like a control, not text.
   row.addEventListener('contextmenu', (e) => {
