@@ -706,9 +706,9 @@ input[type=checkbox]:checked::after {
 .range-track { position: relative; width: 100%; min-width: 0; height: 18px; }
 .range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius-sm); }
 .range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: var(--radius-sm); pointer-events: none; }
-/* Live value = a ▽ that TRAVELS along the track (its left% is set per frame).
-   Centred on the track and sized to read clearly as it moves. */
-.range-track .anim-live { position: absolute; top: 50%; left: 0; width: 11px; height: 9px; transform: translate(-50%, -50%); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 5; }
+/* Live value = a ▽ that TRAVELS along the track (its left% is set per frame). It
+   sits ABOVE the track line with its tip pointing down at it. */
+.range-track .anim-live { position: absolute; top: 50%; left: 0; width: 11px; height: 9px; transform: translate(-50%, -100%); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 5; }
 .range-track input[type=range] {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0;
   -webkit-appearance: none; appearance: none; background: none; pointer-events: none;
@@ -943,7 +943,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    bar riding at the value. Built from divs (not a native range) for a clean,
    cross-browser full-width handle. */
 .lh-op {
-  position: relative; box-sizing: border-box; cursor: pointer; overflow: hidden;
+  position: relative; box-sizing: border-box; cursor: pointer;
   background: var(--line-2); border: 1px solid var(--line);
 }
 .lh-op-fill {
