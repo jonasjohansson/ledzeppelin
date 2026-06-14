@@ -706,32 +706,27 @@ input[type=checkbox]:checked::after {
 .range-track { position: relative; width: 100%; min-width: 0; height: 18px; }
 .range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius-sm); }
 .range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: var(--radius-sm); pointer-events: none; }
-.range-track .anim-live { position: absolute; top: 50%; left: 0; width: 2px; height: 13px; margin-left: -1px; transform: translateY(-50%); background: var(--green); border-radius: 1px; pointer-events: none; }
+/* Live value = a ▽ that TRAVELS along the track (its left% is set per frame). */
+.range-track .anim-live { position: absolute; top: 1px; left: 0; width: 9px; height: 6px; transform: translateX(-50%); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; }
 .range-track input[type=range] {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0;
   -webkit-appearance: none; appearance: none; background: none; pointer-events: none;
 }
 .range-track input[type=range]::-webkit-slider-runnable-track { background: none; border: none; }
-/* Triangle grips (Resolume trim style): a ▽ at each end of the active span. */
+/* End grips: angled wedge caps (Resolume trim style) — the in-grip is a wedge
+   thick on its LEFT (the range's start), the out-grip thick on its RIGHT. */
 .range-track input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: ew-resize;
-  width: 12px; height: 9px; border: none; border-radius: 0; background: var(--accent);
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  width: 9px; height: 16px; border: none; border-radius: 0; background: var(--accent);
 }
 .range-track input[type=range]::-moz-range-thumb {
-  pointer-events: auto; cursor: ew-resize; width: 12px; height: 9px; border: none; border-radius: 0;
-  background: var(--accent); clip-path: polygon(0 0, 100% 0, 50% 100%);
+  pointer-events: auto; cursor: ew-resize; width: 9px; height: 16px; border: none; border-radius: 0; background: var(--accent);
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
-/* The handles BRACKET the active span (Resolume trim-grip style): the in-grip
-   hangs left of its value, the out-grip right of it — [in][ fill ][out] — so
-   the grips read as the edges of the range, and both stay grabbable even when
-   in == out. (Transform moves the painted box; the native hit area is wider
-   than the visual shift, so grabbing is unaffected.) */
-.range-track .rt-in::-webkit-slider-thumb { transform: translate(-5px, -4px); }
-.range-track .rt-out::-webkit-slider-thumb { transform: translate(5px, -4px); }
-.range-track .rt-in::-moz-range-thumb { transform: translate(-5px, -4px); }
-.range-track .rt-out::-moz-range-thumb { transform: translate(5px, -4px); }
+.range-track .rt-in::-webkit-slider-thumb { clip-path: polygon(0 0, 100% 0, 0 100%); transform: translateX(-4px); }
+.range-track .rt-out::-webkit-slider-thumb { clip-path: polygon(0 0, 100% 0, 100% 100%); transform: translateX(4px); }
+.range-track .rt-in::-moz-range-thumb { clip-path: polygon(0 0, 100% 0, 0 100%); transform: translateX(-4px); }
+.range-track .rt-out::-moz-range-thumb { clip-path: polygon(0 0, 100% 0, 100% 100%); transform: translateX(4px); }
 /* Distinguish the END (out) handle from the START (in) handle. */
 /* Handle value bubble: a tiny editable readout that pops above a grabbed thumb
    and follows it — type into it to set an exact in/out value. */
@@ -804,9 +799,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .ly-row input[type=range]::-webkit-slider-runnable-track {
   height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
   background: linear-gradient(to right,
-    color-mix(in srgb, var(--accent) 28%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
     var(--accent) calc(var(--fill, 50%) - 2px),
-    var(--accent) var(--fill, 50%),
+    color-mix(in srgb, var(--accent) 55%, #fff) calc(var(--fill, 50%) - 2px),
+    color-mix(in srgb, var(--accent) 55%, #fff) var(--fill, 50%),
     var(--field-bg) var(--fill, 50%));
 }
 .ly-row input[type=range]::-webkit-slider-thumb {
@@ -815,9 +810,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .ly-row input[type=range]::-moz-range-track {
   height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
   background: linear-gradient(to right,
-    color-mix(in srgb, var(--accent) 28%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
     var(--accent) calc(var(--fill, 50%) - 2px),
-    var(--accent) var(--fill, 50%),
+    color-mix(in srgb, var(--accent) 55%, #fff) calc(var(--fill, 50%) - 2px),
+    color-mix(in srgb, var(--accent) 55%, #fff) var(--fill, 50%),
     var(--field-bg) var(--fill, 50%));
 }
 .ly-row input[type=range]::-moz-range-progress { background: transparent; }
@@ -954,12 +949,12 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 100%);
   background: var(--accent); pointer-events: none;
 }
-/* Handle: a round accent knob with a dark ring (param-slider vibe), centred on
-   the fill's top edge. */
+/* Handle: a full-width BRIGHT edge line at the value (matches the param sliders'
+   lightened-accent edge), riding the top of the bottom-up fill. */
 .lh-op-handle {
-  position: absolute; left: 50%; width: 12px; height: 12px; border-radius: 50%;
-  bottom: var(--fill, 100%); transform: translate(-50%, 50%);
-  background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; pointer-events: none;
+  position: absolute; left: 0; right: 0; height: 2px;
+  bottom: var(--fill, 100%); transform: translateY(50%);
+  background: color-mix(in srgb, var(--accent) 55%, #fff); pointer-events: none;
 }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
 .lh-clear {
