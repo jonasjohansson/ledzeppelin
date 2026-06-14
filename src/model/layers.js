@@ -644,17 +644,24 @@ export function makeLayer(id, clipId = 'c1') {
   };
 }
 
-// Keep an empty layer at the BOTTOM of the stack (deck index 0, since addLayer
-// prepends) so there's always a fresh layer ready to drop a clip into — which is
-// why there's no manual "+ layer" button. Idempotent: a no-op when the bottom
-// layer is already empty, otherwise adds one below. Seeds a layer if there are none.
+// Keep EXACTLY ONE empty layer, at the BOTTOM of the stack (deck index 0, since
+// addLayer prepends) so there's always a fresh layer ready to drop a clip into —
+// which is why there's no manual "+ layer" button. Any extra empty layers (e.g. a
+// source layer left empty after moving its clip away) are removed, so empties
+// never pile up. Idempotent.
 export function ensureTrailingEmptyLayer(show) {
   const comp = show?.composition;
   if (!comp) return show;
   const layers = Array.isArray(comp.layers) ? comp.layers : [];
   const isEmpty = (L) => L && (!L.clips || L.clips.filter(Boolean).length === 0);
-  if (layers.length && isEmpty(layers[0])) return show;   // already an empty bottom layer
-  return addLayer(show);
+  // Already in the desired shape — exactly one empty layer and it's at the bottom?
+  const empties = layers.filter(isEmpty);
+  if (empties.length === 1 && isEmpty(layers[0])) return show;
+  // Rebuild: content layers (order preserved) with a single empty layer beneath
+  // them. Reuse an existing empty layer (keep its id) when there is one.
+  const content = layers.filter((L) => !isEmpty(L));
+  if (empties.length) return { ...show, composition: { ...comp, layers: [empties[0], ...content] } };
+  return addLayer({ ...show, composition: { ...comp, layers: content } });
 }
 
 // Append a new default layer (one active clip on the first generator), auto-named
