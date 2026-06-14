@@ -308,12 +308,18 @@ body.deck-hidden #side { margin-left: auto; }
   background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
   padding: var(--s3);
 }
-/* --- CONTROL pane: the companion surface in the editor --- */
-#control-pane { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: var(--panel-2);
-  border-radius: 0 0 var(--radius) var(--radius); padding: var(--s3); }
+/* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
+   so content keeps the same side margin as the Design/Output panes. --- */
+#system-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#system-control, #system-settings {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius); padding: var(--s3);
+}
 /* Companion/daemon status dot on the CONTROL tab — red offline, accent live. */
+/* Daemon/companion status dot — red offline, green when running (a fixed status
+   green, independent of the theme accent). */
 .tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 7px; vertical-align: middle; }
-.tab-dot.on { background: var(--accent); }
+.tab-dot.on { background: #57c98a; }
 .ctrlpane-head { display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 8px 8px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--line); text-align: center; }
 .ctrl-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: 0 0 auto; }
@@ -1165,7 +1171,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    corner File menu.) */
 
 /* --- System › Settings ----------------------------------------------------- */
-#system-settings { padding: 4px 0; }
 .accent-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 10px; }
 .accent-swatch {
   width: 24px; height: 24px; padding: 0; border-radius: var(--radius);

@@ -1606,7 +1606,9 @@ function loop(ts) {
     const over = overCapacityOutputs(show);
     hud.classList.toggle('hud-offline', (!live && configured) || over > 0);
     hud.classList.toggle('hud-live', !!live);
-    document.getElementById('control-dot')?.classList.toggle('on', !!live);   // companion/daemon status on the Control tab
+    // Companion/daemon status (red offline / green-accent live) on the SYSTEM tab + the Control subtab.
+    document.getElementById('control-dot')?.classList.toggle('on', !!live);
+    document.getElementById('control-subdot')?.classList.toggle('on', !!live);
     if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
     hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
       + (over > 0 ? `  ·  ⚠ ${over} over cap` : '');
