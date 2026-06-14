@@ -1374,7 +1374,7 @@ applyAccent(savedAccent());   // apply the saved accent on boot
 
 // --- System pane: Control / Settings subtabs ---------------------------------
 let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
-systemTab = systemTab === 'settings' ? 'settings' : 'control';
+systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
 function setSystemTab(which) {
   systemTab = which === 'settings' ? 'settings' : 'control';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
@@ -1395,27 +1395,6 @@ document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
 async function buildSettings(mount) {
   if (!mount) return;
   mount.textContent = '';
-
-  // --- Accent colour ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
-  const cur = savedAccent();
-  const swatches = [];
-  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
-  const row = oel('div', { className: 'accent-swatches' });
-  for (const p of ACCENT_PRESETS) {
-    const sw = oel('button', { className: 'accent-swatch', title: p });
-    sw.dataset.hex = p; sw.style.background = p;
-    sw.onclick = () => { setAccent(p); picker.value = p; mark(p); };
-    swatches.push(sw); row.append(sw);
-  }
-  mount.append(row);
-  const picker = oel('input', { type: 'color', value: cur, className: 'accent-picker', title: 'custom accent colour' });
-  picker.addEventListener('input', () => { setAccent(picker.value); mark(picker.value); });
-  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Custom' }), picker]));
-  const reset = oel('button', { className: 'fx-add', textContent: 'reset to default' });
-  reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; mark(ACCENT_DEFAULT); };
-  mount.append(reset);
-  mark(cur);
 
   // --- Audio input (the hardware device for the "Audio External" modulator + gain) ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'audio input' }));
@@ -1448,6 +1427,27 @@ async function buildSettings(mount) {
     min: 1, max: 40, step: 1, default: 10, commit: 'live',
     onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
   }));
+
+  // --- Accent colour (least priority → last) ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
+  const cur = savedAccent();
+  const swatches = [];
+  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
+  const row = oel('div', { className: 'accent-swatches' });
+  for (const p of ACCENT_PRESETS) {
+    const sw = oel('button', { className: 'accent-swatch', title: p });
+    sw.dataset.hex = p; sw.style.background = p;
+    sw.onclick = () => { setAccent(p); picker.value = p; mark(p); };
+    swatches.push(sw); row.append(sw);
+  }
+  mount.append(row);
+  const picker = oel('input', { type: 'color', value: cur, className: 'accent-picker', title: 'custom accent colour' });
+  picker.addEventListener('input', () => { setAccent(picker.value); mark(picker.value); });
+  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Custom' }), picker]));
+  const reset = oel('button', { className: 'fx-add', textContent: 'reset to default' });
+  reset.onclick = () => { setAccent(ACCENT_DEFAULT); picker.value = ACCENT_DEFAULT; mark(ACCENT_DEFAULT); };
+  mount.append(reset);
+  mark(cur);
 }
 setSystemTab(systemTab);
 setOutputTab('fixtures');

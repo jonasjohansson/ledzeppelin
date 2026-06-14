@@ -609,7 +609,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const box = el('div', { className: 'comp-fx' });
     box.append(Section('Effects', 'comp-fx', (b) => {
       for (let fx = 0; fx < fxs.length; fx++) b.append(compEffectBlock(fx, fxs));
-      const addBtn = el('button', { className: 'composer-add', textContent: '+ effect' });
+      const addBtn = el('button', { className: 'composer-add', textContent: '+' });
       addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addCompositionEffect(show(), name)));
       b.append(addBtn);
     }, undefined, fxs.length === 0));
@@ -784,11 +784,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (clip.videoMissing) thumbWrap.append(el('div', { className: 'clip-missing', textContent: '⚠ video', title: 'video file lost on reload — drop a new source onto this clip' }));
       cell.append(thumbWrap);
       // Modulation badges on the THUMBNAIL corner (the label bar is too narrow):
-      // A = a param follows the audio input, E = a param follows an external
-      // (OSC / socket) channel — so the deck shows at a glance which clips are
-      // being driven from outside.
+      // T = a param runs on the timeline, A = follows the audio input, E = follows
+      // an external (OSC / socket) channel — so the deck shows at a glance which
+      // clips are animated / driven from outside.
       const animModes = new Set(Object.values(clip.anim || {}).map((a) => a && a.mode));
       const mods = el('div', { className: 'clip-mods' });
+      if (animModes.has('timeline')) mods.append(el('span', { className: 'clip-mod', textContent: 'T', title: 'a parameter runs on the timeline' }));
       if (animModes.has('audio')) mods.append(el('span', { className: 'clip-mod', textContent: 'A', title: 'a parameter follows the audio input' }));
       if (animModes.has('external')) mods.append(el('span', { className: 'clip-mod', textContent: 'E', title: 'a parameter follows an external (OSC / socket) channel' }));
       if (mods.childNodes.length) thumbWrap.append(mods);
@@ -881,7 +882,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const layerFx = layer.effects || [];
     box.append(Section('Effects', 'layer-effects', (b) => {
       for (let fx = 0; fx < layerFx.length; fx++) b.append(layerEffectBlock(id, fx, layerFx));
-      const addBtn = el('button', { className: 'composer-add', textContent: '+ effect' });
+      const addBtn = el('button', { className: 'composer-add', textContent: '+' });
       addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addLayerEffect(show(), id, name)));
       b.append(addBtn);
     }, undefined, layerFx.length === 0));
@@ -1106,7 +1107,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const clipFx = clip.effects || [];
     box.append(Section('Effects', 'effects', (b) => {
       for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
-      const addBtn = el('button', { className: 'composer-add', textContent: '+ effect' });
+      const addBtn = el('button', { className: 'composer-add', textContent: '+' });
       addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addClipEffect(show(), id, clip.id, name)));
       b.append(addBtn);
     }, undefined, clipFx.length === 0));
