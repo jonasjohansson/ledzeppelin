@@ -103,7 +103,7 @@ function simpleWail(ac, dest, t, dur, fStart, fEnd) {
 // IMMIGRANT — the full-band flagship intro (its own self-contained engine).
 // ---------------------------------------------------------------------------
 function immigrant(ac) {
-  const BEAT = 0.4;                 // 150 BPM
+  const BEAT = 0.341;              // 176 BPM — swift
   const t0 = ac.currentTime + 0.06;
   const at = (beat) => t0 + beat * BEAT;
   const bq = (type, freq, Q = 0.7, gain = 0) => { const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; f.gain.value = gain; return f; };
@@ -223,44 +223,66 @@ function immigrant(ac) {
     const end = t + durSec + 0.05; src.start(t); src.stop(end); lfo.start(t); lfo.stop(end);
   };
 
-  // --- the score (beats @ 150 BPM) ---------------------------------------
-  // guitar/bass gallop: [midi, startBeat, durBeats, accent, palmMute]
+  // a singing lead-hook voice (brighter, bypasses the heavy cab so it cuts over
+  // the wall of guitars, with a little vibrato).
+  const lead = (freq, t, durSec) => {
+    const amp = G(0);
+    amp.gain.linearRampToValueAtTime(0.5, t + 0.01);
+    amp.gain.exponentialRampToValueAtTime(0.34, t + 0.3);
+    amp.gain.exponentialRampToValueAtTime(0.0001, t + durSec + 0.5);
+    const drv = ac.createWaveShaper(); drv.curve = distortionCurve(18); drv.oversample = '2x';
+    const pres = bq('peaking', 3200, 1.5, 6), lp = bq('lowpass', 6800);
+    amp.connect(drv).connect(pres).connect(lp).connect(master); send(lp, 0.2);
+    const lfo = ac.createOscillator(); lfo.frequency.value = 5.5; const lg = G(0);
+    lg.gain.setValueAtTime(0, t + 0.15); lg.gain.linearRampToValueAtTime(20, t + 0.4); lfo.connect(lg);
+    const end = t + durSec + 0.6;
+    for (const det of [-5, 5]) { const o = ac.createOscillator(); o.type = 'sawtooth'; o.frequency.value = freq; o.detune.value = det; lg.connect(o.detune); const g = G(0.5); o.connect(g).connect(amp); o.start(t); o.stop(end); }
+    lfo.start(t); lfo.stop(end);
+  };
+
+  // --- the score (beats @ 176 BPM) — straight into the catchy gallop, NO
+  // opening chord. F# minor pentatonic; the riff climbs A→B→C# then resolves
+  // B-A-F#. guitar/bass gallop: [midi, startBeat, durBeats, accent, palmMute] ---
   const GTR = [
-    [42, 0, 1.5, 1, 0], [49, 0, 1.5, 1, 0],
-    [42, 2, 0.25, 1, 1], [42, 2.25, 0.25, 0, 1], [42, 2.5, 0.5, 1, 1],
-    [42, 3, 0.25, 1, 1], [42, 3.25, 0.25, 0, 1], [45, 3.5, 0.5, 1, 0],
-    [42, 4, 0.25, 1, 1], [42, 4.25, 0.25, 0, 1], [47, 4.5, 0.5, 1, 0],
-    [42, 5, 0.25, 1, 1], [42, 5.25, 0.25, 0, 1], [42, 5.5, 0.5, 1, 1],
-    [42, 6, 0.25, 1, 1], [42, 6.25, 0.25, 0, 1], [45, 6.5, 0.5, 1, 0],
-    [42, 7, 0.25, 1, 1], [42, 7.25, 0.25, 0, 1], [49, 7.5, 0.5, 1, 0],
-    [47, 8, 0.25, 1, 1], [47, 8.25, 0.25, 0, 1], [47, 8.5, 0.5, 1, 1],
-    [49, 9, 0.25, 1, 1], [49, 9.25, 0.25, 0, 1], [52, 9.5, 0.5, 1, 0],
-    [42, 10, 0.25, 1, 1], [42, 10.25, 0.25, 0, 1], [42, 10.5, 0.5, 1, 1],
-    [42, 11, 0.25, 1, 1], [42, 11.25, 0.25, 0, 1], [45, 11.5, 0.5, 1, 0],
-    [42, 12, 0.25, 1, 1], [42, 12.25, 0.25, 1, 1], [42, 12.5, 0.25, 1, 1], [42, 12.75, 0.25, 1, 1],
-    [45, 13, 0.25, 1, 1], [47, 13.25, 0.25, 1, 1], [49, 13.5, 0.25, 1, 1], [52, 13.75, 0.25, 1, 1],
-    [42, 14, 1.0, 1, 0], [49, 14, 1.0, 1, 0], [54, 14, 1.0, 1, 0],
+    // riff cell (climbing hook)
+    [42, 0.0, 0.25, 1, 1], [42, 0.25, 0.25, 0, 1], [45, 0.5, 0.5, 1, 0],
+    [42, 1.0, 0.25, 1, 1], [42, 1.25, 0.25, 0, 1], [47, 1.5, 0.5, 1, 0],
+    [42, 2.0, 0.25, 1, 1], [42, 2.25, 0.25, 0, 1], [49, 2.5, 0.5, 1, 0],
+    [47, 3.0, 0.25, 1, 1], [45, 3.25, 0.25, 0, 1], [42, 3.5, 0.5, 1, 0],
+    // repeat (lead hook sings over this)
+    [42, 4.0, 0.25, 1, 1], [42, 4.25, 0.25, 0, 1], [45, 4.5, 0.5, 1, 0],
+    [42, 5.0, 0.25, 1, 1], [42, 5.25, 0.25, 0, 1], [47, 5.5, 0.5, 1, 0],
+    [42, 6.0, 0.25, 1, 1], [42, 6.25, 0.25, 0, 1], [49, 6.5, 0.5, 1, 0],
+    [47, 7.0, 0.25, 1, 1], [45, 7.25, 0.25, 0, 1], [42, 7.5, 0.5, 1, 0],
+    // build (straight climbing 16ths)
+    [42, 8.0, 0.25, 1, 1], [45, 8.25, 0.25, 1, 1], [47, 8.5, 0.25, 1, 1], [49, 8.75, 0.25, 1, 1],
+    [47, 9.0, 0.25, 1, 1], [49, 9.25, 0.25, 1, 1], [52, 9.5, 0.25, 1, 1], [54, 9.75, 0.25, 1, 1],
+    // final stab
+    [42, 10.0, 1.0, 1, 0], [49, 10.0, 1.0, 1, 0], [54, 10.0, 1.0, 1, 0],
   ];
   for (const [m, b, d, acc, pm] of GTR) noteG(mtof(m), at(b), d * BEAT, { power: !pm, palmMute: !!pm, accent: !!acc });
+
+  // the singing lead hook (octave up) over the riff's repeat
+  for (const [m, b, d] of [[57, 4.5, 1.0], [59, 5.5, 1.0], [61, 6.5, 1.2], [57, 7.5, 1.4]]) lead(mtof(m), at(b), d * BEAT);
 
   // bass: root-following, on the eighth positions so it locks with the kick
   const bassSeen = new Set();
   for (const [m, b] of GTR) { if (Math.abs((b * 2) % 1) < 1e-6 && !bassSeen.has(b)) { bassSeen.add(b); bass(at(b), 0.22, m - 12); } }
 
   // drums
-  const kicks = [0, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14];
+  const kicks = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10];
   for (const b of kicks) kick(at(b));
-  for (const b of [3, 5, 7, 9, 11, 14]) snare(at(b));
-  for (const [b, k] of [[12, 't1'], [12.5, 't1'], [13, 't2'], [13.25, 't2'], [13.5, 't3'], [13.75, 't3']]) {
+  for (const b of [1, 3, 5, 7, 9, 10]) snare(at(b));
+  for (const [b, k] of [[8, 't1'], [8.5, 't1'], [9, 't2'], [9.25, 't2'], [9.5, 't3'], [9.75, 't3']]) {
     if (k === 't1') tom(at(b), 220, 130, 0.3); else if (k === 't2') tom(at(b), 165, 98, 0.34); else tom(at(b), 110, 62, 0.4);
   }
-  crash(at(0), 0.3, 1.2); crash(at(14), 0.9, 1.9);
+  crash(at(10), 0.9, 1.9);
 
   // the two war cries
-  wail(at(5), 1.05, 66, 73);
-  wail(at(10), 1.45, 73, 81);
+  wail(at(2.5), 0.7, 66, 73);
+  wail(at(8.0), 1.1, 73, 81);
 
-  return 15 * BEAT + 1.0;   // total incl. ring-out
+  return 11 * BEAT + 1.0;   // total incl. ring-out
 }
 
 // ---------------------------------------------------------------------------
