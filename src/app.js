@@ -618,6 +618,7 @@ let mapBus = null;
 try { mapBus = new BroadcastChannel('lz-mappings'); } catch { /* unsupported */ }
 function postMapParams() { if (mapBus) { try { mapBus.postMessage({ type: 'params', data: listMappables(show) }); } catch { /* closed */ } } }
 function pushMapChannels() { if (mapBus) { try { mapBus.postMessage({ type: 'channels', data: { ...extChannels() } }); } catch { /* closed */ } } }
+function postMapMidi() { if (mapBus) { try { mapBus.postMessage({ type: 'midi', enabled: midiEnabled(), inputs: midiInputs().map((i) => i.name) }); } catch { /* closed */ } } }
 
 const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 const setKeyChannel = (code, on) => { extSet('key:' + code, on ? 1 : 0); pushMapChannels(); };   // immediate push so Learn catches a momentary key
@@ -627,9 +628,9 @@ document.addEventListener('keyup', (e) => { if (!isTyping(e.target)) setKeyChann
 if (mapBus) {
   mapBus.onmessage = (e) => {
     const m = e.data || {};
-    if (m.type === 'hello') postMapParams();
+    if (m.type === 'hello') { postMapParams(); postMapMidi(); }
     else if (m.type === 'key') setKeyChannel(m.code, m.down);              // a key pressed in the Mappings window
-    else if (m.type === 'enableMidi') enableMidi();
+    else if (m.type === 'enableMidi') { enableMidi().then(postMapMidi); }
     else if (m.type === 'bind' || m.type === 'clear') {
       show = m.type === 'bind' ? bindMapping(show, m.id, m.channel) : clearMapping(show, m.id);
       saveShow(show); layerPanel?.refresh?.(); postMapParams();
@@ -1357,7 +1358,6 @@ outputTabsEl?.addEventListener('click', (ev) => {
 const systemPaneEl = document.getElementById('system-pane');
 const systemControlEl = document.getElementById('system-control');
 const systemSettingsEl = document.getElementById('system-settings');
-const systemMappingEl = document.getElementById('system-mapping');
 // The companion URL the QR/link point at. Prefer the daemon's LAN IP (a phone
 // can't use localhost); fall back to this page's origin (works if the editor was
 // itself opened via the LAN IP).
@@ -1399,7 +1399,7 @@ sectionSwitchEl?.addEventListener('click', (ev) => {
 
 // System subtab (declared BEFORE the initial setSection() below, which reads it).
 let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
-systemTab = ['control', 'mapping'].includes(systemTab) ? systemTab : 'settings';   // default to Settings
+systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
 
 // Initial layout: restore the last section (Design/Output/System) across
 // reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
@@ -1429,32 +1429,23 @@ function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KE
 applyAccent(savedAccent());   // apply the saved accent on boot
 
 // --- System pane: Settings / Control / Mapping subtabs -----------------------
-const VALID_SYSTABS = ['settings', 'control', 'mapping'];
-// The mapping surface always lives in its own window (a named target → one
-// reused window; the click is the user gesture that satisfies the popup blocker).
+const VALID_SYSTABS = ['settings', 'control'];
+// The mapping surface lives in its own window (a named target → one reused
+// window; the click is the user gesture that satisfies the popup blocker).
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
-function buildMappingPane() {
-  if (!systemMappingEl || systemMappingEl.dataset.built) return;
-  systemMappingEl.dataset.built = '1';
-  systemMappingEl.append(oel('div', { className: 'map-tab-pane' }, [
-    oel('div', { className: 'seg-hint', textContent: 'Mapping opens in its own window so you can keep it beside the editor (e.g. a second screen) while you touch a controller.' }),
-    oel('button', { className: 'fx-add', textContent: 'open mappings window ↗', onclick: () => openMappingsWindow() }),
-  ]));
-}
-function setSystemTab(which, userGesture = false) {
+document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
+function setSystemTab(which) {
   systemTab = VALID_SYSTABS.includes(which) ? which : 'settings';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
   document.querySelectorAll('#system-tabs .subtab').forEach((b) => b.classList.toggle('subtab-active', b.dataset.systab === systemTab));
   if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
   if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
-  if (systemMappingEl) systemMappingEl.hidden = systemTab !== 'mapping';
   if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
   if (systemTab === 'settings') buildSettings(systemSettingsEl);   // refresh device list / accent state
-  if (systemTab === 'mapping') { buildMappingPane(); if (userGesture) openMappingsWindow(); }   // pop-out only on a click (popup blocker)
 }
 document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
-  if (b) setSystemTab(b.dataset.systab, true);   // a click → user gesture (lets Mapping pop the window)
+  if (b) setSystemTab(b.dataset.systab);
 });
 
 // Settings pane: accent colour + audio input (more preferences can join later).

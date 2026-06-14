@@ -315,10 +315,6 @@ body.deck-hidden #side { margin-left: auto; }
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius); padding: var(--s3);
 }
-/* Mapping subtab = a placeholder; the surface always opens in its own window. */
-#system-mapping { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius); padding: var(--s3); }
-.map-tab-pane { display: flex; flex-direction: column; gap: 12px; padding: 12px 4px; }
-.map-tab-pane .seg-hint { line-height: var(--lh-ctrl); }
 /* Companion/daemon status dot on the CONTROL tab — red offline, accent live. */
 /* Daemon/companion status dot — red offline, green when running (a fixed status
    green, independent of the theme accent). */
@@ -1202,9 +1198,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .rec-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-row .fx-add { flex: 0 0 auto; margin-top: 0; padding: 2px 10px; }
 .fx-add.rec-on { color: var(--danger); border-color: var(--danger); }
-.accent-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 4px; }
+.accent-swatches { display: flex; gap: 6px; margin: 4px 0 4px; }
 .accent-swatch {
-  width: 28px; height: 28px; padding: 0; border-radius: var(--radius);
+  flex: 1 1 0; min-width: 0; height: 28px; padding: 0; border-radius: var(--radius);
   border: 1px solid var(--line-2); cursor: pointer;
 }
 .accent-swatch.is-on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }

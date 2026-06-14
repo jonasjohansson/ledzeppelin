@@ -28,6 +28,11 @@ bus.onmessage = (e) => {
   statusEl.textContent = 'connected to editor';
   if (m.type === 'params') { params = m.data || []; renderParams(); }
   else if (m.type === 'channels') { channels = m.data || {}; renderChips(); tickLearn(); }
+  else if (m.type === 'midi') {
+    const btn = $('enable-midi'), st = $('midi-status');
+    btn.disabled = !!m.enabled; btn.textContent = m.enabled ? 'MIDI enabled ✓' : 'enable MIDI';
+    st.textContent = m.enabled ? (m.inputs?.length ? 'inputs: ' + m.inputs.join(', ') : 'no MIDI inputs connected') : 'clock → BPM · CC/notes → channels';
+  }
 };
 setInterval(() => { if (performance.now() - lastBus > 1500) statusEl.textContent = 'editor not responding — is it open?'; }, 1000);
 
