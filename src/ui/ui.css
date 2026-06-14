@@ -1198,8 +1198,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .rec-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-row .fx-add { flex: 0 0 auto; margin-top: 0; padding: 2px 10px; }
 .fx-add.rec-on { color: var(--danger); border-color: var(--danger); }
-.accent-picker {
-  flex: 0 0 auto; width: 52px; height: var(--ctrl-h); padding: 2px; cursor: pointer;
-  background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius);
+.accent-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 4px; }
+.accent-swatch {
+  width: 28px; height: 28px; padding: 0; border-radius: var(--radius);
+  border: 1px solid var(--line-2); cursor: pointer;
 }
+.accent-swatch.is-on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
 #system-settings .fx-add { margin-top: 8px; }
