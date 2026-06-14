@@ -44,29 +44,19 @@ function defaultShow() {
   // Generic placeholder hardware so the first run shows SOMETHING on the wall —
   // the user reconfigures (or scans) these to match their real rig.
   show = addDevice(show, { id: 'c1', name: 'Generic Controller', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
-  // ONE generic fixture definition, placed as a centred FAN of instances radiating
-  // from the middle so the square canvas lights middle-out. All share the one def.
+  // ONE generic fixture DEFINITION available in the library — but NO instances
+  // placed on the canvas (an empty stage; the user maps their own rig).
   show.fixtureTypes = [{ id: 't1', name: 'Generic Fixture', ledsPerMeter: 60, meters: 1.6, pixelCount: 96, colorOrder: 'RGB' }];
-  const N = 8, run = 230, mid = 160, ccx = cv.w / 2, ccy = cv.h / 2;
-  for (let i = 0; i < N; i++) {
-    const deg = i * (360 / N), a = deg * Math.PI / 180;
-    const transform = { x: ccx + Math.cos(a) * mid, y: ccy + Math.sin(a) * mid, w: run, h: 0, rotation: deg };
-    show = addFixture(show, {
-      id: `f${i + 1}`, typeId: 't1',
-      output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 96 },
-      input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: 96 },
-    });
-  }
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
   // opacity so both read). Prefixed manifest defaults per source.
   const checkers = { ...makeClip('checkers', undefined, 'c1'), params: prefixedDefaults('checkers') };
   const lines = { ...makeClip('line', undefined, 'l1c'), params: prefixedDefaults('line') };
   show.composition.layers = [
-    { id: 'l1', name: 'Checkered', blend: 'alpha', opacity: 1,
+    { id: 'l1', name: 'Layer 1', blend: 'alpha', opacity: 1,
       clips: [checkers], activeClipId: checkers.id,
       effects: [], params: {}, transitionMs: 500 },
-    { id: 'l2', name: 'Lines', blend: 'alpha', opacity: 0.5,
+    { id: 'l2', name: 'Layer 2', blend: 'alpha', opacity: 0.5,
       clips: [lines], activeClipId: lines.id,
       effects: [], params: {}, transitionMs: 500 },
   ];
