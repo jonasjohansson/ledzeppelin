@@ -739,6 +739,9 @@ input[type=checkbox]:checked::after {
 .range-track { position: relative; width: 100%; min-width: 0; height: 18px; }
 .range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius-sm); }
 .range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: var(--radius-sm); pointer-events: none; }
+/* Beat-sync tick marks dividing the loop into N beats. */
+.range-track .rt-ticks { position: absolute; inset: 0; pointer-events: none; }
+.range-track .rt-tick { position: absolute; top: 50%; width: 1px; height: 9px; transform: translate(-50%, -50%); background: color-mix(in srgb, var(--text) 32%, transparent); }
 /* Live value = a ▽ that TRAVELS along the track (its left% is set per frame). It
    sits ABOVE the track line with a small gap, tip pointing down at it. */
 .range-track .anim-live { position: absolute; top: 50%; left: 0; width: 11px; height: 9px; transform: translate(-50%, calc(-100% - 3px)); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 5; }

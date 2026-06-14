@@ -88,7 +88,7 @@ function paramControl(p, value, onInput) {
 // on the [min,max] track (Resolume-style), with a fill between and a live marker
 // the render loop moves to the current animated value. Dragging a thumb commits
 // on release (change) — the fill follows live (input) without re-rendering.
-function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFrom, onLiveTo }) {
+function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFrom, onLiveTo, ticks }) {
   const span = (max - min) || 1;
   const frac = (v) => Math.max(0, Math.min(1, (v - min) / span));
   const st = String(step ?? ((max - min) <= 2 ? 0.001 : (max - min) <= 50 ? 0.01 : 1));
@@ -144,7 +144,14 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
   outEl.addEventListener('input', () => { coarse(outEl); layout(); place(outBub, outEl); onLiveTo?.(Number(outEl.value)); });
   inEl.addEventListener('change', () => onFrom(Number(inEl.value)));
   outEl.addEventListener('change', () => onTo(Number(outEl.value)));
-  wrap.append(el('div', { className: 'rt-base' }), fill, live, inEl, outEl, inBub, outBub);
+  // Beat-sync tick marks: divide the track into `ticks` equal segments (e.g. 8
+  // beats → 7 interior ticks) so the loop's beat grid reads at a glance.
+  const tickLayer = el('div', { className: 'rt-ticks' });
+  const nTicks = Math.round(Number(ticks) || 0);
+  if (nTicks > 1) for (let i = 1; i < nTicks; i++) {
+    const t = el('div', { className: 'rt-tick' }); t.style.left = `${(i / nTicks) * 100}%`; tickLayer.append(t);
+  }
+  wrap.append(el('div', { className: 'rt-base' }), tickLayer, fill, live, inEl, outEl, inBub, outBub);
   wrap.dataset.animkey = animKey;
   wrap.dataset.min = String(min); wrap.dataset.max = String(max);
   layout();
@@ -198,6 +205,8 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const readout = el('span', { className: 'ly-readout', textContent: fmtLive(anim.from) });
   const track = rangeTrack({
     min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
+    // Beat-synced loops show their beat grid as tick marks on the track.
+    ticks: anim.beats != null ? anim.beats : 0,
     onFrom: (v) => onAnim({ ...anim, from: v }),
     onTo: (v) => onAnim({ ...anim, to: v }),
     // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
