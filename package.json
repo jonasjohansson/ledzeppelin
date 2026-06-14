@@ -2,6 +2,6 @@
   "name": "ledzeppelin",
   "version": "0.0.0",
   "type": "module",
-  "scripts": { "start": "node server/index.js", "launch": "OPEN=1 node server/index.js", "play": "node server/play.js", "test": "node --test \"test/*.test.js\"" },
+  "scripts": { "start": "node server/index.js", "launch": "OPEN=1 node server/index.js", "test": "node --test \"test/*.test.js\"" },
   "dependencies": { "ws": "^8.18.0" }
 }

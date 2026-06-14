@@ -9,8 +9,6 @@ import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput } from './output.js';
 import { scanArtnet } from './artpoll.js';
-import { startRecording, stopRecording, isRecording, captureFrame, listRecordings } from './recorder.js';
-import { startPlayback, stopPlayback, isPlaying, playingName } from './player.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
 
 // Read a request's JSON body (small payloads only).
@@ -75,23 +73,6 @@ const http = createServer(async (req, res) => {
     catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
     return;
   }
-  // --- Recordings: list + standalone (browser-less) playback on the daemon ---
-  if (url.pathname === '/api/recordings') {
-    res.setHeader('content-type', 'application/json');
-    return res.end(JSON.stringify({ recordings: listRecordings(), recording: isRecording(), playing: playingName() }));
-  }
-  if (url.pathname === '/api/recordings/play' && req.method === 'POST') {
-    res.setHeader('content-type', 'application/json');
-    const body = await readJson(req);
-    const meta = startPlayback(body.name, { loop: body.loop !== false });
-    if (!meta) { res.writeHead(404); return res.end(JSON.stringify({ error: 'recording not found' })); }
-    return res.end(JSON.stringify({ ok: true, playing: playingName() }));
-  }
-  if (url.pathname === '/api/recordings/stop' && req.method === 'POST') {
-    res.setHeader('content-type', 'application/json');
-    stopPlayback();
-    return res.end(JSON.stringify({ ok: true }));
-  }
   if (url.pathname === '/api/wled/scan') {
     res.setHeader('content-type', 'application/json');
     try { res.end(JSON.stringify(await scanSubnet())); }
@@ -130,13 +111,11 @@ wss.on('connection', (ws) => {
     if (timer) clearInterval(timer);
     const frameMs = 1000 / outFps;
     timer = setInterval(() => {
-      if (isPlaying()) return;                               // a baked recording is driving output
       if (!route || !latest) return;
       const now = Date.now();
       if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at outFps; else ~1Hz keep-alive
       dirty = false; lastSent = now; frames++;
       try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
-      if (isRecording()) captureFrame(latest);               // bake the live stream to disk
     }, frameMs);
   };
   ws.on('message', (data, isBinary) => {
@@ -161,11 +140,6 @@ wss.on('connection', (ws) => {
       else if (m.type === 'manifest-req') {
         if (lastManifest && ws.readyState === 1) { try { ws.send(lastManifest); } catch { /* closing */ } }
         relayRaw(data.toString(), ws);
-      }
-      // Record the live output stream to disk (route + fps captured at start).
-      else if (m.type === 'record') {
-        if (m.action === 'start' && route) startRecording(m.name, m.fps ?? outFps, route);
-        else if (m.action === 'stop') stopRecording();
       }
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
