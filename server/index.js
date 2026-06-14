@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput } from './output.js';
+import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
 
 // Read a request's JSON body (small payloads only).
@@ -66,6 +67,12 @@ const http = createServer(async (req, res) => {
     return res.end(JSON.stringify({ lan, port: PORT }));
   }
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));
+  if (url.pathname === '/api/artnet/scan') {
+    res.setHeader('content-type', 'application/json');
+    try { res.end(JSON.stringify(await scanArtnet())); }
+    catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
+    return;
+  }
   if (url.pathname === '/api/wled/scan') {
     res.setHeader('content-type', 'application/json');
     try { res.end(JSON.stringify(await scanSubnet())); }

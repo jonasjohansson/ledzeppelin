@@ -330,6 +330,25 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         // Base universe — the device's pixels occupy consecutive universes from it.
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
+        // Discover Art-Net nodes on the network (ArtPoll) → click one to bind this
+        // device's IP to it without re-mapping pixels.
+        (() => {
+          const btn = el('button', { className: 'fx-add', textContent: 'scan Art-Net' });
+          const list = el('div', { className: 'scan-block' });
+          btn.addEventListener('click', async () => {
+            btn.disabled = true; btn.textContent = 'scanning…'; list.textContent = '';
+            let nodes = [];
+            try { nodes = await fetch('/api/artnet/scan').then((r) => r.json()); } catch { /* daemon offline */ }
+            btn.disabled = false; btn.textContent = 'scan Art-Net';
+            if (!Array.isArray(nodes) || !nodes.length) { list.append(el('span', { className: 'seg-hint', textContent: 'no Art-Net nodes found' })); return; }
+            for (const n of nodes) {
+              const row = el('button', { className: 'fx-add', textContent: `${n.ip}${n.shortName ? ' · ' + n.shortName : ''}`, title: n.longName || n.ip });
+              row.addEventListener('click', () => upd({ ip: n.ip }));   // bind → re-renders the editor
+              list.append(row);
+            }
+          });
+          return el('div', { className: 'scan-block' }, [btn, list]);
+        })(),
       ] : []),
       // Output delay (ms) — hold this controller's packets back to time-align it
       // with the rest of the rig (e.g. against projection). 0 = immediate.
