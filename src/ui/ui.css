@@ -707,27 +707,27 @@ input[type=checkbox]:checked::after {
 .range-track .rt-base { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%); background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius-sm); }
 .range-track .rt-fill { position: absolute; top: 50%; height: 3px; transform: translateY(-50%); background: var(--accent); opacity: .55; border-radius: var(--radius-sm); pointer-events: none; }
 /* Live value = a ▽ that TRAVELS along the track (its left% is set per frame). It
-   sits ABOVE the track line with its tip pointing down at it. */
-.range-track .anim-live { position: absolute; top: 50%; left: 0; width: 11px; height: 9px; transform: translate(-50%, -100%); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 5; }
+   sits ABOVE the track line with a small gap, tip pointing down at it. */
+.range-track .anim-live { position: absolute; top: 50%; left: 0; width: 11px; height: 9px; transform: translate(-50%, calc(-100% - 3px)); background: var(--green); clip-path: polygon(0 0, 100% 0, 50% 100%); pointer-events: none; z-index: 5; }
 .range-track input[type=range] {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%; margin: 0;
   -webkit-appearance: none; appearance: none; background: none; pointer-events: none;
 }
 .range-track input[type=range]::-webkit-slider-runnable-track { background: none; border: none; }
-/* End grips: small rounded handles bracketing the active span. */
+/* End grips: pennant flags hanging BELOW the line at each end of the span — the
+   in-grip points down-left, the out-grip down-right (Resolume trim style). */
 .range-track input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none; pointer-events: auto; cursor: ew-resize;
-  width: 11px; height: 14px; border-radius: var(--radius-sm); background: var(--accent); border: 1px solid var(--bg);
+  width: 12px; height: 13px; border: none; border-radius: 0; background: var(--accent);
 }
 .range-track input[type=range]::-moz-range-thumb {
-  pointer-events: auto; cursor: ew-resize; width: 11px; height: 14px; border-radius: var(--radius-sm);
-  background: var(--accent); border: 1px solid var(--bg);
+  pointer-events: auto; cursor: ew-resize; width: 12px; height: 13px; border: none; border-radius: 0; background: var(--accent);
 }
 .range-track input[type=range]::-moz-range-track { background: none; border: none; }
-.range-track .rt-in::-webkit-slider-thumb { transform: translateX(-5px); }
-.range-track .rt-out::-webkit-slider-thumb { transform: translateX(5px); }
-.range-track .rt-in::-moz-range-thumb { transform: translateX(-5px); }
-.range-track .rt-out::-moz-range-thumb { transform: translateX(5px); }
+.range-track .rt-in::-webkit-slider-thumb { clip-path: polygon(0 0, 100% 0, 100% 55%, 0 100%); transform: translate(-3px, 4px); }
+.range-track .rt-out::-webkit-slider-thumb { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 55%); transform: translate(3px, 4px); }
+.range-track .rt-in::-moz-range-thumb { clip-path: polygon(0 0, 100% 0, 100% 55%, 0 100%); transform: translate(-3px, 4px); }
+.range-track .rt-out::-moz-range-thumb { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 55%); transform: translate(3px, 4px); }
 /* Distinguish the END (out) handle from the START (in) handle. */
 /* Handle value bubble: a tiny editable readout that pops above a grabbed thumb
    and follows it — type into it to set an exact in/out value. */
@@ -793,29 +793,23 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    to --fill, capped by a 2px BRIGHT accent edge line at the value. No round thumb
    — the thumb is a transparent grab strip; the edge line tracks the value exactly. */
 .ly-row input.ly-readout { flex: 0 0 var(--col-val); text-align: right; }   /* fixed value column → sliders align */
+/* The fill gradient lives on the INPUT box (not the native track) so it spans
+   edge-to-edge with no thumb inset — the dim fill is flush to the left. */
 .ly-row input[type=range] {
   order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
-  -webkit-appearance: none; appearance: none; height: var(--ctrl-h); background: transparent; cursor: pointer;
-}
-.ly-row input[type=range]::-webkit-slider-runnable-track {
-  height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
+  -webkit-appearance: none; appearance: none; height: var(--ctrl-h); cursor: pointer; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: linear-gradient(to right,
     color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
     var(--accent) calc(var(--fill, 50%) - 2px),
     var(--accent) var(--fill, 50%),
     var(--field-bg) var(--fill, 50%));
 }
+.ly-row input[type=range]::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; }
 .ly-row input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; width: 10px; height: var(--ctrl-h); margin-top: 0; background: transparent; border: none;
 }
-.ly-row input[type=range]::-moz-range-track {
-  height: var(--ctrl-h); border-radius: var(--radius-sm); border: 1px solid var(--line);
-  background: linear-gradient(to right,
-    color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
-    var(--accent) calc(var(--fill, 50%) - 2px),
-    var(--accent) var(--fill, 50%),
-    var(--field-bg) var(--fill, 50%));
-}
+.ly-row input[type=range]::-moz-range-track { height: 100%; background: transparent; border: none; }
 .ly-row input[type=range]::-moz-range-progress { background: transparent; }
 .ly-row input[type=range]::-moz-range-thumb { width: 10px; height: var(--ctrl-h); border: none; background: transparent; }
 
