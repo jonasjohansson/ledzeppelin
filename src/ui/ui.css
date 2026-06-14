@@ -918,31 +918,29 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
 /* B · S · ✕ · opacity read as ONE segmented bar — flush, sharing borders. */
 .lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear, .lh-body > .lh-op { border-left: 0; }
-.lh-op { display: flex; flex-direction: column; align-items: stretch; gap: 0; min-height: 0; }
+/* Opacity quarter = a segment box (matches the B·S·✕ chrome) holding a thin
+   vertical slider centred inside. */
+.lh-op { display: flex; align-items: center; justify-content: center; min-height: 0;
+  background: var(--field-bg); border: 1px solid var(--line); box-sizing: border-box; }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
-/* Opacity = a full-width vertical LEVEL bar: an accent fill rising from the
-   bottom to the value (--fill set in JS, like the param-row sliders), with a thin
-   handle line at the fill top. */
+/* Same look as the param-row sliders, rotated vertical: a thin rounded track with
+   an accent fill rising to --fill (set in JS) + a round accent thumb. */
 .lh-op-range {
   -webkit-appearance: none; appearance: none; cursor: pointer;
   writing-mode: vertical-lr; direction: rtl;   /* 0 at bottom, 1 at top */
-  width: 100%; flex: 1 1 0; min-height: 0; margin: 0; box-sizing: border-box;
-  border: 1px solid var(--line);
-  /* Accent fill rising to --fill, capped by a 2px handle line that marks the
-     filled/unfilled boundary, then the empty track above. */
-  background: linear-gradient(to top,
-    var(--accent) calc(var(--fill, 100%) - 2px),
-    var(--text) calc(var(--fill, 100%) - 2px),
-    var(--text) var(--fill, 100%),
-    var(--field-bg) var(--fill, 100%));
+  width: 14px; flex: 1 1 0; min-height: 0; margin: 8px 0; background: transparent;
 }
-/* Thumb stays as the (invisible) drag target — the gradient line is the visible
-   handle, and it tracks the value exactly (no native half-thumb inset). */
-.lh-op-range::-webkit-slider-runnable-track { background: transparent; border: none; }
-.lh-op-range::-webkit-slider-thumb { -webkit-appearance: none; width: 100%; height: 8px; border: none; background: transparent; }
-.lh-op-range::-moz-range-track { background: transparent; border: none; }
-.lh-op-range::-moz-range-progress { background: transparent; }
-.lh-op-range::-moz-range-thumb { width: 100%; height: 8px; border: none; background: transparent; }
+.lh-op-range::-webkit-slider-runnable-track {
+  width: 4px; border-radius: var(--radius-sm);
+  background: linear-gradient(to top, var(--accent) var(--fill, 100%), var(--line-2) var(--fill, 100%));
+}
+.lh-op-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg); margin-left: -4px;   /* centre the 12px thumb on the 4px track */
+}
+.lh-op-range::-moz-range-track { width: 4px; border-radius: var(--radius-sm); background: var(--line-2); }
+.lh-op-range::-moz-range-progress { width: 4px; border-radius: var(--radius-sm); background: var(--accent); }
+.lh-op-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); }
 .lh-clear {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
