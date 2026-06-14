@@ -918,35 +918,25 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
 /* B · S · ✕ · opacity read as ONE segmented bar — flush, sharing borders. */
 .lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear, .lh-body > .lh-op { border-left: 0; }
-/* Opacity quarter = a segment box (matches the B·S·✕ chrome) holding a thin
-   vertical slider centred inside. Column flex + flex:1 1 0 / min-height:0 makes
-   the slider FILL the existing row height (it must not drive it — a vertical range
-   has a large intrinsic length). */
-.lh-op { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0;
-  background: var(--field-bg); border: 1px solid var(--line); box-sizing: border-box; }
+/* Opacity quarter = a custom vertical fader: a segment box (matching the B·S·✕
+   chrome) with a bottom-up accent fill to --fill and a full-width rounded handle
+   bar riding at the value. Built from divs (not a native range) for a clean,
+   cross-browser full-width handle. */
+.lh-op {
+  position: relative; box-sizing: border-box; cursor: pointer; overflow: hidden;
+  background: var(--line-2); border: 1px solid var(--line);
+}
+.lh-op-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: var(--fill, 100%);
+  background: var(--accent); pointer-events: none;
+}
+/* Handle: a full-width rounded bar centred on the fill's top edge. */
+.lh-op-handle {
+  position: absolute; left: 1px; right: 1px; height: 6px; border-radius: 3px;
+  bottom: var(--fill, 100%); transform: translateY(50%);
+  background: var(--text); pointer-events: none;
+}
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
-/* Same look as the param-row sliders, rotated vertical: a thin rounded track with
-   an accent fill rising to --fill (set in JS) + a round accent thumb. */
-.lh-op-range {
-  -webkit-appearance: none; appearance: none; cursor: pointer;
-  writing-mode: vertical-lr; direction: rtl;   /* 0 at bottom, 1 at top */
-  width: 100%; flex: 1 1 0; min-height: 0; margin: 0; background: transparent;
-}
-/* Track fills the whole box width — a wide accent fill rising to --fill — with a
-   round thumb riding on it. */
-.lh-op-range::-webkit-slider-runnable-track {
-  width: 100%; border-radius: 0;
-  background: linear-gradient(to top, var(--accent) var(--fill, 100%), var(--line-2) var(--fill, 100%));
-}
-.lh-op-range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--accent); border: 2px solid var(--bg);
-  /* vertical+rtl anchors the thumb to the right edge — pull it back to centre. */
-  transform: translateX(-9px);
-}
-.lh-op-range::-moz-range-track { width: 100%; border-radius: 0; background: var(--line-2); }
-.lh-op-range::-moz-range-progress { width: 100%; border-radius: 0; background: var(--accent); }
-.lh-op-range::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); }
 .lh-clear {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;

@@ -432,7 +432,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function syncLayerOpacity(id, v) {
     const dl = document.querySelector(`.deck-layer[data-layer="${id}"]`);
     if (dl) {
-      const r = dl.querySelector('.lh-op-range'); if (r) { r.value = String(v); r.style.setProperty('--fill', Math.round((Number(v) || 0) * 100) + '%'); }
+      const r = dl.querySelector('.lh-op'); if (r) r.style.setProperty('--fill', Math.round((Math.max(0, Math.min(1, Number(v) || 0))) * 100) + '%');
       const o = dl.querySelector('.lh-op-val'); if (o) o.textContent = Math.round((Number(v) || 0) * 100) + '%';
     }
     const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
@@ -902,28 +902,36 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const body = el('div', { className: 'lh-body' });
 
     // Vertical opacity fader (no numeric readout — the slider IS the value).
-    const opCol = el('div', { className: 'lh-op' });
-    const opRange = el('input', {
-      type: 'range', min: '0', max: '1', step: '0.001', value: String(layer.opacity ?? 1),
-      className: 'lh-op-range', title: 'layer opacity',
-    });
-    // Bottom-up ACCENT fill (--fill = value%) — the fader reads as a level meter
-    // matching the param sliders, not a thin track + thumb.
-    const paintOp = (v) => opRange.style.setProperty('--fill', Math.round((Number(v) || 0) * 100) + '%');
+    // Opacity = a custom vertical fader (a native vertical range can't render a
+    // clean full-width handle cross-browser). Bottom-up accent fill to --fill,
+    // with a full-width rounded handle bar riding at the value.
+    const opCol = el('div', { className: 'lh-op', title: 'layer opacity', role: 'slider' });
+    const opFill = el('div', { className: 'lh-op-fill' });
+    const opHandle = el('div', { className: 'lh-op-handle' });
+    opCol.append(opFill, opHandle);
+    const paintOp = (v) => opCol.style.setProperty('--fill', Math.round((Math.max(0, Math.min(1, Number(v) || 0))) * 100) + '%');
     paintOp(layer.opacity ?? 1);
-    opRange.addEventListener('input', () => {
-      if (shiftDown) opRange.value = String(coarseSnap(Number(opRange.value), 0, 1));   // Shift → 0.1 steps
-      const v = Number(opRange.value);
-      paintOp(v);
-      commitLive(patchLayer(show(), id, { opacity: v }));
-      syncLayerOpacity(id, v);
+    // y → value (bottom = 0, top = 1); Shift snaps to 0.1 steps.
+    const opFromY = (clientY) => {
+      const r = opCol.getBoundingClientRect();
+      let v = r.height ? 1 - (clientY - r.top) / r.height : 0;
+      v = Math.max(0, Math.min(1, v));
+      return shiftDown ? coarseSnap(v, 0, 1) : v;
+    };
+    const opSet = (v) => { paintOp(v); commitLive(patchLayer(show(), id, { opacity: v })); syncLayerOpacity(id, v); };
+    let opDrag = false;
+    // The fader sits inside the drag-to-reorder, click-to-select head — stop the
+    // press/click from reaching the head (adjusting opacity is not selecting it).
+    opCol.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      opDrag = true; try { opCol.setPointerCapture(e.pointerId); } catch { /* not capturable */ }
+      opSet(opFromY(e.clientY));
     });
-    // The fader sits inside the drag-to-reorder, click-to-select head. Stop both
-    // its press (would start a reorder) AND its click (would SELECT the layer)
-    // from reaching the head — adjusting opacity is not selecting the layer.
-    opRange.addEventListener('pointerdown', (e) => e.stopPropagation());
-    opRange.addEventListener('click', (e) => e.stopPropagation());
-    opCol.append(opRange);
+    opCol.addEventListener('pointermove', (e) => { if (opDrag) opSet(opFromY(e.clientY)); });
+    const opEnd = (e) => { if (!opDrag) return; opDrag = false; try { opCol.releasePointerCapture(e.pointerId); } catch { /* already released */ } };
+    opCol.addEventListener('pointerup', opEnd);
+    opCol.addEventListener('pointercancel', opEnd);
+    opCol.addEventListener('click', (e) => e.stopPropagation());
 
     // Body = FOUR equal quarters: B · S · ✕ · opacity (vertical slider, right).
     // stopPropagation so the buttons don't also fire the layer-select click.
