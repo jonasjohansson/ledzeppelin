@@ -131,3 +131,9 @@ function render(manifest) {
 const fmt = (v) => { const n = Number(v); return Number.isInteger(n) ? String(n) : n.toFixed(2); };
 
 connect();
+
+// PWA: register the remote's own service worker (scope /remote/) so it installs
+// as a home-screen app and opens offline. Secure-context only; best-effort.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  navigator.serviceWorker.register('./service-worker.js').catch(() => { /* non-fatal */ });
+}
