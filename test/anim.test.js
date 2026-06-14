@@ -53,6 +53,25 @@ test('audio anim maps a band (×gain, clamped) onto from..to', () => {
   assert.equal(animatedValue(spec, 0, {}), 0);               // missing band → 0
 });
 
+test('makeAudioAnim carries a source (default external)', () => {
+  assert.equal(makeAudioAnim(0, 1).source, 'external');
+  assert.equal(makeAudioAnim(0, 1, 'bass', 1, 'composition').source, 'composition');
+  assert.equal(makeAudioAnim(0, 1, 'bass', 1, 'bogus').source, 'external');   // unknown → external
+});
+
+test('audio anim reads its namespaced per-source band', () => {
+  const ext = makeAudioAnim(0, 10, 'bass', 1, 'external');
+  const comp = makeAudioAnim(0, 10, 'bass', 1, 'composition');
+  const signals = { 'external:bass': 0.2, 'composition:bass': 0.7, bass: 0.2 };
+  assert.equal(animatedValue(ext, 0, signals), 2);    // external:bass = 0.2 → 2
+  assert.equal(animatedValue(comp, 0, signals), 7);   // composition:bass = 0.7 → 7
+});
+
+test('audio anim falls back to the plain band when no namespaced key', () => {
+  const spec = makeAudioAnim(0, 10, 'level', 1, 'composition');
+  assert.equal(animatedValue(spec, 0, { level: 0.5 }), 5);   // only plain band present
+});
+
 test('resolveParams handles audio specs', () => {
   const params = { 'hue.shift': 0 };
   const anim = { 'hue.shift': makeAudioAnim(0, 1, 'level', 1) };

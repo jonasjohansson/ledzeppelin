@@ -21,7 +21,7 @@ import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
-import { updateAudio, setAudioGain } from './model/audio.js';
+import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 // Appearance/theme overrides removed — the app ships one curated base design
@@ -1360,12 +1360,12 @@ function syncVideos() {
   if (!clips.length && !videoMap.size) return;   // no video clips, nothing mapped → nothing to do
   const live = new Set(clips.map((c) => c.id));
   for (const [id, v] of videoMap) {
-    if (!live.has(id)) { try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
+    if (!live.has(id)) { unregisterMediaElement(v.el); try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
   }
   for (const c of clips) {
     const existing = videoMap.get(c.id);
     if (existing && existing.url === c.videoUrl) continue;
-    if (existing) { try { existing.el.pause(); } catch { /* ignore */ } gl.deleteTexture(existing.tex); }
+    if (existing) { unregisterMediaElement(existing.el); try { existing.el.pause(); } catch { /* ignore */ } gl.deleteTexture(existing.tex); }
     const el = document.createElement('video');
     el.src = c.videoUrl; el.loop = true; el.muted = true; el.playsInline = true; el.autoplay = true;
     el.play().catch(() => { /* will play on first user gesture */ });
@@ -1375,6 +1375,7 @@ function syncVideos() {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     videoMap.set(c.id, { url: c.videoUrl, el, tex });
+    registerMediaElement(el);   // so the 'composition' audio source can analyse it
   }
 }
 function uploadVideos() {
@@ -1653,9 +1654,25 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Load composition…', act: () => openCompInput.click() },
   ]));
 });
-document.getElementById('menu-audio')?.addEventListener('click', (e) => {
+document.getElementById('menu-audio')?.addEventListener('click', async (e) => {
   e.stopPropagation();
   const body = oel('div', { className: 'menu-pad' }, [oel('div', { className: 'menu-title', textContent: 'audio input' })]);
+  // The hardware INPUT device for the "Audio External" modulator. ("Audio
+  // Composition" taps clip audio and needs no device.) Choosing one is the user
+  // gesture that opens that device.
+  const inputs = await listInputs();
+  const cur = show.composition?.audioDevice || 'default';
+  const sel = oel('select', { title: 'hardware input device for the Audio External modulator' });
+  const opt = (value, label, on) => { const o = oel('option', { value, textContent: label }); if (on) o.selected = true; sel.append(o); };
+  opt('default', 'System default', cur === 'default');
+  inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, cur === d.deviceId));
+  sel.addEventListener('change', async () => {
+    const ok = await enableAudio('external', sel.value);
+    show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
+    saveShow(show);
+    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input — check permissions';
+  });
+  body.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
   body.append(Slider('Gain', show.composition?.audioGain ?? 1, {
     min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
     onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },

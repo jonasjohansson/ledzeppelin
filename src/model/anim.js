@@ -23,8 +23,10 @@ export function makeAnim(from, to, durationMs = 10000, direction = 'forward') {
   return { mode: 'timeline', from: Number(from) || 0, to: Number(to) || 0, durationMs: Math.max(0, Math.round(durationMs)), direction };
 }
 
-export function makeAudioAnim(from, to, band = 'level', gain = 1) {
-  return { mode: 'audio', from: Number(from) || 0, to: Number(to) || 0, band, gain: Number(gain) || 1 };
+// `source`: 'external' (a hardware input) or 'composition' (the comp's clip
+// audio). Both feed independent analysers — see model/audio.js.
+export function makeAudioAnim(from, to, band = 'level', gain = 1, source = 'external') {
+  return { mode: 'audio', from: Number(from) || 0, to: Number(to) || 0, band, gain: Number(gain) || 1, source: source === 'composition' ? 'composition' : 'external' };
 }
 
 export function makeExternalAnim(from, to, channel = '', gain = 1) {
@@ -81,7 +83,15 @@ export function animatedValue(spec, timeSec, signals) {
   if (!spec) return undefined;
   let p;
   if (spec.mode === 'audio' || spec.mode === 'external') {
-    const v = (signals && signals[spec.mode === 'audio' ? spec.band : spec.channel]) || 0;
+    // Audio reads a per-source band ("external:bass" / "composition:level"),
+    // falling back to the plain band name when the namespaced key isn't present
+    // (legacy/source-less anims, or signal maps that only expose plain bands).
+    let key = spec.channel;
+    if (spec.mode === 'audio') {
+      key = spec.source ? `${spec.source}:${spec.band}` : spec.band;
+      if (signals && !(key in signals) && spec.band in signals) key = spec.band;
+    }
+    const v = (signals && signals[key]) || 0;
     p = Math.max(0, Math.min(1, v * (spec.gain ?? 1)));
   } else {
     p = animPhase(timeSec, spec.durationMs, spec.direction, spec.phase);

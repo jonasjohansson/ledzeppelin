@@ -35,7 +35,7 @@ import {
 import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
-import { AUDIO_BANDS, enableAudio } from '../model/audio.js';
+import { AUDIO_BANDS, enableAudio } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
@@ -167,11 +167,18 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const isExternal = anim?.mode === 'external';
   const wrap = el('div', { className: 'anim-param' });
   const cog = animModeMenu({
-    animated, isAudio, isExternal, oscAddress,
+    animated, isAudio, isExternal, audioSource: anim?.source, oscAddress,
     onPick: (mode) => {
       // Default the sweep to the FULL slider range (in = min, out = max).
       if (mode === 'basic') onAnim(null);
-      else if (mode === 'audio') { enableAudio(); onAnim(makeAudioAnim(min, max, 'level', 1)); }
+      // Two audio sources (Resolume-style): External input or Composition (clip)
+      // audio. Switching source on an existing audio anim keeps its band/gain.
+      else if (mode === 'audio-external' || mode === 'audio-composition') {
+        const src = mode === 'audio-composition' ? 'composition' : 'external';
+        enableAudio(src);
+        const base = isAudio ? anim : null;
+        onAnim(makeAudioAnim(base?.from ?? min, base?.to ?? max, base?.band ?? 'level', base?.gain ?? 1, src));
+      }
       // Default to the first live channel, if any has been seen yet.
       else if (mode === 'external') onAnim(makeExternalAnim(min, max, extList()[0]?.channel ?? ''));
       else onAnim(makeAnim(min, max, 10000, 'forward'));
@@ -214,11 +221,13 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
 // The cog button + its Basic/Timeline/Audio/External popover (Resolume-style).
 // The cog reflects the current mode (accent when animated, green for Audio);
 // the menu marks the active mode. Replaces the old inline "T" toggle + dropdown.
-function animModeMenu({ animated, isAudio, isExternal, onPick, oscAddress }) {
+function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscAddress }) {
   const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   const close = () => { menu.hidden = true; };
-  const cur = !animated ? 'basic' : (isAudio ? 'audio' : isExternal ? 'external' : 'timeline');
+  const cur = !animated ? 'basic'
+    : isAudio ? (audioSource === 'composition' ? 'audio-composition' : 'audio-external')
+    : isExternal ? 'external' : 'timeline';
   // Compact one-line items; what each mode does lives on the HOVER title — a
   // visible description per row made this little picker read like a manual.
   const item = (mode, label, desc) => el('button', {
@@ -229,7 +238,8 @@ function animModeMenu({ animated, isAudio, isExternal, onPick, oscAddress }) {
   menu.append(
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
-    item('audio', 'Audio', 'follow a band of the live audio input'),
+    item('audio-external', 'Audio External', 'follow a band of a hardware audio input'),
+    item('audio-composition', 'Audio Composition', 'follow a band of the composition’s clip audio'),
     item('external', 'External', 'follow an OSC address or socket channel')
   );
   // Companion tick: a ☑/◻ row that publishes THIS parameter to the phone remote.
