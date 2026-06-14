@@ -693,7 +693,16 @@ input[type=checkbox]:checked::after {
   background: var(--field-bg); color: var(--accent); border: 1px solid var(--line-2);
   border-radius: var(--radius); font: var(--fw-med) var(--fs-ctrl) var(--mono); letter-spacing: var(--ls-ui);
 }
-.cmp-tap:active { background: var(--accent-soft); }
+.cmp-tap:active { transform: scale(0.94); }
+/* TAP pulses on the beat (animation-duration = one beat, set inline as --beat).
+   Restarting the animation on each tap re-phases the flash to your taps; the
+   on-beat flash at 0% also serves as the click reaction. */
+@keyframes cmp-tap-beat {
+  0%        { background: var(--accent); color: #1a0e0e; border-color: var(--accent); box-shadow: 0 0 9px 1px color-mix(in srgb, var(--accent) 70%, transparent); }
+  18%       { background: var(--accent); color: #1a0e0e; }
+  45%, 100% { background: var(--field-bg); color: var(--accent); border-color: var(--line-2); box-shadow: none; }
+}
+.cmp-tap.pulsing { animation: cmp-tap-beat var(--beat, 500ms) linear infinite; }
 /* Timeline duration unit toggle (s ⇄ ♪ beat-synced). */
 .anim-unit {
   flex: 0 0 auto; min-width: 22px; padding: 0 5px; height: var(--ctrl-h); cursor: pointer;

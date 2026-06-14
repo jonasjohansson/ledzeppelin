@@ -43,8 +43,15 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     // --- Tempo (BPM) — drives beat-synced Timeline modulation; TAP sets by ear. ---
     if (setBpm) {
       const bpmInput = el('input', { type: 'number', value: String(getShow().composition?.bpm ?? 120), step: '1', min: '20', max: '300' });
-      bpmInput.addEventListener('change', () => { const v = Number(bpmInput.value); if (Number.isFinite(v)) setBpm(v); });
-      const tap = el('button', { className: 'cmp-tap', textContent: 'TAP', title: 'tap in time with the music to set the tempo' });
+      const tap = el('button', { className: 'cmp-tap pulsing', textContent: 'TAP', title: 'tap in time with the music to set the tempo' });
+      // The TAP button flashes once per beat: animation-duration = one beat.
+      const beatMs = () => 60000 / Math.max(1, Number(bpmInput.value) || getShow().composition?.bpm || 120);
+      const syncPulse = () => tap.style.setProperty('--beat', beatMs() + 'ms');
+      // Restart the pulse animation so its on-beat flash re-phases (used on each
+      // tap to align the flash to the taps, and as the click reaction).
+      const rephase = () => { syncPulse(); tap.classList.remove('pulsing'); void tap.offsetWidth; tap.classList.add('pulsing'); };
+      syncPulse();
+      bpmInput.addEventListener('change', () => { const v = Number(bpmInput.value); if (Number.isFinite(v)) { setBpm(v); rephase(); } });
       tap.addEventListener('click', () => {
         const t = performance.now();
         taps = taps.filter((x) => t - x < 2000); taps.push(t);
@@ -54,6 +61,7 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
           const next = Math.round(60000 / avg);
           if (next >= 20 && next <= 300) { setBpm(next); bpmInput.value = String(next); }
         }
+        rephase();   // flash now + re-align the beat pulse to this tap
       });
       root.append(el('div', { className: 'fx-card cmp-grid' }, [
         el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]),
