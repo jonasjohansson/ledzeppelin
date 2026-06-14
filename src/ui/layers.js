@@ -432,7 +432,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   function syncLayerOpacity(id, v) {
     const dl = document.querySelector(`.deck-layer[data-layer="${id}"]`);
     if (dl) {
-      const r = dl.querySelector('.lh-op-range'); if (r) r.value = String(v);
+      const r = dl.querySelector('.lh-op-range'); if (r) { r.value = String(v); r.style.setProperty('--fill', Math.round((Number(v) || 0) * 100) + '%'); }
       const o = dl.querySelector('.lh-op-val'); if (o) o.textContent = Math.round((Number(v) || 0) * 100) + '%';
     }
     const insp = document.querySelector(`.ly-param[data-opacity-layer="${id}"]`);
@@ -907,9 +907,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       type: 'range', min: '0', max: '1', step: '0.001', value: String(layer.opacity ?? 1),
       className: 'lh-op-range', title: 'layer opacity',
     });
+    // Bottom-up ACCENT fill (--fill = value%) — the fader reads as a level meter
+    // matching the param sliders, not a thin track + thumb.
+    const paintOp = (v) => opRange.style.setProperty('--fill', Math.round((Number(v) || 0) * 100) + '%');
+    paintOp(layer.opacity ?? 1);
     opRange.addEventListener('input', () => {
       if (shiftDown) opRange.value = String(coarseSnap(Number(opRange.value), 0, 1));   // Shift → 0.1 steps
       const v = Number(opRange.value);
+      paintOp(v);
       commitLive(patchLayer(show(), id, { opacity: v }));
       syncLayerOpacity(id, v);
     });

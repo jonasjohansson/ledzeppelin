@@ -914,19 +914,27 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* No top/side inset — the B·S·✕ bar reaches the head-box edges; a small bottom
    gap keeps it off the name label. */
 .lh-body { display: flex; gap: 0; flex: 1 1 auto; padding: 0 0 4px; align-items: stretch; }
+/* All FOUR quarters are equal width: B · S · ✕ · opacity. */
 .lh-body > .lh-tog, .lh-body > .lh-clear, .lh-body > .lh-op { flex: 1 1 0; min-width: 0; }
-/* B · S · ✕ read as ONE segmented bar — flush, sharing borders (no double line). */
-.lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear { border-left: 0; }
-/* …but keep the opacity fader visually separate from the button group. */
-.lh-body > .lh-op { margin-left: 6px; }
-.lh-op { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 0; }
+/* B · S · ✕ · opacity read as ONE segmented bar — flush, sharing borders. */
+.lh-body > .lh-tog:not(:first-child), .lh-body > .lh-clear, .lh-body > .lh-op { border-left: 0; }
+.lh-op { display: flex; flex-direction: column; align-items: stretch; gap: 0; min-height: 0; }
 .lh-op-val { font-size: var(--fs-micro); color: var(--readout); font-variant-numeric: tabular-nums; }
+/* Opacity = a full-width vertical LEVEL bar: an accent fill rising from the
+   bottom to the value (--fill set in JS, like the param-row sliders), with a thin
+   handle line at the fill top. */
 .lh-op-range {
-  /* flex-basis 0 so the slider's large intrinsic length doesn't drive the row
-     height — it just fills the (fixed) head height. */
-  writing-mode: vertical-lr; direction: rtl;
-  width: 14px; flex: 1 1 0; min-height: 0; margin: 0 auto; accent-color: var(--green);
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+  writing-mode: vertical-lr; direction: rtl;   /* 0 at bottom, 1 at top */
+  width: 100%; flex: 1 1 0; min-height: 0; margin: 0; box-sizing: border-box;
+  border: 1px solid var(--line);
+  background: linear-gradient(to top, var(--accent) var(--fill, 100%), var(--field-bg) var(--fill, 100%));
 }
+.lh-op-range::-webkit-slider-runnable-track { background: transparent; border: none; }
+.lh-op-range::-webkit-slider-thumb { -webkit-appearance: none; width: 100%; height: 3px; border: none; border-radius: 0; background: var(--text); }
+.lh-op-range::-moz-range-track { background: transparent; border: none; }
+.lh-op-range::-moz-range-progress { background: transparent; }
+.lh-op-range::-moz-range-thumb { width: 100%; height: 3px; border: none; border-radius: 0; background: var(--text); }
 .lh-clear {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
