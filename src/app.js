@@ -842,7 +842,6 @@ function chainStatusRow(sel) {
 // port on the first one's device) so they become a chain.
 function chainSelectedAction() {
   return oel('div', { className: 'output-edit' }, [
-    oel('div', { className: 'fx-pts', textContent: `${selectedFixtureIds.size} fixtures selected — drag to move together` }),
     oel('button', {
       className: 'fx-add', textContent: '⛓ chain (same output)',
       onclick: () => {
@@ -1036,50 +1035,33 @@ function renderOutput() {
   outputListEl.append(addControls());
 
   for (const dg of devOrder) {
+    // UNASSIGNED fixtures have no container — list them flat at the top (no group).
+    if (!dg.deviceId) {
+      for (const g of dg.groups) for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i));
+      continue;
+    }
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
-    const devName = gdev?.name || dg.deviceId || 'Unassigned';
+    const devName = gdev?.name || dg.deviceId;
     const devFx = dg.groups.reduce((m, g) => m + g.items.length, 0);
     const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const devOpen = expandedDevices.has(dg.deviceId);   // triangle is authoritative; selecting a fixture adds it (auto-reveal) but you can still collapse
-    // Controller node (MadMapper "Lumiverse" style): a colour swatch, the name
-    // (click → edit its settings in the left sidebar), a muted OUTPUT BINDING
-    // sub-line (target IP / protocol, or "no output"), and the pixel load.
-    const isRealDev = !!dg.deviceId;
-    const devSelected = isRealDev && selectedDeviceId === dg.deviceId;
+    const devSelected = selectedDeviceId === dg.deviceId;
     const proto = gdev?.protocol === 'artnet' ? 'Art-Net' : 'DDP';
-    // Binding sub-line shows the OUTPUT TARGET — only meaningful for a real device.
-    // Unassigned needs none (the fixtures sit inside it — that's evident); we only
-    // hint when it's empty.
-    const binding = isRealDev ? `${gdev?.ip || 'no output'} · ${proto}` : (devFx ? null : 'drop a fixture here');
-
-    const tri = oel('span', { className: 'out-tri' + (devOpen ? ' open' : ''), textContent: devOpen ? '▾' : '▸' });
-    const swatchDot = swatch(deviceColor(dg.deviceId));
-    const devNameEl = oel('span', { className: 'out-name', textContent: devName,
-      title: isRealDev ? `edit ${devName}` : 'select all unassigned fixtures' });
-    devNameEl.onclick = (ev) => {
-      ev.stopPropagation();
-      if (isRealDev) { selectDevice(dg.deviceId); return; }
-      expandedDevices.add(dg.deviceId);   // Unassigned: select all its fixtures
-      selectedFixtureIds = new Set(show.fixtures.filter((f) => !(f.output?.deviceId || '')).map((f) => f.id));
-      renderOutput(); redrawOverlay();
-    };
-    // With a binding line, the triangle rides it (MadMapper style); without one,
-    // the triangle sits inline before the name so the row is still expandable.
-    const devMain = oel('div', { className: 'out-node-main' }, binding != null
-      ? [oel('div', { className: 'out-name-row' }, [swatchDot, devNameEl]),
-         oel('div', { className: 'out-binding' }, [tri, oel('span', { textContent: binding })])]
-      : [oel('div', { className: 'out-name-row' }, [tri, swatchDot, devNameEl])]);
-    // No enable square, no ✕ — select the device (click its name) and press ⌫ to
-    // delete it.
-    const dnodeKids = [devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })];
-    const dhead = oel('div', { className: 'out-node out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, dnodeKids);
-    // Clicking the row background (not the name) toggles expand.
-    dhead.onclick = () => { expandedDevices.has(dg.deviceId) ? expandedDevices.delete(dg.deviceId) : expandedDevices.add(dg.deviceId); renderOutput(); };
-    dropZone(dhead, dg.deviceId, null);   // drop a fixture on a controller → assign it there (keeps its port; Unassigned header unassigns)
+    // Controller node (MadMapper "Lumiverse" style): a colour swatch, the name, and
+    // a muted OUTPUT TARGET sub-line (IP · protocol / "no output"). NO disclosure
+    // arrow — its fixtures always list beneath it. Click the row to edit it (left
+    // sidebar); ⌫ deletes the selected device.
+    const binding = `${gdev?.ip || 'no output'} · ${proto}`;
+    const devMain = oel('div', { className: 'out-node-main' }, [
+      oel('div', { className: 'out-name-row' }, [swatch(deviceColor(dg.deviceId)), oel('span', { className: 'out-name', textContent: devName })]),
+      oel('div', { className: 'out-binding' }, [oel('span', { textContent: binding })]),
+    ]);
+    const dhead = oel('div', { className: 'out-node out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` },
+      [devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })]);
+    dhead.onclick = () => selectDevice(dg.deviceId);   // click anywhere on the controller → edit it
+    dropZone(dhead, dg.deviceId, null);   // drop a fixture on a controller → assign it there
     outputListEl.append(dhead);
-    if (!devOpen) continue;
 
     const singleOut = dg.groups.length === 1;   // one output → skip the redundant "out N" sub-header
     for (const g of dg.groups) {
