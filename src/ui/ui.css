@@ -263,9 +263,11 @@ body.fit-fit #stageinner canvas#stage {
   height: auto;
 }
 body.fit-fill #stageinner canvas#stage { width: 100vw; height: auto; }
-/* "fill": frost the side panels so the composite reads through them. Overriding the
-   surface tokens makes every descendant that paints with them translucent too. */
-body.fit-fill #side, body.fit-fill #output-inspector, body.fit-fill #deckbar {
+/* "fill": frost the right inspector panels so the composite reads through them.
+   Overriding the surface tokens makes every descendant translucent too. The DECK
+   stays opaque — its clip thumbnails are opaque bitmaps, so frosting it would only
+   make the gaps/empty cells see-through and read as inconsistent. */
+body.fit-fill #side, body.fit-fill #output-inspector {
   --bg: var(--bg-glass); --panel: var(--panel-glass); --panel-2: var(--panel-2-glass);
   --surface: var(--panel-glass); --surface-2: var(--panel-2-glass); --field-bg: var(--field-bg-glass);
   -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
