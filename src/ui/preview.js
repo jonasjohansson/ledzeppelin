@@ -577,7 +577,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       // Cursor offset from the pinned anchor, projected onto the bar's axes →
       // new length (w) and thickness (h); centre stays midway anchor↔cursor.
       const { ux, uy, pxx, pyy, anchor, id } = dragState;
-      const [cxp, cyp] = canvasPx(ev, dragState.cv);
+      let [cxp, cyp] = canvasPx(ev, dragState.cv);
+      if (snap) { const s = snap(cxp, cyp, id, [id]); cxp = s[0]; cyp = s[1]; }   // snap the dragged corner to the grid/guides
       const vx = cxp - anchor.x, vy = cyp - anchor.y;
       const du = vx * ux + vy * uy, dp = vx * pxx + vy * pyy;
       const w = Math.max(MIN_W, Math.abs(du)), h = Math.max(MIN_H, Math.abs(dp));
