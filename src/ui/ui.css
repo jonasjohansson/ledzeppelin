@@ -189,6 +189,8 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    separator margin/rule above it is dead space — drop it so GEOMETRY sits at
    the top. */
 #output-inspector > .output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+/* The selected fixture's name, above POSITION — names what you're editing. */
+.fx-detail-title { color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 2px 0 8px; }
 .output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
 /* Fixtures inputs reuse the shared .fx-field input chrome (same as Design) — no
    override here, so the two panels match. Hide number-input spinner arrows so a

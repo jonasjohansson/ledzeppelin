@@ -748,7 +748,13 @@ function positionEditor(sel) {
   // Two collapsible groups (same accent-header + rule + chevron as the Clip
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
+  // A title row up top names the selected fixture (auto number + its type) so the
+  // editor reads "what am I editing" before the geometry fields.
+  const fxIdx = show.fixtures.indexOf(sel);
+  const fxType = (show.fixtureTypes || []).find((t) => t.id === sel.typeId)?.name;
+  const fxTitle = fixtureLabel(sel, fxIdx) + (fxType ? ` ${fxType}` : '');
   return oel('div', { className: 'output-edit' }, [
+    oel('div', { className: 'fx-detail-title', textContent: fxTitle }),
     Section('Position', 'position', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
@@ -1195,6 +1201,7 @@ document.addEventListener('keydown', (e) => {
 // top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
 // always a way back). Tab is intentionally NOT bound (too easy to hit).
 let resetView = null;   // set by the zoom IIFE; used by the top menu's View › Reset zoom
+let reflowView = null;  // set by the zoom IIFE; re-clamps the view when the viewport (insets) changes
 // One button in the corner toggles the whole UI; it stays put (the cluster keeps
 // this button visible while hidden) and just relabels hide ⇄ show.
 const toggleGui = () => {
@@ -1333,31 +1340,46 @@ document.addEventListener('keydown', (e) => {
 // --- Stage zoom (scroll-wheel, zoom-to-cursor) + pan. A CSS transform on
 // #stageinner scales BOTH the WebGL stage and the #preview overlay together;
 // because preview.js maps pointer coords via getBoundingClientRect(), dragging
-// and hit-testing stay correct at any zoom with no extra math. Shift+wheel pans
-// vertically (wheel+drag-free); '0' resets. ---
+// and hit-testing stay correct at any zoom with no extra math.
+//
+// The camera references the VIEWPORT (#stagewrap — the inset-aware region between
+// the sidebars), NOT the whole window, so the clamp agrees with what you see. The
+// transformOrigin is the layout top-left (0 0), so the untransformed top-left maps
+// to (bx+panX, by+panY) and the scaled box is W·z × H·z. ---
 (() => {
   const inner = document.getElementById('stageinner');
-  if (!inner) return;
+  const wrap = document.getElementById('stagewrap');
+  if (!inner || !wrap) return;
   // The view ALWAYS starts at 100% / centred on (re)load — it isn't persisted, so
   // a reload is a clean slate (Jonas). Zoom/pan live only for the session.
   let z = 1, panX = 0, panY = 0;
   const clamp = (v) => Math.max(0.25, Math.min(10, v));
-  // Track the last-applied transform so clampPan() can back out the canvas's
-  // (pan/zoom-invariant) layout box from a single getBoundingClientRect.
-  let appliedX = 0, appliedY = 0, appliedZ = 1;
   const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  // Keep the composite CONTAINED in the window: you can't shove it off into the
-  // pasteboard. When the scaled content is larger than the viewport on an axis it
-  // must cover it (edges no further in than the window); when smaller it must sit
-  // fully inside. transformOrigin is 0 0, so the layout top-left maps to
-  // (baseL+panX, baseT+panY) and the box is Lw·z × Lh·z.
+  // The untransformed layout box of the canvas, in screen coords: offsetWidth/Height
+  // ignore the transform (true layout size), and #stageinner is flex-centred in the
+  // (inset-aware) #stagewrap, so its top-left is the wrap centre minus half the box.
+  const frame = () => {
+    const W = inner.offsetWidth, H = inner.offsetHeight;
+    const wr = wrap.getBoundingClientRect();
+    return { W, H, vx: wr.left, vy: wr.top, vw: wr.width, vh: wr.height,
+      bx: wr.left + (wr.width - W) / 2, by: wr.top + (wr.height - H) / 2 };
+  };
+  // Pan clamp, viewport-relative + corner-friendly:
+  //  • content ≤ viewport on an axis → keep it fully inside (slidable; no drift at
+  //    exact fit, where the range collapses to centred).
+  //  • content > viewport → allow overpan until any content point can reach the
+  //    viewport CENTRE (so any corner can be brought in and inspected), but not so
+  //    far that the canvas is flung away.
   const clampPan = () => {
-    const rect = inner.getBoundingClientRect();        // reflects appliedX/Y/Z
-    const Lw = rect.width / (appliedZ || 1), Lh = rect.height / (appliedZ || 1);
-    const baseL = rect.left - appliedX, baseT = rect.top - appliedY;   // layout origin (invariant)
-    const cw = Lw * z, ch = Lh * z, winW = window.innerWidth, winH = window.innerHeight;
-    panX = cw >= winW ? clampNum(panX, winW - cw - baseL, -baseL) : clampNum(panX, -baseL, winW - cw - baseL);
-    panY = ch >= winH ? clampNum(panY, winH - ch - baseT, -baseT) : clampNum(panY, -baseT, winH - ch - baseT);
+    const f = frame();
+    const axis = (pan, base, content, vStart, vSize) => {
+      let lo, hi;
+      if (content <= vSize) { lo = vStart - base; hi = vStart + vSize - content - base; }
+      else { const keep = vSize / 2; lo = vStart + keep - base - content; hi = vStart + vSize - keep - base; }
+      return lo > hi ? (lo + hi) / 2 : clampNum(pan, lo, hi);
+    };
+    panX = axis(panX, f.bx, f.W * z, f.vx, f.vw);
+    panY = axis(panY, f.by, f.H * z, f.vy, f.vh);
   };
   // A reset/zoom-% pill in the corner cluster — appears only when zoomed/panned.
   const resetBtn = document.createElement('button');
@@ -1368,7 +1390,6 @@ document.addEventListener('keydown', (e) => {
     clampPan();
     inner.style.transformOrigin = '0 0';
     inner.style.transform = `translate(${panX}px,${panY}px) scale(${z})`;
-    appliedX = panX; appliedY = panY; appliedZ = z;
     preview?.setRenderScale?.(z); redrawOverlay();      // re-render overlay crisp at the new zoom
     // Always-visible zoom readout (click to reset); 'on' accent only when zoomed/panned.
     const idle = z === 1 && panX === 0 && panY === 0;
@@ -1377,6 +1398,10 @@ document.addEventListener('keydown', (e) => {
   apply();   // 100% / centred on startup
   const reset = () => { z = 1; panX = 0; panY = 0; apply(); };
   resetView = reset;          // expose to the top menu (View › Reset zoom)
+  // When the viewport changes (sidebars open/close, section/tab switch, resize) the
+  // base box recentres — re-clamp the existing pan/zoom against the new frame so the
+  // view stays valid without resetting it.
+  reflowView = () => { apply(); };
   resetBtn.onclick = reset;
   // Wheel-zoom / Shift-pan work ANYWHERE over the canvas — bound to the window so
   // they fire over the pasteboard and even when the (transformed) canvas has been
@@ -1399,11 +1424,23 @@ document.addEventListener('keydown', (e) => {
     if ((e.key === '0' || e.key === ')') && !typingIn(e.target)) { reset(); e.preventDefault(); }
   });
 
-  // --- HAND pan: MIDDLE-mouse drag to move the view, anywhere on the page. ---
-  let panDrag = null;
+  // --- HAND pan: MIDDLE-mouse drag, OR hold SPACE and left-drag (the universal
+  //     convention — works on a trackpad with no middle button). Anywhere over the
+  //     canvas/pasteboard; skips the panels so they still scroll/click normally. ---
+  let panDrag = null, spaceDown = false;
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || typingIn(e.target)) return;
+    if (!spaceDown) { spaceDown = true; if (!panDrag) document.body.style.cursor = 'grab'; }
+    e.preventDefault();                                  // don't page-scroll on space
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code !== 'Space') return;
+    spaceDown = false; if (!panDrag) document.body.style.cursor = '';
+  });
   window.addEventListener('pointerdown', (e) => {
-    if (e.button !== 1) return;                          // middle button only
-    e.preventDefault();
+    const panBtn = e.button === 1 || (e.button === 0 && spaceDown);   // middle, or Space+left
+    if (!panBtn || overChrome(e.target)) return;
+    e.preventDefault(); e.stopPropagation();             // capture phase: keep it from the selection/marquee handlers
     panDrag = { x: e.clientX, y: e.clientY };
     document.body.style.cursor = 'grabbing';
   }, { capture: true });
@@ -1412,7 +1449,7 @@ document.addEventListener('keydown', (e) => {
     panX += e.clientX - panDrag.x; panY += e.clientY - panDrag.y;
     panDrag.x = e.clientX; panDrag.y = e.clientY; apply();
   });
-  const endPan = () => { if (!panDrag) return; panDrag = null; document.body.style.cursor = ''; };
+  const endPan = () => { if (!panDrag) return; panDrag = null; document.body.style.cursor = spaceDown ? 'grab' : ''; };
   window.addEventListener('pointerup', endPan);
   window.addEventListener('pointercancel', endPan);
 })();
@@ -1723,6 +1760,7 @@ function updateStageInsets() {
     }
     root.style.setProperty('--inset-left', left + 'px');
     root.style.setProperty('--inset-right', right + 'px');
+    reflowView?.();   // the viewport moved — re-clamp the camera against the new frame
   });
 }
 window.addEventListener('resize', updateStageInsets);
