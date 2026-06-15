@@ -1082,6 +1082,26 @@ function setWallView(v) {
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
 
+// --- Canvas fit mode: how the composite sizes against the window/panels. ---
+//   fill    — full-bleed (composite fills the window width; TouchDesigner-style)
+//   fit     — the WHOLE composite letterboxed in the gap between the side panels
+//   full    — composite fits the window; the panels go translucent (frosted glass)
+const FIT_MODES = ['fill', 'fit', 'full'];
+const FIT_LABEL = { fill: '▭ fill', fit: '▣ fit', full: '⛶ full' };
+const fitBtn = document.getElementById('fit-btn');
+let fitMode = (() => { try { const m = localStorage.getItem('lz.fit'); return FIT_MODES.includes(m) ? m : 'fill'; } catch { return 'fill'; } })();
+function setFitMode(m) {
+  fitMode = FIT_MODES.includes(m) ? m : 'fill';
+  try { localStorage.setItem('lz.fit', fitMode); } catch { /* private */ }
+  for (const x of FIT_MODES) document.body.classList.toggle('fit-' + x, x === fitMode);
+  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode !== 'fill'); }
+}
+fitBtn?.addEventListener('click', () => {
+  setFitMode(FIT_MODES[(FIT_MODES.indexOf(fitMode) + 1) % FIT_MODES.length]);
+  resetView?.();   // the layout box changed — recentre at 100%
+});
+setFitMode(fitMode);
+
 // Blackout: a live-performance master that holds ALL output dark (sends zeros) while
 // the preview keeps playing, so you can cue without lighting the wall. Off by default.
 // (Blackout state + setBlackout are declared above the layer panel — see there.
