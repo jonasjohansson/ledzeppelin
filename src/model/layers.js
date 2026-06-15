@@ -644,20 +644,21 @@ export function makeLayer(id, clipId = 'c1') {
   };
 }
 
-// Keep AT MOST ONE empty layer so blank layers never pile up (e.g. a source layer
-// left empty after moving its clip away). Does NOT add a layer: when you fill the
-// last empty layer, no replacement is spawned — the deck shows a "+ layer" button
-// instead (a new layer is made only when there's no empty layer left). Idempotent.
+// Keep EXACTLY ONE empty layer, at the BOTTOM of the stack (deck index 0, since
+// addLayer prepends) — there's always a fresh layer ready to drop a clip into, so
+// no manual "+ layer" button is needed, and blank layers never pile up (extras
+// from moving clips away are collapsed). Idempotent.
 export function tidyEmptyLayers(show) {
   const comp = show?.composition;
   if (!comp) return show;
   const layers = Array.isArray(comp.layers) ? comp.layers : [];
   const isEmpty = (L) => L && (!L.clips || L.clips.filter(Boolean).length === 0);
   const empties = layers.filter(isEmpty);
-  if (empties.length <= 1) return show;                       // 0 or 1 empty → leave as-is
-  // Multiple empties → collapse to one (keep the first, drop the rest).
+  if (empties.length === 1 && isEmpty(layers[0])) return show;   // already exactly one, at the bottom
   const content = layers.filter((L) => !isEmpty(L));
-  return { ...show, composition: { ...comp, layers: [empties[0], ...content] } };
+  // Reuse an existing empty layer (keep its id) when there is one; else add one.
+  if (empties.length) return { ...show, composition: { ...comp, layers: [empties[0], ...content] } };
+  return addLayer({ ...show, composition: { ...comp, layers: content } });
 }
 
 // Append a new default layer (one active clip on the first generator), auto-named
