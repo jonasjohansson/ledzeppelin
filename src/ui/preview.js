@@ -475,7 +475,16 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       } else {
         const ax = pts[0][0] * rw, ay = pts[0][1] * rh;
         const bx = pts[pts.length - 1][0] * rw, by = pts[pts.length - 1][1] * rh;
-        if (segDist(px, py, ax, ay, bx, by) <= hitR) return { fxId: f.id, seg: 0 };
+        // Hit ANYWHERE on the footprint: perpendicular distance within the bar's
+        // half-thickness (min hitR so thin strips stay grabbable) and the projection
+        // within the run — i.e. the whole rotated rectangle, not just the centreline.
+        const cv = show.composition?.canvas || { w: rw, h: rh };
+        const half = Math.max(hitR, (thicknessOf(f, cv) / 2) * (rh / (cv.h || rh)));
+        const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy || 1;
+        const t = ((px - ax) * dx + (py - ay) * dy) / len2;
+        const tc = Math.max(0, Math.min(1, t));
+        const perp = Math.hypot(px - (ax + tc * dx), py - (ay + tc * dy));
+        if (perp <= half && t >= -hitR / Math.sqrt(len2) && t <= 1 + hitR / Math.sqrt(len2)) return { fxId: f.id, seg: 0 };
       }
     }
     return null;

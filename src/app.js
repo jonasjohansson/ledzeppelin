@@ -1931,17 +1931,12 @@ if (paramOscEl) {
   // Park the readout just ABOVE the whole corner cluster (telemetry + buttons), so
   // it reads as a line over the "v… · fps …" row rather than on top of it.
   const cornerEl = document.getElementById('corner-controls');
-  const placeParamOsc = () => { if (cornerEl) { const r = cornerEl.getBoundingClientRect(); paramOscEl.style.bottom = (window.innerHeight - r.top + 6) + 'px'; } };
-  placeParamOsc();
-  window.addEventListener('resize', placeParamOsc);
-  document.addEventListener('mouseover', (e) => {
-    const r = e.target.closest?.('[data-osc]');
-    paramOscEl.textContent = r ? r.dataset.osc : '';
-  });
-  document.addEventListener('focusin', (e) => {
-    const r = e.target.closest?.('[data-osc]');
-    if (r) paramOscEl.textContent = r.dataset.osc;
-  });
+  // Re-measured on each show (layout settles after the zoom pill etc. are added),
+  // so the readout always sits just ABOVE the corner cluster, not over the fps row.
+  const placeParamOsc = () => { if (cornerEl) { const r = cornerEl.getBoundingClientRect(); paramOscEl.style.bottom = (window.innerHeight - r.top + 8) + 'px'; } };
+  const showOsc = (addr) => { if (addr) { placeParamOsc(); paramOscEl.textContent = addr; } else paramOscEl.textContent = ''; };
+  document.addEventListener('mouseover', (e) => showOsc(e.target.closest?.('[data-osc]')?.dataset.osc || ''));
+  document.addEventListener('focusin', (e) => { const a = e.target.closest?.('[data-osc]')?.dataset.osc; if (a) showOsc(a); });
 }
 
 // A ~6s synthesized full-band hard-rock intro on launch (procedural homage, not a
