@@ -241,29 +241,20 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   background: #000;
   box-shadow: 0 0 0 1px var(--line);
 }
-/* Canvas FIT MODES (body.fit-*), set by the corner toggle. The WHOLE composite is
-   always shown (letterboxed to its aspect, never cropped); width = min(available
-   width, the width that makes height == the viewport) so it scales UP or down to
-   fill, preserving aspect (--comp-aspect is published from the render loop since
-   CSS can't read canvas attrs):
-   • fit    — fit in the GAP between the side panels (reserved as --fit-left /
-              --fit-right, measured each frame; edge-to-edge left in Design)
-   • window — fit to the whole window; the panels just float over the edges */
-#stageinner canvas#stage { display: block; height: auto; }
-body.fit-fit #stagewrap { padding-left: var(--fit-left, 0px); padding-right: var(--fit-right, var(--side-w)); box-sizing: border-box; }
-body.fit-fit #stageinner canvas#stage {
-  width: min(calc(100vw - var(--fit-left, 0px) - var(--fit-right, var(--side-w))), calc((100vh - 6px) * var(--comp-aspect, 1.778)));
-}
-body.fit-window #stageinner canvas#stage {
+/* Canvas BASE size: the WHOLE composite always fits the window (letterboxed to its
+   aspect, never cropped) — width = min(window width, the width that makes height ==
+   the viewport), scaling up or down (--comp-aspect is published from the render loop
+   since CSS can't read canvas attrs). Zoom/pan (a transform on #stageinner) roams
+   freely on top; the ⤢ pill resets to this fitted view. */
+#stageinner canvas#stage {
+  display: block; height: auto;
   width: min(100vw, calc(100vh * var(--comp-aspect, 1.778)));
 }
-/* Live view (corner ▣ live): the composite dims to a ghost for context while
-   the LED cells on #preview stay full strength — where the visuals hit a tube,
-   its pixels light up; the rest reads as the dark wall. SVG chrome drops. */
-/* Live view dims the stage so the fixtures' pixels carry the visuals — but only
-   when there ARE fixtures; otherwise dimming would blank an empty stage. */
+/* Live view (corner ▣ live): the composite dims to a ghost for context while the
+   LED cells on #preview stay full strength — where the visuals hit a tube, its
+   pixels light up; the rest reads as the dark wall. The fixture OUTLINES stay
+   visible (so you can still see + grab fixtures) — only dims the composite. */
 body.wall-view.has-fixtures #stage { opacity: 0.07; }
-body.wall-view #ovl { display: none !important; }  /* outranks setOverlay's inline style */
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Vector chrome layer over the lights canvas — stays sharp under the zoom/pan

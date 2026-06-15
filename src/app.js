@@ -183,6 +183,15 @@ function rebuild(next) {
   broadcastManifest();   // geometry change can rename/restructure → refresh the phone
 }
 
+// Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
+// fixture drag so the sampled colours follow the new positions each frame.
+function refreshSampler() {
+  const { sampleUVs, spans } = buildPipelineInputs(show);
+  sampler?.dispose?.();
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
+  lastSpans = spans; recomputeHiddenSpans();
+}
+
 // Hidden ("eye"-off) fixtures must go DARK on the wall, not just in the preview —
 // so we still sample them (to keep DDP indices contiguous) and zero their bytes
 // before sending. Recompute when the hidden flag toggles (no full rebuild).
@@ -543,7 +552,7 @@ if (previewCanvas) {
     getShow: () => show,
     getSelected: () => selectedFixtureIds,
     onSelect: (fxId, ev) => selectFixture(fxId, ev),
-    onEdit: (next) => { show = next; redrawOverlay(); },         // live, no rebuild churn
+    onEdit: (next) => { show = next; samplerDirty = true; redrawOverlay(); },   // live: flag a sampler rebuild so the lit content follows the drag in realtime
     onCommit: (next) => { snapGuides = []; saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
     snap: snapPoint,
     // Rubber-band select: keep the prior selection only when Shift-additive.
@@ -1089,26 +1098,9 @@ function setWallView(v) {
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
 
-// --- Canvas fit mode: how the WHOLE composite sizes (always letterboxed to its
-// aspect — never cropped). Two variations: ---
-//   fit    — fit in the gap BETWEEN the side panels (reserves the inspector, and
-//            the left fixture editor in Output; edge-to-edge left in Design)
-//   window — fit to the whole window (the panels just float over the edges)
-const FIT_MODES = ['fit', 'window'];
-const FIT_LABEL = { fit: '▣ fit', window: '⛶ window' };
-const fitBtn = document.getElementById('fit-btn');
-let fitMode = (() => { try { const m = localStorage.getItem('lz.fit'); return FIT_MODES.includes(m) ? m : 'fit'; } catch { return 'fit'; } })();
-function setFitMode(m) {
-  fitMode = FIT_MODES.includes(m) ? m : 'fit';
-  try { localStorage.setItem('lz.fit', fitMode); } catch { /* private */ }
-  for (const x of FIT_MODES) document.body.classList.toggle('fit-' + x, x === fitMode);
-  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode === 'window'); }
-}
-fitBtn?.addEventListener('click', () => {
-  setFitMode(FIT_MODES[(FIT_MODES.indexOf(fitMode) + 1) % FIT_MODES.length]);
-  resetView?.();   // the layout box changed — recentre at 100%
-});
-setFitMode(fitMode);
+// (Canvas fit: the composite always fits the window as the BASE view — letterboxed
+// to its aspect, never cropped (CSS) — then you zoom/pan freely on top. The ⤢ pill
+// resets back to that fitted view. No fit-mode toggle.)
 
 // Blackout: a live-performance master that holds ALL output dark (sends zeros) while
 // the preview keeps playing, so you can cue without lighting the wall. Off by default.
@@ -1650,24 +1642,8 @@ function syncCompAspect() {
   if (a !== lastAspect) { lastAspect = a; document.documentElement.style.setProperty('--comp-aspect', String(a)); }
 }
 syncCompAspect();
-// "fit" canvas mode reserves the actual side panels: the right inspector always,
-// and the LEFT fixture editor when it's shown (Output with a selection). In Design
-// the left has no panel (the deck floats over the top-left), so the canvas goes
-// edge-to-edge on the left. Published as --fit-left / --fit-right; change-detected.
-let lastFitL = -1, lastFitR = -1;
-function updateFitInsets() {
-  const side = document.getElementById('side');
-  const oi = document.getElementById('output-inspector');
-  const vw = window.innerWidth;
-  const right = side ? Math.max(0, Math.round(vw - side.getBoundingClientRect().left)) : 0;
-  const left = (oi && oi.offsetParent !== null) ? Math.max(0, Math.round(oi.getBoundingClientRect().right)) : 0;
-  if (left !== lastFitL) { lastFitL = left; document.documentElement.style.setProperty('--fit-left', left + 'px'); }
-  if (right !== lastFitR) { lastFitR = right; document.documentElement.style.setProperty('--fit-right', right + 'px'); }
-}
-updateFitInsets();
 function loop(ts) {
   syncCompAspect();
-  updateFitInsets();
   if (!t0) t0 = ts;
   if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
@@ -1752,6 +1728,9 @@ function loop(ts) {
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
+    // A live fixture drag flagged the sampler stale — rebuild it from the dragged
+    // positions (throttled to this frame) so the lit content follows in realtime.
+    if (samplerDirty) { refreshSampler(); samplerDirty = false; }
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
     lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
