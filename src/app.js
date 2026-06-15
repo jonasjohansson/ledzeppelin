@@ -1629,8 +1629,24 @@ function syncCompAspect() {
   if (a !== lastAspect) { lastAspect = a; document.documentElement.style.setProperty('--comp-aspect', String(a)); }
 }
 syncCompAspect();
+// "fit" canvas mode reserves the actual side panels: the right inspector always,
+// and the LEFT fixture editor when it's shown (Output with a selection). In Design
+// the left has no panel (the deck floats over the top-left), so the canvas goes
+// edge-to-edge on the left. Published as --fit-left / --fit-right; change-detected.
+let lastFitL = -1, lastFitR = -1;
+function updateFitInsets() {
+  const side = document.getElementById('side');
+  const oi = document.getElementById('output-inspector');
+  const vw = window.innerWidth;
+  const right = side ? Math.max(0, Math.round(vw - side.getBoundingClientRect().left)) : 0;
+  const left = (oi && oi.offsetParent !== null) ? Math.max(0, Math.round(oi.getBoundingClientRect().right)) : 0;
+  if (left !== lastFitL) { lastFitL = left; document.documentElement.style.setProperty('--fit-left', left + 'px'); }
+  if (right !== lastFitR) { lastFitR = right; document.documentElement.style.setProperty('--fit-right', right + 'px'); }
+}
+updateFitInsets();
 function loop(ts) {
   syncCompAspect();
+  updateFitInsets();
   if (!t0) t0 = ts;
   if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog

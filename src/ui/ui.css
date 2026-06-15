@@ -253,13 +253,15 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
    • fill — full-bleed: the composite fills the window; the side panels go
             translucent (frosted glass) so it shows through behind them */
 #stageinner canvas#stage { display: block; }
-/* Reserve the inspector on the right; flex then centres the composite in what's
-   left. width = min(that width, the width that makes height == the viewport) so it
-   scales UP or down to fill, preserving aspect (CSS can't read canvas attrs, so
-   --comp-aspect is published from the render loop). */
-body.fit-fit #stagewrap { padding-right: var(--side-w); box-sizing: border-box; }
+/* Reserve the actual side panels (measured into --fit-left / --fit-right by the
+   render loop): the right inspector always, and the left fixture editor when shown
+   in Output — in Design the left has no panel so it goes edge-to-edge. Flex then
+   centres the composite in the gap; width = min(gap, the width that makes height ==
+   the viewport) so it scales UP or down to fill, preserving aspect (--comp-aspect
+   is published from the render loop since CSS can't read canvas attrs). */
+body.fit-fit #stagewrap { padding-left: var(--fit-left, 0px); padding-right: var(--fit-right, var(--side-w)); box-sizing: border-box; }
 body.fit-fit #stageinner canvas#stage {
-  width: min(calc(100vw - var(--side-w)), calc((100vh - 6px) * var(--comp-aspect, 1.778)));
+  width: min(calc(100vw - var(--fit-left, 0px) - var(--fit-right, var(--side-w))), calc((100vh - 6px) * var(--comp-aspect, 1.778)));
   height: auto;
 }
 body.fit-fill #stageinner canvas#stage { width: 100vw; height: auto; }
