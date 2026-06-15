@@ -1742,7 +1742,7 @@ syncCompAspect();
 // behind a panel. The left inspector width is RESERVED even when it's empty, so the
 // canvas never jumps between subtabs or when a selection clears. Measured after
 // layout (rAF) and published as CSS insets; 0 in every other view (full window).
-const INSPECTOR_W = 312;   // must match #output-inspector flex-basis in ui.css
+const INSPECTOR_W = 256;   // must match #output-inspector flex-basis in ui.css
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(() => {
@@ -1750,13 +1750,12 @@ function updateStageInsets() {
     const active = !outputPaneEl?.hidden && !document.body.classList.contains('gui-hidden');
     let left = 0, right = 0;
     if (active) {
+      // Editor + main panel cluster at the RIGHT; the canvas takes the whole left.
+      // Reserve the inspector slot (INSPECTOR_W) on top of the main panel width
+      // whether or not the inspector is currently shown, so the canvas never jumps.
       const vw = window.innerWidth;
       const side = document.getElementById('side')?.getBoundingClientRect();
-      if (side) right = Math.max(0, vw - side.left);
-      // Reserve the inspector column whether or not it currently has content.
-      left = outputInspectorEl && !outputInspectorEl.hidden
-        ? Math.max(0, outputInspectorEl.getBoundingClientRect().right)
-        : INSPECTOR_W;
+      if (side) right = Math.max(0, vw - side.left) + INSPECTOR_W;
     }
     root.style.setProperty('--inset-left', left + 'px');
     root.style.setProperty('--inset-right', right + 'px');
