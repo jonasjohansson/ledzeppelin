@@ -219,7 +219,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
   // Network scan: find WLED controllers on the LAN (via the daemon) and add them
   // with one click. Results persist across renders so adding one re-renders the
   // list with it marked "added".
-  function scanBlock(show) {
+  function scanBlock(show, rerender = render) {
     const wrap = el('div', { className: 'scan-block' });
     const btn = el('button', {
       className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan network',
@@ -227,10 +227,10 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       disabled: scanState.running,
       onclick: async () => {
         if (scanState.running) return;
-        scanState = { running: true, result: null, error: null }; render();
+        scanState = { running: true, result: null, error: null }; rerender();
         const r = await scanDevices();
         scanState = { running: false, result: r.ok ? r.data : null, error: r.ok ? null : r.error };
-        render();
+        rerender();
       },
     });
     wrap.append(btn);
@@ -543,6 +543,12 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       const d = (show.devices || []).find((x) => x.id === selDeviceId);
       return d ? deviceDetail(show, d) : null;
     },
+    // App drives device selection in the merged Fixtures tab (clicking a controller
+    // header) → point the left-sidebar editor at it.
+    setDevice: (id) => { selDeviceId = id; lastSel = 'device'; },
+    // The WLED network-discovery block, for the app to mount in the merged tab.
+    // Pass a rerender callback so its results refresh wherever it's mounted.
+    scanEl: (rerender) => scanBlock(getShow(), rerender),
     libraryDetailEl: () => {
       const show = getShow();
       if (libSel === 'controller') {

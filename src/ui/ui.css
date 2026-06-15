@@ -144,7 +144,10 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
 
 /* --- Output mapping: fixture list --- */
-.output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 6px 0 10px; }
+.output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
+/* + fixture / + device side by side; the type picker (if any) sits full-width below. */
+.output-addrow { display: flex; gap: 4px; }
+.output-addrow .fx-add { flex: 1 1 0; min-width: 0; }
 .output-tools select {
   width: 100%; box-sizing: border-box; background: var(--field-bg); color: var(--text);
   border: 1px solid var(--field-border); border-radius: var(--radius);
@@ -224,7 +227,11 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 /* Matte-style PASTEBOARD: a subtle transparency checker fills the area OUTSIDE
    the canvas (behind every panel). The canvas sits on top as a clean rectangle. */
 #stagewrap {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  position: fixed; top: 0; bottom: 0;
+  /* In Output › Fixtures the desk is inset to the gap BETWEEN the two sidebars
+     (insets published from JS) so the whole rig fits, unoccluded, between them;
+     elsewhere both insets are 0 and it spans the full viewport. */
+  left: var(--inset-left, 0px); right: var(--inset-right, 0px);
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
   background-color: var(--bg);
@@ -248,7 +255,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
    freely on top; the ⤢ pill resets to this fitted view. */
 #stageinner canvas#stage {
   display: block; height: auto;
-  width: min(100vw, calc(100vh * var(--comp-aspect, 1.778)));
+  width: min(calc(100vw - var(--inset-left, 0px) - var(--inset-right, 0px)), calc(100vh * var(--comp-aspect, 1.778)));
 }
 /* Live view (corner ▣ live): the composite dims to a ghost for context while the
    LED cells on #preview stay full strength — where the visuals hit a tube, its

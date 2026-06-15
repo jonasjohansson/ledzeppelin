@@ -519,7 +519,20 @@ const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, sh
 
 // Update the selection from a click. shift = toggle; clicking an already-selected
 // fixture keeps the group (so it can be dragged); a new one selects just it.
+// Select a device for editing — the left sidebar shows its settings (IP / model /
+// colour order / scan). Mutually exclusive with a fixture selection: one editor at
+// a time. Unassigned ('') has no device to edit, so it's ignored here.
+function selectDevice(id) {
+  if (!id) return;
+  selectedDeviceId = id;
+  selectedFixtureIds.clear();
+  expandedDevices.add(id);
+  panel.setDevice?.(id);
+  renderOutput(); redrawOverlay();
+}
+
 function selectFixture(fxId, ev, opts = {}) {
+  selectedDeviceId = null;   // picking (or clearing) fixtures ends any device edit
   if (ev && ev.shiftKey) {
     if (fxId == null) return;
     if (selectedFixtureIds.has(fxId)) selectedFixtureIds.delete(fxId); else selectedFixtureIds.add(fxId);
@@ -576,7 +589,9 @@ if (previewCanvas) {
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
 const outputInspectorEl = document.getElementById('output-inspector');   // left sidebar — selected item's editor
-let outputTab = 'fixtures';   // Output sub-tab: fixtures | devices | library
+let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
+let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
+let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
 let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
@@ -796,9 +811,12 @@ function chainStatusRow(sel) {
   const runPx = show.fixtures.filter((f) => runKeyOf(f) === key).reduce((m, f) => m + (f.pixelCount || 0), 0);
   const cap = Number(dev?.maxPerOutput) || 0;
   const full = cap > 0 && runPx >= cap;
-  // FROM picker: the controller (=first on its output) + every other fixture.
+  // FROM picker: the controller (=first on its output) + every other fixture. When
+  // the fixture has no device, there IS no controller to be "first" on — say so
+  // (picking another fixture here still wires + assigns it onto that fixture's run).
+  const assigned = !!sel.output?.deviceId;
   const fromSel = oel('select');
-  fromSel.append(oel('option', { value: '', textContent: `${devName} (controller)` }));
+  fromSel.append(oel('option', { value: '', textContent: assigned ? `${devName} (controller)` : '— unassigned (no controller) —' }));
   for (const f of show.fixtures) if (f.id !== sel.id) fromSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
   fromSel.value = ch && ch.index > 0 ? ch.members[ch.index - 1] : '';
   fromSel.addEventListener('change', () => applyShow(fromSel.value ? wireAfter(show, sel.id, fromSel.value) : wireFirst(show, sel.id)));
@@ -814,7 +832,7 @@ function chainStatusRow(sel) {
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
   return oel('div', {}, [
-    oel('div', { className: 'fx-pts' + (full ? ' fx-err' : ''), textContent: (ch ? `⛓ ${ch.name} · ${ch.index + 1}/${ch.members.length}` : '⋈ first on its output') + capTxt }),
+    oel('div', { className: 'fx-pts' + (full ? ' fx-err' : ''), textContent: (ch ? `⛓ ${ch.name} · ${ch.index + 1}/${ch.members.length}` : (assigned ? '⋈ first on its output' : '⋈ unassigned')) + capTxt }),
     oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input ←' }), fromSel]),
     oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output →' }), toSel]),
   ]);
@@ -863,19 +881,20 @@ function addInstance(typeId) {
   });
   selectedFixtureIds = new Set([id]);
   expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
+  // Commit the new fixture FIRST (rebuild), THEN reveal the overlay — setOverlay
+  // re-renders the list, and the list's stale-selection prune would drop the new
+  // id if the fixture weren't in `show` yet (leaving it unselected, editor hidden).
+  saveShow(next); rebuild(next);
   setOverlay(true);   // reveal the canvas overlay so the new strip is visible
-  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+  panel.refresh(); renderOutput(); redrawOverlay();
 }
 
-// "+ fixture" control for the placement list: pick a definition to place. The
-// definitions themselves are created/edited in the Library tab.
-function addFixtureControl() {
+// The "+ fixture" / "+ device" toolbar that sits ABOVE the placement list. The two
+// add buttons sit side by side; the fixture-type picker (what "+ fixture" places)
+// is a full-width row below them. Definitions themselves are made in Inventory.
+function addControls() {
   const wrap = oel('div', { className: 'output-tools' });
   const types = show.fixtureTypes || [];
-  if (!types.length) {
-    wrap.append(oel('span', { className: 'seg-hint', textContent: 'define a fixture type in the Inventory tab first' }));
-    return wrap;
-  }
   const sel = oel('select', { title: 'fixture type to place (defined in the Inventory tab)' });
   for (const t of types) {
     // Don't re-append the px count when the type's NAME already states it —
@@ -884,24 +903,22 @@ function addFixtureControl() {
     const label = /\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`;
     sel.append(oel('option', { value: t.id, textContent: label }));
   }
-  wrap.append(
-    oel('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addInstance(sel.value) }),
-    sel
-  );
-  return wrap;
-}
-
-// "+ device" — create a controller right here in the patch view (a generic one;
-// edit its IP / model / colour order in the Devices tab). New devices appear as
-// empty containers you can drag fixtures onto.
-function addDeviceControl() {
-  return oel('button', { className: 'fx-add', textContent: '+ device', onclick: () => {
+  const addFx = oel('button', { className: 'fx-add', textContent: '+ fixture',
+    title: types.length ? 'place a fixture' : 'define a fixture type in the Inventory tab first',
+    onclick: () => { if (types.length) addInstance(sel.value); } });
+  addFx.disabled = !types.length;
+  // "+ device" — create a controller right here (a generic one; edit its IP / model /
+  // colour order below). New devices appear as empty containers you can drop onto.
+  const addDev = oel('button', { className: 'fx-add', textContent: '+ device', onclick: () => {
     let n = structuredClone(show);
     let k = (n.devices?.length || 0) + 1, id; do { id = `c${k}`; k++; } while (n.devices.some((d) => d.id === id));
     n = addDevice(n, { id, name: `Controller ${n.devices.length + 1}`, typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });
-    expandedDevices.add(id);
+    expandedDevices.add(id); selectDevice(id);
     rebuild(n); panel.refresh(); renderOutput();
   } });
+  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev]));
+  if (types.length) wrap.append(sel);
+  return wrap;
 }
 
 // Confirm before deleting fixture(s) — it re-packs pixel ranges, and removing a
@@ -928,17 +945,22 @@ function updateInspector() {
   if (!outputInspectorEl) return;
   let detail = null;
   if (outputPaneEl && !outputPaneEl.hidden) {
-    if (outputTab === 'fixtures') {
+    if (outputTab === 'library') detail = panel.libraryDetailEl?.();
+    else {
+      // Merged Fixtures+Devices tab: one fixture selected → its position/patch
+      // editor; else a device selected → its settings editor; else nothing.
       if (selectedFixtureIds.size === 1) {
         const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
         if (f) detail = positionEditor(f);
+      } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
+        detail = panel.deviceDetailEl?.();
       }
-    } else if (outputTab === 'devices') detail = panel.deviceDetailEl?.();
-    else if (outputTab === 'library') detail = panel.libraryDetailEl?.();
+    }
   }
   outputInspectorEl.textContent = '';
   if (detail) { outputInspectorEl.append(detail); outputInspectorEl.hidden = false; }
   else outputInspectorEl.hidden = true;
+  updateStageInsets();   // the left inspector showing/hiding changes the fit window
 }
 
 function renderOutput() {
@@ -1023,6 +1045,9 @@ function renderOutput() {
   // obvious and easy to find before you wire them.
   devOrder.sort((a, b) => (a.deviceId === '' ? 0 : 1) - (b.deviceId === '' ? 0 : 1));
 
+  // Add buttons sit ABOVE the list (+ fixture / + device side by side).
+  outputListEl.append(addControls());
+
   for (const dg of devOrder) {
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
     const devName = gdev?.name || dg.deviceId || 'Unassigned';
@@ -1031,16 +1056,21 @@ function renderOutput() {
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
     const devOpen = expandedDevices.has(dg.deviceId);   // caret is authoritative; selecting a fixture adds it to the set (auto-reveal) but you can still collapse
-    // Controller header. Clicking the NAME selects every fixture on the device;
-    // clicking elsewhere on the header expands/collapses it.
-    const devNameEl = oel('span', { className: 'out-group-dev', textContent: devName, title: `select all fixtures on ${devName}` });
+    // Controller header. For a real device, clicking the NAME opens its settings
+    // in the left sidebar (edit); for the Unassigned group (no device to edit) the
+    // name selects every fixture in it. Clicking elsewhere expands/collapses.
+    const isRealDev = !!dg.deviceId;
+    const devSelected = isRealDev && selectedDeviceId === dg.deviceId;
+    const devNameEl = oel('span', { className: 'out-group-dev', textContent: devName,
+      title: isRealDev ? `edit ${devName}` : 'select all unassigned fixtures' });
     devNameEl.onclick = (ev) => {
       ev.stopPropagation();
-      expandedDevices.add(dg.deviceId);   // selecting all reveals the group
-      selectedFixtureIds = new Set(show.fixtures.filter((f) => (f.output?.deviceId || '') === dg.deviceId).map((f) => f.id));
+      if (isRealDev) { selectDevice(dg.deviceId); return; }
+      expandedDevices.add(dg.deviceId);   // Unassigned: select all its fixtures
+      selectedFixtureIds = new Set(show.fixtures.filter((f) => !(f.output?.deviceId || '')).map((f) => f.id));
       renderOutput(); redrawOverlay();
     };
-    const dhead = oel('div', { className: 'out-group out-dev', title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, [
+    const dhead = oel('div', { className: 'out-group out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, [
       oel('span', { className: 'out-caret', textContent: devOpen ? '▾' : '▸' }),
       swatch(deviceColor(dg.deviceId)),
       devNameEl,
@@ -1076,8 +1106,11 @@ function renderOutput() {
     }
   }
 
-  outputListEl.append(addFixtureControl()); outputListEl.append(addDeviceControl());
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
+  // WLED network discovery (adds devices) lives at the bottom — a power tool, out
+  // of the way. Pass renderOutput so its results refresh in place here.
+  const scan = panel.scanEl?.(renderOutput);
+  if (scan) outputListEl.append(scan);
 }
 
 const renderOutputList = renderOutput; // back-compat alias
@@ -1196,6 +1229,7 @@ const toggleGui = () => {
   const hidden = document.body.classList.toggle('gui-hidden');
   const b = document.getElementById('g-hide');
   if (b) b.textContent = hidden ? 'Show UI' : 'Hide UI';
+  updateStageInsets();   // hiding the UI frees the canvas to span the full window
 };
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'h' && e.key !== 'H') return;
@@ -1213,11 +1247,17 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   const t = e.target;
   if (typingIn(t)) return;
-  // On the Devices / Library tabs, ⌫ deletes the selected device / model /
-  // definition (deleteSelected confirms before removing a device).
-  if (!outputPaneEl?.hidden && (outputTab === 'devices' || outputTab === 'library')) {
+  // On the Inventory (library) tab, ⌫ deletes the selected model / definition.
+  if (!outputPaneEl?.hidden && outputTab === 'library') {
     if (panel.deleteSelected?.()) { renderOutput(); redrawOverlay(); }
     e.preventDefault();
+    return;
+  }
+  // Merged Fixtures tab: a selected DEVICE (no fixture selected) → delete it
+  // (deleteSelected confirms + unroutes its fixtures).
+  if (!outputPaneEl?.hidden && !selectedFixtureIds.size && selectedDeviceId) {
+    e.preventDefault();
+    if (panel.deleteSelected?.()) { selectedDeviceId = null; renderOutput(); redrawOverlay(); }
     return;
   }
   // A SELECTED FIXTURE is the signal to delete fixtures (regardless of the overlay
@@ -1436,6 +1476,7 @@ function setOutputTab(which) {
   if (devicesDesignEl) devicesDesignEl.hidden = which !== 'devices';
   if (libraryDesignEl) libraryDesignEl.hidden = which !== 'library';
   renderOutput();
+  updateStageInsets();
 }
 outputTabsEl?.addEventListener('click', (ev) => {
   const b = ev.target.closest('.subtab');
@@ -1686,6 +1727,28 @@ function syncCompAspect() {
   if (a !== lastAspect) { lastAspect = a; document.documentElement.style.setProperty('--comp-aspect', String(a)); }
 }
 syncCompAspect();
+
+// In Output › Fixtures, fit the canvas to the gap BETWEEN the two sidebars (the
+// left fixture editor + the right panel) so the whole rig stays visible, never
+// hidden behind a panel. Measured after layout (rAF) and published as CSS insets;
+// 0 everywhere else, so the canvas spans the full window in every other view.
+function updateStageInsets() {
+  cancelAnimationFrame(insetRaf);
+  insetRaf = requestAnimationFrame(() => {
+    const root = document.documentElement;
+    const active = !outputPaneEl?.hidden && outputTab === 'fixtures' && !document.body.classList.contains('gui-hidden');
+    let left = 0, right = 0;
+    if (active) {
+      const vw = window.innerWidth;
+      const side = document.getElementById('side')?.getBoundingClientRect();
+      if (side) right = Math.max(0, vw - side.left);
+      if (outputInspectorEl && !outputInspectorEl.hidden) left = Math.max(0, outputInspectorEl.getBoundingClientRect().right);
+    }
+    root.style.setProperty('--inset-left', left + 'px');
+    root.style.setProperty('--inset-right', right + 'px');
+  });
+}
+window.addEventListener('resize', updateStageInsets);
 function loop(ts) {
   syncCompAspect();
   if (!t0) t0 = ts;
