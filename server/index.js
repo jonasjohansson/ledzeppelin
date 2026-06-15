@@ -58,8 +58,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 7070;
 const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
-  // Companion discovery: the editor asks for the daemon's LAN address so it can
-  // show a phone-reachable /remote/ URL + QR (localhost wouldn't work on a phone).
+  // Control discovery: the editor asks for the daemon's LAN address so it can
+  // show a phone-reachable /control/ URL + QR (localhost wouldn't work on a phone).
   if (url.pathname === '/api/info') {
     const lan = Object.values(networkInterfaces()).flat()
       .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
@@ -182,6 +182,6 @@ http.listen(PORT, () => {
   // The phone companion: print the LAN URL so anyone on the network can open it.
   const lan = Object.values(networkInterfaces()).flat()
     .find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
-  if (lan) console.log(`companion  http://${lan}:${PORT}/remote/  (open on a phone on this Wi-Fi)`);
+  if (lan) console.log(`control    http://${lan}:${PORT}/control/  (open on a phone on this Wi-Fi)`);
   if (process.env.OPEN) openBrowser(url);
 });

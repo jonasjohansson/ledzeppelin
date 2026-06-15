@@ -1398,12 +1398,12 @@ outputTabsEl?.addEventListener('click', (ev) => {
 const systemPaneEl = document.getElementById('system-pane');
 const systemControlEl = document.getElementById('system-control');
 const systemSettingsEl = document.getElementById('system-settings');
-// The companion URL the QR/link point at. Prefer the daemon's LAN IP (a phone
-// can't use localhost); fall back to this page's origin (works if the editor was
-// itself opened via the LAN IP).
-let companionUrl = `${location.origin}/remote/`;
+// The Control surface URL the QR/link point at. Prefer the daemon's LAN IP (a
+// phone can't use localhost); fall back to this page's origin (works if the editor
+// was itself opened via the LAN IP).
+let companionUrl = `${location.origin}/control/`;
 fetch('/api/info').then((r) => r.json()).then((info) => {
-  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/remote/`; if (!systemPaneEl?.hidden) controlPanel.rebuild(); }
+  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/control/`; if (!systemPaneEl?.hidden) controlPanel.rebuild(); }
 }).catch(() => { /* no daemon — keep the origin-based URL */ });
 
 controlPanel = createControlPanel({

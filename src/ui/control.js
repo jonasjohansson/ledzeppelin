@@ -1,5 +1,5 @@
 // CONTROL pane — the companion surface, inside the editor. Mirrors what the
-// phone (/remote/) shows: the MASTER controls (each layer's opacity + Block +
+// phone (/control/) shows: the MASTER controls (each layer's opacity + Block +
 // clip-trigger grid) and the ticked CUSTOM params, but drives them LOCALLY via
 // `send(address, value)` (the same canonical OSC addresses → handleExt). It also
 // shows the phone-companion URL + QR + a live connection status, so this tab

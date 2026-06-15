@@ -1,4 +1,4 @@
-// Service worker for the phone companion (scope: /remote/). Same network-first
+// Service worker for the phone companion (scope: /control/). Same network-first
 // approach as the main app: fresh when the daemon is reachable, cached shell so
 // the home-screen app still opens (showing "connecting…") when it isn't. The
 // frame/control socket (/frames) and live API are never cached.
