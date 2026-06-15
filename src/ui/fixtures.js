@@ -9,15 +9,6 @@ import { Slider } from './controls.js';
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
-// HSL (deg, %, %) → "#rrggbb", so a controller's assigned identity hue can seed
-// its default colour for the <input type=color>.
-const hslToHex = (h, s, l) => {
-  s /= 100; l /= 100;
-  const k = (n) => (n + h / 30) % 12;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => { const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return Math.round(255 * c); };
-  return '#' + [f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('');
-};
 
 export function loadShow() {
   try {
@@ -122,6 +113,11 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
 
   function controllerBlock(d) {
     const st = deviceStatus.get(d.id);
+    // Live controls (brightness / save / reboot) only make sense when the device is
+    // actually reachable — gate them on a confirmed-online status. CHECK stays
+    // enabled (it's how you bring the status online in the first place).
+    const online = !!st?.ok;
+    const offTitle = d.ip ? 'controller offline — press CHECK first' : 'set the controller IP first';
     const refresh = async () => { deviceStatus.set(d.id, await getDeviceState(d.ip)); render(); };
     // Status — multi-line key/value so it reads clearly (we have the vertical room).
     const statBox = el('div', { className: 'ctrl-stat' });
@@ -150,7 +146,8 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     // a 0–1 cap applied per-frame on the daemon). This works during a live show;
     // WLED's own master-brightness write is ignored while it's in realtime mode.
     const pct = Math.round((d.brightness ?? 1) * 100);
-    const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range' });
+    const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range', disabled: !online });
+    if (!online) slider.title = offTitle;
     const briVal = el('span', { className: 'ctrl-val', textContent: `${pct}%` });
     slider.addEventListener('input', () => {
       if (shiftDown) slider.value = String(coarseSnap(Number(slider.value), 0, 100));   // Shift → 10% steps
@@ -164,13 +161,13 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     return el('div', { className: 'ctrl-block' }, [
       el('div', { className: 'fx-pts', textContent: 'controller' }),
       el('label', { className: 'ctrl-bri' }, [el('span', { textContent: 'Bright' }), slider, briVal]),
-      saveToDeviceRow(d),
+      saveToDeviceRow(d, online, offTitle),
       // Check + its status readout sit at the bottom (the diagnostics, after the
       // everyday controls).
       el('div', { className: 'ctrl-row' }, [
         el('button', { className: 'ctrl-btn', textContent: 'check', title: 'read status from the controller', onclick: refresh }),
         el('button', {
-          className: 'ctrl-btn', textContent: 'reboot', title: 'reboot the controller (output to it drops for ~10s)',
+          className: 'ctrl-btn', textContent: 'reboot', disabled: !online, title: online ? 'reboot the controller (output to it drops for ~10s)' : offTitle,
           onclick: async () => {
             if (!d.ip) { window.alert('Set the controller IP first.'); return; }
             if (!window.confirm(`Reboot “${d.name || d.id}”?\n\nIt drops off the network for ~10s while it restarts.`)) return;
@@ -186,7 +183,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
 
   // "Save to device": write each output's LED length + colour order to WLED's
   // config, then set the controller's DEFAULT colour so it shows the brand colour.
-  function saveToDeviceRow(d) {
+  function saveToDeviceRow(d, online = true, offTitle = '') {
     const show = getShow();
     const nOut = (show.deviceTypes || []).find((m) => m.id === d.typeId)?.outputs ?? d.outputs ?? 1;
     const outs = [];
@@ -198,8 +195,8 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     }
     const note = pushStatus.get(d.id);
     const btn = el('button', {
-      className: 'ctrl-btn', textContent: 'save to device',
-      title: `write LED count + colour order + default colour to ${d.name || d.id}'s WLED config`,
+      className: 'ctrl-btn', textContent: 'save to device', disabled: !online,
+      title: online ? `write LED count + colour order to ${d.name || d.id}'s WLED config` : offTitle,
       onclick: async () => {
         pushStatus.set(d.id, 'saving…'); render();
         const r = await pushDeviceConfig(d.ip, outs);
@@ -353,15 +350,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Output delay (ms) — hold this controller's packets back to time-align it
       // with the rest of the rig (e.g. against projection). 0 = immediate.
       field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))),
-      // Default colour — the idle colour shown on the strip after "save to device",
-      // so you can tell controllers apart physically. Seeds from this controller's
-      // auto-assigned identity hue (same colour as its preview/swatch) until set.
-      (() => {
-        const autoHex = hslToHex(controllerColorMap(show).hue.get(d.id) ?? 210, 70, 60);
-        const c = el('input', { type: 'color', className: 'fx-color', value: d.defaultColor || autoHex });
-        c.addEventListener('change', () => upd({ defaultColor: c.value }));
-        return field('Default color', c);
-      })(),
       patchRuler(show, d),
       controllerBlock(d),
     ]);

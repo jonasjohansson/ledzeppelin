@@ -650,6 +650,10 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
 .ctrl-btn:active { background: var(--panel-2); }
 .ctrl-btn.is-added { color: var(--accent); border-color: var(--accent-line); opacity: 1; }   /* scan: already added ✓ */
+/* Live controls are disabled until the controller is confirmed online (CHECK). */
+.ctrl-btn:disabled { opacity: .35; cursor: default; }
+.ctrl-btn:disabled:hover { border-color: var(--line-2); color: var(--text); }
+.ctrl-range:disabled { opacity: .35; cursor: default; }
 .ctrl-bri { display: flex; align-items: center; gap: 8px; min-height: var(--row-h); }
 .ctrl-bri > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); font: var(--fs-body) var(--mono); }
 .ctrl-range { flex: 1 1 0; min-width: 0; accent-color: var(--accent); }

@@ -1047,15 +1047,11 @@ function renderOutput() {
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
     const devSelected = selectedDeviceId === dg.deviceId;
-    const proto = gdev?.protocol === 'artnet' ? 'Art-Net' : 'DDP';
-    // Controller node (MadMapper "Lumiverse" style): a colour swatch, the name, and
-    // a muted OUTPUT TARGET sub-line (IP · protocol / "no output"). NO disclosure
-    // arrow — its fixtures always list beneath it. Click the row to edit it (left
-    // sidebar); ⌫ deletes the selected device.
-    const binding = `${gdev?.ip || 'no output'} · ${proto}`;
+    // Controller node (MadMapper "Lumiverse" style): a colour swatch + the name, and
+    // the pixel load. No disclosure arrow (its fixtures always list beneath it) and
+    // no output-target sub-line — that detail lives in the editor when you click it.
     const devMain = oel('div', { className: 'out-node-main' }, [
       oel('div', { className: 'out-name-row' }, [swatch(deviceColor(dg.deviceId)), oel('span', { className: 'out-name', textContent: devName })]),
-      oel('div', { className: 'out-binding' }, [oel('span', { textContent: binding })]),
     ]);
     const dhead = oel('div', { className: 'out-node out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` },
       [devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })]);
@@ -1704,21 +1700,26 @@ function syncCompAspect() {
 }
 syncCompAspect();
 
-// In Output › Fixtures, fit the canvas to the gap BETWEEN the two sidebars (the
-// left fixture editor + the right panel) so the whole rig stays visible, never
-// hidden behind a panel. Measured after layout (rAF) and published as CSS insets;
-// 0 everywhere else, so the canvas spans the full window in every other view.
+// In OUTPUT (both subtabs), fit the canvas to the gap BETWEEN the two sidebars (the
+// left editor + the right panel) so the whole rig stays visible, never hidden
+// behind a panel. The left inspector width is RESERVED even when it's empty, so the
+// canvas never jumps between subtabs or when a selection clears. Measured after
+// layout (rAF) and published as CSS insets; 0 in every other view (full window).
+const INSPECTOR_W = 312;   // must match #output-inspector flex-basis in ui.css
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(() => {
     const root = document.documentElement;
-    const active = !outputPaneEl?.hidden && outputTab === 'fixtures' && !document.body.classList.contains('gui-hidden');
+    const active = !outputPaneEl?.hidden && !document.body.classList.contains('gui-hidden');
     let left = 0, right = 0;
     if (active) {
       const vw = window.innerWidth;
       const side = document.getElementById('side')?.getBoundingClientRect();
       if (side) right = Math.max(0, vw - side.left);
-      if (outputInspectorEl && !outputInspectorEl.hidden) left = Math.max(0, outputInspectorEl.getBoundingClientRect().right);
+      // Reserve the inspector column whether or not it currently has content.
+      left = outputInspectorEl && !outputInspectorEl.hidden
+        ? Math.max(0, outputInspectorEl.getBoundingClientRect().right)
+        : INSPECTOR_W;
     }
     root.style.setProperty('--inset-left', left + 'px');
     root.style.setProperty('--inset-right', right + 'px');
