@@ -556,7 +556,7 @@ function selectFixture(fxId, ev, opts = {}) {
   }
   renderOutput(); redrawOverlay();
   // Scroll the picked fixture's row into view in the placement list.
-  if (fxId != null) outputListEl?.querySelector(`.output-row[data-fxid="${fxId}"]`)?.scrollIntoView({ block: 'nearest' });
+  if (fxId != null) outputListEl?.querySelector(`[data-fxid="${fxId}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 let dragHandle = null;
@@ -983,8 +983,20 @@ function renderOutput() {
     el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
     return el;
   };
+  // A MadMapper-style enable square: filled (accent) = visible/on, hollow = off.
+  // Lives at the LEFT of every node; stops propagation so it doesn't select.
+  const checkBox = (on, title, onToggle) => {
+    const b = oel('button', { className: 'out-check' + (on ? ' on' : ''), title });
+    b.onclick = (e) => { e.stopPropagation(); onToggle(); };
+    return b;
+  };
+  const setFixturesHidden = (ids, hidden) => {
+    const n = structuredClone(show); const set = new Set(ids);
+    for (const ff of n.fixtures) if (set.has(ff.id)) ff.hidden = hidden;
+    show = n; saveShow(n); recomputeHiddenSpans(); renderOutput(); redrawOverlay();
+  };
   const fixtureRow = (f, i) => {
-    const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
+    const row = oel('div', { className: 'out-node out-fix' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
     // Drag a fixture row onto a device / output header to assign it (the whole
     // selection drags when this row is part of a multi-select).
@@ -994,18 +1006,10 @@ function renderOutput() {
       e.dataTransfer.effectAllowed = 'move';
       try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
     });
-    const name = oel('span', { textContent: fixtureLabel(f, i) });
-    const rng = oel('span', { className: 'fx-badge', textContent: fixtureRange(f) });
-    const eye = oel('button', {
-      className: 'output-eye' + (f.hidden ? ' off' : ''), textContent: f.hidden ? '◌' : '●',
-      title: f.hidden ? 'show fixture' : 'hide fixture',
-    });
-    eye.onclick = (e) => {
-      e.stopPropagation();
-      const n = structuredClone(show); const ff = n.fixtures.find((x) => x.id === f.id);
-      ff.hidden = !ff.hidden; show = n; saveShow(n); recomputeHiddenSpans(); renderOutput(); redrawOverlay();
-    };
-    const del = oel('button', { textContent: '✕', className: 'ly-rmfx', title: 'remove fixture' });
+    const chk = checkBox(!f.hidden, f.hidden ? 'show fixture' : 'hide fixture', () => setFixturesHidden([f.id], !f.hidden));
+    const name = oel('span', { className: 'out-name', textContent: fixtureLabel(f, i) });
+    const rng = oel('span', { className: 'out-badge', textContent: fixtureRange(f) });
+    const del = oel('button', { textContent: '✕', className: 'out-x', title: 'remove fixture' });
     del.onclick = (e) => {
       e.stopPropagation();
       if (!confirmDeleteFixtures([f.id])) return;
@@ -1014,7 +1018,7 @@ function renderOutput() {
       selectedFixtureIds.delete(f.id); rebuild(n); panel.refresh(); renderOutput();
     };
     row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture
-    row.append(name, rng, eye, del);
+    row.append(chk, name, rng, del);
     return row;
   };
   // GROUP the placement list by CONTROLLER → output. Two levels: a controller
@@ -1055,13 +1059,20 @@ function renderOutput() {
     const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const devOpen = expandedDevices.has(dg.deviceId);   // caret is authoritative; selecting a fixture adds it to the set (auto-reveal) but you can still collapse
-    // Controller header. For a real device, clicking the NAME opens its settings
-    // in the left sidebar (edit); for the Unassigned group (no device to edit) the
-    // name selects every fixture in it. Clicking elsewhere expands/collapses.
+    const devOpen = expandedDevices.has(dg.deviceId);   // triangle is authoritative; selecting a fixture adds it (auto-reveal) but you can still collapse
+    // Controller node (MadMapper "Lumiverse" style): an enable square, the name
+    // (click → edit its settings in the left sidebar), a muted OUTPUT BINDING
+    // sub-line (target IP / protocol, or "no output"), the pixel load, and ✕.
     const isRealDev = !!dg.deviceId;
     const devSelected = isRealDev && selectedDeviceId === dg.deviceId;
-    const devNameEl = oel('span', { className: 'out-group-dev', textContent: devName,
+    const anyVisible = dg.groups.some((g) => g.items.some((it) => !it.f.hidden));
+    const allIds = dg.groups.flatMap((g) => g.items.map((it) => it.f.id));
+    const proto = gdev?.protocol === 'artnet' ? 'Art-Net' : 'DDP';
+    const binding = isRealDev ? `${gdev?.ip || 'no output'} · ${proto}` : (devFx ? `${devFx} not routed` : 'drop a fixture here');
+
+    const tri = oel('span', { className: 'out-tri' + (devOpen ? ' open' : ''), textContent: devOpen ? '▾' : '▸' });
+    const swatchDot = swatch(deviceColor(dg.deviceId));
+    const devNameEl = oel('span', { className: 'out-name', textContent: devName,
       title: isRealDev ? `edit ${devName}` : 'select all unassigned fixtures' });
     devNameEl.onclick = (ev) => {
       ev.stopPropagation();
@@ -1070,14 +1081,22 @@ function renderOutput() {
       selectedFixtureIds = new Set(show.fixtures.filter((f) => !(f.output?.deviceId || '')).map((f) => f.id));
       renderOutput(); redrawOverlay();
     };
-    const dhead = oel('div', { className: 'out-group out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, [
-      oel('span', { className: 'out-caret', textContent: devOpen ? '▾' : '▸' }),
-      swatch(deviceColor(dg.deviceId)),
-      devNameEl,
-      // One number — the controller's pixel load. Out/fx counts live on the
-      // hover title; the outputs themselves appear when you expand.
-      oel('span', { className: 'fx-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` }),
+    const bindingRow = oel('div', { className: 'out-binding' }, [tri, oel('span', { textContent: binding })]);
+    const devMain = oel('div', { className: 'out-node-main' }, [
+      oel('div', { className: 'out-name-row' }, [swatchDot, devNameEl]),
+      bindingRow,
     ]);
+    const chk = checkBox(anyVisible, anyVisible ? 'hide all on this controller' : 'show all on this controller',
+      () => { if (allIds.length) setFixturesHidden(allIds, anyVisible); });
+    if (!allIds.length) chk.classList.add('disabled');
+    const dnodeKids = [chk, devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })];
+    if (isRealDev) {
+      const dx = oel('button', { className: 'out-x', textContent: '✕', title: `delete ${devName}` });
+      dx.onclick = (ev) => { ev.stopPropagation(); selectDevice(dg.deviceId); if (panel.deleteSelected?.()) { selectedDeviceId = null; renderOutput(); redrawOverlay(); } };
+      dnodeKids.push(dx);
+    }
+    const dhead = oel('div', { className: 'out-node out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` }, dnodeKids);
+    // Clicking the row background (not the name/check/✕) toggles expand.
     dhead.onclick = () => { expandedDevices.has(dg.deviceId) ? expandedDevices.delete(dg.deviceId) : expandedDevices.add(dg.deviceId); renderOutput(); };
     dropZone(dhead, dg.deviceId, null);   // drop a fixture on a controller → assign it there (keeps its port; Unassigned header unassigns)
     outputListEl.append(dhead);
@@ -1089,14 +1108,10 @@ function renderOutput() {
       const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
       const over = gcap > 0 && totalPx > gcap;
       const collapsed = !expandedGroups.has(g.key);
-      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · Output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
-        oel('span', { className: 'out-caret', textContent: collapsed ? '▸' : '▾' }),
-        swatch(runColor(g.deviceId, g.port)),
-        oel('span', { className: 'out-group-port', textContent: `out ${g.port}` }),
-        // Pixels only show the capacity when the output is OVER it (the common
-        // case isn't); the ⛓ "chain" tag is dropped — multiple fixtures under one
-        // output already mean a chain.
-        oel('span', { className: 'fx-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${over ? totalPx + '/' + gcap : totalPx}px${over ? ' ⚠' : ''}` }),
+      const ohead = oel('div', { className: 'out-node out-port', title: `${devName} · Output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
+        oel('span', { className: 'out-tri' + (collapsed ? '' : ' open'), textContent: collapsed ? '▸' : '▾' }),
+        oel('span', { className: 'out-name', textContent: `out ${g.port}` }),
+        oel('span', { className: 'out-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${over ? totalPx + '/' + gcap : totalPx}px${over ? ' ⚠' : ''}` }),
       ]);
       ohead.onclick = () => { expandedGroups.has(g.key) ? expandedGroups.delete(g.key) : expandedGroups.add(g.key); renderOutput(); };
       dropZone(ohead, g.deviceId, g.port);   // drop a fixture on an output → assign it to that device + port
