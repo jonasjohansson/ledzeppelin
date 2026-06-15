@@ -1636,7 +1636,10 @@ function loop(ts) {
     prevBindCh = { ...chNow };
   }
   syncVideos(); uploadVideos();
-  if (sampler) {
+  // Always composite + draw to the stage, even with NO fixtures/sampler — the
+  // sampling + DDP send below are individually guarded on `sampler`. (Gating the
+  // whole block on `sampler` left the stage black until a fixture was placed.)
+  {
     // When the transport is playing, derive the active clip from the playhead and
     // render a shallow-cloned layer with that activeClipId (the compositor's
     // crossfade picks up the change). Otherwise render the show's layers as-is.
