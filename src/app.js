@@ -177,6 +177,7 @@ function rebuild(next) {
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
+  syncWallDim();         // live-view dim follows fixture count (don't blank an empty stage)
   broadcastManifest();   // geometry change can rename/restructure → refresh the phone
 }
 
@@ -1064,11 +1065,18 @@ overlayToggleBtn?.addEventListener('click', () => setOverlay(!overlayVisible));
 let wallView = false;
 try { wallView = localStorage.getItem('lz.wall') === '1'; } catch { /* ignore */ }
 const wallBtn = document.getElementById('wall-btn');
+// Live (wall) view dims the stage so the FIXTURES show the visuals lighting up.
+// With no fixtures placed there's nothing to light, so dimming would just hide the
+// composite — gate the dim on having fixtures (CSS keys off body.has-fixtures).
+function syncWallDim() {
+  document.body.classList.toggle('has-fixtures', (show.fixtures || []).length > 0);
+}
 function setWallView(v) {
   wallView = !!v;
   try { localStorage.setItem('lz.wall', wallView ? '1' : '0'); } catch { /* ignore */ }
   if (wallView && !overlayVisible) setOverlay(true);
   document.body.classList.toggle('wall-view', wallView);
+  syncWallDim();
   if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' live'; }
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
