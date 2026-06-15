@@ -996,7 +996,7 @@ function renderOutput() {
     // Label = the auto number ("#3") plus the fixture's TYPE name, so the row says
     // what it is, not just its index.
     const typeName = (show.fixtureTypes || []).find((t) => t.id === f.typeId)?.name;
-    const label = typeName ? `${fixtureLabel(f, i)} · ${typeName}` : fixtureLabel(f, i);
+    const label = typeName ? `${fixtureLabel(f, i)} ${typeName}` : fixtureLabel(f, i);
     const name = oel('span', { className: 'out-name', textContent: label });
     const rng = oel('span', { className: 'out-badge', textContent: fixtureRange(f) });
     row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture (⌫ deletes it)
