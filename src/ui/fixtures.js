@@ -440,12 +440,9 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     //     a clean show shows nothing (no "valid" noise). ---
     if (!v.ok) devicesBox.append(el('div', { className: 'fx-err', textContent: v.errors.join(' · ') }));
 
-    // Device control (scan / monitor / output) only works when the app is served BY
-    // the daemon (port 7070). If we're loaded elsewhere, say so — those buttons 404.
-    if (location.port !== '7070') {
-      devicesBox.append(el('div', { className: 'fx-daemon-hint',
-        textContent: 'Device control needs the daemon — run “npm start” and open http://localhost:7070' }));
-    }
+    // No daemon banner here: the bottom-left HUD already surfaces output/connection
+    // state ("◐ output offline — start the daemon"), and only when a device is
+    // actually configured to need it — so this tab stays clean.
 
     // Compact selectable row (master): name + a couple of badges. Clicking opens
     // its editor below. Reuses the Output tab's list styling.

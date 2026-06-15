@@ -521,7 +521,6 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 }
 .fx-detail { margin-top: 2px; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
-.fx-daemon-hint { font-size: var(--fs-micro); color: var(--amber); padding: 4px 0 6px; margin: 2px 0; line-height: var(--lh-ctrl); }
 .scan-block { display: flex; flex-direction: column; gap: 3px; }
 .scan-row .ctrl-btn { margin-left: auto; }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
