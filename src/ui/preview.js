@@ -184,8 +184,14 @@ export function createPreview(canvasEl, opts = {}) {
           const len = Math.hypot(bx - ax, by - ay) || 1;
           const ux = (bx - ax) / len, uy = (by - ay) / len;
           const pitch = len / (count - 1);
-          const k = canvasEl.width / W;                       // logical → device px
-          const side = Math.max(1, Math.round(Math.max(1.5, Math.min(thick, pitch * litFrac)) * k)) / k;
+          // Each LED is a cell: its ALONG-the-run size is the lit package (~5 mm, so
+          // sparse strips read as dots, dense ones fill in); its ACROSS size is the
+          // FULL fixture thickness — so resizing Height visibly fattens the strip,
+          // not just the bounds. Axis-aligned bars draw crisp rects; angled ones rotate.
+          const along = Math.max(1.5, Math.min(pitch, pitch * litFrac));
+          const across = Math.max(1.5, thick);
+          const axisAligned = Math.abs(ux) < 1e-3 || Math.abs(uy) < 1e-3;
+          const ang = Math.atan2(uy, ux);
           let last = '';
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
@@ -194,7 +200,13 @@ export function createPreview(canvasEl, opts = {}) {
             const css = `rgb(${r},${g},${b})`;
             if (css !== last) { ctx.fillStyle = css; last = css; }
             const cx = ax + ux * i * pitch, cy = ay + uy * i * pitch;
-            ctx.fillRect(Math.round((cx - side / 2) * k) / k, Math.round((cy - side / 2) * k) / k, side, side);
+            if (axisAligned) {
+              const horiz = Math.abs(ux) >= Math.abs(uy);
+              const w = horiz ? along : across, h = horiz ? across : along;
+              ctx.fillRect(Math.round(cx - w / 2), Math.round(cy - h / 2), Math.round(w), Math.round(h));
+            } else {
+              ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.fillRect(-along / 2, -across / 2, along, across); ctx.restore();
+            }
           }
         } else {
           // Polyline fallback: a square per LED, sized to the same physical duty
