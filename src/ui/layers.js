@@ -249,8 +249,9 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
     item('audio-external', 'Audio Ext.', 'follow a band of a hardware audio input'),
-    item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio'),
-    item('external', 'External', 'follow an OSC address or socket channel')
+    item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio')
+    // No 'External' item: any param is bound live via System › Mapping (which sets
+    // the External binding under the hood), so an explicit menu entry is redundant.
   );
   // Control tick: a ☑/◻ row that publishes THIS parameter to the Control surface.
   // (Only for params that have a canonical address — i.e. everything routable.)
@@ -266,7 +267,7 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External) · or expose it on the Control surface',
+    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio) · map it in System › Mapping · or expose it on the Control surface',
   });
   btn.onclick = (e) => {
     e.stopPropagation();
