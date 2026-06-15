@@ -1,0 +1,82 @@
+{
+  "$description": "Led Zeppelin tokens in Tokens Studio (classic value/type) format. Import in Figma via the Tokens Studio plugin: Tools > Import > paste/upload this file, then 'Create variables' to generate the Figma Variable collections. Mirrors src/ui/ui.css :root. Single set — root groups become variable groups.",
+  "color": {
+    "surface": {
+      "bg":          { "value": "#101114", "type": "color" },
+      "panel":       { "value": "#1c1e22", "type": "color" },
+      "panel-2":     { "value": "#26282d", "type": "color" },
+      "hover":       { "value": "#33363c", "type": "color" },
+      "panel-solid": { "value": "#1c1e22", "type": "color" },
+      "field-bg":    { "value": "#121317", "type": "color" }
+    },
+    "line": {
+      "line":   { "value": "#33363e", "type": "color" },
+      "line-2": { "value": "#474c55", "type": "color" }
+    },
+    "text": {
+      "text":    { "value": "#f4f5f7", "type": "color" },
+      "muted":   { "value": "#a3aab4", "type": "color" },
+      "faint":   { "value": "#737a84", "type": "color" },
+      "readout": { "value": "#d7dbe0", "type": "color" }
+    },
+    "accent": {
+      "accent":      { "value": "#e8a35c", "type": "color", "description": "the one warm accent; green/amber/cyan all alias this" },
+      "accent-soft": { "value": "#33271a", "type": "color" },
+      "accent-text": { "value": "#f1d6bb", "type": "color" },
+      "accent-line": { "value": "#54402b", "type": "color" }
+    },
+    "status": {
+      "danger": { "value": "#ff6b6b", "type": "color" },
+      "green":  { "value": "{color.accent.accent}", "type": "color", "description": "alias of accent" },
+      "amber":  { "value": "{color.accent.accent}", "type": "color", "description": "alias of accent" },
+      "cyan":   { "value": "{color.accent.accent}", "type": "color", "description": "alias of accent" }
+    }
+  },
+  "spacing": {
+    "s1": { "value": "2px",  "type": "spacing" },
+    "s2": { "value": "4px",  "type": "spacing" },
+    "s3": { "value": "6px",  "type": "spacing" },
+    "s4": { "value": "10px", "type": "spacing" },
+    "s5": { "value": "14px", "type": "spacing" }
+  },
+  "radius": {
+    "radius":    { "value": "3px", "type": "borderRadius" },
+    "radius-sm": { "value": "2px", "type": "borderRadius" }
+  },
+  "font": {
+    "family": {
+      "ui":   { "value": "Spline Sans Mono", "type": "fontFamilies", "description": "mono-forward: one face for chrome AND data; Martian Mono is the swappable alt" }
+    },
+    "size": {
+      "micro": { "value": "10px", "type": "fontSizes" },
+      "body":  { "value": "11px", "type": "fontSizes" },
+      "ctrl":  { "value": "12px", "type": "fontSizes" },
+      "title": { "value": "13px", "type": "fontSizes" },
+      "glyph": { "value": "15px", "type": "fontSizes" }
+    },
+    "weight": {
+      "reg": { "value": "400", "type": "fontWeights" },
+      "med": { "value": "400", "type": "fontWeights", "description": "single weight — no bold in UI text" }
+    },
+    "lineHeight": {
+      "tight": { "value": "1.2",  "type": "lineHeights" },
+      "ctrl":  { "value": "1.4",  "type": "lineHeights" },
+      "ui":    { "value": "1.45", "type": "lineHeights" }
+    },
+    "letterSpacing": {
+      "caps": { "value": "0.1em",  "type": "letterSpacing" },
+      "ui":   { "value": "0.04em", "type": "letterSpacing" }
+    }
+  },
+  "layout": {
+    "side-w":    { "value": "332px", "type": "sizing", "description": "right panel width" },
+    "layer-w":   { "value": "128px", "type": "sizing" },
+    "clip-w":    { "value": "96px",  "type": "sizing" },
+    "clip-h":    { "value": "84px",  "type": "sizing" },
+    "row-h":     { "value": "26px",  "type": "sizing", "description": "one label·control row height" },
+    "ctrl-h":    { "value": "22px",  "type": "sizing", "description": "one control height" },
+    "col-label": { "value": "84px",  "type": "sizing" },
+    "col-val":   { "value": "44px",  "type": "sizing" },
+    "slider-w":  { "value": "120px", "type": "sizing" }
+  }
+}
