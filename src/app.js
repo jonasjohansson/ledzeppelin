@@ -27,6 +27,7 @@ import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/mid
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 import { armStartupRiff } from './ui/startup-riff.js';
+import { VERSION } from './version.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -713,7 +714,7 @@ function positionEditor(sel) {
         oel('div', { className: 'output-grid' }, [
           txField('X', tf.x, (v) => setT({ x: v })),
           txField('Y', tf.y, (v) => setT({ y: v })),
-          txField('Length', tf.w, (v) => setT({ w: v })),
+          txField('Width', tf.w, (v) => setT({ w: v })),
           // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
           // fixture's px-per-meter). The field shows the effective px; typing a
           // value overrides, 0 (or clearing) returns to auto.
@@ -1783,7 +1784,7 @@ function loop(ts) {
     // Companion/daemon status (red offline / green live) on the Control subtab.
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
     if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
-    hud.textContent = `${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
+    hud.textContent = `v${VERSION}  ·  ${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
       + (over > 0 ? `  ·  ⚠ ${over} over cap` : '');
     frames = 0; last = ts;
   }
@@ -1935,6 +1936,12 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenu
 // over OSC / the socket. Delegated — rows carry data-osc (set in layers.js).
 const paramOscEl = document.getElementById('param-osc');
 if (paramOscEl) {
+  // Park the readout just ABOVE the whole corner cluster (telemetry + buttons), so
+  // it reads as a line over the "v… · fps …" row rather than on top of it.
+  const cornerEl = document.getElementById('corner-controls');
+  const placeParamOsc = () => { if (cornerEl) { const r = cornerEl.getBoundingClientRect(); paramOscEl.style.bottom = (window.innerHeight - r.top + 6) + 'px'; } };
+  placeParamOsc();
+  window.addEventListener('resize', placeParamOsc);
   document.addEventListener('mouseover', (e) => {
     const r = e.target.closest?.('[data-osc]');
     paramOscEl.textContent = r ? r.dataset.osc : '';

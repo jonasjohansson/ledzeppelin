@@ -74,5 +74,21 @@ export function buildPipelineInputs(show) {
     });
   }
 
+  // Also SAMPLE fixtures with no device (or a device that no longer exists) so they
+  // light up in the preview — prototyping shouldn't require wiring to a controller
+  // first. They're appended after all routed pixels and are NOT added to `route`,
+  // so nothing is sent for them; they just pick up colour from the composite.
+  const deviceIds = new Set(show.devices.map((d) => d.id));
+  for (const f of show.fixtures) {
+    if (deviceIds.has(f.output?.deviceId)) continue;   // already routed above
+    const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
+    const pts = samplePoints(basePts, f.input.samples);
+    const [ox, oy] = chainOffset(show, f.id);
+    spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
+    fixtureOrder.push(f);
+    for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
+    cursor += pts.length;
+  }
+
   return { sampleUVs: new Float32Array(uvs), route, fixtureOrder, spans };
 }

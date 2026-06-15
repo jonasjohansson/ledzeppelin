@@ -1,0 +1,5 @@
+#!/bin/sh
+# Auto-bump the PATCH version on every commit so the HUD tracks release progress.
+# Best-effort: never block a commit if node/the file is unavailable.
+node -e "const fs=require('fs');const p='src/version.js';let s=fs.readFileSync(p,'utf8');s=s.replace(/(VERSION\s*=\s*')(\d+)\.(\d+)\.(\d+)(')/,(_,a,x,y,z,b)=>a+x+'.'+y+'.'+(Number(z)+1)+b);fs.writeFileSync(p,s);" 2>/dev/null && git add src/version.js
+exit 0
