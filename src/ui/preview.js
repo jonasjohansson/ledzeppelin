@@ -12,6 +12,18 @@ import {
 const ROTATE_KNOB = 0.06;
 // Minimum on-canvas size (px) when corner-resizing a bar, so it can't collapse.
 const MIN_W = 6, MIN_H = 3;
+// Bounding box (normalized) of the selected fixtures, for a GROUP resize — only
+// when 2+ are selected. Uses the centreline points (good enough). Module-scope so
+// both the chrome and the hit-test share it.
+function groupBox(show, selectedIds) {
+  if (!selectedIds || !selectedIds.has || selectedIds.size < 2) return null;
+  let minX = 1, minY = 1, maxX = 0, maxY = 0, any = false;
+  for (const f of show.fixtures || []) {
+    if (!selectedIds.has(f.id)) continue;
+    for (const [x, y] of (f.input?.points || [])) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; any = true; }
+  }
+  return any && maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
+}
 
 // Virtual-fixture preview: draws each fixture's resampled points onto a 2D
 // overlay canvas, colored by the latest sampled RGB. Hardware-free dev view.
@@ -374,6 +386,14 @@ export function createPreview(canvasEl, opts = {}) {
       }
     }
 
+    // Group-resize box + corner handles (2+ selected).
+    const gb = groupBox(show, selectedIds);
+    if (gb) {
+      const x = gb.minX * W, y = gb.minY * Hh, w = (gb.maxX - gb.minX) * W, h = (gb.maxY - gb.minY) * Hh;
+      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="none" stroke="#e8b27f" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
+      for (const c of [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]) p.push(rectS(c[0] - 4 * ck, c[1] - 4 * ck, 8 * ck, 8 * ck, '#e8b27f', 1.5 * ck));
+    }
+
     if (marquee) {
       const x = marquee.x0 * W, y = marquee.y0 * Hh, w = (marquee.x1 - marquee.x0) * W, h = (marquee.y1 - marquee.y0) * Hh;
       p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(232,163,92,.10)" stroke="rgba(232,163,92,.85)" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
@@ -425,7 +445,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   function cursorFor(hit) {
     if (!hit) return 'default';
     if (hit.rotate) return 'grab';                 // rotate knob
-    if (hit.scaleCorner != null) return hit.cursor || 'nwse-resize';
+    if (hit.scaleCorner != null || hit.groupCorner != null) return hit.cursor || 'nwse-resize';
     if (hit.vertex != null || hit.seg != null) return 'move';   // body / vertex → move
     return 'default';
   }
@@ -436,6 +456,15 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const fixtures = show.fixtures ?? [];
     // Rotate knob (a single selected bar) wins over everything — test it first.
     const sel = getSelected?.();
+    // Group-resize: 2+ selected → corner handles on the group's bounding box.
+    if (sel && sel.has && sel.size > 1) {
+      const gb = groupBox(show, sel);
+      if (gb) {
+        const corners = [[gb.minX * rw, gb.minY * rh], [gb.maxX * rw, gb.minY * rh], [gb.maxX * rw, gb.maxY * rh], [gb.minX * rw, gb.maxY * rh]];
+        const ccx = (gb.minX + gb.maxX) / 2 * rw, ccy = (gb.minY + gb.maxY) / 2 * rh;
+        for (let c = 0; c < 4; c++) if (Math.hypot(px - corners[c][0], py - corners[c][1]) <= vtxR) return { groupCorner: c, cursor: resizeCursor(corners[c][0] - ccx, corners[c][1] - ccy) };
+      }
+    }
     const selId = sel ? (sel.has ? (sel.size === 1 ? [...sel][0] : null) : sel) : null;
     if (selId) {
       const f = fixtures.find((x) => x.id === selId);
@@ -511,11 +540,25 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       canvasEl.setPointerCapture(ev.pointerId); ev.preventDefault();
       return;
     }
-    onSelect?.(hit.fxId, ev);
+    if (hit.fxId != null) onSelect?.(hit.fxId, ev);   // group-corner grabs have no fxId — keep the multi-selection
     const show = getShow();
     const cv = show.composition?.canvas || { w: 1280, h: 720 };
 
-    if (hit.rotate) {
+    if (hit.groupCorner != null) {
+      // Uniform group resize: scale all selected fixtures about the OPPOSITE corner
+      // of their bounding box. Snapshot each fixture's transform/points.
+      const gb = groupBox(show, getSelected?.());
+      const cN = [[gb.minX, gb.minY], [gb.maxX, gb.minY], [gb.maxX, gb.maxY], [gb.minX, gb.maxY]];
+      const an = cN[(hit.groupCorner + 2) % 4], co = cN[hit.groupCorner];
+      const anchor = { x: an[0] * cv.w, y: an[1] * cv.h }, corner0 = { x: co[0] * cv.w, y: co[1] * cv.h };
+      const items = [...getSelected()].map((id) => {
+        const f = show.fixtures.find((x) => x.id === id); if (!f) return null;
+        if (isPolylineFixture(f.input)) return { id, mode: 'poly', pts0: f.input.points.map((q) => q.slice()) };
+        const tf = f.input?.transform || transformFromPoints(f.input.points, cv);
+        return { id, mode: 'bar', x0: tf.x, y0: tf.y, w0: Number(tf.w) || 0, h0: Number(tf.h) || 0 };
+      }).filter(Boolean);
+      dragState = { kind: 'gscale', cv, anchor, corner0, items };
+    } else if (hit.rotate) {
       dragState = { kind: 'rotate', id: hit.fxId, cv };
     } else if (hit.scaleCorner != null) {
       // Resize from the grabbed corner, keeping the OPPOSITE corner pinned and
@@ -587,6 +630,24 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         y: anchor.y + uy * (du / 2) + pyy * (dp / 2), w, h,
       });
       hintText = `${Math.round(w)}×${Math.round(h)} px`;
+    } else if (dragState.kind === 'gscale') {
+      // Uniform scale of the whole selection about the pinned group corner.
+      const { anchor, corner0, cv, items } = dragState;
+      const [cxp, cyp] = canvasPx(ev, cv);
+      const d0 = Math.hypot(corner0.x - anchor.x, corner0.y - anchor.y) || 1;
+      const s = Math.max(0.05, Math.hypot(cxp - anchor.x, cyp - anchor.y) / d0);
+      for (const it of items) {
+        if (it.mode === 'poly') {
+          next = setFixturePoints(next, it.id, it.pts0.map(([x, y]) => [
+            (anchor.x + s * (x * cv.w - anchor.x)) / cv.w, (anchor.y + s * (y * cv.h - anchor.y)) / cv.h,
+          ]));
+        } else {
+          const patch = { x: anchor.x + s * (it.x0 - anchor.x), y: anchor.y + s * (it.y0 - anchor.y), w: Math.max(MIN_W, it.w0 * s) };
+          if (it.h0 > 0) patch.h = Math.max(MIN_H, it.h0 * s);   // only scale thickness if it was manual
+          next = setFixtureTransform(next, it.id, patch);
+        }
+      }
+      hintText = `×${s.toFixed(2)}`;
     } else if (dragState.kind === 'vertex') {
       const [nx, ny] = norm(ev);
       next = setFixtureVertex(next, dragState.id, dragState.index, nx, ny);
