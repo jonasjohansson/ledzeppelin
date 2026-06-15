@@ -1534,6 +1534,16 @@ async function buildSettings(mount) {
     onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
   }));
 
+  // --- Startup sound: the riff greets you on the first visit; opt in to hear it
+  // on every reload. ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'startup sound' }));
+  const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
+  const riffBtn = oel('button', { className: 'fx-add' });
+  const paintRiff = () => { riffBtn.textContent = (riffAlways() ? '▣' : '▢') + ' play riff on every reload'; riffBtn.classList.toggle('on', riffAlways()); };
+  riffBtn.onclick = () => { try { localStorage.setItem('lz.riff.always', riffAlways() ? '0' : '1'); } catch { /* private */ } paintRiff(); };
+  paintRiff();
+  mount.append(riffBtn);
+
   // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
   // input lives in the Mapping window.)

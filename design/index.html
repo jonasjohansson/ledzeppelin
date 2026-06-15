@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Led Zeppelin — Component Gallery</title>
+<meta name="viewport" content="width=1280, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<!-- Preload the active mono face so html.to.design captures real glyphs, not a
+     fallback (it still needs font-mapping in the plugin — see CAPTURE.md). -->
+<link rel="preload" href="../fonts/SplineSansMono.woff2" as="font" type="font/woff2" crossorigin>
+<!-- THE design system: the real app stylesheet, untouched. Every component below
+     is styled by this file and nothing else, so the Figma capture == the app. -->
+<link rel="stylesheet" href="../src/ui/ui.css">
+<style>
+  /* GALLERY-ONLY scaffolding (prefixed .gx-). This block styles the catalog page
+     itself — section frames, labels, the swatch grid. It defines NO app component
+     styles, so it can't drift from ui.css. Delete it and the components still work. */
+  body { background: var(--bg); color: var(--text); font-family: var(--sans);
+         margin: 0; padding: 28px 28px 80px; font-size: var(--fs-body); }
+  .gx-h1 { font-size: 22px; letter-spacing: var(--ls-ui); color: var(--text); margin: 0 0 2px; }
+  .gx-sub { color: var(--muted); font-size: var(--fs-ctrl); margin: 0 0 28px; max-width: 70ch; line-height: var(--lh-ui); }
+  .gx-sec { margin: 0 0 34px; }
+  .gx-sec > h2 { font: var(--fw-med) var(--fs-micro)/1 var(--sans); letter-spacing: var(--ls-caps);
+                 text-transform: uppercase; color: var(--accent); margin: 0 0 12px;
+                 border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); padding-bottom: 6px; }
+  .gx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  /* A specimen card: a labelled frame around one component so each maps to one
+     Figma component when imported. Neutral chrome so it doesn't read as app UI. */
+  .gx-spec { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+             padding: 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .gx-spec > .gx-label { font: var(--fs-micro) var(--mono); color: var(--faint);
+             text-transform: uppercase; letter-spacing: var(--ls-caps); }
+  .gx-spec > .gx-stage { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .gx-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  /* When a component expects to live inside the inspector pane (panel-2 fill), give
+     it that backdrop so it reads correctly. */
+  .gx-pane { background: var(--panel-2); border-radius: var(--radius); padding: 10px; }
+  .gx-swatch { display: flex; flex-direction: column; gap: 4px; }
+  .gx-chip { height: 46px; border-radius: var(--radius); border: 1px solid var(--line); }
+  .gx-chip-name { font: var(--fs-micro) var(--mono); color: var(--text); }
+  .gx-chip-val { font: var(--fs-micro) var(--mono); color: var(--faint); }
+  .gx-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .gx-type-row { display: flex; align-items: baseline; gap: 12px; }
+  .gx-type-meta { font: var(--fs-micro) var(--mono); color: var(--faint); flex: 0 0 130px; }
+  .gx-space { background: var(--accent); height: 14px; }
+  .gx-space-row { display: flex; align-items: center; gap: 10px; }
+  .gx-space-meta { font: var(--fs-micro) var(--mono); color: var(--faint); flex: 0 0 120px; }
+</style>
+</head>
+<body>
+
+<h1 class="gx-h1">Led Zeppelin — Component Gallery</h1>
+<p class="gx-sub">A flat, fully-visible catalog of every UI primitive, rendered by the real
+<code>src/ui/ui.css</code>. This is the capture source for html.to.design: each specimen
+frame below is meant to become one Figma component, and the tokens map to Figma Variables.
+The live app hides these across tabs and builds them with JS, so capture this page, not the app.</p>
+
+<!-- ════════════ TOKENS: COLOR / SURFACE ════════════ -->
+<section class="gx-sec">
+  <h2>Tokens · Color &amp; Surface</h2>
+  <div class="gx-swatches" id="gx-colors"></div>
+</section>
+
+<!-- ════════════ TOKENS: TYPOGRAPHY ════════════ -->
+<section class="gx-sec">
+  <h2>Tokens · Typography (mono-forward)</h2>
+  <div class="gx-spec" style="max-width:640px">
+    <div class="gx-stage" id="gx-type"></div>
+  </div>
+</section>
+
+<!-- ════════════ TOKENS: SPACING / RADIUS / LAYOUT ════════════ -->
+<section class="gx-sec">
+  <h2>Tokens · Spacing scale</h2>
+  <div class="gx-spec" style="max-width:520px">
+    <div class="gx-stage" id="gx-space"></div>
+  </div>
+</section>
+
+<!-- ════════════ TABS ════════════ -->
+<section class="gx-sec">
+  <h2>Tabs</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Section switch (Design · Output · System)</span>
+      <div class="gx-stage">
+        <div class="section-switch">
+          <button class="section-tab section-active">Design</button>
+          <button class="section-tab">Output</button>
+          <button class="section-tab">System</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Sub-tabs (folder tabs)</span>
+      <div class="gx-stage">
+        <div class="subtabs">
+          <button class="subtab">Composition</button>
+          <button class="subtab">Layer</button>
+          <button class="subtab subtab-active">Clip</button>
+        </div>
+        <div class="gx-pane" style="border-radius:0 0 var(--radius) var(--radius)">
+          <span class="gx-chip-val">active tab merges into the pane</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Workspace tabs (.tab)</span>
+      <div class="gx-stage">
+        <div class="tabs">
+          <button class="tab tab-active">Stage</button>
+          <button class="tab">Map</button>
+          <button class="tab">Show</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Tab with status dot</span>
+      <div class="gx-stage">
+        <div class="subtabs">
+          <button class="subtab subtab-active">Settings</button>
+          <button class="subtab">Control <span class="tab-dot on"></span></button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ BUTTONS ════════════ -->
+<section class="gx-sec">
+  <h2>Buttons</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Base button</span>
+      <div class="gx-stage"><div class="gx-row">
+        <button>Default</button>
+        <button class="on" style="color:var(--accent)">Active</button>
+        <button disabled>Disabled</button>
+      </div></div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Ghost button (.g-btn)</span>
+      <div class="gx-stage"><div class="gx-row">
+        <button class="g-btn">File</button>
+        <button class="g-btn">Mapping</button>
+        <button class="g-btn">Hide UI</button>
+      </div></div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Primary action (.ctrl-btn / .fx-add)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ctrl-row">
+          <button class="ctrl-btn">Save</button>
+          <button class="ctrl-btn is-added">Added ✓</button>
+        </div>
+        <button class="fx-add">Scan network</button>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Corner toggles (.g-btn / .on)</span>
+      <div class="gx-stage"><div class="gx-row" id="gx-corner">
+        <button>▢ fixtures</button>
+        <button class="on" style="color:var(--accent)">▣ snap</button>
+        <button>▢ grid</button>
+        <button>▭ fill</button>
+      </div></div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Segmented (.dir-btns)</span>
+      <div class="gx-stage">
+        <div class="dir-btns">
+          <button class="dir-btn on">→</button>
+          <button class="dir-btn">←</button>
+          <button class="dir-btn">⇄</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Header toggles (.lh-tog)</span>
+      <div class="gx-stage"><div class="gx-row">
+        <button class="lh-tog" style="width:22px;height:22px">B</button>
+        <button class="lh-tog on" style="width:22px;height:22px">S</button>
+        <button class="lh-tog" style="width:22px;height:22px">✕</button>
+      </div></div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">TAP (.cmp-tap) + reset (.insp-sec-reset)</span>
+      <div class="gx-stage"><div class="gx-row">
+        <button class="cmp-tap">TAP</button>
+        <button class="insp-sec-reset">⟲</button>
+        <button class="fx-del" style="width:auto">Delete</button>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ FIELDS ════════════ -->
+<section class="gx-sec">
+  <h2>Fields &amp; inputs (.fx-field)</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Text · number · select</span>
+      <div class="gx-stage gx-pane">
+        <label class="fx-field"><span>Name</span><input type="text" value="Tube 01"></label>
+        <label class="fx-field"><span>Pixels</span><input type="number" value="144"></label>
+        <label class="fx-field"><span>Model</span>
+          <select><option>WLED · QuinLED</option><option>Art-Net node</option></select>
+        </label>
+        <label class="fx-field"><span>Computed</span><span class="fx-readonly">432 ch</span></label>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Color · checkbox · badge</span>
+      <div class="gx-stage gx-pane">
+        <label class="fx-field"><span>Tint</span><input type="color" class="fx-color" value="#e8a35c"></label>
+        <label class="fx-field"><span>Snap</span><input type="checkbox" checked style="margin-left:auto"></label>
+        <div class="gx-row"><span class="fx-badge">DMX</span><span class="fx-badge">RGB</span><span class="fx-badge">144px</span></div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">OSC address chip (.osc-addr)</span>
+      <div class="gx-stage gx-pane">
+        <span class="osc-addr">/comp/layer1/opacity</span>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ PARAM ROWS ════════════ -->
+<section class="gx-sec">
+  <h2>Parameter rows</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Slider row (.ly-param.ly-row)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ly-param ly-row" style="--fill:72%">
+          <span class="ly-plabel">opacity</span>
+          <input class="ly-readout" value="72" style="flex:0 0 var(--col-val);text-align:right">
+          <button class="ly-step">−</button>
+          <button class="ly-step ly-step-plus">+</button>
+          <input type="range" min="0" max="100" value="72">
+          <span class="anim-cog-wrap"><button class="anim-cog">⚙</button></span>
+        </div>
+        <div class="ly-param ly-row is-animated" style="--fill:40%">
+          <span class="ly-plabel">scale</span>
+          <input class="ly-readout" value="40" style="flex:0 0 var(--col-val);text-align:right">
+          <button class="ly-step">−</button>
+          <button class="ly-step ly-step-plus">+</button>
+          <input type="range" min="0" max="100" value="40">
+          <span class="anim-cog-wrap"><button class="anim-cog on">⚙</button></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Bool row (.bool-row)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ly-param bool-row">
+          <span class="ly-plabel">mirror</span>
+          <input type="checkbox" checked>
+        </div>
+        <div class="ly-param bool-row">
+          <span class="ly-plabel">loop</span>
+          <input type="checkbox">
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Brightness row (.ctrl-bri)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ctrl-bri">
+          <span>master</span>
+          <input class="ctrl-range" type="range" min="0" max="100" value="85">
+          <span class="ctrl-val">85</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Dual-handle range (.range-track)</span>
+      <div class="gx-stage gx-pane">
+        <div class="range-track">
+          <div class="rt-base"></div>
+          <div class="rt-fill" style="left:20%;width:55%"></div>
+          <div class="anim-live" style="left:48%"></div>
+          <input type="range" class="rt-in" min="0" max="100" value="20">
+          <input type="range" class="rt-out" min="0" max="100" value="75">
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ CARDS & PANELS ════════════ -->
+<section class="gx-sec">
+  <h2>Cards &amp; panels</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Collapsible section (.insp-sec)</span>
+      <div class="gx-stage gx-pane">
+        <div class="insp-sec is-open">
+          <button class="insp-sec-head">
+            <span class="insp-tri"></span>
+            <span class="insp-sec-title">Geometry</span>
+            <span class="insp-sec-reset">⟲</span>
+          </button>
+          <div class="insp-sec-body">
+            <div class="ly-param ly-row" style="--fill:50%">
+              <span class="ly-plabel">x</span>
+              <input class="ly-readout" value="640" style="flex:0 0 var(--col-val);text-align:right">
+              <button class="ly-step">−</button><button class="ly-step ly-step-plus">+</button>
+              <input type="range" value="50">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Chain card (.chain-card)</span>
+      <div class="gx-stage gx-pane">
+        <div class="chain-card">
+          <div class="chain-head">
+            <span class="chain-name">Stagger A</span>
+            <button class="chain-fire">▶</button>
+          </div>
+          <div class="chain-members">
+            <div class="chain-member"><span class="chain-idx">1</span><span class="chain-mname">Tube 01</span></div>
+            <div class="chain-member"><span class="chain-idx">2</span><span class="chain-mname">Tube 02</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Control layer card (.ctrl-layer)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ctrl-layer">
+          <div class="ctrl-layer-head">
+            <span class="ctrl-layer-name">Layer 1 — Plasma</span>
+            <button class="ctrl-blk">B</button>
+          </div>
+          <div class="ctrl-clips">
+            <button class="ctrl-clip active">warm</button>
+            <button class="ctrl-clip">strobe</button>
+            <button class="ctrl-clip">drift</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Companion header (.ctrlpane-head)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ctrlpane-head">
+          <span class="ctrl-status-dot on"></span>
+          <div class="ctrl-urlrow"><a class="ctrl-url">192.168.1.42:7000</a></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ LISTS & ROWS ════════════ -->
+<section class="gx-sec">
+  <h2>Lists &amp; status</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Fixture rows (.output-row)</span>
+      <div class="gx-stage gx-pane">
+        <div class="output-row selected"><span>Tube 01</span><span class="output-dev">.42</span><button class="output-eye">●</button></div>
+        <div class="output-row"><span>Tube 02</span><span class="output-dev">.43</span><button class="output-eye off">○</button></div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Device status dots (.dev-dot)</span>
+      <div class="gx-stage gx-pane">
+        <div class="gx-row"><span class="dev-dot dev-online"></span><span class="gx-chip-val">online</span></div>
+        <div class="gx-row"><span class="dev-dot dev-offline"></span><span class="gx-chip-val">offline</span></div>
+        <div class="gx-row"><span class="dev-dot dev-check"></span><span class="gx-chip-val">checking</span></div>
+        <div class="gx-row"><span class="dev-dot dev-noip"></span><span class="gx-chip-val">no ip</span></div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Controller group header (.out-group)</span>
+      <div class="gx-stage gx-pane">
+        <div class="out-group">
+          <span class="out-caret">▾</span>
+          <span class="out-swatch" style="background:var(--accent)"></span>
+          <span class="out-group-dev">QuinLED-Dig-Quad</span>
+        </div>
+        <div class="patch-bar">
+          <div class="patch-seg"><span>1</span></div>
+          <div class="patch-seg"><span>2</span></div>
+          <div class="patch-seg"><span>3</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Status line / HUD (#hud)</span>
+      <div class="gx-stage gx-pane">
+        <div id="hud" class="hud-live" style="position:static">60fps · 432px · live</div>
+        <div id="hud" class="hud-offline" style="position:static">daemon offline</div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Key/value stat (.ctrl-stat)</span>
+      <div class="gx-stage gx-pane">
+        <div class="ctrl-stat">
+          <div class="ctrl-stat-row"><span class="ctrl-stat-k">ip</span><span class="ctrl-stat-v">192.168.1.42</span></div>
+          <div class="ctrl-stat-row"><span class="ctrl-stat-k">fps</span><span class="ctrl-stat-v">60</span></div>
+          <div class="ctrl-stat-row"><span class="ctrl-stat-k">leds</span><span class="ctrl-stat-v">432</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ════════════ MENUS & OVERLAYS ════════════ -->
+<section class="gx-sec">
+  <h2>Menus &amp; overlays</h2>
+  <div class="gx-grid">
+
+    <div class="gx-spec">
+      <span class="gx-label">Dropdown menu (#menu-pop)</span>
+      <div class="gx-stage">
+        <div id="menu-pop" style="position:static;display:block">
+          <div class="menu-title">File</div>
+          <div class="menu-item">New show <span class="menu-key">⌘N</span></div>
+          <div class="menu-item">Open… <span class="menu-key">⌘O</span></div>
+          <div class="menu-sep"></div>
+          <div class="menu-item">Save <span class="menu-key">⌘S</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gx-spec">
+      <span class="gx-label">Shortcuts card (.shortcuts-card)</span>
+      <div class="gx-stage">
+        <div class="shortcuts-card" style="min-width:0">
+          <div class="shortcuts-title">Keyboard</div>
+          <div class="shortcuts-grid">
+            <span class="shortcuts-key">H</span><span class="shortcuts-act">hide UI</span>
+            <span class="shortcuts-key">Space</span><span class="shortcuts-act">play / pause</span>
+            <span class="shortcuts-key">B</span><span class="shortcuts-act">blackout</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<script type="module">
+  // Render token specimens straight from getComputedStyle so the gallery never
+  // drifts from ui.css — if a token changes value, this catalog follows.
+  const root = getComputedStyle(document.documentElement);
+  const v = n => root.getPropertyValue(n).trim();
+
+  const COLORS = [
+    '--bg','--panel','--panel-2','--hover','--panel-solid',
+    '--line','--line-2','--field-bg',
+    '--text','--muted','--faint','--readout',
+    '--accent','--accent-soft','--accent-text','--accent-line','--danger',
+  ];
+  document.getElementById('gx-colors').innerHTML = COLORS.map(n => `
+    <div class="gx-swatch">
+      <div class="gx-chip" style="background:var(${n})"></div>
+      <span class="gx-chip-name">${n}</span>
+      <span class="gx-chip-val">${v(n) || '—'}</span>
+    </div>`).join('');
+
+  const TYPE = [
+    ['--fs-glyph','15px','glyph'],['--fs-title','13px','title'],
+    ['--fs-ctrl','12px','control'],['--fs-body','11px','body'],['--fs-micro','10px','micro'],
+  ];
+  document.getElementById('gx-type').innerHTML = TYPE.map(([tok,,name]) => `
+    <div class="gx-type-row">
+      <span class="gx-type-meta">${tok} · ${v(tok)}</span>
+      <span style="font-size:var(${tok})">Led Zeppelin ${name} 0123</span>
+    </div>`).join('');
+
+  const SPACE = ['--s1','--s2','--s3','--s4','--s5'];
+  document.getElementById('gx-space').innerHTML = SPACE.map(n => `
+    <div class="gx-space-row">
+      <span class="gx-space-meta">${n} · ${v(n)}</span>
+      <span class="gx-space" style="width:var(${n})"></span>
+    </div>`).join('');
+</script>
+</body>
+</html>

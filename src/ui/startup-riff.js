@@ -432,12 +432,14 @@ export function armStartupRiff() {
   try { window.lzRiff = (name) => playStyle(name || pickStyle() || 'immigrant'); } catch { /* ignore */ }
   const style = pickStyle();
   if (!style) return;   // disabled
-  try { if (localStorage.getItem(PLAYED_KEY)) return; } catch { /* private mode → greet anyway */ }
+  // 'lz.riff.always' (Settings toggle) → play on every reload; otherwise first visit only.
+  let always = false; try { always = localStorage.getItem('lz.riff.always') === '1'; } catch { /* private */ }
+  if (!always) { try { if (localStorage.getItem(PLAYED_KEY)) return; } catch { /* private → greet anyway */ } }
 
   let done = false;
   const playOnce = () => {
     if (done) return; done = true; cleanup();
-    try { localStorage.setItem(PLAYED_KEY, '1'); } catch { /* private mode */ }
+    if (!always) { try { localStorage.setItem(PLAYED_KEY, '1'); } catch { /* private mode */ } }
     playStyle(style);
   };
   const onGesture = () => playOnce();
