@@ -247,8 +247,10 @@ export function createPreview(canvasEl, opts = {}) {
   const arrowS = (p0x, p0y, p1x, p1y, color, thick, ck) => {
     const dx = p1x - p0x, dy = p1y - p0y, len = Math.hypot(dx, dy) || 1;
     const ux = dx / len, uy = dy / len, px = -uy, py = ux;
-    const tip = thick != null ? Math.max(8 * ck, thick * 1.9) : 9 * ck;
-    const wide = thick != null ? Math.max(4 * ck, thick * 1.0) : 4.5 * ck;
+    // Scale a little with a bar's thickness, but CAP it so a fat fixture doesn't
+    // get a giant arrowhead (it reads as a small direction marker, not a wedge).
+    const tip = thick != null ? Math.max(8 * ck, Math.min(thick * 0.9, 13 * ck)) : 9 * ck;
+    const wide = thick != null ? Math.max(4 * ck, Math.min(thick * 0.5, 7 * ck)) : 4.5 * ck;
     return `<polygon points="${nz(p0x + ux * tip)},${nz(p0y + uy * tip)} ${nz(p0x + px * wide)},${nz(p0y + py * wide)} ${nz(p0x - px * wide)},${nz(p0y - py * wide)}" fill="${color}"/>`;
   };
   const labelS = (text, cx, cy, selected, ck) => {
@@ -282,10 +284,15 @@ export function createPreview(canvasEl, opts = {}) {
 
     if (show && show.fixtures?.length) {
       const { fixtureOrder, chainColors } = pipelineFor(show);
+      // Draw ROUTED fixtures (with chain colours) AND unassigned ones (no device
+      // yet) — a fixture you just added should appear on the canvas so you can
+      // place it before wiring it to an output. Unassigned ⇒ neutral colour.
+      const routed = new Set(fixtureOrder.map((f) => f.id));
+      const drawList = fixtureOrder.concat(show.fixtures.filter((f) => !routed.has(f.id)));
       const dim = (c) => (colorTint ? c : 'rgba(150,156,166,.85)');
       const selFx = selectedIds && show.fixtures.find((f) => isSelected(selectedIds, f.id));
       const focusKey = selFx ? runKey(selFx) : null;
-      for (const f of fixtureOrder) {
+      for (const f of drawList) {
         const eps = f.input.points; if (!eps || !eps.length) continue;
         const reversed = !!f.input.reversed;
         if (f.hidden) {                                  // faint ghost outline

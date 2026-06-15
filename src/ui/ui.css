@@ -58,7 +58,7 @@
   --ls-caps:.1em; --ls-ui:.04em;
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
-  --radius:3px; --radius-sm:2px;
+  --radius:0px; --radius-sm:0px;   /* squared corners — synced from Figma UI Kit Radius tokens */
   --side-w:332px;    /* right panel (Design/Output/Control) width — shared so the HUD can dodge it */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
@@ -395,7 +395,7 @@ body.deck-hidden #side { margin-left: auto; }
    left-aligned row reads as a quiet OCR menu rather than a segmented control. */
 /* The PARENT row carries the divider (the subtabs underneath sit inside it),
    so the two tab rows read as one nested hierarchy, not two unrelated menus. */
-.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 4px; margin-bottom: 0; border-bottom: 1px solid var(--line); }
+.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 4px; margin-bottom: 0; }
 .section-tab {
   flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output = 50% each */
   border: none; border-radius: 0; padding: 4px 0; cursor: pointer;
