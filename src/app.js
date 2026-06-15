@@ -1083,20 +1083,20 @@ function setWallView(v) {
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
 
-// --- Canvas fit mode: how the composite sizes against the window/panels. ---
-//   fit  — the WHOLE composite scaled to fill the area left of the inspector
-//          (edge-to-edge on the left in Design, where the deck just floats on top)
-//   fill — full-bleed: the composite fills the window; the side panels go
-//          translucent (frosted glass) so it shows through behind them
-const FIT_MODES = ['fit', 'fill'];
-const FIT_LABEL = { fit: '▣ fit', fill: '▭ fill' };
+// --- Canvas fit mode: how the WHOLE composite sizes (always letterboxed to its
+// aspect — never cropped). Two variations: ---
+//   fit    — fit in the gap BETWEEN the side panels (reserves the inspector, and
+//            the left fixture editor in Output; edge-to-edge left in Design)
+//   window — fit to the whole window (the panels just float over the edges)
+const FIT_MODES = ['fit', 'window'];
+const FIT_LABEL = { fit: '▣ fit', window: '⛶ window' };
 const fitBtn = document.getElementById('fit-btn');
 let fitMode = (() => { try { const m = localStorage.getItem('lz.fit'); return FIT_MODES.includes(m) ? m : 'fit'; } catch { return 'fit'; } })();
 function setFitMode(m) {
-  fitMode = FIT_MODES.includes(m) ? m : 'fill';
+  fitMode = FIT_MODES.includes(m) ? m : 'fit';
   try { localStorage.setItem('lz.fit', fitMode); } catch { /* private */ }
   for (const x of FIT_MODES) document.body.classList.toggle('fit-' + x, x === fitMode);
-  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode === 'fill'); }
+  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode === 'window'); }
 }
 fitBtn?.addEventListener('click', () => {
   setFitMode(FIT_MODES[(FIT_MODES.indexOf(fitMode) + 1) % FIT_MODES.length]);
