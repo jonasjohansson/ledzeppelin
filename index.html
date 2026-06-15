@@ -24,6 +24,9 @@ canvas{display:block}
 #hud{display:flex;align-items:center;gap:14px;padding:0 4px;color:var(--muted);font:11px var(--mono,"Spline Sans Mono",ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
+<!-- OSC-address readout: shows the canonical address of the hovered/selected
+     parameter, just above the corner telemetry. -->
+<div id="param-osc"></div>
 <!-- Hidden file input for Settings › Open show. -->
 <input id="open-show-file" type="file" accept=".json,application/json" style="display:none">
 <!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI

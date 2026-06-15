@@ -173,6 +173,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const isAudio = anim?.mode === 'audio';
   const isExternal = anim?.mode === 'external';
   const wrap = el('div', { className: 'anim-param' });
+  if (oscAddress) wrap.dataset.osc = oscAddress;   // hover/focus → show the address in the corner readout
   const cog = animModeMenu({
     animated, isAudio, isExternal, audioSource: anim?.source, oscAddress,
     onPick: (mode) => {

@@ -415,6 +415,14 @@ body.gui-hidden #layout { display: none; }
 }
 /* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
    overlay toggle + hide UI. Decoupled from any tab. */
+/* OSC-address readout: the canonical address of the hovered/selected parameter,
+   parked just above the corner telemetry. Empty = hidden. */
+#param-osc {
+  position: fixed; z-index: 5; pointer-events: none;
+  left: calc(10px + env(safe-area-inset-left)); bottom: calc(34px + env(safe-area-inset-bottom));
+  font: 11px var(--mono, ui-monospace, monospace); color: var(--accent); font-variant-numeric: tabular-nums;
+}
+#param-osc:empty { display: none; }
 #corner-controls {
   position: fixed; z-index: 5; pointer-events: auto;
   /* Offset by the device safe-area (notch / home indicator) when installed as a

@@ -1923,6 +1923,21 @@ snapBtn?.addEventListener('click', (e) => {
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
 
+// Parameter OSC-address readout: hovering (or focusing) a param row shows its
+// canonical address in the corner (#param-osc), so you always know what to send
+// over OSC / the socket. Delegated — rows carry data-osc (set in layers.js).
+const paramOscEl = document.getElementById('param-osc');
+if (paramOscEl) {
+  document.addEventListener('mouseover', (e) => {
+    const r = e.target.closest?.('[data-osc]');
+    paramOscEl.textContent = r ? r.dataset.osc : '';
+  });
+  document.addEventListener('focusin', (e) => {
+    const r = e.target.closest?.('[data-osc]');
+    if (r) paramOscEl.textContent = r.dataset.osc;
+  });
+}
+
 // A ~6s synthesized full-band hard-rock intro on launch (procedural homage, not a
 // sample). Tries to play on load; if autoplay is blocked, fires on first input.
 // Pick a style / disable via localStorage 'lz.riff' (see startup-riff.js).
