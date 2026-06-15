@@ -30,7 +30,7 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/frames`);
   ws.addEventListener('open', () => {
     backoff = 500;
-    setStatus(true, 'Remote — connected');
+    setStatus(true, 'Control — connected');
     // Ask for the manifest, and keep asking until one arrives (the editor may
     // connect after us).
     askManifest();
@@ -50,7 +50,7 @@ function connect() {
   });
   ws.addEventListener('close', () => {
     clearInterval(reqTimer); reqTimer = null;
-    setStatus(false, 'Remote — reconnecting…');
+    setStatus(false, 'Control — reconnecting…');
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   });

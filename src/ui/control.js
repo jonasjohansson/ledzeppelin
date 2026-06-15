@@ -30,7 +30,7 @@ export function createControlPanel({ mount, getShow, send, status }) {
     // live). No prose — the dot says it.
     head.append(el('div', { className: 'ctrl-qr', innerHTML: qrSvg(s.url, 116) }));
     const dot = el('span', { className: 'ctrl-status-dot' + (s.connected ? ' on' : ''), title: s.connected ? 'daemon live' : 'daemon offline' });
-    const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the companion in a new tab' });
+    const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the Control surface in a new tab' });
     head.append(el('div', { className: 'ctrl-urlrow' }, [dot, a]));
   }
 
@@ -41,7 +41,7 @@ export function createControlPanel({ mount, getShow, send, status }) {
     lastSig = sig;
     body.textContent = '';
     // Control is PARAMETERS ONLY — clip launching / layer mixing stays in the
-    // deck (Design). Here you adjust the params you exposed via the ⚙ Companion
+    // deck (Design). Here you adjust the params you exposed via the ⚙ Control
     // tick, with the same sliders as the rest of the editor.
     if (m.controls.length) {
       const card = el('div', { className: 'ctrl-layer' });
@@ -53,9 +53,8 @@ export function createControlPanel({ mount, getShow, send, status }) {
         }));
       }
       body.append(card);
-    } else {
-      body.append(el('div', { className: 'ctrl-empty', textContent: 'No parameters yet — tick a parameter’s ⚙ → Companion to add it here.' }));
     }
+    // (Empty state intentionally blank — no instructional text.)
   }
 
   return {

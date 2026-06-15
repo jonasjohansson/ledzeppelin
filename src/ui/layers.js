@@ -247,25 +247,25 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
   menu.append(
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
-    item('audio-external', 'Audio External', 'follow a band of a hardware audio input'),
-    item('audio-composition', 'Audio Composition', 'follow a band of the composition’s clip audio'),
+    item('audio-external', 'Audio Ext.', 'follow a band of a hardware audio input'),
+    item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio'),
     item('external', 'External', 'follow an OSC address or socket channel')
   );
-  // Companion tick: a ☑/◻ row that publishes THIS parameter to the phone remote.
+  // Control tick: a ☑/◻ row that publishes THIS parameter to the Control surface.
   // (Only for params that have a canonical address — i.e. everything routable.)
   if (oscAddress) {
     const on = remoteHook.has(oscAddress);
     menu.append(el('button', {
       className: 'fx-menu-item fx-menu-tick' + (on ? ' is-on' : ''),
-      textContent: `${on ? '☑' : '◻'} Companion`,
-      title: 'show this parameter on the phone companion',
+      textContent: `${on ? '☑' : '◻'} Control`,
+      title: 'show this parameter on the Control surface',
       onclick: (e) => { e.stopPropagation(); close(); remoteHook.toggle(oscAddress); },
     }));
   }
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External) · or expose it to the phone Companion',
+    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio / External) · or expose it on the Control surface',
   });
   btn.onclick = (e) => {
     e.stopPropagation();

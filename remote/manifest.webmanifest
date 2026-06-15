@@ -1,6 +1,6 @@
 {
-  "name": "Led Zeppelin Remote",
-  "short_name": "LZ Remote",
+  "name": "Led Zeppelin Control",
+  "short_name": "LZ Control",
   "description": "Phone control surface for a Led Zeppelin show — trigger clips and ride faders live.",
   "id": "/remote/",
   "start_url": "./",
