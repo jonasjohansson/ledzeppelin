@@ -392,8 +392,8 @@ export function createPreview(canvasEl, opts = {}) {
 //   • right-click a vertex → remove it
 // Edits derive a new show and call onEdit(next) per move; onCommit on release.
 export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap, onMarqueeStart, onMarquee, onMarqueeEnd }, opts = {}) {
-  const hitR = opts.hitRadius ?? 18;
-  const vtxR = opts.vertexRadius ?? 9;
+  const hitR = opts.hitRadius ?? 26;      // body click tolerance (bigger = easier to grab a thin strip)
+  const vtxR = opts.vertexRadius ?? 12;   // handle grab radius
   let dragState = null;
   let enabled = opts.enabled ?? true;
 
@@ -411,6 +411,25 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   // Hit-test reversed (topmost wins). Returns {fxId} for a body hit, or
   // {fxId, vertex:i} when a polyline vertex handle is grabbed.
+  // Map a corner's screen-space direction (dx,dy from the fixture centre) to the
+  // matching resize cursor — so a horizontal end reads ↔, a vertical end ↕, and a
+  // diagonal corner the ⤡/⤢ diagonals (depends on the fixture's rotation).
+  function resizeCursor(dx, dy) {
+    let a = (Math.atan2(dy, dx) * 180 / Math.PI % 180 + 180) % 180;   // 0..180 (symmetric)
+    if (a < 22.5 || a >= 157.5) return 'ew-resize';
+    if (a < 67.5) return 'nwse-resize';
+    if (a < 112.5) return 'ns-resize';
+    return 'nesw-resize';
+  }
+  // The cursor for whatever's under the pointer (hover feedback).
+  function cursorFor(hit) {
+    if (!hit) return 'default';
+    if (hit.rotate) return 'grab';                 // rotate knob
+    if (hit.scaleCorner != null) return hit.cursor || 'nwse-resize';
+    if (hit.vertex != null || hit.seg != null) return 'move';   // body / vertex → move
+    return 'default';
+  }
+
   function hitTest(ev) {
     const show = getShow();
     const [px, py, rw, rh] = localPx(ev);
@@ -437,8 +456,9 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
           [ax + cpx * ht, ay + cpy * ht], [bx + cpx * ht, by + cpy * ht],
           [bx - cpx * ht, by - cpy * ht], [ax - cpx * ht, ay - cpy * ht],
         ];
+        const ccx = cxN * rw, ccy = cyN * rh;
         for (let c = 0; c < 4; c++) {
-          if (Math.hypot(px - corners[c][0], py - corners[c][1]) <= vtxR) return { fxId: selId, scaleCorner: c };
+          if (Math.hypot(px - corners[c][0], py - corners[c][1]) <= vtxR) return { fxId: selId, scaleCorner: c, cursor: resizeCursor(corners[c][0] - ccx, corners[c][1] - ccy) };
         }
       }
     }
@@ -522,7 +542,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   });
 
   canvasEl.addEventListener('pointermove', (ev) => {
-    if (!enabled || !dragState) return;
+    if (!enabled) return;
+    if (!dragState) { canvasEl.style.cursor = cursorFor(hitTest(ev)); return; }   // hover feedback (resize/move cursors)
     if (dragState.kind === 'marquee') {
       const [nx, ny] = norm(ev);
       onMarquee?.({
@@ -591,6 +612,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   }
   canvasEl.addEventListener('pointerup', end);
   canvasEl.addEventListener('pointercancel', end);
+  canvasEl.addEventListener('pointerleave', () => { if (!dragState) canvasEl.style.cursor = 'default'; });
 
   // Double-click a fixture body → insert a vertex there (bend / segment the run).
   canvasEl.addEventListener('dblclick', (ev) => {
