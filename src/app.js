@@ -108,6 +108,7 @@ let show = tidyEmptyLayers(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(ini
 // don't require recreating it — only a RESOLUTION change does (see setCanvasSize).
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
+let samplerDirty = false;   // set during a live fixture drag → rebuild the sampler next frame so lit content follows in realtime
 let controlPanel = null;   // Control-tab panel (assigned once built; null-safe before)
 // Global output framerate cap sent to the daemon (System › Settings; persisted).
 const OUTFPS_KEY = 'lz.outfps';
@@ -685,7 +686,12 @@ function positionEditor(sel) {
     apply(next);
   };
   // Device picker (which controller the chain HEAD is wired to). Locked downstream.
+  // First option is "unassigned" so a deviceless fixture reads as such (not a
+  // false-selected first device) and can be left unassigned for prototyping.
   const devSel = oel('select');
+  const noneOpt = oel('option', { value: '', textContent: '— unassigned —' });
+  if (!sel.output?.deviceId) noneOpt.selected = true;
+  devSel.append(noneOpt);
   for (const d of show.devices) {
     const o = oel('option', { value: d.id, textContent: `${d.name || d.id} (${d.id})` });
     if (d.id === sel.output?.deviceId) o.selected = true;
@@ -699,7 +705,7 @@ function positionEditor(sel) {
   const nOut = Math.max(1, Math.round(dev?.outputs ?? 4));
   const portSel = oel('select');
   for (let p = 1; p <= nOut; p++) {
-    const o = oel('option', { value: String(p), textContent: `output ${p}` });
+    const o = oel('option', { value: String(p), textContent: `Output ${p}` });
     if (p === (sel.output?.port ?? 1)) o.selected = true;
     portSel.append(o);
   }
@@ -762,7 +768,7 @@ function chainStatusRow(sel) {
   const ch = chainOf(show, sel.id);
   const idxOf = (id) => show.fixtures.findIndex((x) => x.id === id);
   const nameOf = (id) => { const i = idxOf(id); return i >= 0 ? fixtureLabel(show.fixtures[i], i) : id; };
-  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '?'}·o${f?.output?.port ?? 1})`; };
+  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${f?.output?.port ?? 1})`; };
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const devName = dev?.name || dev?.id || 'controller';
   // Pixel load + capacity on this fixture's output (0 max = unlimited).
@@ -785,7 +791,7 @@ function chainStatusRow(sel) {
   for (const f of show.fixtures) if (f.id !== sel.id) toSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
   toSel.value = next || '';
   toSel.disabled = full && !next;
-  if (full) toSel.title = `${devName} output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  if (full) toSel.title = `${devName} Output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
   return oel('div', {}, [
@@ -1001,7 +1007,7 @@ function renderOutput() {
       const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
       const over = gcap > 0 && totalPx > gcap;
       const collapsed = !expandedGroups.has(g.key);
-      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
+      const ohead = oel('div', { className: 'out-group out-sub', title: `${devName} · Output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
         oel('span', { className: 'out-caret', textContent: collapsed ? '▸' : '▾' }),
         swatch(runColor(g.deviceId, g.port)),
         oel('span', { className: 'out-group-port', textContent: `out ${g.port}` }),
@@ -1259,7 +1265,14 @@ document.addEventListener('keydown', (e) => {
       let n = 1; do { copy.id = `${base}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === copy.id));
       copy.output.pixelOffset = devEnd(copy.output?.deviceId || '');   // contiguous append
       const tf = copy.input?.transform;
-      if (tf) { tf.x = (tf.x || 0) + 20; tf.y = (tf.y || 0) + 20; }      // nudge off the original
+      if (tf) {
+        // Place the copy NEXT TO the original (no overlap): shift x by the
+        // fixture's on-screen bounding WIDTH (run/thickness rotated) + a small gap.
+        const rad = (tf.rotation || 0) * Math.PI / 180;
+        const th = thicknessOf(copy, next.composition?.canvas || { w: 1280, h: 720 });
+        const aabbW = Math.abs(Math.cos(rad)) * (tf.w || 0) + Math.abs(Math.sin(rad)) * th;
+        tf.x = (tf.x || 0) + Math.max(aabbW, 12) + 8;
+      }
       else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
       next.fixtures.push(copy);
       newIds.push(copy.id);

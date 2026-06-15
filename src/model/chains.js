@@ -12,7 +12,7 @@
 
 const settingsOf = (show) => (show && typeof show.chainSettings === 'object' && show.chainSettings) || {};
 export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 1}`;
-export const runLabel = (deviceId, port) => `${deviceId || '?'} · port ${port}`;
+export const runLabel = (deviceId, port) => `${deviceId || 'unassigned'} · port ${port}`;
 
 // All runs: [{ key, deviceId, port, members:[fixtureId… in wiring order], stagger, axis }].
 export function runsOf(show) {

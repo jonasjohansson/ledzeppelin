@@ -145,7 +145,9 @@ export function validate(show) {
   const errors = [];
   const ids = new Set(show.devices.map((d) => d.id));
   for (const f of show.fixtures) {
-    if (!ids.has(f.output?.deviceId)) errors.push(`fixture ${f.id}: unknown device ${f.output?.deviceId}`);
+    // An empty deviceId is a valid UNASSIGNED fixture (prototyping); only flag a
+    // deviceId that's set but points at a device that no longer exists.
+    if (f.output?.deviceId && !ids.has(f.output.deviceId)) errors.push(`fixture ${f.id}: unknown device ${f.output?.deviceId}`);
     if (f.output?.pixelCount !== f.pixelCount) errors.push(`fixture ${f.id}: output pixelCount mismatch`);
     if ((f.input?.points?.length ?? 0) < 2) errors.push(`fixture ${f.id}: input needs ≥2 points`);
   }
