@@ -1049,7 +1049,10 @@ function renderOutput() {
     const isRealDev = !!dg.deviceId;
     const devSelected = isRealDev && selectedDeviceId === dg.deviceId;
     const proto = gdev?.protocol === 'artnet' ? 'Art-Net' : 'DDP';
-    const binding = isRealDev ? `${gdev?.ip || 'no output'} · ${proto}` : (devFx ? `${devFx} not routed` : 'drop a fixture here');
+    // Binding sub-line shows the OUTPUT TARGET — only meaningful for a real device.
+    // Unassigned needs none (the fixtures sit inside it — that's evident); we only
+    // hint when it's empty.
+    const binding = isRealDev ? `${gdev?.ip || 'no output'} · ${proto}` : (devFx ? null : 'drop a fixture here');
 
     const tri = oel('span', { className: 'out-tri' + (devOpen ? ' open' : ''), textContent: devOpen ? '▾' : '▸' });
     const swatchDot = swatch(deviceColor(dg.deviceId));
@@ -1062,11 +1065,12 @@ function renderOutput() {
       selectedFixtureIds = new Set(show.fixtures.filter((f) => !(f.output?.deviceId || '')).map((f) => f.id));
       renderOutput(); redrawOverlay();
     };
-    const bindingRow = oel('div', { className: 'out-binding' }, [tri, oel('span', { textContent: binding })]);
-    const devMain = oel('div', { className: 'out-node-main' }, [
-      oel('div', { className: 'out-name-row' }, [swatchDot, devNameEl]),
-      bindingRow,
-    ]);
+    // With a binding line, the triangle rides it (MadMapper style); without one,
+    // the triangle sits inline before the name so the row is still expandable.
+    const devMain = oel('div', { className: 'out-node-main' }, binding != null
+      ? [oel('div', { className: 'out-name-row' }, [swatchDot, devNameEl]),
+         oel('div', { className: 'out-binding' }, [tri, oel('span', { textContent: binding })])]
+      : [oel('div', { className: 'out-name-row' }, [tri, swatchDot, devNameEl])]);
     // No enable square, no ✕ — select the device (click its name) and press ⌫ to
     // delete it.
     const dnodeKids = [devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })];

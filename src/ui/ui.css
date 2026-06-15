@@ -588,7 +588,7 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
    than their device). */
 .out-dev, .out-fix { min-height: 44px; }
 .out-node:hover { background: var(--hover); }
-.out-node.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.out-node.selected { background: var(--accent-soft); }
 .out-node.selected .out-name { color: var(--accent-text); }
 .out-node.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
 .out-node[draggable="true"] { cursor: grab; }
@@ -601,7 +601,8 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .out-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .out-name { flex: 1 1 auto; min-width: 0; color: var(--text); font: var(--fs-ctrl) var(--mono);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.out-fix .out-name, .out-port .out-name { color: var(--muted); font-size: var(--fs-body); }
+.out-fix .out-name { color: var(--muted); font-size: var(--fs-ctrl); }   /* same size as the device name */
+.out-port .out-name { color: var(--muted); font-size: var(--fs-body); }
 .out-name-row .out-name:hover { color: var(--accent); }
 .out-binding { display: flex; align-items: center; gap: 5px; color: var(--faint); font: var(--fs-micro) var(--mono); }
 .out-binding:hover { color: var(--muted); }
