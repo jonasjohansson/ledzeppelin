@@ -557,6 +557,10 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .out-group { position: sticky; top: 0; z-index: 2; background: var(--panel);
   display: flex; align-items: center; gap: 6px; margin: 9px 0 3px; padding: 6px 0 3px; border-top: 1px solid var(--line); cursor: pointer; }
 .out-group:first-child { border-top: none; margin-top: 0; }
+/* Drag-to-assign: a fixture row is draggable onto a device/output header. */
+.output-row[draggable="true"] { cursor: grab; }
+.output-row[draggable="true"]:active { cursor: grabbing; }
+.out-group.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
 .out-dev .out-group-dev { color: var(--text); font-weight: var(--fw-med); }   /* controller header reads as the heading */
 .out-sub { position: static; margin: 2px 0 2px 14px; padding: 3px 0; border-top: none; }   /* nested output, not sticky */
 .out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }

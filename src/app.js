@@ -579,6 +579,16 @@ const outputInspectorEl = document.getElementById('output-inspector');   // left
 let outputTab = 'fixtures';   // Output sub-tab: fixtures | devices | library
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
+let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
+// Assign the given fixtures to a device (+ optional output port) and re-pack — the
+// drag-to-assign / drag-to-unassign action (deviceId '' = back to the Unassigned pool).
+function assignFixturesTo(fxIds, deviceId, port) {
+  if (!fxIds || !fxIds.length) return;
+  const n = structuredClone(show);
+  for (const f of n.fixtures) if (fxIds.includes(f.id)) { f.output.deviceId = deviceId; if (port != null) f.output.port = port; }
+  selectedFixtureIds = new Set(fxIds); expandedDevices.add(deviceId);
+  saveShow(n); rebuild(n); panel.refresh(); renderOutput(); redrawOverlay();   // rebuild repacks pixel offsets
+}
 // Controller-colour tint for the UI (preview chrome + placement-list swatches).
 // Toggled from the corner "▢ color" button; persisted. Default ON.
 let controllerTint = (() => { try { return localStorage.getItem('lz.tint') !== '0'; } catch { return true; } })();
@@ -881,6 +891,19 @@ function addFixtureControl() {
   return wrap;
 }
 
+// "+ device" — create a controller right here in the patch view (a generic one;
+// edit its IP / model / colour order in the Devices tab). New devices appear as
+// empty containers you can drag fixtures onto.
+function addDeviceControl() {
+  return oel('button', { className: 'fx-add', textContent: '+ device', onclick: () => {
+    let n = structuredClone(show);
+    let k = (n.devices?.length || 0) + 1, id; do { id = `c${k}`; k++; } while (n.devices.some((d) => d.id === id));
+    n = addDevice(n, { id, name: `Controller ${n.devices.length + 1}`, typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });
+    expandedDevices.add(id);
+    rebuild(n); panel.refresh(); renderOutput();
+  } });
+}
+
 // Confirm before deleting fixture(s) — it re-packs pixel ranges, and removing a
 // chained fixture changes that whole output's wiring/addressing.
 function confirmDeleteFixtures(ids) {
@@ -928,13 +951,27 @@ function renderOutput() {
   if (outputTab === 'library') return;   // Library uses the device + fixture editors, not the placement list
 
   // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
-  if (!fixtures.length) {
-    outputListEl.append(addFixtureControl());
-    return;
-  }
+  // (No early-out for an empty rig — the device containers still render below so
+  // they're visible + droppable even before any fixture is placed.)
+  // A header/row becomes a drop target: dropping the dragged fixture(s) assigns
+  // them to `deviceId` (+ `port` when given; deviceId '' = unassign).
+  const dropZone = (el, deviceId, port) => {
+    el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop-hover'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drop-hover'));
+    el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
+    return el;
+  };
   const fixtureRow = (f, i) => {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
+    // Drag a fixture row onto a device / output header to assign it (the whole
+    // selection drags when this row is part of a multi-select).
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => {
+      dragFxIds = (selectedFixtureIds.has(f.id) && selectedFixtureIds.size > 1) ? [...selectedFixtureIds] : [f.id];
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
+    });
     const name = oel('span', { textContent: fixtureLabel(f, i) });
     const rng = oel('span', { className: 'fx-badge', textContent: fixtureRange(f) });
     const eye = oel('button', {
@@ -976,6 +1013,11 @@ function renderOutput() {
     if (!g) { g = { key, deviceId: did, port, items: [] }; dg.gmap.set(key, g); dg.groups.push(g); }
     g.items.push({ f, i });
   });
+  // Show EVERY device as a container (even with no fixtures) so it's a drop target
+  // for drag-to-assign — you can drop a fixture onto an empty controller.
+  for (const d of show.devices) {
+    if (!devMap.has(d.id)) { const dg = { deviceId: d.id, groups: [], gmap: new Map() }; devMap.set(d.id, dg); devOrder.push(dg); }
+  }
   const swatch = (color) => { const s = oel('span', { className: 'out-swatch' }); s.style.background = color; return s; };
   // Unassigned fixtures (no device) sort to the TOP so freshly-added strips are
   // obvious and easy to find before you wire them.
@@ -1007,6 +1049,7 @@ function renderOutput() {
       oel('span', { className: 'fx-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` }),
     ]);
     dhead.onclick = () => { expandedDevices.has(dg.deviceId) ? expandedDevices.delete(dg.deviceId) : expandedDevices.add(dg.deviceId); renderOutput(); };
+    dropZone(dhead, dg.deviceId, null);   // drop a fixture on a controller → assign it there (keeps its port; Unassigned header unassigns)
     outputListEl.append(dhead);
     if (!devOpen) continue;
 
@@ -1026,13 +1069,14 @@ function renderOutput() {
         oel('span', { className: 'fx-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${over ? totalPx + '/' + gcap : totalPx}px${over ? ' ⚠' : ''}` }),
       ]);
       ohead.onclick = () => { expandedGroups.has(g.key) ? expandedGroups.delete(g.key) : expandedGroups.add(g.key); renderOutput(); };
+      dropZone(ohead, g.deviceId, g.port);   // drop a fixture on an output → assign it to that device + port
       outputListEl.append(ohead);
       if (collapsed) continue;
       for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i));   // editor is in the left sidebar
     }
   }
 
-  outputListEl.append(addFixtureControl());
+  outputListEl.append(addFixtureControl()); outputListEl.append(addDeviceControl());
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
 }
 
