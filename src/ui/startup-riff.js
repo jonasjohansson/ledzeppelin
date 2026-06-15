@@ -32,7 +32,7 @@ function cry(ac) {
   const G = (v) => { const g = ac.createGain(); g.gain.value = v; return g; };
   const bq = (type, freq, Q = 0.7, gain = 0) => { const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = Q; f.gain.value = gain; return f; };
 
-  const master = G(0.46); const mlp = bq('lowpass', 12000); master.connect(mlp).connect(ac.destination);
+  const master = G(0.3); const mlp = bq('lowpass', 12000); master.connect(mlp).connect(ac.destination);
   const conv = ac.createConvolver();
   { const rate = ac.sampleRate, len = Math.floor(rate * 2.8), ir = ac.createBuffer(2, len, rate);
     for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
