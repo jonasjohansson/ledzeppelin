@@ -504,7 +504,7 @@ function snapPoint(x, y, fid, excludeIds) {
   else { const g = Math.round(y / SNAP_GRID) * SNAP_GRID; if (Math.abs(y - g) <= SNAP_DIST) sy = g; }
   return [sx, sy];
 }
-const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, (showGrid || snapEnabled) ? SNAP_GRID : 0, snapGuides, marqueeRect);
+const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, showGrid ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
 // Update the selection from a click. shift = toggle; clicking an already-selected
 // fixture keeps the group (so it can be dragged); a new one selects just it.
@@ -1083,18 +1083,19 @@ wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
 
 // --- Canvas fit mode: how the composite sizes against the window/panels. ---
-//   fill    — full-bleed (composite fills the window width; TouchDesigner-style)
-//   fit     — the WHOLE composite letterboxed in the gap between the side panels
-//   full    — composite fits the window; the panels go translucent (frosted glass)
-const FIT_MODES = ['fill', 'fit', 'full'];
-const FIT_LABEL = { fill: '▭ fill', fit: '▣ fit', full: '⛶ full' };
+//   fit  — the WHOLE composite scaled to fill the area left of the inspector
+//          (edge-to-edge on the left in Design, where the deck just floats on top)
+//   fill — full-bleed: the composite fills the window; the side panels go
+//          translucent (frosted glass) so it shows through behind them
+const FIT_MODES = ['fit', 'fill'];
+const FIT_LABEL = { fit: '▣ fit', fill: '▭ fill' };
 const fitBtn = document.getElementById('fit-btn');
-let fitMode = (() => { try { const m = localStorage.getItem('lz.fit'); return FIT_MODES.includes(m) ? m : 'fill'; } catch { return 'fill'; } })();
+let fitMode = (() => { try { const m = localStorage.getItem('lz.fit'); return FIT_MODES.includes(m) ? m : 'fit'; } catch { return 'fit'; } })();
 function setFitMode(m) {
   fitMode = FIT_MODES.includes(m) ? m : 'fill';
   try { localStorage.setItem('lz.fit', fitMode); } catch { /* private */ }
   for (const x of FIT_MODES) document.body.classList.toggle('fit-' + x, x === fitMode);
-  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode !== 'fill'); }
+  if (fitBtn) { fitBtn.textContent = FIT_LABEL[fitMode]; fitBtn.classList.toggle('on', fitMode === 'fill'); }
 }
 fitBtn?.addEventListener('click', () => {
   setFitMode(FIT_MODES[(FIT_MODES.indexOf(fitMode) + 1) % FIT_MODES.length]);
@@ -1609,7 +1610,17 @@ let frames = 0, last = 0;
 // so it never drops frames we could otherwise have made.
 const OUTPUT_FPS = 42, FRAME_INTERVAL = 1000 / OUTPUT_FPS;
 let frameDue = 0;
+// Publish the composition aspect (w/h) as a CSS var so the "fit" canvas mode can
+// scale the composite to fill its area (CSS can't read canvas attributes). Updated
+// only when it changes — no per-frame style churn.
+let lastAspect = 0;
+function syncCompAspect() {
+  const a = (canvas.width || 16) / (canvas.height || 9);
+  if (a !== lastAspect) { lastAspect = a; document.documentElement.style.setProperty('--comp-aspect', String(a)); }
+}
+syncCompAspect();
 function loop(ts) {
+  syncCompAspect();
   if (!t0) t0 = ts;
   if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
@@ -1702,7 +1713,7 @@ function loop(ts) {
     // here naturally — muted layers composite to black, which samples/sends dark.
     // Skip the overlay draw entirely when it's hidden (its canvas is display:none) —
     // no point spending CPU drawing thousands of LEDs you can't see.
-    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, (showGrid || snapEnabled) ? SNAP_GRID : 0, snapGuides, marqueeRect);
+    if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, showGrid ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
     // Draw composited output to the real screen so there's something visible.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

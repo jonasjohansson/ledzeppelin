@@ -248,18 +248,24 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   box-shadow: 0 0 0 1px var(--line);
 }
 /* Canvas FIT MODES (body.fit-*), set by the corner toggle:
-   • fill — full-bleed: fills the window width (TouchDesigner-style), vertical crop
-   • fit  — the WHOLE composite letterboxed in the gap between the side panels
-   • full — the WHOLE composite letterboxed to the window; panels go translucent */
+   • fit  — the WHOLE composite scaled to fill the area LEFT of the inspector
+            (edge-to-edge on the left; the deck just floats over the top-left)
+   • fill — full-bleed: the composite fills the window; the side panels go
+            translucent (frosted glass) so it shows through behind them */
 #stageinner canvas#stage { display: block; }
+/* Reserve the inspector on the right; flex then centres the composite in what's
+   left. width = min(that width, the width that makes height == the viewport) so it
+   scales UP or down to fill, preserving aspect (CSS can't read canvas attrs, so
+   --comp-aspect is published from the render loop). */
+body.fit-fit #stagewrap { padding-right: var(--side-w); box-sizing: border-box; }
+body.fit-fit #stageinner canvas#stage {
+  width: min(calc(100vw - var(--side-w)), calc((100vh - 6px) * var(--comp-aspect, 1.778)));
+  height: auto;
+}
 body.fit-fill #stageinner canvas#stage { width: 100vw; height: auto; }
-/* Reserve a side-panel width on each side so the composite sits clear of the
-   right inspector (and clears the deck on the left). */
-body.fit-fit  #stageinner canvas#stage { width: auto; height: auto; max-width: calc(100vw - 2 * var(--side-w)); max-height: calc(100vh - 36px); }
-body.fit-full #stageinner canvas#stage { width: auto; height: auto; max-width: 100vw; max-height: 100vh; }
-/* "full": frost the side panels so the composite reads through them. Overriding the
+/* "fill": frost the side panels so the composite reads through them. Overriding the
    surface tokens makes every descendant that paints with them translucent too. */
-body.fit-full #side, body.fit-full #output-inspector, body.fit-full #deckbar {
+body.fit-fill #side, body.fit-fill #output-inspector, body.fit-fill #deckbar {
   --bg: var(--bg-glass); --panel: var(--panel-glass); --panel-2: var(--panel-2-glass);
   --surface: var(--panel-glass); --surface-2: var(--panel-2-glass); --field-bg: var(--field-bg-glass);
   -webkit-backdrop-filter: blur(9px); backdrop-filter: blur(9px);
