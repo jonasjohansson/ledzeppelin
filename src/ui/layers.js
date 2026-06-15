@@ -328,12 +328,13 @@ function animControls(anim, onAnim, oscAddress, onAnimLive) {
       (bnd) => onAnim({ ...anim, band: bnd })));
     kids.push(mini('gain', anim.gain ?? 1, (v) => onAnim({ ...anim, gain: v }), { commitLive: onAnimLive && ((v) => onAnimLive({ ...anim, gain: v })) }));
   } else if (isExternal) {
-    // The channel + OSC address now live in System › Mapping (one overview for
-    // all params). Here we just show the in/out range track (above) + a hint;
-    // the binding's source is managed in the Mapping tab.
-    return el('div', { className: 'anim-ctrls' }, [
-      el('span', { className: 'seg-hint', textContent: anim.channel ? `mapped: ${anim.channel} · set in Mapping` : 'set the source in System › Mapping' }),
-    ]);
+    // The channel lives in System › Mapping; here we expose the IN/OUT range the
+    // incoming 0..1 maps to (so a control can drive a sub-range of the param), as
+    // editable fields alongside the track handles above.
+    kids.push(el('span', { className: 'seg-hint', textContent: anim.channel ? `mapped: ${anim.channel}` : 'map in System › Mapping' }));
+    kids.push(mini('in', anim.from, (v) => onAnim({ ...anim, from: v }), { commitLive: onAnimLive && ((v) => onAnimLive({ ...anim, from: v })) }));
+    kids.push(mini('out', anim.to, (v) => onAnim({ ...anim, to: v }), { commitLive: onAnimLive && ((v) => onAnimLive({ ...anim, to: v })) }));
+    return el('div', { className: 'anim-ctrls' }, kids);
   } else {
     // (in/out live on the track handles — grab a thumb for its value bubble)
     // Direction/duration edits are RETIMED against the clock so the sweep

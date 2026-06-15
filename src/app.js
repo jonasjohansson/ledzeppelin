@@ -1534,6 +1534,13 @@ async function buildSettings(mount) {
     onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
   }));
 
+  // --- OSC / socket: where to send live control. Both drive the same canonical
+  // addresses (shown per-param in System › Mapping and on hover in the corner). ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'osc / socket' }));
+  const oscHost = (() => { try { return new URL(companionUrl).hostname; } catch { return location.hostname; } })();
+  mount.append(oel('div', { className: 'seg-hint', textContent: `OSC in · ${oscHost}:9000 — send e.g. /layer/1/clip/1/width with a 0–1 value` }));
+  mount.append(oel('div', { className: 'seg-hint', textContent: `Socket · ${location.host}/frames — {"type":"ext","channel":"<address>","value":0–1}` }));
+
   // --- Startup sound: the riff greets you on the first visit; opt in to hear it
   // on every reload. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'startup sound' }));
