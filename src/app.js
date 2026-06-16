@@ -1462,6 +1462,7 @@ const inspPanes = {
   composition: document.getElementById('insp-composition'),
 };
 function setInspectorTab(which) {
+  try { localStorage.setItem('lz.itab', which); } catch { /* private mode */ }   // restore on reload
   inspTabsEl?.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.itab === which));
   for (const [k, pane] of Object.entries(inspPanes)) if (pane) pane.hidden = k !== which;
@@ -1478,6 +1479,7 @@ inspTabsEl?.addEventListener('click', (ev) => {
 const outputTabsEl = document.getElementById('io-tabs');
 function setOutputTab(which) {
   outputTab = which;
+  try { localStorage.setItem('lz.otab', which); } catch { /* private mode */ }   // restore on reload
   outputTabsEl?.querySelectorAll('.subtab').forEach((x) =>
     x.classList.toggle('subtab-active', x.dataset.otab === which));
   // Three tabs: Fixtures = placement list · Devices = instances · Library = models.
@@ -1522,14 +1524,14 @@ function setSection(which) {
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
   if (systemPaneEl) systemPaneEl.hidden = which !== 'system';
-  // The clip deck stays visible in Design AND System (you keep the composition
-  // in view while tweaking params); only Output hides it to give the canvas +
-  // fixture editor the room. body.output-mode also lets CSS react.
+  // The clip deck (layers) stays visible in EVERY section — including Output — so
+  // you keep the composition in view while patching fixtures. It floats over the
+  // canvas's top-left (it's pointer-transparent except the deck itself), same as in
+  // Design. body.output-mode lets the layout dock the editor at the right.
   document.body.classList.toggle('output-mode', which === 'output');
-  document.body.classList.toggle('deck-hidden', which === 'output');   // pin #side right only when the deck is gone
   const leftEl = document.getElementById('left');
-  if (leftEl) leftEl.hidden = which === 'output';
-  updateInspector();   // left sidebar only shows in Output
+  if (leftEl) leftEl.hidden = false;
+  updateInspector();   // the editor column only shows in Output (and only when selected)
   if (which === 'system' && systemTab === 'control') controlPanel.rebuild();
 }
 sectionSwitchEl?.addEventListener('click', (ev) => {
@@ -1671,7 +1673,11 @@ async function buildSettings(mount) {
   mark(cur);
 }
 setSystemTab(systemTab);
-setOutputTab('fixtures');
+// Restore the last-used subtabs across reloads (section + systemTab already persist).
+const savedOutputTab = (() => { try { return localStorage.getItem('lz.otab'); } catch { return null; } })();
+setOutputTab(['fixtures', 'library'].includes(savedOutputTab) ? savedOutputTab : 'fixtures');
+const savedInspTab = (() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })();
+setInspectorTab(['clip', 'layer', 'composition'].includes(savedInspTab) ? savedInspTab : 'clip');
 setOverlay(true);
 
 // --- Video clips: a <video> element + GL texture per video clip (runtime only;
@@ -1742,7 +1748,6 @@ syncCompAspect();
 // behind a panel. The left inspector width is RESERVED even when it's empty, so the
 // canvas never jumps between subtabs or when a selection clears. Measured after
 // layout (rAF) and published as CSS insets; 0 in every other view (full window).
-const INSPECTOR_W = 256;   // must match #output-inspector flex-basis in ui.css
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(() => {
@@ -1751,11 +1756,15 @@ function updateStageInsets() {
     let left = 0, right = 0;
     if (active) {
       // Editor + main panel cluster at the RIGHT; the canvas takes the whole left.
-      // Reserve the inspector slot (INSPECTOR_W) on top of the main panel width
-      // whether or not the inspector is currently shown, so the canvas never jumps.
+      // The canvas fits up to the LEFT edge of that cluster: the inspector when it's
+      // shown (a fixture/device is selected), otherwise just the main panel — so with
+      // nothing selected the canvas extends to the panel (no reserved gap).
       const vw = window.innerWidth;
-      const side = document.getElementById('side')?.getBoundingClientRect();
-      if (side) right = Math.max(0, vw - side.left) + INSPECTOR_W;
+      const insp = outputInspectorEl;
+      const clusterLeft = insp && !insp.hidden
+        ? insp.getBoundingClientRect().left
+        : document.getElementById('side')?.getBoundingClientRect().left;
+      if (clusterLeft != null) right = Math.max(0, vw - clusterLeft);
     }
     root.style.setProperty('--inset-left', left + 'px');
     root.style.setProperty('--inset-right', right + 'px');

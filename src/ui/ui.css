@@ -191,7 +191,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 #output-inspector > .output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 /* The selected fixture's name, above POSITION — names what you're editing. */
 .fx-detail-title { color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 2px 0 8px; }
-.output-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+.output-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 /* Fixtures inputs reuse the shared .fx-field input chrome (same as Design) — no
    override here, so the two panels match. Hide number-input spinner arrows so a
    number field reads like the Design readouts (clean, no native chrome). */
@@ -465,7 +465,7 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 
 .fx-card {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);   /* min 0 → rows shrink to the panel; inputs don't overflow */
   gap: 0;
   background: transparent; border: none; border-radius: 0;
   border-top: 1px solid var(--line); padding: var(--s2) 0 0;
@@ -547,7 +547,7 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 #fixtures-view { max-height: calc(100vh - 56px); overflow-y: auto; }
 
 /* Shared horizontal row module: label left (fixed column) · value right. */
-.fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
+.fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-width: 0; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
 /* Fixed label column so the name stays readable (text/number inputs otherwise
    claim their intrinsic width and squeeze the label down to an ellipsis). */
 .fx-field > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
