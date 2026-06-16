@@ -224,16 +224,6 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 #menu-pop .menu-pad { padding: 8px 14px; }   /* control popover body (e.g. Audio gain) */
 #menu-pop .menu-title { font: var(--fw-med) var(--fs-micro) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--faint); padding: 4px 14px 6px; }
 
-/* About dialog — a centred, dismissible card (classic software About). */
-.about-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
-.about-card { background: var(--panel-solid); border: 1px solid var(--line-2); padding: 26px 32px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 218px; box-shadow: 0 10px 44px rgba(0,0,0,.55); }
-.about-name { font: 15px var(--sans); letter-spacing: var(--ls-ui); color: var(--text); }
-.about-ver { font-size: var(--fs-micro); color: var(--accent); font-variant-numeric: tabular-nums; }
-.about-tag { font-size: var(--fs-body); color: var(--muted); margin-top: 3px; }
-.about-copy { font-size: var(--fs-micro); color: var(--faint); margin-top: 8px; }
-.about-link { margin-top: 14px; font: var(--fs-body) var(--sans); color: var(--accent-text); background: var(--accent-soft); border: 1px solid var(--accent-line); padding: 7px 16px; text-decoration: none; }
-.about-link:hover { color: var(--accent); border-color: var(--accent); }
-
 /* Matte-style PASTEBOARD: a subtle transparency checker fills the area OUTSIDE
    the canvas (behind every panel). The canvas sits on top as a clean rectangle. */
 #stagewrap {
@@ -431,7 +421,10 @@ body.gui-hidden #layout { display: none; }
    parked just above the corner telemetry. Empty = hidden. */
 #param-osc {
   position: fixed; z-index: 5; pointer-events: none;
-  left: calc(10px + env(safe-area-inset-left)); bottom: calc(34px + env(safe-area-inset-bottom));
+  /* One line ABOVE the telemetry HUD (which sits at 10px + ctrl-h + 7px), so the
+     OSC address and the viewport metadata don't collide. */
+  left: calc(10px + env(safe-area-inset-left));
+  bottom: calc(10px + var(--ctrl-h) + 7px + 17px + env(safe-area-inset-bottom));
   font: 11px var(--mono, ui-monospace, monospace); color: var(--accent); font-variant-numeric: tabular-nums;
 }
 #param-osc:empty { display: none; }
