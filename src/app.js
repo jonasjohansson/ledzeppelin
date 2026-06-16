@@ -778,10 +778,14 @@ function positionEditor(sel) {
           txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
         ]),
         oel('div', { className: 'dir-btns out-transform' }, [
-          oel('button', { className: 'dir-btn', textContent: '⟳ 90°', title: 'rotate 90°',
+          oel('button', { className: 'dir-btn', textContent: '−90°', title: 'rotate −90°',
+            onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) }),
+          oel('button', { className: 'dir-btn', textContent: '+90°', title: 'rotate +90°',
             onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
-          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ flip',
-            title: 'reverse pixel direction (which end is pixel 0) — the canvas arrow points at pixel 0',
+          // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
+          // (the canvas arrow points at pixel 0).
+          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ reverse',
+            title: 'reverse the LED strip direction (which end is pixel 0)',
             onclick: () => apply(flipFixture(show, sel.id)) }),
         ]),
       );
@@ -1613,6 +1617,7 @@ function applyAccent(hex) {
   s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
   s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
   s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
+  preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
 function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }

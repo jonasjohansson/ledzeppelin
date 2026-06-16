@@ -77,6 +77,15 @@ export function createPreview(canvasEl, opts = {}) {
   let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
   let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
   function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // The theme accent (driven from app on change) → fixture chrome border/fill, so
+  // the canvas follows the chosen accent (not a hardcoded orange). [r,g,b].
+  let accentRGB = [232, 163, 92];
+  const accCss = (a) => `rgba(${accentRGB[0]},${accentRGB[1]},${accentRGB[2]},${a})`;
+  function setAccentColor(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex || ''); if (!m) return;
+    const n = parseInt(m[1], 16); accentRGB = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    chromeKey = null;   // force a chrome rebuild in the new accent
+  }
   // SVG chrome rebuild cache — rebuild only when the show ref or this key changes.
   let chromeShow = null, chromeKey = null;
 
@@ -278,7 +287,7 @@ export function createPreview(canvasEl, opts = {}) {
     return `<polygon points="${nz(p0x + ux * tip)},${nz(p0y + uy * tip)} ${nz(p0x + px * wide)},${nz(p0y + py * wide)} ${nz(p0x - px * wide)},${nz(p0y - py * wide)}" fill="${color}"/>`;
   };
   const labelS = (text, cx, cy, selected, ck) => {
-    const fs = 11 * ck, fill = selected ? '#e8b27f' : 'rgba(205,210,218,.92)';
+    const fs = 11 * ck, fill = selected ? accCss(1) : 'rgba(205,210,218,.92)';
     return `<text x="${nz(cx)}" y="${nz(cy)}" font-size="${nz(fs)}" font-family="'Spline Sans Mono',ui-monospace,Menlo,monospace" text-anchor="middle" fill="${fill}" stroke="rgba(0,0,0,.7)" stroke-width="${nz(1.6 * ck)}" stroke-linejoin="round" paint-order="stroke">${esc(text)}</text>`;
   };
 
@@ -302,8 +311,8 @@ export function createPreview(canvasEl, opts = {}) {
       for (let y = 0; y <= Hh; y += snapGrid) ln(0, y, W, y, 'rgba(255,255,255,.09)', ck);
     }
     if (guides) for (const g of guides) {
-      if (g.axis === 'x') ln(g.v, 0, g.v, Hh, 'rgba(232,178,127,.85)', ck);
-      else ln(0, g.v, W, g.v, 'rgba(232,178,127,.85)', ck);
+      if (g.axis === 'x') ln(g.v, 0, g.v, Hh, accCss(.85), ck);
+      else ln(0, g.v, W, g.v, accCss(.85), ck);
     }
 
     if (show && show.fixtures?.length) {
@@ -313,7 +322,9 @@ export function createPreview(canvasEl, opts = {}) {
       // place it before wiring it to an output. Unassigned ⇒ neutral colour.
       const routed = new Set(fixtureOrder.map((f) => f.id));
       const drawList = fixtureOrder.concat(show.fixtures.filter((f) => !routed.has(f.id)));
-      const dim = (c) => (colorTint ? c : 'rgba(150,156,166,.85)');
+      // Not tinting by controller → the fixture chrome uses the theme ACCENT (so a
+      // fixture reads clearly on the canvas, in the chosen accent).
+      const dim = (c) => (colorTint ? c : accCss(.9));
       const selFx = selectedIds && show.fixtures.find((f) => isSelected(selectedIds, f.id));
       const focusKey = selFx ? runKey(selFx) : null;
       for (const f of drawList) {
@@ -321,11 +332,14 @@ export function createPreview(canvasEl, opts = {}) {
         const reversed = !!f.input.reversed;
         if (f.hidden) {                                  // faint ghost outline
           const onSel = isSelected(selectedIds, f.id);
-          poly(eps, onSel ? 'rgba(232,178,127,.55)' : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
+          poly(eps, onSel ? accCss(.55) : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
           continue;
         }
         const selected = isSelected(selectedIds, f.id);
-        const stroke = selected ? '#e8b27f' : dim(chainColors[runKey(f)] || 'rgba(150,156,166,.6)');
+        const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
+        // A faint accent wash as the body fill makes the (unselected) fixture easy to
+        // spot against the canvas; the selected one keeps its highlight (no wash).
+        const bodyFill = selected ? 'none' : accCss(.14);
         const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
         const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
         if (!selected && runKey(f) !== focusKey && lblLen * viewZoom < 13) continue;   // LOD: tiny → no chrome
@@ -347,10 +361,10 @@ export function createPreview(canvasEl, opts = {}) {
         const cv = show.composition?.canvas || { w: W, h: Hh };
         const ht = (thicknessOf(f, cv) / 2) * (Hh / (cv.h || Hh));
         const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
-        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="none" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="${bodyFill}" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
         if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck));
         const cx = (ax + bx) / 2, cy = (ay + by) / 2;
-        if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="rgba(232,178,127,.3)" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
+        if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="${accCss(.3)}" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
         const single = selected && (!selectedIds.has || selectedIds.size === 1);
         if (single) {
           for (const c of [c1, c2, c3, c4]) p.push(rectS(c[0] - 3 * ck, c[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
@@ -390,18 +404,18 @@ export function createPreview(canvasEl, opts = {}) {
     const gb = groupBox(show, selectedIds);
     if (gb) {
       const x = gb.minX * W, y = gb.minY * Hh, w = (gb.maxX - gb.minX) * W, h = (gb.maxY - gb.minY) * Hh;
-      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="none" stroke="#e8b27f" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
-      for (const c of [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]) p.push(rectS(c[0] - 4 * ck, c[1] - 4 * ck, 8 * ck, 8 * ck, '#e8b27f', 1.5 * ck));
+      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="none" stroke="${accCss(1)}" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
+      for (const c of [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]) p.push(rectS(c[0] - 4 * ck, c[1] - 4 * ck, 8 * ck, 8 * ck, accCss(1), 1.5 * ck));
     }
 
     if (marquee) {
       const x = marquee.x0 * W, y = marquee.y0 * Hh, w = (marquee.x1 - marquee.x0) * W, h = (marquee.y1 - marquee.y0) * Hh;
-      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(232,163,92,.10)" stroke="rgba(232,163,92,.85)" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
+      p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="${accCss(.1)}" stroke="${accCss(.85)}" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
     }
     return p.join('');
   }
 
-  return { draw, setRenderScale, setBaseSize, setColorTint };
+  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor };
 }
 
 // Drag-placement on the Output overlay:
