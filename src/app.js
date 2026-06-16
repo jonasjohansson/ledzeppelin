@@ -565,13 +565,21 @@ function selectFixture(fxId, ev, opts = {}) {
 }
 
 let dragHandle = null;
+let dragOrig = null;   // show state captured at the START of a canvas drag (for ONE undo entry)
 if (previewCanvas) {
   dragHandle = enableDragPlacement(previewCanvas, {
     getShow: () => show,
     getSelected: () => selectedFixtureIds,
     onSelect: (fxId, ev) => selectFixture(fxId, ev),
-    onEdit: (next) => { show = next; samplerDirty = true; redrawOverlay(); },   // live: flag a sampler rebuild so the lit content follows the drag in realtime
-    onCommit: (next) => { snapGuides = []; saveShow(next); rebuild(next); panel.refresh(); renderOutput(); },
+    // Live drag overwrites `show` each frame — so remember the PRE-drag state once,
+    // here, before the first mutation, for undo.
+    onEdit: (next) => { if (!dragOrig) dragOrig = show; show = next; samplerDirty = true; redrawOverlay(); },
+    onCommit: (next) => {
+      snapGuides = [];
+      if (dragOrig) { undoStack.push(dragOrig); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; dragOrig = null; }
+      undoSuppress = true; saveShow(next); rebuild(next); undoSuppress = false;   // rebuild must NOT snapshot the post-drag show
+      panel.refresh(); renderOutput();
+    },
     snap: snapPoint,
     // Rubber-band select: keep the prior selection only when Shift-additive.
     onMarqueeStart: (additive) => {
@@ -898,12 +906,13 @@ function addInstance(typeId) {
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
   const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: t.pixelCount, h: 0, rotation: 90 };
-  // If a controller is selected, the new fixture lands ON it (its own free output);
-  // otherwise it's unassigned (lands in the flat list until you wire it).
+  // If a controller is selected, the new fixture lands ON it; otherwise it's
+  // unassigned. Either way it gets its OWN free output (port) so added strips are
+  // NOT auto-chained together — chain them deliberately via the chain action.
   const onDev = selectedDeviceId && next.devices.some((d) => d.id === selectedDeviceId) ? selectedDeviceId : '';
   next.fixtures.push({
     id, typeId: t.id,
-    output: { deviceId: onDev, port: onDev ? freePort(next, onDev) : 1, pixelOffset: 0, pixelCount: t.pixelCount },
+    output: { deviceId: onDev, port: freePort(next, onDev), pixelOffset: 0, pixelCount: t.pixelCount },
     input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
   });
   selectedFixtureIds = new Set([id]);
