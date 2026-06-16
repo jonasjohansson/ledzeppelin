@@ -589,26 +589,28 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .out-group .out-chain { color: var(--accent); }
 .out-group .out-over { color: var(--danger); }
 
-/* === MadMapper-style output tree (merged Fixtures tab) =====================
-   A device is a container: an enable square, its name, a muted output-binding
-   sub-line (target IP · protocol / "no output"), pixel load + ✕. Fixtures nest
-   under it (indented), each its own enable square. Selection fills the row with
-   the warm "selected" surface — a deliberate, MadMapper-like highlight. */
-.out-node { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: var(--radius);
+/* === Output Fixtures list (merged tab) =====================================
+   Same card chrome as the Inventory rows (full-width cells: fill + hairline), so
+   the two tabs read alike. A controller is a CONTAINER; its fixtures nest beneath
+   it — indented, with a left guide line, so it's clear they live inside it. The
+   selected row fills with the warm "selected" surface. */
+.out-node { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 10px; margin: 4px 0;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius);
   cursor: pointer; user-select: none; box-sizing: border-box; }
-/* Devices and fixtures share one comfortable row height (fixtures aren't smaller
-   than their device). */
-.out-dev, .out-fix { min-height: 44px; }
-.out-node:hover { background: var(--hover); }
-.out-node.selected { background: var(--accent-soft); }
+.out-node:hover { border-color: var(--line-2); }
+.out-node.selected { background: var(--accent-soft); border-color: var(--accent-line); }
 .out-node.selected .out-name { color: var(--accent-text); }
-.out-node.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.out-node.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .out-node[draggable="true"] { cursor: grab; }
 .out-node[draggable="true"]:active { cursor: grabbing; }
-/* The device row stands a touch apart (a hairline + breathing room above). */
-.out-dev { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 7px; }
-.out-dev:first-of-type { margin-top: 2px; border-top: none; padding-top: 4px; }
-.out-port { margin-left: 14px; min-height: 0; }    /* per-output sub-line (multi-output devices) */
+/* Controller = the container header; a touch of space above separates each group. */
+.out-dev { margin-top: 12px; }
+.out-dev:first-of-type { margin-top: 0; }
+/* Fixtures INSIDE a controller: indented + a left guide line tying them to it. */
+.out-fix.nested { margin-left: 16px; position: relative; }
+.out-fix.nested::before { content: ''; position: absolute; left: -9px; top: -7px; bottom: 50%;
+  width: 1px; background: var(--line-2); }
+.out-port { margin-left: 16px; min-height: 0; }    /* per-output sub-line (multi-output devices) */
 .out-node-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .out-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .out-name { flex: 1 1 auto; min-width: 0; color: var(--text); font: var(--fs-ctrl) var(--mono);

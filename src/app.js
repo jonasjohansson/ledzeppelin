@@ -923,8 +923,11 @@ function addControls() {
     expandedDevices.add(id); selectDevice(id);
     rebuild(n); panel.refresh(); renderOutput();
   } });
-  // "scan" — WLED network discovery, beside the add buttons; its results render below.
+  // "scan" — WLED network discovery, beside the add buttons; its results render
+  // below. Only possible when the daemon (node) is running — it serves the scan API.
+  const daemonUp = !!bridge?.connected?.();
   const scanBtn = panel.scanButtonEl?.(renderOutput);
+  if (scanBtn && !daemonUp) { scanBtn.disabled = true; scanBtn.title = 'start the daemon (npm start) to scan the network'; }
   wrap.append(oel('div', { className: 'output-addrow' }, scanBtn ? [addFx, addDev, scanBtn] : [addFx, addDev]));
   if (types.length) wrap.append(sel);
   const scanRes = panel.scanResultsEl?.();
@@ -1033,8 +1036,8 @@ function renderOutput() {
     el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
     return el;
   };
-  const fixtureRow = (f, i) => {
-    const row = oel('div', { className: 'out-node out-fix' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
+  const fixtureRow = (f, i, nested) => {
+    const row = oel('div', { className: 'out-node out-fix' + (nested ? ' nested' : '') + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
     // Drag a fixture row onto a device / output header to assign it (the whole
     // selection drags when this row is part of a multi-select).
@@ -1112,7 +1115,7 @@ function renderOutput() {
 
     const singleOut = dg.groups.length === 1;   // one output → skip the redundant "out N" sub-header
     for (const g of dg.groups) {
-      if (singleOut) { for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i)); continue; }
+      if (singleOut) { for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i, true)); continue; }
       const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
       const over = gcap > 0 && totalPx > gcap;
       const collapsed = !expandedGroups.has(g.key);
@@ -1125,7 +1128,7 @@ function renderOutput() {
       dropZone(ohead, g.deviceId, g.port);   // drop a fixture on an output → assign it to that device + port
       outputListEl.append(ohead);
       if (collapsed) continue;
-      for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i));   // editor is in the left sidebar
+      for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i, true));   // nested under its controller
     }
   }
 
@@ -1768,6 +1771,7 @@ const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
 rebuild(show);
 
 let frames = 0, last = 0;
+let lastLive = null;   // daemon-connected state last seen by the loop (to refresh scan availability)
 // Cap the heavy pipeline (composite → sample → DDP → preview) to WLED's ~42fps
 // ceiling — no point rendering/sending faster than the wall can show. The
 // accumulator auto-disables when we're compute-bound (frameDue catches up to ts),
@@ -1938,6 +1942,8 @@ function loop(ts) {
     hud.classList.toggle('hud-live', !!live);
     // Companion/daemon status (red offline / green live) on the Control subtab.
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
+    // Daemon came up / went down → refresh the Output list so "scan" enables/disables.
+    if (!!live !== lastLive) { lastLive = !!live; if (outputPaneEl && !outputPaneEl.hidden && outputTab === 'fixtures') renderOutput(); }
     if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
     hud.textContent = `v${VERSION}  ·  ${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
       + (over > 0 ? `  ·  ⚠ ${over} over cap` : '');
