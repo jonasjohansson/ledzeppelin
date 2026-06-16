@@ -830,6 +830,65 @@ function positionEditor(sel) {
   ]);
 }
 
+// Like txField, but the value may be null = "mixed" across the multi-selection:
+// shows a "— mixed —" placeholder and commits only when the user types something.
+function txFieldMulti(label, value, onCommit) {
+  const i = oel('input', { type: 'number', step: '1', placeholder: '— mixed —' });
+  if (value != null) i.value = String(Math.round(value));
+  i.addEventListener('change', () => { if (i.value === '') return; onCommit(Number(i.value)); });
+  return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
+}
+
+// Position editor for a MULTI-selection — the SAME interface as positionEditor, but
+// each field sets that property on EVERY selected fixture (X/Y/Width/Height/Rotation,
+// ±90 and reverse applied per-fixture). A field shows the shared value, or blank
+// ("— mixed —") when they differ. (Patch is per-chain, so it's omitted here.)
+function multiPositionEditor(ids) {
+  const fxOf = (id, src = show) => (src.fixtures || []).find((x) => x.id === id);
+  const tfOf = (f, src = show) => f.input.transform || transformFromPoints(f.input.points, src.composition?.canvas);
+  const tfs = ids.map((id) => tfOf(fxOf(id)));
+  // Shared transform value across the selection, or null when they differ.
+  const shared = (key) => { const v0 = tfs[0]?.[key] ?? 0; return tfs.every((t) => Math.abs((t?.[key] ?? 0) - v0) < 0.5) ? v0 : null; };
+  // Apply a per-id mutation across the whole selection in ONE commit.
+  const applyAll = (mutate) => { let next = show; for (const id of ids) next = mutate(next, id); applyShow(next); };
+  const setEachT = (patch) => applyAll((nx, id) => setFixtureTransform(nx, id, patch));
+  const rotStep = (sign) => applyAll((nx, id) => {
+    const r = tfOf(fxOf(id, nx), nx).rotation || 0;
+    return setFixtureTransform(nx, id, { rotation: (snap90(r) + (sign > 0 ? 90 : 270)) % 360 });
+  });
+  // Height: only show a shared number when every fixture has the SAME manual height.
+  const hManual = tfs.every((t) => !isAutoThickness(t.h));
+  const hVal = hManual ? shared('h') : null;
+  // reverse button is "on" only when ALL selected strips are reversed.
+  const allRev = ids.every((id) => !!fxOf(id)?.input?.reversed);
+
+  return oel('div', { className: 'output-edit' }, [
+    Section('Position', 'position', (body) => {
+      body.append(
+        oel('div', { className: 'output-grid' }, [
+          txFieldMulti('X', shared('x'), (v) => setEachT({ x: v })),
+          txFieldMulti('Y', shared('y'), (v) => setEachT({ y: v })),
+          txFieldMulti('Width', shared('w'), (v) => setEachT({ w: v })),
+          txFieldMulti('Height', hVal, (v) => setEachT({ h: v > 0 ? v : 0 })),   // 0 = auto
+          (() => {
+            const fld = txFieldMulti('Rotation°', shared('rotation'), (v) => setEachT({ rotation: v }));
+            fld.append(
+              oel('button', { className: 'dir-btn rot-step', textContent: '−90°', title: 'rotate each −90°', onclick: () => rotStep(-1) }),
+              oel('button', { className: 'dir-btn rot-step', textContent: '+90°', title: 'rotate each +90°', onclick: () => rotStep(1) }),
+            );
+            return fld;
+          })(),
+        ]),
+        oel('div', { className: 'dir-btns out-transform' }, [
+          oel('button', { className: 'dir-btn' + (allRev ? ' on' : ''), textContent: '⇄ reverse',
+            title: 'reverse each selected strip (which end is pixel 0)',
+            onclick: () => applyAll((nx, id) => flipFixture(nx, id)) }),
+        ]),
+      );
+    }),
+  ]);
+}
+
 const applyShow = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
 
 // Wiring for the selected fixture: its INPUT comes FROM another fixture's output
@@ -1003,6 +1062,10 @@ function updateInspector() {
       if (selectedFixtureIds.size === 1) {
         const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
         if (f) { detail = positionEditor(f); const t = (show.fixtureTypes || []).find((x) => x.id === f.typeId)?.name; title = fixtureLabel(f, show.fixtures.indexOf(f)) + (t ? ` ${t}` : ''); }
+      } else if (selectedFixtureIds.size > 1) {
+        // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
+        const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
+        if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures selected`; }
       } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
         detail = panel.deviceDetailEl?.();
         title = (show.devices.find((d) => d.id === selectedDeviceId)?.name) || selectedDeviceId;

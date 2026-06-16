@@ -12,15 +12,30 @@ import {
 const ROTATE_KNOB = 0.06;
 // Minimum on-canvas size (px) when corner-resizing a bar, so it can't collapse.
 const MIN_W = 6, MIN_H = 3;
-// Bounding box (normalized) of the selected fixtures, for a GROUP resize — only
-// when 2+ are selected. Uses the centreline points (good enough). Module-scope so
-// both the chrome and the hit-test share it.
-function groupBox(show, selectedIds) {
+// Bounding box (normalized) of the selected fixtures' DRAWN footprint, for a GROUP
+// resize — only when 2+ are selected. BARS include their thickness rectangle (so
+// the box hugs the visible fixture, not just its centreline); polylines use their
+// vertices. baseW/baseH are the logical drawing dims (BASE_W/BASE_H). Module-scope
+// so both the chrome and the hit-test share it.
+function groupBox(show, selectedIds, baseW, baseH) {
   if (!selectedIds || !selectedIds.has || selectedIds.size < 2) return null;
+  const W = baseW || 1280, Hh = baseH || 720;
+  const cv = show.composition?.canvas || { w: W, h: Hh };
   let minX = 1, minY = 1, maxX = 0, maxY = 0, any = false;
+  const acc = (xn, yn) => { if (xn < minX) minX = xn; if (xn > maxX) maxX = xn; if (yn < minY) minY = yn; if (yn > maxY) maxY = yn; any = true; };
   for (const f of show.fixtures || []) {
     if (!selectedIds.has(f.id)) continue;
-    for (const [x, y] of (f.input?.points || [])) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; any = true; }
+    const eps = f.input?.points || [];
+    if (!eps.length) continue;
+    if (isPolylineFixture(f.input) || eps.length < 2) { for (const [x, y] of eps) acc(x, y); continue; }
+    // BAR: the 4 outer corners of the thickness rectangle (same math as buildChrome).
+    const ax = eps[0][0] * W, ay = eps[0][1] * Hh, bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, perpX = -dy / len, perpY = dx / len;
+    const ht = (thicknessOf(f, cv) / 2) * (Hh / (cv.h || Hh));
+    for (const sgn of [1, -1]) {
+      acc((ax + perpX * ht * sgn) / W, (ay + perpY * ht * sgn) / Hh);
+      acc((bx + perpX * ht * sgn) / W, (by + perpY * ht * sgn) / Hh);
+    }
   }
   return any && maxX > minX && maxY > minY ? { minX, minY, maxX, maxY } : null;
 }
@@ -415,7 +430,7 @@ export function createPreview(canvasEl, opts = {}) {
     }
 
     // Group-resize box + 8 handles (corners + edge midpoints) (2+ selected).
-    const gb = groupBox(show, selectedIds);
+    const gb = groupBox(show, selectedIds, W, Hh);
     if (gb) {
       const x = gb.minX * W, y = gb.minY * Hh, w = (gb.maxX - gb.minX) * W, h = (gb.maxY - gb.minY) * Hh;
       p.push(`<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="none" stroke="${accCss(1)}" stroke-width="${nz(ck)}" stroke-dasharray="${DASH}"/>`);
@@ -487,7 +502,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     // Group-resize: 2+ selected → 8 handles (corners + edge midpoints) on the box.
     // Corners scale both axes (diagonal), edges scale one (↔ / ↕).
     if (sel && sel.has && sel.size > 1) {
-      const gb = groupBox(show, sel);
+      const gb = groupBox(show, sel, rw, rh);
       if (gb) {
         const ccx = (gb.minX + gb.maxX) / 2 * rw, ccy = (gb.minY + gb.maxY) / 2 * rh;
         for (const h of groupHandles(gb)) {
@@ -582,7 +597,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       // Directional group resize: a corner scales both axes, an edge scales one.
       // The OPPOSITE side stays pinned (anchor); Shift locks the aspect ratio.
       const h = hit.groupHandle;
-      const gb = groupBox(show, getSelected?.());
+      const gb = groupBox(show, getSelected?.(), cv.w, cv.h);
       const ax = h.col !== 1, ay = h.row !== 1;
       const anchor = { x: (h.col === 0 ? gb.maxX : gb.minX) * cv.w, y: (h.row === 0 ? gb.maxY : gb.minY) * cv.h };
       const corner0 = { x: (h.col === 0 ? gb.minX : gb.maxX) * cv.w, y: (h.row === 0 ? gb.minY : gb.maxY) * cv.h };
