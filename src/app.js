@@ -985,14 +985,12 @@ function addInstance(typeId) {
   let n = next.fixtures.length + 1, id;
   do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
   const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  // Drop new strips at the TOP-LEFT (cascaded so successive adds don't fully
-  // overlap) so they're easy to spot, and leave them UNASSIGNED (no device) — they
-  // land in the "Unassigned" group until you wire them to an output. A thin VERTICAL
-  // strip (rotation 90°) dropped in the MIDDLE of the canvas, cascaded a little so
-  // successive adds don't fully overlap.
+  // Drop new strips in the MIDDLE of the canvas, UNROTATED (a horizontal strip),
+  // cascaded a little so successive adds don't fully overlap, and leave them
+  // UNASSIGNED (no device) until you wire them to an output.
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
-  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: t.pixelCount, h: 0, rotation: 90 };
+  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: t.pixelCount, h: 0, rotation: 0 };
   // If a controller is selected, the new fixture lands ON it; otherwise it's
   // unassigned. Either way it gets its OWN free output (port) so added strips are
   // NOT auto-chained together — chain them deliberately via the chain action.
