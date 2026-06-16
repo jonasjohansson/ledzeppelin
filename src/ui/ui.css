@@ -188,9 +188,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* When the editor is the inspector's only content (a selected fixture), the
    separator margin/rule above it is dead space — drop it so GEOMETRY sits at
    the top. */
-#output-inspector > .output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
-/* The selected fixture's name, above POSITION — names what you're editing. */
-.fx-detail-title { color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 2px 0 8px; }
+.output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 .output-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
 /* Fixtures inputs reuse the shared .fx-field input chrome (same as Design) — no
    override here, so the two panels match. Hide number-input spinner arrows so a
@@ -278,11 +276,6 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
   align-items: stretch; padding: 0; box-sizing: border-box;
   height: 100vh; pointer-events: none;
 }
-/* Inspector: the selected item's editor in Output, docked just LEFT of the right
-   panel (#side) so it reads as part of the right-hand controls. */
-#output-inspector { flex: 0 0 256px; max-height: 100vh; display: flex; flex-direction: column;
-  overflow-y: auto; pointer-events: auto; margin-right: -1px; }
-#output-inspector[hidden] { display: none; }
 #left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
 #deckbar { flex: 0 0 auto; }
 /* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
@@ -290,14 +283,9 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
   display: flex; flex-direction: column; align-items: flex-start; gap: 0; }   /* stack the group + "+ layer" below it (not inline) */
 #deckbar, #side { pointer-events: auto; }
 /* The right panel docks flush; -1px overlaps the deck's border into one shared
-   hairline (no doubled 2px seam) — the packed-grid look. */
+   hairline (no doubled 2px seam) — the packed-grid look. The deck (#left, flex
+   1 1 auto) fills the left and pushes #side to the far right in every section. */
 #side { align-self: stretch; margin-left: -1px; }
-/* In Output the editor + main panel CLUSTER at the far right (the canvas takes the
-   whole left). The leftmost of the cluster carries the auto-margin that pushes it
-   over: the inspector when it's shown, otherwise the main panel itself. */
-body.output-mode #output-inspector { margin-left: auto; }
-body.output-mode #side { margin-left: -1px; }
-body.output-mode #layout:has(> #output-inspector[hidden]) #side { margin-left: auto; }
 
 /* Solid, docked panel chrome — flush cells (no radius), distinct from the
    checker pasteboard via solid fill + hairline. */
@@ -316,7 +304,10 @@ body.output-mode #layout:has(> #output-inspector[hidden]) #side { margin-left: a
 /* No outer panel padding — the tab rows span edge to edge and content keeps
    only its OWN inset (#insp-panes), so the side margin isn't doubled and the
    DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
-#side { flex: 0 0 var(--side-w); max-height: 100vh; display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
+/* End the panel ABOVE the bottom toggle bar (#corner-controls) so the panel/editor
+   never covers the viewport toggles — they read as a continuous bar beneath it. */
+#side { flex: 0 0 var(--side-w); max-height: calc(100vh - 44px); margin-bottom: 44px;
+  display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
@@ -325,6 +316,23 @@ body.output-mode #layout:has(> #output-inspector[hidden]) #side { margin-left: a
   background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
   padding: var(--s3);
 }
+/* Editor DOCK: the selected fixture/device editor as a bottom window inside the
+   Output pane, below the list. A title bar (click / ▾ to minimise) over a scrolling
+   body; minimised, only the bar shows. */
+#output-editor { flex: 0 0 auto; min-height: 0; max-height: 55%; display: flex; flex-direction: column;
+  border-top: 1px solid var(--line-2); background: var(--panel-2); }
+#output-editor[hidden] { display: none; }
+#output-editor.minimized { max-height: none; }
+#output-editor-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 5px var(--s3); cursor: pointer; user-select: none; background: var(--panel); }
+#output-editor-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
+#output-editor-min { flex: 0 0 auto; background: transparent; border: none; color: var(--muted);
+  cursor: pointer; padding: 0 4px; font-size: var(--fs-body); line-height: 1; }
+#output-editor-min:hover { color: var(--accent); }
+#output-editor-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); }
+#output-editor.minimized #output-editor-body { display: none; }
+
 /* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
    so content keeps the same side margin as the Design/Output panes. --- */
 #system-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }

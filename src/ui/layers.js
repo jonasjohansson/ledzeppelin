@@ -415,6 +415,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // is the default; clicking a layer head or the composition header switches the
   // active target without dropping the clip selection.
   let deckSel = 'clip';      // 'clip' | 'layer' | 'comp'
+  // Double-click the COMPOSITION header to collapse the deck to just that bar.
+  let deckCollapsed = (() => { try { return localStorage.getItem('lz.deck.collapsed') === '1'; } catch { return false; } })();
   let selectedEffect = null; // a selected effect row: { scope:'clip'|'layer', layerId, clipId?, index } — Backspace deletes it
   const fxSel = (scope, layerId, clipId, index) => selectedEffect
     && selectedEffect.scope === scope && selectedEffect.layerId === layerId
@@ -604,10 +606,16 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     ]);
     if ((comp.effects || []).length) titleWrap.append(el('span', { className: 'deck-fx', textContent: 'fx', title: 'composition has effects' }));
     // The WHOLE header bar selects the composition (like a layer head), not just
-    // the title text.
+    // the title text. Double-click COLLAPSES the deck to just this bar (and back).
     compHead.addEventListener('click', () => { deckSel = 'comp'; onCompositionSelect?.(); render(); });
+    compHead.addEventListener('dblclick', () => {
+      deckCollapsed = !deckCollapsed;
+      try { localStorage.setItem('lz.deck.collapsed', deckCollapsed ? '1' : '0'); } catch { /* private */ }
+      render();
+    });
+    if (deckCollapsed) compHead.classList.add('is-collapsed');
     compHead.append(titleWrap);
-    const group = el('div', { className: 'deck-comp-group' }, [compHead, deckBox]);
+    const group = el('div', { className: 'deck-comp-group' }, deckCollapsed ? [compHead] : [compHead, deckBox]);
     deckEl.append(group);
 
     // --- CLIP inspector: the SELECTED clip, found across ALL layers ----------

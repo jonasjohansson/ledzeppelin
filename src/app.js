@@ -588,7 +588,13 @@ if (previewCanvas) {
 
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
-const outputInspectorEl = document.getElementById('output-inspector');   // left sidebar — selected item's editor
+// Editor dock at the BOTTOM of the Output pane: a bar (title + minimise) and a body
+// that holds the selected fixture/device editor. Collapsible.
+const outputEditorEl = document.getElementById('output-editor');
+const outputEditorBodyEl = document.getElementById('output-editor-body');
+const outputEditorTitleEl = document.getElementById('output-editor-title');
+const outputEditorMinBtn = document.getElementById('output-editor-min');
+let editorMinimized = (() => { try { return localStorage.getItem('lz.editor.min') === '1'; } catch { return false; } })();
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
@@ -748,13 +754,8 @@ function positionEditor(sel) {
   // Two collapsible groups (same accent-header + rule + chevron as the Clip
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
-  // A title row up top names the selected fixture (auto number + its type) so the
-  // editor reads "what am I editing" before the geometry fields.
-  const fxIdx = show.fixtures.indexOf(sel);
-  const fxType = (show.fixtureTypes || []).find((t) => t.id === sel.typeId)?.name;
-  const fxTitle = fixtureLabel(sel, fxIdx) + (fxType ? ` ${fxType}` : '');
+  // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
-    oel('div', { className: 'fx-detail-title', textContent: fxTitle }),
     Section('Position', 'position', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
@@ -943,30 +944,50 @@ function confirmDeleteFixtures(ids) {
   return window.confirm(msg);
 }
 
-// The LEFT sidebar editor: shows the selected item's properties for the active
-// Output tab — a fixture's position (Fixtures), a device's settings (Devices),
-// or a model/definition (Library). Hidden when nothing's selected / not Output.
+// The editor DOCK at the bottom of the Output pane: shows the selected item's
+// properties — a fixture's position (Fixtures), a device's settings, or a model
+// (Inventory). It has a title bar (with a ▾ minimise toggle) above its body, and
+// hides entirely when nothing's selected / not in Output.
 function updateInspector() {
-  if (!outputInspectorEl) return;
-  let detail = null;
+  if (!outputEditorEl) return;
+  let detail = null, title = '';
   if (outputPaneEl && !outputPaneEl.hidden) {
-    if (outputTab === 'library') detail = panel.libraryDetailEl?.();
+    if (outputTab === 'library') { detail = panel.libraryDetailEl?.(); title = 'Inventory item'; }
     else {
       // Merged Fixtures+Devices tab: one fixture selected → its position/patch
       // editor; else a device selected → its settings editor; else nothing.
       if (selectedFixtureIds.size === 1) {
         const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
-        if (f) detail = positionEditor(f);
+        if (f) { detail = positionEditor(f); const t = (show.fixtureTypes || []).find((x) => x.id === f.typeId)?.name; title = fixtureLabel(f, show.fixtures.indexOf(f)) + (t ? ` ${t}` : ''); }
       } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
         detail = panel.deviceDetailEl?.();
+        title = (show.devices.find((d) => d.id === selectedDeviceId)?.name) || selectedDeviceId;
       }
     }
   }
-  outputInspectorEl.textContent = '';
-  if (detail) { outputInspectorEl.append(detail); outputInspectorEl.hidden = false; }
-  else outputInspectorEl.hidden = true;
-  updateStageInsets();   // the left inspector showing/hiding changes the fit window
+  outputEditorBodyEl.textContent = '';
+  if (detail) {
+    outputEditorTitleEl.textContent = title;
+    outputEditorBodyEl.append(detail);
+    outputEditorEl.hidden = false;
+    outputEditorEl.classList.toggle('minimized', editorMinimized);
+    if (outputEditorMinBtn) outputEditorMinBtn.textContent = editorMinimized ? '▴' : '▾';
+  } else {
+    outputEditorEl.hidden = true;
+  }
+  updateStageInsets();
 }
+// Minimise / restore the editor dock (collapses to just its title bar). Persisted.
+function setEditorMinimized(v) {
+  editorMinimized = !!v;
+  try { localStorage.setItem('lz.editor.min', editorMinimized ? '1' : '0'); } catch { /* private */ }
+  updateInspector();
+}
+outputEditorMinBtn?.addEventListener('click', () => setEditorMinimized(!editorMinimized));
+document.getElementById('output-editor-bar')?.addEventListener('click', (e) => {
+  if (e.target === outputEditorMinBtn) return;   // the button handles itself
+  setEditorMinimized(!editorMinimized);
+});
 
 function renderOutput() {
   updateInspector();
@@ -1184,7 +1205,7 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('pointerdown', (e) => {
   if (!selectedFixtureIds.size) return;
-  if (e.target.closest?.('#stageinner, #side, #output-inspector, #deckbar, #corner-controls, #show-ui')) return;
+  if (e.target.closest?.('#stageinner, #side, #deckbar, #corner-controls, #show-ui')) return;
   clearFixtureSelection();
 });
 
@@ -1407,7 +1428,7 @@ document.addEventListener('keydown', (e) => {
   // they fire over the pasteboard and even when the (transformed) canvas has been
   // panned out from under the cursor. Skipped over the scrollable chrome so the
   // sidebar / deck / menus still scroll normally.
-  const overChrome = (t) => t?.closest?.('#side, #deckbar, #output-inspector, #corner-controls, #menu-pop, .pick-pop');
+  const overChrome = (t) => t?.closest?.('#side, #deckbar, #corner-controls, #menu-pop, .pick-pop');
   window.addEventListener('wheel', (e) => {
     if (overChrome(e.target)) return;                        // let panels scroll
     e.preventDefault();
@@ -1743,30 +1764,22 @@ function syncCompAspect() {
 }
 syncCompAspect();
 
-// In OUTPUT (both subtabs), fit the canvas to the gap BETWEEN the two sidebars (the
-// left editor + the right panel) so the whole rig stays visible, never hidden
-// behind a panel. The left inspector width is RESERVED even when it's empty, so the
-// canvas never jumps between subtabs or when a selection clears. Measured after
-// layout (rAF) and published as CSS insets; 0 in every other view (full window).
+// In OUTPUT, fit the canvas to the left of the main panel (the editor now lives
+// INSIDE that panel, so there's a single right-side chrome). The canvas takes the
+// whole left up to #side. Measured after layout (rAF) and published as CSS insets;
+// 0 in every other view (full window).
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(() => {
     const root = document.documentElement;
     const active = !outputPaneEl?.hidden && !document.body.classList.contains('gui-hidden');
-    let left = 0, right = 0;
+    let right = 0;
     if (active) {
-      // Editor + main panel cluster at the RIGHT; the canvas takes the whole left.
-      // The canvas fits up to the LEFT edge of that cluster: the inspector when it's
-      // shown (a fixture/device is selected), otherwise just the main panel — so with
-      // nothing selected the canvas extends to the panel (no reserved gap).
       const vw = window.innerWidth;
-      const insp = outputInspectorEl;
-      const clusterLeft = insp && !insp.hidden
-        ? insp.getBoundingClientRect().left
-        : document.getElementById('side')?.getBoundingClientRect().left;
-      if (clusterLeft != null) right = Math.max(0, vw - clusterLeft);
+      const side = document.getElementById('side')?.getBoundingClientRect();
+      if (side) right = Math.max(0, vw - side.left);
     }
-    root.style.setProperty('--inset-left', left + 'px');
+    root.style.setProperty('--inset-left', '0px');
     root.style.setProperty('--inset-right', right + 'px');
     reflowView?.();   // the viewport moved — re-clamp the camera against the new frame
   });

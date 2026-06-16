@@ -62,11 +62,6 @@ canvas{display:block}
     <section id="deckbar" class="panel"></section>
   </div>
 
-  <!-- INSPECTOR: the selected item's editor in Output (fixture position / device
-       settings / library model). Sits just left of the right panel so it reads as
-       part of the right-hand controls. Empty + hidden otherwise. -->
-  <aside id="output-inspector" class="panel" hidden></aside>
-
   <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
        Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
        Devices routing. Only one section shows at a time (more canvas room). -->
@@ -112,6 +107,16 @@ canvas{display:block}
         <div id="devices-design"></div>
         <!-- Library tab: the catalog of models — controller types + fixture types. -->
         <div id="library-design"></div>
+      </div>
+      <!-- Editor dock: the selected fixture/device's editor as a bottom window,
+           below the list. Collapsible via the ▾ in its bar. Hidden when nothing's
+           selected. -->
+      <div id="output-editor" hidden>
+        <div id="output-editor-bar">
+          <span id="output-editor-title"></span>
+          <button id="output-editor-min" title="minimise editor">▾</button>
+        </div>
+        <div id="output-editor-body"></div>
       </div>
     </div>
 
