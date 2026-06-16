@@ -27,6 +27,31 @@ const statusEl = $('status'), chipsEl = $('chips'), paramsEl = $('params');
   addEventListener('storage', (e) => { if (e.key === 'lz.accent') apply(); });
 })();
 
+// OSC input PORT — settable here; the daemon rebinds (POST /api/osc/port). Persisted
+// so it sticks across reloads (re-applied on load). The Mapping window is served by
+// the daemon, so it can hit the API directly.
+(function oscPort() {
+  const input = $('osc-port'), status = $('osc-port-status'), echo = $('osc-port-echo');
+  if (!input) return;
+  const setUi = (p) => { input.value = p; if (echo) echo.textContent = p; };
+  const flash = (msg, ok) => { if (!status) return; status.textContent = msg; status.style.color = ok ? 'var(--accent)' : 'var(--danger, #e66)'; setTimeout(() => { status.textContent = ''; }, 1600); };
+  const saved = (() => { try { return Number(localStorage.getItem('lz.oscport')) || 0; } catch { return 0; } })();
+  const post = async (port) => {
+    try {
+      const r = await fetch('/api/osc/port', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ port }) });
+      const d = await r.json();
+      if (d.osc) { setUi(d.osc); try { localStorage.setItem('lz.oscport', String(d.osc)); } catch { /* private */ } flash('✓ bound', true); }
+      else flash(d.error || 'failed', false);
+    } catch { flash('daemon offline', false); }
+  };
+  // On load: reflect the daemon's current port; if a saved port differs, apply it.
+  fetch('/api/info').then((r) => r.json()).then((d) => {
+    setUi(d.osc || 9000);
+    if (saved && saved !== d.osc) post(saved);
+  }).catch(() => {});
+  input.addEventListener('change', () => { const p = Math.max(1, Math.min(65535, Math.round(Number(input.value) || 9000))); post(p); });
+})();
+
 let params = [];                 // [{ id, kind, keyable, group, label, osc, midi, key, mode }]
 let channels = {};               // { channel: value }
 let learn = null;                // { id, slot } currently armed

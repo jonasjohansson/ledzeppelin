@@ -59,6 +59,9 @@
   .hint { font-size: 11px; color: var(--faint, #777); }
   .map-socket { margin: -4px 0 10px; line-height: 1.7; }
   .map-socket code { font-family: var(--mono, monospace); color: var(--accent, #e8a35c); background: var(--field-bg, #1a1a1a); border: 1px solid var(--line, #333); padding: 1px 5px; border-radius: 4px; }
+  .map-osc-in { margin: -4px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .map-osc-in input { width: 72px; font: 12px var(--mono, monospace); color: var(--text, #eee); background: var(--field-bg, #1a1a1a); border: 1px solid var(--line-2, #474c55); border-radius: 4px; padding: 2px 6px; }
+  #osc-port-status { font-size: 11px; }
 </style>
 </head>
 <body>
@@ -75,10 +78,15 @@
   <div class="map-sec">channels</div>
   <div class="chips" id="chips"><span class="chip-empty">touch a knob · press a key · send OSC</span></div>
 
+  <div class="map-sec">osc input</div>
+  <div class="hint map-osc-in">listening on UDP port
+    <input id="osc-port" type="number" min="1" max="65535" step="1" value="9000">
+    <span id="osc-port-status"></span></div>
+
   <div class="map-sec">parameters <span class="sec-aside">— click a row, then move a control</span></div>
   <!-- Any address can be driven directly (no mapping needed) over OSC or the socket. -->
   <div class="hint map-socket">drive any address directly —
-    OSC to UDP <code>:9000</code> (e.g. <code>/layer/1/clip/1/width</code> with a 0–1 value)
+    OSC to UDP <code>:<span id="osc-port-echo">9000</span></code> (e.g. <code>/layer/1/clip/1/width</code> with a 0–1 value)
     · or socket <code>{"type":"ext","channel":"/layer/1/clip/1/width","value":0.5}</code></div>
   <div id="params"><span class="chip-empty">connecting…</span></div>
 </div>

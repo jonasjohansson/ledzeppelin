@@ -79,7 +79,14 @@ const http = createServer(async (req, res) => {
     const lan = Object.values(networkInterfaces()).flat()
       .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
     res.setHeader('content-type', 'application/json');
-    return res.end(JSON.stringify({ lan, port: PORT }));
+    return res.end(JSON.stringify({ lan, port: PORT, osc: OSC_PORT }));
+  }
+  // Set the OSC listen PORT live (the Mapping window's OSC-input field). Rebinds.
+  if (url.pathname === '/api/osc/port' && req.method === 'POST') {
+    res.setHeader('content-type', 'application/json');
+    try { bindOsc((await readJson(req)).port); res.end(JSON.stringify({ osc: OSC_PORT })); }
+    catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
+    return;
   }
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));
   if (url.pathname === '/api/artnet/scan') {
@@ -182,15 +189,25 @@ function broadcastExt(channel, value, except) {
 }
 // OSC over UDP: any address, first numeric arg → an external channel named by
 // the address. TouchOSC / TouchDesigner / oscsend point here.
-const OSC_PORT = Number(process.env.OSC_PORT) || 9000;
-const osc = createSocket('udp4');
-let oscSeen = false;
-osc.on('message', (buf) => {
-  if (!oscSeen) { oscSeen = true; console.log(`[osc] receiving on :${OSC_PORT}`); }
-  for (const { address, value } of parseOsc(buf)) broadcastExt(address, value);
-});
-osc.on('error', (e) => { console.error(`[osc] listener error: ${e.message}`); try { osc.close(); } catch { /* already closed */ } });
-osc.bind(OSC_PORT);
+// Bindable so the listen PORT can be changed live (Mapping window → POST
+// /api/osc/port). Rebinding closes the old socket and binds the new port.
+let OSC_PORT = Number(process.env.OSC_PORT) || 9000;
+let osc = null;
+function bindOsc(port) {
+  const p = Math.max(1, Math.min(65535, Math.round(Number(port) || OSC_PORT)));
+  if (osc) { try { osc.close(); } catch { /* already closed */ } osc = null; }
+  OSC_PORT = p;
+  const s = createSocket('udp4');
+  let seen = false;
+  s.on('message', (buf) => {
+    if (!seen) { seen = true; console.log(`[osc] receiving on :${OSC_PORT}`); }
+    for (const { address, value } of parseOsc(buf)) broadcastExt(address, value);
+  });
+  s.on('error', (e) => { console.error(`[osc] listener error: ${e.message}`); try { s.close(); } catch { /* already closed */ } });
+  s.bind(OSC_PORT);
+  osc = s;
+}
+bindOsc(OSC_PORT);
 http.listen(PORT, () => {
   const url = `http://localhost:${PORT}`;
   console.log(`ledzeppelin ${url}`);
