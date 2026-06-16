@@ -715,17 +715,22 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     }
     const [hnx, hny] = norm(ev);
     dragHint = hintText ? { nx: hnx, ny: hny, text: hintText } : null;
+    dragState.moved = true;                   // an actual geometry edit happened
     onEdit?.(next);
   });
 
   function end(ev) {
     if (!dragState) return;
     const wasMarquee = dragState.kind === 'marquee';
+    const moved = dragState.moved;
     dragState = null; dragHint = null;
     canvasEl.style.cursor = cursorFor(hitTest(ev));   // back to hover feedback
     try { canvasEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
-    if (wasMarquee) onMarqueeEnd?.();        // selection-only — no geometry commit
-    else onCommit?.(getShow());
+    // Only COMMIT (which rebuilds the sampler — a one-frame flash) when the drag
+    // actually moved something. A plain click just SELECTS; committing it would
+    // pointlessly rebuild and flicker the lit cells.
+    if (wasMarquee) onMarqueeEnd?.();
+    else if (moved) onCommit?.(getShow());
   }
   canvasEl.addEventListener('pointerup', end);
   canvasEl.addEventListener('pointercancel', end);
