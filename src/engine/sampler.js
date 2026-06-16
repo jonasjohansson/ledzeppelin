@@ -81,12 +81,17 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
       const ridx = widx ^ 1;
       widx = ridx;
       if (primed && fences[ridx]) {
-        const s = gl.clientWaitSync(fences[ridx], 0, 0);
+        // SYNC_FLUSH_COMMANDS_BIT flushes the fence so clientWaitSync can actually
+        // observe completion — without it the fence may never read as signaled, the
+        // read is skipped every frame, and the PBO gets overwritten unread (that's
+        // the "READ-usage buffer written…before being read back" perf warning).
+        const s = gl.clientWaitSync(fences[ridx], gl.SYNC_FLUSH_COMMANDS_BIT, 0);
         if (s === gl.ALREADY_SIGNALED || s === gl.CONDITION_SATISFIED) {
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[ridx]);
           gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
           lastValid = trim(out);
+          gl.deleteSync(fences[ridx]); fences[ridx] = null;   // consumed → don't re-check/overwrite unread
         }
       }
       primed = true;

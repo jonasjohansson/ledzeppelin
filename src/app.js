@@ -46,9 +46,14 @@ function defaultShow() {
   // Generic placeholder hardware so the first run shows SOMETHING on the wall —
   // the user reconfigures (or scans) these to match their real rig.
   show = addDevice(show, { id: 'c1', name: 'Generic Controller', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
-  // ONE generic fixture DEFINITION available in the library — but NO instances
-  // placed on the canvas (an empty stage; the user maps their own rig).
-  show.fixtureTypes = [{ id: 't1', name: 'Generic Fixture', ledsPerMeter: 60, meters: 1.6, pixelCount: 96, colorOrder: 'RGB' }];
+  // A spread of generic strip DEFINITIONS in the library (96 / 60 / 30 led/m, in 5 m
+   // and 1 m lengths) — but NO instances placed (empty stage; the user maps their rig).
+  const genericType = (lpm, m) => ({ id: `g${lpm}_${m}`, name: `${lpm}/m · ${m}m`, ledsPerMeter: lpm, meters: m, pixelCount: lpm * m, colorOrder: 'RGB' });
+  show.fixtureTypes = [
+    genericType(96, 5), genericType(96, 1),
+    genericType(60, 5), genericType(60, 1),
+    genericType(30, 5), genericType(30, 1),
+  ];
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
   // opacity so both read). Prefixed manifest defaults per source.
@@ -887,10 +892,12 @@ function addInstance(typeId) {
   const cv = next.composition?.canvas || { w: 1280, h: 720 };
   // Drop new strips at the TOP-LEFT (cascaded so successive adds don't fully
   // overlap) so they're easy to spot, and leave them UNASSIGNED (no device) — they
-  // land in the "Unassigned" group until you wire them to an output. A thin
-  // VERTICAL strip: thickness 10 px, run = pixel count (rotation 90° stands it up).
+  // land in the "Unassigned" group until you wire them to an output. A thin VERTICAL
+  // strip (rotation 90°) dropped in the MIDDLE of the canvas, cascaded a little so
+  // successive adds don't fully overlap.
   const k = next.fixtures.length;
-  const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 0, rotation: 90 };
+  const off = (k % 8) * 16 - 56;
+  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: t.pixelCount, h: 0, rotation: 90 };
   // If a controller is selected, the new fixture lands ON it (its own free output);
   // otherwise it's unassigned (lands in the flat list until you wire it).
   const onDev = selectedDeviceId && next.devices.some((d) => d.id === selectedDeviceId) ? selectedDeviceId : '';
