@@ -329,10 +329,6 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 #output-editor[hidden] { display: none; }
 #output-editor-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
   padding: 5px var(--s3); cursor: row-resize; user-select: none; touch-action: none; background: var(--panel); }
-/* Grip dashes — the universal "drag me" affordance. */
-#output-editor-grip { flex: 0 0 auto; width: 16px; height: 4px; border-radius: 2px;
-  background: repeating-linear-gradient(to right, var(--line-2) 0 3px, transparent 3px 5px); }
-#output-editor-bar:hover #output-editor-grip { background: repeating-linear-gradient(to right, var(--muted) 0 3px, transparent 3px 5px); }
 #output-editor-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
 #output-editor-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); }
