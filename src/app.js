@@ -912,6 +912,64 @@ function multiPositionEditor(ids) {
 
 const applyShow = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
 
+// --- Align & distribute the multi-selection (canvas px, bounding-box based) -----
+// Each fixture's AABB on the canvas: centre ± size/2 (size = aabbSize, rotation-aware).
+function fxMetrics(id, src = show) {
+  const f = (src.fixtures || []).find((x) => x.id === id);
+  const tf = f.input.transform || transformFromPoints(f.input.points, src.composition?.canvas);
+  const s = aabbSize(tf, thicknessOf(f, src.composition?.canvas));
+  return { id, w: s.w, h: s.h, cx: tf.x, cy: tf.y, left: tf.x - s.w / 2, right: tf.x + s.w / 2, top: tf.y - s.h / 2, bottom: tf.y + s.h / 2 };
+}
+// mode: left|cx|right|top|cy|bottom (align) · distH|distV (distribute centres evenly).
+function alignSelected(mode) {
+  const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
+  if (ids.length < 2) return;
+  const m = ids.map((id) => fxMetrics(id));
+  const minL = Math.min(...m.map((x) => x.left)), maxR = Math.max(...m.map((x) => x.right));
+  const minT = Math.min(...m.map((x) => x.top)), maxB = Math.max(...m.map((x) => x.bottom));
+  const patch = {};   // id → transform patch (centre)
+  if (mode === 'distH' || mode === 'distV') {
+    const k = mode === 'distH' ? 'cx' : 'cy';
+    const sorted = [...m].sort((a, b) => a[k] - b[k]);
+    const first = sorted[0][k], last = sorted[sorted.length - 1][k];
+    sorted.forEach((it, i) => { const v = sorted.length > 1 ? first + (last - first) * i / (sorted.length - 1) : it[k]; patch[it.id] = mode === 'distH' ? { x: v } : { y: v }; });
+  } else for (const it of m) {
+    if (mode === 'left') patch[it.id] = { x: minL + it.w / 2 };
+    else if (mode === 'right') patch[it.id] = { x: maxR - it.w / 2 };
+    else if (mode === 'cx') patch[it.id] = { x: (minL + maxR) / 2 };
+    else if (mode === 'top') patch[it.id] = { y: minT + it.h / 2 };
+    else if (mode === 'bottom') patch[it.id] = { y: maxB - it.h / 2 };
+    else if (mode === 'cy') patch[it.id] = { y: (minT + maxB) / 2 };
+  }
+  let next = show;
+  for (const id of ids) if (patch[id]) next = setFixtureTransform(next, id, patch[id]);
+  applyShow(next);
+  updateInspector();   // positions changed wholesale → refresh the editor fields
+}
+// Floating align toolbar — bottom-centre of the canvas, only with 2+ fixtures
+// selected in the Output (Fixtures) view. Built once; visibility via updateAlignBar.
+let alignBarEl = null;
+(() => {
+  const groups = [
+    [['left', '↤', 'Align left'], ['cx', '↔', 'Align horizontal centres'], ['right', '↦', 'Align right']],
+    [['top', '↥', 'Align top'], ['cy', '↕', 'Align vertical centres'], ['bottom', '↧', 'Align bottom']],
+    [['distH', '⇿', 'Distribute horizontally'], ['distV', '⇳', 'Distribute vertically']],
+  ];
+  const bar = oel('div', { id: 'align-bar', hidden: true });
+  groups.forEach((g, gi) => {
+    if (gi) bar.append(oel('span', { className: 'corner-sep' }));
+    for (const [mode, glyph, title] of g) bar.append(oel('button', { textContent: glyph, title, onclick: () => alignSelected(mode) }));
+  });
+  document.body.append(bar);
+  alignBarEl = bar;
+})();
+function updateAlignBar() {
+  if (!alignBarEl) return;
+  const on = outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library'
+    && selectedFixtureIds.size > 1 && !document.body.classList.contains('gui-hidden');
+  alignBarEl.hidden = !on;
+}
+
 // Wiring for the selected fixture: its INPUT comes FROM another fixture's output
 // (or straight from the controller = first on its output), and its OUTPUT goes TO
 // the next fixture. Picking a "from" fixture moves this one onto that fixture's
@@ -1101,6 +1159,7 @@ function updateInspector() {
     outputEditorEl.hidden = true;
   }
   updateStageInsets();
+  updateAlignBar();
 }
 // The editor dock height is set by dragging its CURTAIN bar. Clamp between the bar
 // alone (≈ collapsed) and most of the pane (leave room for the list). Persisted.
