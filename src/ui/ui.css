@@ -272,7 +272,12 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 /* The panels overlay the canvas: the container passes clicks through to the
    canvas, the panels themselves capture them. */
 #layout {
-  position: relative; z-index: 1; display: flex; gap: 0;
+  /* Above the bottom toolbar (#corner-controls, z 5) so the right panel sits in
+     FRONT of the viewport UI. #layout is pointer-events:none and its left region
+     (#left) is transparent, so the toolbar still shows through + stays clickable in
+     the canvas area; only the opaque #side covers the toolbar where they overlap
+     (and the toolbar is capped so it never reaches under the panel — see below). */
+  position: relative; z-index: 6; display: flex; gap: 0;
   align-items: stretch; padding: 0; box-sizing: border-box;
   height: 100vh; pointer-events: none;
 }
@@ -304,11 +309,10 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 /* No outer panel padding — the tab rows span edge to edge and content keeps
    only its OWN inset (#insp-panes), so the side margin isn't doubled and the
    DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
-/* Full-height, and ABOVE the bottom toolbar (#corner-controls, z 5) so the panel
-   sits in front of the viewport UI where they overlap. (Menus z40 / popovers z50
-   still open above it.) */
+/* Full-height. #layout (its ancestor) rides above the bottom toolbar, so the panel
+   sits in front of the viewport UI where they overlap. */
 #side { flex: 0 0 var(--side-w); max-height: 100vh;
-  display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 6; padding: 0; }
+  display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
@@ -423,8 +427,13 @@ body.gui-hidden #layout { display: none; }
   /* Offset by the device safe-area (notch / home indicator) when installed as a
      standalone PWA with viewport-fit=cover; falls back to 10px on normal screens. */
   left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
+  /* Never reach under the right panel — the panel now renders in front of it, so cap
+     the cluster at the panel's left edge (the telemetry truncates rather than hide). */
+  max-width: calc(100vw - var(--inset-right, 0px) - 22px);
   display: inline-flex; align-items: center; gap: 6px;   /* center, not stretch — buttons keep one intrinsic height whether alone (Show UI) or among taller siblings */
 }
+/* Let the telemetry shrink/ellipsis first when space is tight (buttons keep size). */
+#hud { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
    the button / shift the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
