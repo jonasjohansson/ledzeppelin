@@ -5,6 +5,7 @@ import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { parseOsc } from './osc.js';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput } from './output.js';
@@ -54,7 +55,21 @@ function openBrowser(url) {
     spawn(cmd, [url], { shell: process.platform === 'win32', detached: true, stdio: 'ignore' }).unref();
   } catch { /* no browser / unsupported env — UI is still reachable manually */ }
 }
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Where the web assets (index.html, src/, fonts/, …) live. In dev they sit at the
+// repo root (server/..). In a Bun-compiled binary import.meta.url points inside the
+// embedded fs, so fall back to dirs next to the executable — the build ships the
+// assets there (plain folder: beside the binary or ./assets; macOS .app:
+// ../Resources). `PACKAGED` is true when we resolved from the executable.
+const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = (() => {
+  if (existsSync(join(SRC_ROOT, 'index.html'))) return SRC_ROOT;
+  const exeDir = dirname(process.execPath);
+  for (const c of [exeDir, join(exeDir, 'assets'), join(exeDir, '..', 'Resources')]) {
+    if (existsSync(join(c, 'index.html'))) return c;
+  }
+  return SRC_ROOT;
+})();
+const PACKAGED = ROOT !== SRC_ROOT;
 const PORT = Number(process.env.PORT) || 7070;
 const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -183,5 +198,7 @@ http.listen(PORT, () => {
   const lan = Object.values(networkInterfaces()).flat()
     .find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
   if (lan) console.log(`control    http://${lan}:${PORT}/control/  (open on a phone on this Wi-Fi)`);
-  if (process.env.OPEN) openBrowser(url);
+  // Auto-open the browser when launched as a packaged app (double-click), or when
+  // OPEN=1 (the launch script). Plain `npm start` / headless / CI stay quiet.
+  if (process.env.OPEN || PACKAGED) openBrowser(url);
 });
