@@ -2154,6 +2154,27 @@ const menuList = (items) => {
   }
   return f;
 };
+// Classic "About" dialog — a centred card with name · version · one-line what-it-is
+// · author/year · a link to the repo (where the install lives). Click the backdrop
+// or press Esc to dismiss.
+const REPO_URL = 'https://github.com/jonasjohansson/ledzeppelin';
+function openAbout() {
+  const close = () => back.remove();
+  const card = oel('div', { className: 'about-card' }, [
+    oel('div', { className: 'about-name', textContent: 'LEDZeppelin' }),
+    oel('div', { className: 'about-ver', textContent: `Version ${VERSION}` }),
+    oel('div', { className: 'about-tag', textContent: 'LED mapping & VJ tool' }),
+    oel('div', { className: 'about-copy', textContent: '© 2026 Jonas Johansson' }),
+    oel('a', { className: 'about-link', textContent: 'Get it on GitHub ↗', href: REPO_URL, target: '_blank', rel: 'noopener' }),
+  ]);
+  card.onclick = (e) => e.stopPropagation();   // clicks inside don't dismiss
+  const back = oel('div', { className: 'about-backdrop' }, [card]);
+  back.onclick = close;
+  const onKey = (e) => { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+  document.body.append(back);
+}
+document.getElementById('menu-about')?.addEventListener('click', (e) => { e.stopPropagation(); openAbout(); });
 document.getElementById('menu-file')?.addEventListener('click', (e) => {
   e.stopPropagation();
   openMenu(e.currentTarget, menuList([
