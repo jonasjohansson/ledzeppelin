@@ -287,6 +287,10 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent;
   display: flex; flex-direction: column; align-items: flex-start; gap: 0; }   /* stack the group + "+ layer" below it (not inline) */
 #deckbar, #side { pointer-events: auto; }
+/* In OUTPUT the deck is shown for CONTEXT only (see the composition while patching)
+   — make it click-through so its (empty) clip cells never block selecting a fixture
+   on the canvas behind it. Interact with clips in Design. */
+body.output-mode #deckbar { pointer-events: none; }
 /* The right panel docks flush; -1px overlaps the deck's border into one shared
    hairline (no doubled 2px seam) — the packed-grid look. The deck (#left, flex
    1 1 auto) fills the left and pushes #side to the far right in every section. */
@@ -613,10 +617,8 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 /* Controller = the container header; a touch of space above separates each group. */
 .out-dev { margin-top: 12px; }
 .out-dev:first-of-type { margin-top: 0; }
-/* Fixtures INSIDE a controller: indented + a left guide line tying them to it. */
-.out-fix.nested { margin-left: 16px; position: relative; }
-.out-fix.nested::before { content: ''; position: absolute; left: -9px; top: -7px; bottom: 50%;
-  width: 1px; background: var(--line-2); }
+/* Fixtures INSIDE a controller: indented under it (no guide line). */
+.out-fix.nested { margin-left: 16px; }
 .out-port { margin-left: 16px; min-height: 0; }    /* per-output sub-line (multi-output devices) */
 .out-node-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .out-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }

@@ -891,9 +891,12 @@ function addInstance(typeId) {
   // VERTICAL strip: thickness 10 px, run = pixel count (rotation 90° stands it up).
   const k = next.fixtures.length;
   const transform = { x: 30 + (k % 10) * 14, y: t.pixelCount / 2 + 24, w: t.pixelCount, h: 0, rotation: 90 };
+  // If a controller is selected, the new fixture lands ON it (its own free output);
+  // otherwise it's unassigned (lands in the flat list until you wire it).
+  const onDev = selectedDeviceId && next.devices.some((d) => d.id === selectedDeviceId) ? selectedDeviceId : '';
   next.fixtures.push({
     id, typeId: t.id,
-    output: { deviceId: '', port: 1, pixelOffset: 0, pixelCount: t.pixelCount },
+    output: { deviceId: onDev, port: onDev ? freePort(next, onDev) : 1, pixelOffset: 0, pixelCount: t.pixelCount },
     input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
   });
   selectedFixtureIds = new Set([id]);
@@ -1110,7 +1113,7 @@ function renderOutput() {
     const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const devSelected = selectedDeviceId === dg.deviceId;
+    const devSelected = selectedDeviceId === dg.deviceId && !selectedFixtureIds.size;
     // Controller node (MadMapper "Lumiverse" style): a colour swatch + the name, and
     // the pixel load. No disclosure arrow (its fixtures always list beneath it) and
     // no output-target sub-line — that detail lives in the editor when you click it.
