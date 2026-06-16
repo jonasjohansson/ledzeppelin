@@ -455,7 +455,12 @@ body.gui-hidden #layout { display: none; }
   pointer-events: none; white-space: nowrap; justify-content: flex-start; gap: 12px;
   font-size: var(--fs-micro); opacity: .9;
 }
-#corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
+/* Active toggle / open menu = a clearly FILLED pill (not just an accent-tinted
+   word): the fill IS the on/off signal, so the buttons read as toggles at a
+   glance without any glyph or label cue. */
+#corner-controls button.on, #corner-controls button.open {
+  color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
+}
 #corner-controls #rec-btn.rec-on { color: var(--danger); border-color: var(--danger); }   /* recording = red */
 #corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
 /* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show

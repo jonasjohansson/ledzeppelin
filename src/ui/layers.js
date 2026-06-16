@@ -914,9 +914,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
 
     box.append(Section('Composition', 'layer-comp', (b) => {
-      // Capitalised labels (Add / Screen / Multiply / Alpha); values stay the
-      // lowercase keys the compositor expects.
-      const blendOpts = BLEND_MODES.map((m) => ({ value: m, label: m.charAt(0).toUpperCase() + m.slice(1) }));
+      // Display labels only — values stay the lowercase keys the compositor + saved
+      // shows expect. Premultiplied-over is universally called "Normal" in video
+      // tools, so 'alpha' shows as Normal (and leads, as the default/most common).
+      const BLEND_LABELS = { alpha: 'Normal', add: 'Add', screen: 'Screen', multiply: 'Multiply' };
+      const blendOpts = ['alpha', 'add', 'screen', 'multiply'].map((m) => ({ value: m, label: BLEND_LABELS[m] }));
       b.append(field('Blend Mode', selectInput(blendOpts, layer.blend ?? 'alpha',
         (m) => commit(patchLayer(show(), id, { blend: m })))));
       const opacityRow = sliderField('Opacity', layer.opacity ?? 1, 0, 1,

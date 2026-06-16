@@ -637,20 +637,20 @@ const colorBtn = document.getElementById('color-btn');
 function setControllerTint(on) {
   controllerTint = !!on;
   try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
-  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'color'; }
   preview?.setColorTint?.(controllerTint);
   renderOutput(); redrawOverlay();
 }
 colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
 // Initial sync (preview exists; the startup renderOutput reads controllerTint).
-if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = (controllerTint ? '▣' : '▢') + ' color'; }
+if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'color'; }
 preview?.setColorTint?.(controllerTint);
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');
 function setSnapEnabled(v) {
   snapEnabled = !!v;
-  if (snapBtn) { snapBtn.classList.toggle('on', snapEnabled); snapBtn.textContent = (snapEnabled ? '▣' : '▢') + ' snap'; }
+  if (snapBtn) { snapBtn.classList.toggle('on', snapEnabled); snapBtn.textContent = 'snap'; }
   redrawOverlay();
 }
 // Snap prefs persist (corner toggle on/off + the grid/distance config in Settings).
@@ -663,7 +663,7 @@ setSnapEnabled(snapEnabled);   // reflect the loaded state on the corner button
 const gridBtn = document.getElementById('grid-btn');
 function setShowGrid(v) {
   showGrid = !!v;
-  if (gridBtn) { gridBtn.classList.toggle('on', showGrid); gridBtn.textContent = (showGrid ? '▣' : '▢') + ' grid'; }
+  if (gridBtn) { gridBtn.classList.toggle('on', showGrid); gridBtn.textContent = 'grid'; }
   try { localStorage.setItem('lz.grid', showGrid ? '1' : '0'); } catch { /* private */ }
   redrawOverlay();
 }
@@ -1202,7 +1202,7 @@ function setOverlay(v) {
   if (ovlSvg) ovlSvg.style.display = overlayVisible ? '' : 'none';   // hide the SVG chrome too
   dragHandle?.setEnabled(overlayVisible);
   overlayToggleBtn?.classList.toggle('on', overlayVisible);
-  if (overlayToggleBtn) overlayToggleBtn.textContent = (overlayVisible ? '▣' : '▢') + ' fixtures';
+  if (overlayToggleBtn) overlayToggleBtn.textContent = 'fixtures';
   if (snapBtn) snapBtn.disabled = !overlayVisible;   // snap only matters while dragging fixtures (overlay on)
   if (overlayVisible) renderOutput();
   redrawOverlay();
@@ -1231,7 +1231,7 @@ function setWallView(v) {
   document.body.classList.toggle('wall-view', wallView);
   syncWallDim();
   preview?.setLiveView?.(wallView);   // all fixture cells full strength in live
-  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' live'; }
+  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = 'live'; }
   redrawOverlay();
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
