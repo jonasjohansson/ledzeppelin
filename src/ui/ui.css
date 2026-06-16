@@ -257,11 +257,9 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   display: block; height: auto;
   width: min(calc(100vw - var(--inset-left, 0px) - var(--inset-right, 0px)), calc(100vh * var(--comp-aspect, 1.778)));
 }
-/* Live view (corner ▣ live): the composite dims to a ghost for context while the
-   LED cells on #preview stay full strength — where the visuals hit a tube, its
-   pixels light up; the rest reads as the dark wall. The fixture OUTLINES stay
-   visible (so you can still see + grab fixtures) — only dims the composite. */
-body.wall-view.has-fixtures #stage { opacity: 0.07; }
+/* Live view (corner ▣ live): the composite is NOT dimmed (dimming made the lights
+   hard to read) — instead every fixture's LED cells go full strength (see
+   preview.js liveView) so the lights pop on top of the visuals. */
 /* Preview overlay sits exactly over the stage (same box); it is the drag surface. */
 #preview { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* Vector chrome layer over the lights canvas — stays sharp under the zoom/pan
@@ -287,10 +285,15 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 #deckbar { border: none; border-radius: 0; padding: 0; background: transparent;
   display: flex; flex-direction: column; align-items: flex-start; gap: 0; }   /* stack the group + "+ layer" below it (not inline) */
 #deckbar, #side { pointer-events: auto; }
-/* In OUTPUT the deck is shown for CONTEXT only (see the composition while patching)
-   — make it click-through so its (empty) clip cells never block selecting a fixture
-   on the canvas behind it. Interact with clips in Design. */
+/* In OUTPUT the deck floats over the canvas. Keep the CONTAINER click-through so its
+   empty cells / padding never block selecting a fixture on the canvas behind it, but
+   re-enable its REAL controls (clips, layer heads, faders, buttons) so you can still
+   trigger clips + mix layers while patching. Empty clip slots stay pass-through. */
 body.output-mode #deckbar { pointer-events: none; }
+body.output-mode #deckbar .lh-clickable,
+body.output-mode #deckbar .clip-cell,
+body.output-mode #deckbar .lh-op,
+body.output-mode #deckbar button { pointer-events: auto; }
 /* The right panel docks flush; -1px overlaps the deck's border into one shared
    hairline (no doubled 2px seam) — the packed-grid look. The deck (#left, flex
    1 1 auto) fills the left and pushes #side to the far right in every section. */

@@ -86,6 +86,10 @@ export function createPreview(canvasEl, opts = {}) {
   let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
   let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
   function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // Live view: show ALL fixtures' cells at full strength (it's the "wall", not the
+  // editor — selection-isolation doesn't apply).
+  let liveView = false;
+  function setLiveView(on) { liveView = !!on; }
   // The theme accent (driven from app on change) → fixture chrome border/fill, so
   // the canvas follows the chosen accent (not a hardcoded orange). [r,g,b].
   let accentRGB = [232, 163, 92];
@@ -199,8 +203,8 @@ export function createPreview(canvasEl, opts = {}) {
       const lpm = Number(f.ledsPerMeter)
         || (Number(f.meters) > 0 ? count / Number(f.meters) : 60);
       const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
-      // Selected → full strength; everything else sits back at 22%.
-      ctx.globalAlpha = isSelected(selectedIds, f.id) ? 1 : 0.22;
+      // Live view → all cells full (the wall). Otherwise selected → full, rest 22%.
+      ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
           // BINARY cells: each LED is an axis-aligned square SNAPPED to the device
@@ -424,7 +428,7 @@ export function createPreview(canvasEl, opts = {}) {
     return p.join('');
   }
 
-  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor };
+  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor, setLiveView };
 }
 
 // Drag-placement on the Output overlay:

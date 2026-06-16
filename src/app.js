@@ -1206,7 +1206,9 @@ function setWallView(v) {
   if (wallView && !overlayVisible) setOverlay(true);
   document.body.classList.toggle('wall-view', wallView);
   syncWallDim();
+  preview?.setLiveView?.(wallView);   // all fixture cells full strength in live
   if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = (wallView ? '▣' : '▢') + ' live'; }
+  redrawOverlay();
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
 setWallView(wallView);
