@@ -2015,21 +2015,9 @@ function fitToFixtures() {
 // something on screen and a patch to build from.)
 function newProject() {
   if (!window.confirm('Start a new project? This clears the current one (save first if you want to keep it).')) return;
-  let next = emptyShow();
-  const cv = next.composition.canvas;   // 1280×720
-  next = addDevice(next, { id: 'c1', name: 'Controller 1', ip: '', colorOrder: 'GRB', port: 4048, typeId: 'digquad' });
-  next.fixtureTypes = [{ id: 't1', name: '1m · 60px', ledsPerMeter: 60, meters: 1, pixelCount: 60, colorOrder: 'GRB' }];
-  const transform = { x: cv.w / 2, y: cv.h / 2, w: 240, h: 0, rotation: 0 };
-  next = addFixture(next, {
-    id: 'f1', typeId: 't1',
-    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 60 },
-    input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: 60 },
-  });
-  const clip = { ...makeClip('line', undefined, 'clip1'), params: prefixedDefaults('line') };
-  next.composition.layers = [
-    { id: 'l1', name: 'Layer 1', blend: 'add', opacity: 1, clips: [clip], activeClipId: clip.id, effects: [], params: {}, transitionMs: 500 },
-  ];
-  applyFullShow(normalizeComposition(next));
+  // Reset to the standard default (Lines + Checkered, Generic Controller, 1280²) —
+  // the same show a fresh install loads.
+  applyFullShow(normalizeComposition(defaultShow()));
 }
 
 function saveShowToFile() {
