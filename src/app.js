@@ -1354,44 +1354,65 @@ document.addEventListener('keydown', (e) => {
 // indices stay valid), nudges it off the original, and selects the new ones.
 // Only active in mapping mode; ignored while typing so it never steals the
 // browser's text copy/paste.
-let fixtureClipboard = [];
+// Clone the given fixtures into the show, placed next to their originals, and select
+// the copies. Shared by paste (V) and duplicate (D).
+function placeFixtureCopies(srcList) {
+  if (!srcList?.length) return;
+  if (!overlayVisible) setOverlay(true);   // reveal the copies
+  const next = structuredClone(show);
+  const devEnd = (devId) => next.fixtures
+    .filter((x) => (x.output?.deviceId || '') === devId)
+    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
+  const newIds = [];
+  for (const src of srcList) {
+    const copy = structuredClone(src);
+    const base = (src.id || 'f').replace(/-copy\d*$/, '');
+    let n = 1; do { copy.id = `${base}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === copy.id));
+    copy.output.pixelOffset = devEnd(copy.output?.deviceId || '');   // contiguous append
+    const tf = copy.input?.transform;
+    if (tf) {
+      // Place the copy NEXT TO the original (no overlap): shift x by the fixture's
+      // on-screen bounding WIDTH (run/thickness rotated) + a small gap.
+      const rad = (tf.rotation || 0) * Math.PI / 180;
+      const th = thicknessOf(copy, next.composition?.canvas || { w: 1280, h: 720 });
+      const aabbW = Math.abs(Math.cos(rad)) * (tf.w || 0) + Math.abs(Math.sin(rad)) * th;
+      tf.x = (tf.x || 0) + Math.max(aabbW, 12) + 8;
+    } else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
+    next.fixtures.push(copy);
+    newIds.push(copy.id);
+  }
+  selectedDeviceId = null; selectedFixtureIds.clear(); newIds.forEach((id) => selectedFixtureIds.add(id));
+  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+}
+// Clone a controller (its settings, not its fixtures) and select it.
+function placeDeviceCopy(srcDev) {
+  if (!srcDev) return;
+  const next = structuredClone(show);
+  let k = next.devices.length + 1, id; do { id = `c${k}`; k++; } while (next.devices.some((d) => d.id === id));
+  next.devices.push({ ...structuredClone(srcDev), id, name: `${srcDev.name || srcDev.id} copy` });
+  selectedFixtureIds.clear(); selectedDeviceId = id; panel.setDevice?.(id); expandedDevices.add(id);
+  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+// Cmd/Ctrl + C copy · V paste · D duplicate — for the selected FIXTURES or the
+// selected CONTROLLER. Ignored while typing (so native text copy/paste works).
+let clipboard = null;   // { kind:'fixtures', data:[…] } | { kind:'device', data:{…} }
 document.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
   if (typingIn(e.target)) return;
   const k = e.key.toLowerCase();
+  const dev = selectedDeviceId && (show.devices || []).find((d) => d.id === selectedDeviceId);
   if (k === 'c') {
-    if (!selectedFixtureIds.size) return;
-    fixtureClipboard = show.fixtures.filter((f) => selectedFixtureIds.has(f.id)).map((f) => structuredClone(f));
-    e.preventDefault();
+    if (selectedFixtureIds.size) { clipboard = { kind: 'fixtures', data: show.fixtures.filter((f) => selectedFixtureIds.has(f.id)).map((f) => structuredClone(f)) }; e.preventDefault(); }
+    else if (dev) { clipboard = { kind: 'device', data: structuredClone(dev) }; e.preventDefault(); }
   } else if (k === 'v') {
-    if (!fixtureClipboard.length) return;
-    if (!overlayVisible) setOverlay(true);   // reveal the pasted copies
+    if (!clipboard) return;
     e.preventDefault();
-    const next = structuredClone(show);
-    const devEnd = (devId) => next.fixtures
-      .filter((x) => (x.output?.deviceId || '') === devId)
-      .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
-    const newIds = [];
-    for (const src of fixtureClipboard) {
-      const copy = structuredClone(src);
-      const base = (src.id || 'f').replace(/-copy\d*$/, '');
-      let n = 1; do { copy.id = `${base}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === copy.id));
-      copy.output.pixelOffset = devEnd(copy.output?.deviceId || '');   // contiguous append
-      const tf = copy.input?.transform;
-      if (tf) {
-        // Place the copy NEXT TO the original (no overlap): shift x by the
-        // fixture's on-screen bounding WIDTH (run/thickness rotated) + a small gap.
-        const rad = (tf.rotation || 0) * Math.PI / 180;
-        const th = thicknessOf(copy, next.composition?.canvas || { w: 1280, h: 720 });
-        const aabbW = Math.abs(Math.cos(rad)) * (tf.w || 0) + Math.abs(Math.sin(rad)) * th;
-        tf.x = (tf.x || 0) + Math.max(aabbW, 12) + 8;
-      }
-      else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
-      next.fixtures.push(copy);
-      newIds.push(copy.id);
-    }
-    selectedFixtureIds.clear(); newIds.forEach((id) => selectedFixtureIds.add(id));
-    saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+    if (clipboard.kind === 'fixtures') placeFixtureCopies(clipboard.data);
+    else placeDeviceCopy(clipboard.data);
+  } else if (k === 'd') {
+    if (selectedFixtureIds.size) { e.preventDefault(); placeFixtureCopies(show.fixtures.filter((f) => selectedFixtureIds.has(f.id))); }
+    else if (dev) { e.preventDefault(); placeDeviceCopy(dev); }
   }
 });
 

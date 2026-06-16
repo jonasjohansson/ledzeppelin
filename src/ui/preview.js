@@ -603,6 +603,13 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const [nx0, ny0] = norm(ev);
       dragState = { kind: 'move', items, px0, py0, nx0, ny0, cv };
     }
+    // Keep the right cursor for the WHOLE drag (resize arrows / grab), not just on
+    // hover — pointer capture means the cursor would otherwise revert mid-drag.
+    dragState.cursor = (dragState.kind === 'rotate') ? 'grabbing'
+      : (dragState.kind === 'move') ? 'grabbing'
+      : (dragState.kind === 'marquee') ? 'crosshair'
+      : (hit.cursor || cursorFor(hit));
+    canvasEl.style.cursor = dragState.cursor;
     canvasEl.setPointerCapture(ev.pointerId);
     ev.preventDefault();
   });
@@ -610,6 +617,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   canvasEl.addEventListener('pointermove', (ev) => {
     if (!enabled) return;
     if (!dragState) { canvasEl.style.cursor = cursorFor(hitTest(ev)); return; }   // hover feedback (resize/move cursors)
+    if (dragState.cursor) canvasEl.style.cursor = dragState.cursor;               // hold it through the drag
     if (dragState.kind === 'marquee') {
       const [nx, ny] = norm(ev);
       onMarquee?.({
@@ -691,6 +699,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     if (!dragState) return;
     const wasMarquee = dragState.kind === 'marquee';
     dragState = null; dragHint = null;
+    canvasEl.style.cursor = cursorFor(hitTest(ev));   // back to hover feedback
     try { canvasEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
     if (wasMarquee) onMarqueeEnd?.();        // selection-only — no geometry commit
     else onCommit?.(getShow());
