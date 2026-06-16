@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 command -v bun >/dev/null || { echo "bun not found — curl -fsSL https://bun.sh/install | bash"; exit 1; }
 
 ARCH="${1:-arm64}"; TARGET="bun-darwin-$ARCH"
-APP="dist/Led Zeppelin.app"; C="$APP/Contents"
+APP="dist/LEDZeppelin.app"; C="$APP/Contents"
 rm -rf "$APP"; mkdir -p "$C/MacOS" "$C/Resources"
 
 echo "→ compiling daemon ($TARGET)…"
@@ -31,8 +31,8 @@ cat > "$C/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>Led Zeppelin</string>
-  <key>CFBundleDisplayName</key><string>Led Zeppelin</string>
+  <key>CFBundleName</key><string>LEDZeppelin</string>
+  <key>CFBundleDisplayName</key><string>LEDZeppelin</string>
   <key>CFBundleIdentifier</key><string>se.jonasjohansson.ledzeppelin</string>
   <key>CFBundleVersion</key><string>${VERSION:-1.0.0}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION:-1.0.0}</string>
@@ -42,7 +42,7 @@ cat > "$C/Info.plist" <<PLIST
   <!-- It sends DDP/Art-Net + scans the LAN for controllers → macOS shows the
        Local Network permission prompt; this is the reason text. -->
   <key>NSLocalNetworkUsageDescription</key>
-  <string>Led Zeppelin sends light data to and discovers LED controllers on your local network.</string>
+  <string>LEDZeppelin sends light data to and discovers LED controllers on your local network.</string>
 </dict></plist>
 PLIST
 

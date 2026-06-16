@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createSocket } from 'node:dgram';
+import { createConnection } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { parseOsc } from './osc.js';
@@ -208,14 +209,42 @@ function bindOsc(port) {
   osc = s;
 }
 bindOsc(OSC_PORT);
+const httpUrl = `http://localhost:${PORT}`;
+const wantOpen = () => process.env.OPEN || PACKAGED;
+// Is something already listening on the HTTP port? (try to connect to it.)
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const sock = createConnection({ port, host: '127.0.0.1' });
+    const done = (v) => { try { sock.destroy(); } catch { /* */ } resolve(v); };
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+    setTimeout(() => done(false), 300);
+  });
+}
+// If the port's busy, LEDZeppelin is most likely already running there — a
+// double-click should just OPEN that instance, not crash ("nothing happens").
+if (await portInUse(PORT)) {
+  console.error(`port ${PORT} in use — LEDZeppelin already running? opening ${httpUrl}`);
+  if (wantOpen()) openBrowser(httpUrl);
+  process.exit(0);
+}
+// Backstop for any late bind race / unexpected throw (Bun emits listen errors in a
+// way the server's 'error' event + try/catch don't reliably catch).
+process.on('uncaughtException', (e) => {
+  if (e && (e.code === 'EADDRINUSE' || /eaddrinuse|in use|failed to start server/i.test(e.message || ''))) {
+    if (wantOpen()) openBrowser(httpUrl);
+    process.exit(0);
+  }
+  console.error(`server error: ${e?.message || e}`);
+  process.exit(1);
+});
 http.listen(PORT, () => {
-  const url = `http://localhost:${PORT}`;
-  console.log(`ledzeppelin ${url}`);
+  console.log(`ledzeppelin ${httpUrl}`);
   // The phone companion: print the LAN URL so anyone on the network can open it.
   const lan = Object.values(networkInterfaces()).flat()
     .find((i) => i && i.family === 'IPv4' && !i.internal)?.address;
   if (lan) console.log(`control    http://${lan}:${PORT}/control/  (open on a phone on this Wi-Fi)`);
   // Auto-open the browser when launched as a packaged app (double-click), or when
   // OPEN=1 (the launch script). Plain `npm start` / headless / CI stay quiet.
-  if (process.env.OPEN || PACKAGED) openBrowser(url);
+  if (wantOpen()) openBrowser(httpUrl);
 });
