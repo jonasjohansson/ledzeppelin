@@ -304,9 +304,8 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
 /* No outer panel padding — the tab rows span edge to edge and content keeps
    only its OWN inset (#insp-panes), so the side margin isn't doubled and the
    DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
-/* End the panel ABOVE the bottom toggle bar (#corner-controls) so the panel/editor
-   never covers the viewport toggles — they read as a continuous bar beneath it. */
-#side { flex: 0 0 var(--side-w); max-height: calc(100vh - 44px); margin-bottom: 44px;
+/* Full-height — the panel may sit over the bottom viewport toggles (that's fine). */
+#side { flex: 0 0 var(--side-w); max-height: 100vh;
   display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
