@@ -121,6 +121,13 @@ export function resolveParams(params, anim, timeSec, signals) {
   const keys = Object.keys(anim);
   if (!keys.length) return params;
   const out = { ...(params || {}) };
-  for (const k of keys) out[k] = animatedValue(anim[k], timeSec, signals);
+  for (const k of keys) {
+    const spec = anim[k];
+    // An EXTERNAL-bound param with no live value on its channel rests at the BASE
+    // value (so a direct canonical-address write / the slider still drives it),
+    // rather than snapping to the anim's `from`. A live channel value still wins.
+    if (spec && spec.mode === 'external' && !(signals && spec.channel in signals) && params && k in params) continue;
+    out[k] = animatedValue(spec, timeSec, signals);
+  }
   return out;
 }

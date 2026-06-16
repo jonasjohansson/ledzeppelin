@@ -410,7 +410,8 @@ const compositionPanel = createCompositionPanel({
   fitToFixtures: () => fitToFixtures(),   // hoisted fn decl defined later in this module
   setTitle: (t) => { setComposition({ ...show, composition: { ...show.composition, title: t } }); layerPanel.refresh(); },   // reflect in the deck's composition-group header now
   // BPM is read live from show.composition.bpm each frame — no rebuild needed.
-  setBpm: (b) => { show = setShowBpm(show, b); saveShow(show); },
+  // Snapshot so a manual BPM change is undoable (coalesced for tap/slider drags).
+  setBpm: (b) => { snapshotForUndo(show); show = setShowBpm(show, b); saveShow(show); },
 });
 // Output selection + snap state. Declared here (before the Settings panel, whose
 // initial render reads snap state) to avoid a temporal-dead-zone access.
@@ -706,10 +707,11 @@ if (mapBus) {
     else if (m.type === 'key') setKeyChannel(m.code, m.down);              // a key pressed in the Mappings window
     else if (m.type === 'enableMidi') { enableMidi().then(postMapMidi); }
     else if (m.type === 'bind' || m.type === 'clear') {
+      snapshotForUndo(show);   // mapping edits are undoable like other show edits
       show = m.type === 'bind' ? bindMapping(show, m.id, m.channel, m.slot) : clearMapping(show, m.id, m.slot);
       saveShow(show); layerPanel?.refresh?.(); postMapParams();
     }
-    else if (m.type === 'mode') { show = setMappingMode(show, m.id, m.mode); saveShow(show); postMapParams(); }
+    else if (m.type === 'mode') { snapshotForUndo(show); show = setMappingMode(show, m.id, m.mode); saveShow(show); postMapParams(); }
   };
   setInterval(pushMapChannels, 100);   // stream live channel values @10Hz
   setInterval(postMapParams, 2000);    // catch structural show changes (clips added/removed)
@@ -1056,6 +1058,7 @@ function renderOutput() {
   outputListEl.textContent = '';
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
+  if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
 
   if (outputTab === 'library') return;   // Library uses the device + fixture editors, not the placement list
 
@@ -1550,7 +1553,9 @@ document.addEventListener('keydown', (e) => {
   window.addEventListener('wheel', (e) => {
     if (overChrome(e.target)) return;                        // let panels scroll
     e.preventDefault();
-    if (e.shiftKey) { panX -= e.deltaY; apply(); return; }   // Shift = pan instead of zoom
+    // Shift = pan instead of zoom — both axes (deltaX from a trackpad; a plain mouse
+    // wheel only has deltaY, which pans vertically).
+    if (e.shiftKey) { panX -= e.deltaX; panY -= e.deltaY; apply(); return; }
     const z2 = clamp(z * Math.exp(-e.deltaY * 0.0015));
     if (z2 === z) return;
     const rect = inner.getBoundingClientRect();
@@ -1747,6 +1752,7 @@ async function buildSettings(mount) {
   inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, curDev === d.deviceId));
   sel.addEventListener('change', async () => {
     const ok = await enableAudio('external', sel.value);
+    snapshotForUndo(show);   // audio-device pick is undoable
     show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
     saveShow(show);
     sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input — check permissions';
@@ -1754,7 +1760,7 @@ async function buildSettings(mount) {
   mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
   mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
     min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
-    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
+    onInput: (v) => { snapshotForUndo(show); show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
   }));
 
   // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
