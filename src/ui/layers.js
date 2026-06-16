@@ -41,6 +41,7 @@ import { listPresets, savePreset, loadPreset, deletePreset } from '../model/pres
 import { Section } from './section.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
+import { confirmDelete } from './confirm.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
@@ -879,6 +880,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         e.stopPropagation();
         const layers = show().composition?.layers || [];
         if (layers.length <= 1) return;
+        if (!confirmDelete('Delete this layer?')) return;
         const i = layers.findIndex((l) => l.id === id);
         selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;
         commit(removeLayer(show(), id));
@@ -1383,6 +1385,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // (across all layers). Emptying a layer that has siblings is still allowed.
     const totalClips = (show().composition?.layers || []).reduce((n, L) => n + (L.clips?.length || 0), 0);
     if (totalClips <= 1) return;
+    if (!confirmDelete('Delete this clip?')) return;
     // Keep a clip selected: hop to the next clip (or the previous if it was last).
     const clips = l.clips || [];
     const i = clips.findIndex((c) => c && c.id === target);
@@ -1401,6 +1404,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (!selectedLayerId || layers.length <= 1) return false;
     const i = layers.findIndex((l) => l.id === selectedLayerId);
     if (i < 0) return false;
+    if (!confirmDelete('Delete this layer?')) return true;   // handled (cancelled)
     const target = selectedLayerId;
     // Keep a layer selected: hop to a neighbour.
     selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;

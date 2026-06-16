@@ -28,6 +28,7 @@ import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 import { armStartupRiff } from './ui/startup-riff.js';
 import { VERSION } from './version.js';
+import { confirmDelete, confirmDeletesOn, setConfirmDeletes } from './ui/confirm.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -1121,7 +1122,7 @@ function confirmDeleteFixtures(ids) {
     const chained = items.filter((f) => chainOf(show, f.id)).length;
     msg = `Delete ${items.length} fixtures?` + (chained ? `\n\n${chained} are chained — this re-wires their outputs and re-packs pixels.` : '');
   }
-  return window.confirm(msg);
+  return confirmDelete(msg);
 }
 
 // The editor DOCK at the bottom of the Output pane: shows the selected item's
@@ -1935,6 +1936,14 @@ async function buildSettings(mount) {
   riffBtn.onclick = () => { try { localStorage.setItem('lz.riff.always', riffAlways() ? '0' : '1'); } catch { /* private */ } paintRiff(); };
   paintRiff();
   mount.append(riffBtn);
+
+  // --- Confirm before deleting fixtures / devices / clips / layers. Default ON. ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'deleting' }));
+  const delBtn = oel('button', { className: 'fx-add' });
+  const paintDel = () => { delBtn.textContent = (confirmDeletesOn() ? '▣' : '▢') + ' confirm before deleting'; delBtn.classList.toggle('on', confirmDeletesOn()); };
+  delBtn.onclick = () => { setConfirmDeletes(!confirmDeletesOn()); paintDel(); };
+  paintDel();
+  mount.append(delBtn);
 
   // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +

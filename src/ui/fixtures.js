@@ -5,6 +5,7 @@ import { controllerColorMap } from '../model/chains.js';
 import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
+import { confirmDelete } from './confirm.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
@@ -575,7 +576,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         const used = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === selDeviceId).length;
         const msg = `Delete device “${dev?.name || selDeviceId}”?`
           + (used ? `\n\n${used} fixture${used === 1 ? '' : 's'} routed to it will be unrouted.` : '');
-        if (!window.confirm(msg)) return false;
+        if (!confirmDelete(msg)) return false;
         const next = structuredClone(show);
         next.devices = next.devices.filter((d) => d.id !== selDeviceId);
         selDeviceId = null; commit(next); return true;
