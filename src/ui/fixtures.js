@@ -216,10 +216,10 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
   // Network scan: find WLED controllers on the LAN (via the daemon) and add them
   // with one click. Results persist across renders so adding one re-renders the
   // list with it marked "added".
-  function scanBlock(show, rerender = render) {
-    const wrap = el('div', { className: 'scan-block' });
-    const btn = el('button', {
-      className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan network',
+  // Just the scan toggle button (so it can sit beside + fixture / + device).
+  function scanButton(rerender = render) {
+    return el('button', {
+      className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan',
       title: 'find WLED controllers on your network (needs the daemon running)',
       disabled: scanState.running,
       onclick: async () => {
@@ -230,7 +230,12 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         rerender();
       },
     });
-    wrap.append(btn);
+  }
+  // The scan RESULTS (error / found controllers), rendered separately below the row.
+  // Null when there's nothing to show yet.
+  function scanResults(show) {
+    if (!scanState.result && !scanState.error) return null;
+    const wrap = el('div', { className: 'scan-block' });
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
     const res = scanState.result;
     if (res) {
@@ -249,13 +254,12 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
           selDeviceId = id; lastSel = 'device';
           commit(next);
         };
-        const row = el('div', { className: 'output-row scan-row' }, [
+        wrap.append(el('div', { className: 'output-row scan-row' }, [
           el('span', { textContent: d.name }),
           el('span', { className: 'fx-badge', textContent: d.ip }),
           ...(d.leds != null ? [el('span', { className: 'fx-badge', textContent: `${d.leds} px` })] : []),
           add,
-        ]);
-        wrap.append(row);
+        ]));
       }
     }
     return wrap;
@@ -479,7 +483,8 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
           commit(next);
         },
       }));
-      b.append(scanBlock(show));
+      b.append(scanButton());
+      const sr = scanResults(show); if (sr) b.append(sr);
     }
 
     // === LIBRARY tab = the catalog of MODELS you build with ===================
@@ -536,7 +541,8 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     setDevice: (id) => { selDeviceId = id; lastSel = 'device'; },
     // The WLED network-discovery block, for the app to mount in the merged tab.
     // Pass a rerender callback so its results refresh wherever it's mounted.
-    scanEl: (rerender) => scanBlock(getShow(), rerender),
+    scanButtonEl: (rerender) => scanButton(rerender),
+    scanResultsEl: () => scanResults(getShow()),
     libraryDetailEl: () => {
       const show = getShow();
       if (libSel === 'controller') {

@@ -267,6 +267,9 @@ export function qrSvg(text, px = 120) {
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (m[r][c]) {
     rects += `<rect x="${((c + quiet) * cell).toFixed(2)}" y="${((r + quiet) * cell).toFixed(2)}" width="${cell.toFixed(2)}" height="${cell.toFixed(2)}"/>`;
   }
+  // Transparent background + currentColor modules so it merges with the theme
+  // (the host styles .ctrl-qr's colour/background). Inverted (light/accent modules
+  // on a dark inset) still scans reliably on modern cameras.
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 ${px} ${px}" shape-rendering="crispEdges">`
-    + `<rect width="${px}" height="${px}" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
+    + `<g fill="currentColor">${rects}</g></svg>`;
 }

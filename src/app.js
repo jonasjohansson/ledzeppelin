@@ -593,8 +593,9 @@ const outputListEl = document.getElementById('output-list');
 const outputEditorEl = document.getElementById('output-editor');
 const outputEditorBodyEl = document.getElementById('output-editor-body');
 const outputEditorTitleEl = document.getElementById('output-editor-title');
-const outputEditorMinBtn = document.getElementById('output-editor-min');
-let editorMinimized = (() => { try { return localStorage.getItem('lz.editor.min') === '1'; } catch { return false; } })();
+const outputEditorBarEl = document.getElementById('output-editor-bar');
+// Editor dock height (px), set by dragging the curtain bar. Persisted.
+let editorHeight = (() => { try { return Number(localStorage.getItem('lz.editor.h')) || 260; } catch { return 260; } })();
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
@@ -895,9 +896,9 @@ function addInstance(typeId) {
   panel.refresh(); renderOutput(); redrawOverlay();
 }
 
-// The "+ fixture" / "+ device" toolbar that sits ABOVE the placement list. The two
-// add buttons sit side by side; the fixture-type picker (what "+ fixture" places)
-// is a full-width row below them. Definitions themselves are made in Inventory.
+// The "+ fixture" / "+ device" / "scan" toolbar above the placement list — the
+// three actions sit side by side; the fixture-type picker (what "+ fixture" places)
+// is a full-width row below them, then any scan results. Definitions live in Inventory.
 function addControls() {
   const wrap = oel('div', { className: 'output-tools' });
   const types = show.fixtureTypes || [];
@@ -922,8 +923,12 @@ function addControls() {
     expandedDevices.add(id); selectDevice(id);
     rebuild(n); panel.refresh(); renderOutput();
   } });
-  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev]));
+  // "scan" — WLED network discovery, beside the add buttons; its results render below.
+  const scanBtn = panel.scanButtonEl?.(renderOutput);
+  wrap.append(oel('div', { className: 'output-addrow' }, scanBtn ? [addFx, addDev, scanBtn] : [addFx, addDev]));
   if (types.length) wrap.append(sel);
+  const scanRes = panel.scanResultsEl?.();
+  if (scanRes) wrap.append(scanRes);
   return wrap;
 }
 
@@ -970,24 +975,43 @@ function updateInspector() {
     outputEditorTitleEl.textContent = title;
     outputEditorBodyEl.append(detail);
     outputEditorEl.hidden = false;
-    outputEditorEl.classList.toggle('minimized', editorMinimized);
-    if (outputEditorMinBtn) outputEditorMinBtn.textContent = editorMinimized ? '▴' : '▾';
+    applyEditorHeight();
   } else {
     outputEditorEl.hidden = true;
   }
   updateStageInsets();
 }
-// Minimise / restore the editor dock (collapses to just its title bar). Persisted.
-function setEditorMinimized(v) {
-  editorMinimized = !!v;
-  try { localStorage.setItem('lz.editor.min', editorMinimized ? '1' : '0'); } catch { /* private */ }
-  updateInspector();
+// The editor dock height is set by dragging its CURTAIN bar. Clamp between the bar
+// alone (≈ collapsed) and most of the pane (leave room for the list). Persisted.
+function applyEditorHeight() {
+  if (!outputEditorEl || outputEditorEl.hidden) return;
+  const barH = outputEditorBarEl?.offsetHeight || 30;
+  const paneH = outputPaneEl?.getBoundingClientRect().height || window.innerHeight;
+  const max = Math.max(barH, paneH - 140);   // keep ≥140px for the tabs + list
+  editorHeight = Math.max(barH, Math.min(editorHeight, max));
+  outputEditorEl.style.height = editorHeight + 'px';
 }
-outputEditorMinBtn?.addEventListener('click', () => setEditorMinimized(!editorMinimized));
-document.getElementById('output-editor-bar')?.addEventListener('click', (e) => {
-  if (e.target === outputEditorMinBtn) return;   // the button handles itself
-  setEditorMinimized(!editorMinimized);
+function setEditorHeight(h) {
+  editorHeight = h;
+  applyEditorHeight();
+  try { localStorage.setItem('lz.editor.h', String(Math.round(editorHeight))); } catch { /* private */ }
+}
+// Drag the bar (curtain) up to grow the editor, down to shrink it.
+let curtainDrag = null;
+outputEditorBarEl?.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  curtainDrag = { y: e.clientY, h: outputEditorEl.getBoundingClientRect().height };
+  outputEditorBarEl.setPointerCapture?.(e.pointerId);
+  document.body.style.cursor = 'row-resize';
 });
+outputEditorBarEl?.addEventListener('pointermove', (e) => {
+  if (!curtainDrag) return;
+  setEditorHeight(curtainDrag.h + (curtainDrag.y - e.clientY));   // up = taller
+});
+const endCurtain = (e) => { if (!curtainDrag) return; curtainDrag = null; document.body.style.cursor = ''; outputEditorBarEl.releasePointerCapture?.(e.pointerId); };
+outputEditorBarEl?.addEventListener('pointerup', endCurtain);
+outputEditorBarEl?.addEventListener('pointercancel', endCurtain);
 
 function renderOutput() {
   updateInspector();
@@ -1106,10 +1130,7 @@ function renderOutput() {
   }
 
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
-  // WLED network discovery (adds devices) lives at the bottom — a power tool, out
-  // of the way. Pass renderOutput so its results refresh in place here.
-  const scan = panel.scanEl?.(renderOutput);
-  if (scan) outputListEl.append(scan);
+  // (Scan + its results live in the add-controls row at the top.)
 }
 
 const renderOutputList = renderOutput; // back-compat alias
@@ -1641,11 +1662,11 @@ async function buildSettings(mount) {
   // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
   // on/off lives on the viewport corner button (a quick toggle while placing). ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'snap' }));
-  mount.append(Slider('Grid (px)', SNAP_GRID, {
+  mount.append(Slider('Grid', SNAP_GRID, {
     min: 2, max: 100, step: 1, default: 20, commit: 'live',
     onInput: (v) => { SNAP_GRID = Math.round(v); saveSnap(); redrawOverlay(); },
   }));
-  mount.append(Slider('Distance (px)', SNAP_DIST, {
+  mount.append(Slider('Distance', SNAP_DIST, {
     min: 1, max: 40, step: 1, default: 10, commit: 'live',
     onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
   }));
@@ -1657,12 +1678,8 @@ async function buildSettings(mount) {
     onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
   }));
 
-  // --- OSC / socket: where to send live control. Both drive the same canonical
-  // addresses (shown per-param in System › Mapping and on hover in the corner). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'osc / socket' }));
-  const oscHost = (() => { try { return new URL(companionUrl).hostname; } catch { return location.hostname; } })();
-  mount.append(oel('div', { className: 'seg-hint', textContent: `OSC in · ${oscHost}:9000 — send e.g. /layer/1/clip/1/width with a 0–1 value` }));
-  mount.append(oel('div', { className: 'seg-hint', textContent: `Socket · ${location.host}/frames — {"type":"ext","channel":"<address>","value":0–1}` }));
+  // (OSC / socket control lives in the Mapping window now — it shows the canonical
+  // addresses, the socket JSON example, and the OSC :9000 endpoint there.)
 
   // --- Startup sound: the riff greets you on the first visit; opt in to hear it
   // on every reload. ---

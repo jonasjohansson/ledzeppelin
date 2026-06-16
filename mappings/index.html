@@ -76,10 +76,10 @@
   <div class="chips" id="chips"><span class="chip-empty">touch a knob · press a key · send OSC</span></div>
 
   <div class="map-sec">parameters <span class="sec-aside">— click a row, then move a control</span></div>
-  <!-- Any address can be driven directly (no mapping needed) over the socket or OSC. -->
-  <div class="hint map-socket">drive any address directly — socket
-    <code>{"type":"ext","channel":"/layer/1/clip/1/width","value":0.5}</code>
-    · or OSC to UDP :9000</div>
+  <!-- Any address can be driven directly (no mapping needed) over OSC or the socket. -->
+  <div class="hint map-socket">drive any address directly —
+    OSC to UDP <code>:9000</code> (e.g. <code>/layer/1/clip/1/width</code> with a 0–1 value)
+    · or socket <code>{"type":"ext","channel":"/layer/1/clip/1/width","value":0.5}</code></div>
   <div id="params"><span class="chip-empty">connecting…</span></div>
 </div>
 <script type="module" src="./mappings.js"></script>

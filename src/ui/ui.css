@@ -316,21 +316,20 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
   padding: var(--s3);
 }
 /* Editor DOCK: the selected fixture/device editor as a bottom window inside the
-   Output pane, below the list. A title bar (click / ▾ to minimise) over a scrolling
-   body; minimised, only the bar shows. */
-#output-editor { flex: 0 0 auto; min-height: 0; max-height: 55%; display: flex; flex-direction: column;
+   Output pane, below the list. Its bar is a CURTAIN — drag up/down to set the split;
+   drag to the bottom to all but hide it. Height is set inline by JS. */
+#output-editor { flex: 0 0 auto; min-height: 0; display: flex; flex-direction: column;
   border-top: 1px solid var(--line-2); background: var(--panel-2); }
 #output-editor[hidden] { display: none; }
-#output-editor.minimized { max-height: none; }
 #output-editor-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-  padding: 5px var(--s3); cursor: pointer; user-select: none; background: var(--panel); }
+  padding: 5px var(--s3); cursor: row-resize; user-select: none; touch-action: none; background: var(--panel); }
+/* Grip dashes — the universal "drag me" affordance. */
+#output-editor-grip { flex: 0 0 auto; width: 16px; height: 4px; border-radius: 2px;
+  background: repeating-linear-gradient(to right, var(--line-2) 0 3px, transparent 3px 5px); }
+#output-editor-bar:hover #output-editor-grip { background: repeating-linear-gradient(to right, var(--muted) 0 3px, transparent 3px 5px); }
 #output-editor-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
-#output-editor-min { flex: 0 0 auto; background: transparent; border: none; color: var(--muted);
-  cursor: pointer; padding: 0 4px; font-size: var(--fs-body); line-height: 1; }
-#output-editor-min:hover { color: var(--accent); }
 #output-editor-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); }
-#output-editor.minimized #output-editor-body { display: none; }
 
 /* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
    so content keeps the same side margin as the Design/Output panes. --- */
@@ -348,7 +347,9 @@ body.wall-view.has-fixtures #stage { opacity: 0.07; }
   padding: 8px 8px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--line); text-align: center; }
 .ctrl-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: 0 0 auto; }
 .ctrl-status-dot.on { background: var(--accent); }
-.ctrl-qr { line-height: 0; background: #fff; padding: 6px; border-radius: var(--radius); }
+/* Inverted, theme-merged QR: accent modules on a dark inset (no white card). */
+.ctrl-qr { line-height: 0; color: var(--accent); background: var(--field-bg);
+  padding: 10px; border-radius: var(--radius); border: 1px solid var(--line); width: max-content; }
 .ctrl-urlrow { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .ctrl-url { font: var(--fs-body) var(--mono); color: var(--accent); text-decoration: none; word-break: break-all; }
 .ctrl-url:hover { color: var(--accent-text); }
@@ -1299,6 +1300,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .accent-swatch {
   flex: 1 1 0; min-width: 0; height: 28px; padding: 0; border-radius: var(--radius);
   border: 1px solid var(--line-2); cursor: pointer;
+  opacity: .4; transition: opacity .12s;   /* inactive colours read dimmed */
 }
-.accent-swatch.is-on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
+.accent-swatch:hover { opacity: .75; }
+.accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
 #system-settings .fx-add { margin-top: 8px; }

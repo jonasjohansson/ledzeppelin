@@ -109,12 +109,13 @@ canvas{display:block}
         <div id="library-design"></div>
       </div>
       <!-- Editor dock: the selected fixture/device's editor as a bottom window,
-           below the list. Collapsible via the ▾ in its bar. Hidden when nothing's
-           selected. -->
+           below the list. Its bar is a CURTAIN — drag it up/down to set how much of
+           the panel the editor uses (drag to the bottom to all but hide it). Hidden
+           when nothing's selected. -->
       <div id="output-editor" hidden>
-        <div id="output-editor-bar">
+        <div id="output-editor-bar" title="drag to resize">
+          <span id="output-editor-grip"></span>
           <span id="output-editor-title"></span>
-          <button id="output-editor-min" title="minimise editor">▾</button>
         </div>
         <div id="output-editor-body"></div>
       </div>
