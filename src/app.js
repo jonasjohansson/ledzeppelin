@@ -719,6 +719,18 @@ if (mapBus) {
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
 
+// Axis-aligned bounding-box size (canvas px) of a fixture's rotated rectangle —
+// length `tf.w` × effective thickness, rotated by `tf.rotation`. The rect rotates
+// about its centre, so its AABB is centred there too: bbox top-left = centre −
+// size/2. Used so the editor's X/Y read/write the TOP-LEFT (Figma-style) while the
+// model stays centre-based (rotation pivot, drag handle).
+function aabbSize(tf, effThickness) {
+  const t = (tf.rotation || 0) * Math.PI / 180;
+  const c = Math.abs(Math.cos(t)), s = Math.abs(Math.sin(t));
+  const w = tf.w || 0, h = effThickness || 0;
+  return { w: w * c + h * s, h: w * s + h * c };
+}
+
 // A px number field (commits on change) for the selected fixture's transform.
 function txField(label, value, onCommit) {
   const i = oel('input', { type: 'number', step: '1', value: String(Math.round(value)) });
@@ -778,10 +790,12 @@ function positionEditor(sel) {
   // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
     Section('Position', 'position', (body) => {
+      // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
+      const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
         oel('div', { className: 'output-grid' }, [
-          txField('X', tf.x, (v) => setT({ x: v })),
-          txField('Y', tf.y, (v) => setT({ y: v })),
+          txField('X', tf.x - bb.w / 2, (v) => setT({ x: v + bb.w / 2 })),
+          txField('Y', tf.y - bb.h / 2, (v) => setT({ y: v + bb.h / 2 })),
           txField('Width', tf.w, (v) => setT({ w: v })),
           // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
           // fixture's px-per-meter). The field shows the effective px; typing a
@@ -852,6 +866,13 @@ function multiPositionEditor(ids) {
   // Apply a per-id mutation across the whole selection in ONE commit.
   const applyAll = (mutate) => { let next = show; for (const id of ids) next = mutate(next, id); applyShow(next); };
   const setEachT = (patch) => applyAll((nx, id) => setFixtureTransform(nx, id, patch));
+  // X/Y address each fixture's bounding-box TOP-LEFT (Figma-style) — converted
+  // to/from its own centre (per-fixture, since the bbox size depends on rotation).
+  const leftOf = (id, src = show) => { const f = fxOf(id, src); const t = tfOf(f, src); return t.x - aabbSize(t, thicknessOf(f, src.composition?.canvas)).w / 2; };
+  const topOf = (id, src = show) => { const f = fxOf(id, src); const t = tfOf(f, src); return t.y - aabbSize(t, thicknessOf(f, src.composition?.canvas)).h / 2; };
+  const sharedFn = (fn) => { const v0 = fn(ids[0]); return ids.every((id) => Math.abs(fn(id) - v0) < 0.5) ? v0 : null; };
+  const setEachLeft = (v) => applyAll((nx, id) => { const f = fxOf(id, nx); const t = tfOf(f, nx); return setFixtureTransform(nx, id, { x: v + aabbSize(t, thicknessOf(f, nx.composition?.canvas)).w / 2 }); });
+  const setEachTop = (v) => applyAll((nx, id) => { const f = fxOf(id, nx); const t = tfOf(f, nx); return setFixtureTransform(nx, id, { y: v + aabbSize(t, thicknessOf(f, nx.composition?.canvas)).h / 2 }); });
   const rotStep = (sign) => applyAll((nx, id) => {
     const r = tfOf(fxOf(id, nx), nx).rotation || 0;
     return setFixtureTransform(nx, id, { rotation: (snap90(r) + (sign > 0 ? 90 : 270)) % 360 });
@@ -866,8 +887,8 @@ function multiPositionEditor(ids) {
     Section('Position', 'position', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
-          txFieldMulti('X', shared('x'), (v) => setEachT({ x: v })),
-          txFieldMulti('Y', shared('y'), (v) => setEachT({ y: v })),
+          txFieldMulti('X', sharedFn(leftOf), (v) => setEachLeft(v)),
+          txFieldMulti('Y', sharedFn(topOf), (v) => setEachTop(v)),
           txFieldMulti('Width', shared('w'), (v) => setEachT({ w: v })),
           txFieldMulti('Height', hVal, (v) => setEachT({ h: v > 0 ? v : 0 })),   // 0 = auto
           (() => {
