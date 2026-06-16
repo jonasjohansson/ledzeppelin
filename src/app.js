@@ -1218,6 +1218,40 @@ function setWallView(v) {
   redrawOverlay();
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
+
+// --- Screen record (⏺ rec): capture the whole UI to a WebM via getDisplayMedia +
+//     MediaRecorder, then download it. Pick this tab/window in the browser prompt.
+//     Stops on click again, or when you end sharing from the browser bar. ---
+(() => {
+  const recBtn = document.getElementById('rec-btn');
+  if (!recBtn) return;
+  let rec = null, chunks = [];
+  const paint = () => { const on = !!rec; recBtn.classList.toggle('on', on); recBtn.classList.toggle('rec-on', on); recBtn.textContent = (on ? '⏹' : '⏺') + ' rec'; };
+  if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+    recBtn.disabled = true; recBtn.title = 'screen recording not supported in this browser';
+    return;
+  }
+  recBtn.addEventListener('click', async () => {
+    if (rec) { if (rec.state !== 'inactive') rec.stop(); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false }); }
+    catch { return; }   // user cancelled the picker
+    chunks = [];
+    const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ledzeppelin.webm'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      rec = null; chunks = []; paint();
+    };
+    stream.getVideoTracks()[0].addEventListener('ended', () => { if (rec && rec.state !== 'inactive') rec.stop(); });   // "Stop sharing" from the browser
+    rec.start();
+    paint();
+  });
+})();
 setWallView(wallView);
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed

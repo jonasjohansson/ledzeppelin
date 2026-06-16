@@ -456,6 +456,7 @@ body.gui-hidden #layout { display: none; }
   font-size: var(--fs-micro); opacity: .9;
 }
 #corner-controls button.on, #corner-controls button.open { color: var(--accent); }   /* active / open-menu = accent text */
+#corner-controls #rec-btn.rec-on { color: var(--danger); border-color: var(--danger); }   /* recording = red */
 #corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
 /* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show
    toggle (in its usual spot) — everything else hides so the canvas is clear. */

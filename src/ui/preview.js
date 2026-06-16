@@ -317,7 +317,8 @@ export function createPreview(canvasEl, opts = {}) {
     // lengths so dashes stay readable lines when zoomed in instead of shrinking to
     // dots. Strokes still use the dampened `ck` to read as hairlines.
     const du = 1 / viewZoom;
-    const DASH = `${nz(9 * du)} ${nz(5 * du)}`;
+    const DASH = `${nz(9 * du)} ${nz(5 * du)}`;        // fixture outlines — long dashes
+    const LINK_DASH = `${nz(1.5 * du)} ${nz(4 * du)}`; // chain connections — fine dots (distinct)
 
     if (snapGrid > 0) {
       for (let x = 0; x <= W; x += snapGrid) ln(x, 0, x, Hh, 'rgba(255,255,255,.09)', ck);
@@ -405,7 +406,7 @@ export function createPreview(canvasEl, opts = {}) {
         for (let i = 0; i < members.length - 1; i++) {
           const [ax, ay] = endOf(members[i], 'out');
           const [bx, by] = endOf(members[i + 1], 'in');
-          ln(ax, ay, bx, by, col, 1.25 * ck, DASH);
+          ln(ax, ay, bx, by, col, 1.25 * ck, LINK_DASH);
           p.push(arrowS(bx, by, bx + (bx - ax), by + (by - ay), col, null, ck));
         }
         const [ox0, oy0] = endOf(members[0], 'in');
