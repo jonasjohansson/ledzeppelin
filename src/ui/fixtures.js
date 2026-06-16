@@ -493,7 +493,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     //     a model fans out to every device that uses it. ---
     const devTypes = show.deviceTypes || [];
     if (!devTypes.some((t) => t.id === selDevTypeId)) selDevTypeId = devTypes[0]?.id ?? null;
-    libraryBox.append(Section('Controller models', 'controllers', (b) => {
+    libraryBox.append(Section('Controllers', 'controllers', (b) => {
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
         const count = deviceTypeInstanceCount(show, t.id);
@@ -510,7 +510,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
     //     tab. Editing a definition updates all its placed instances. ---
     const types = show.fixtureTypes || [];
     if (!types.some((t) => t.id === selTypeId)) selTypeId = types[0]?.id ?? null;
-    libraryBox.append(Section('Fixture types', 'fixtures', (b) => {
+    libraryBox.append(Section('Fixtures', 'fixtures', (b) => {
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
