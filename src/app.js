@@ -775,15 +775,21 @@ function positionEditor(sel) {
               : `auto — physical scale (10 mm strip ≈ ${eff}px on this fixture); type a value to override`;
             return fld;
           })(),
-          txField('Rotation°', tf.rotation, (v) => setT({ rotation: v })),
+          // Rotation field with its ±90° steppers inline on the same row.
+          (() => {
+            const fld = txField('Rotation°', tf.rotation, (v) => setT({ rotation: v }));
+            fld.append(
+              oel('button', { className: 'dir-btn rot-step', textContent: '−90°', title: 'rotate −90°',
+                onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) }),
+              oel('button', { className: 'dir-btn rot-step', textContent: '+90°', title: 'rotate +90°',
+                onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
+            );
+            return fld;
+          })(),
         ]),
+        // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
+        // (the canvas arrow points at pixel 0).
         oel('div', { className: 'dir-btns out-transform' }, [
-          oel('button', { className: 'dir-btn', textContent: '−90°', title: 'rotate −90°',
-            onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) }),
-          oel('button', { className: 'dir-btn', textContent: '+90°', title: 'rotate +90°',
-            onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
-          // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
-          // (the canvas arrow points at pixel 0).
           oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ reverse',
             title: 'reverse the LED strip direction (which end is pixel 0)',
             onclick: () => apply(flipFixture(show, sel.id)) }),

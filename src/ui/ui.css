@@ -881,6 +881,10 @@ input[type=checkbox]:checked::after {
 .dir-btn:first-child { border-radius: 4px 0 0 4px; }
 .dir-btn:last-child { border-radius: 0 4px 4px 0; border-right-width: 1px; }
 .dir-btn.on { color: var(--text); background: var(--hover); border-color: var(--line-2); }
+/* ±90° steppers inline in the Rotation field: compact, after the number input. */
+.fx-field > .rot-step { flex: 0 0 auto; border-right-width: 0; }
+.fx-field > .rot-step:last-child { border-right-width: 1px; border-radius: 0 4px 4px 0; }
+.fx-field > input + .rot-step { border-radius: 0; margin-left: 6px; }
 
 /* Bool param: label left, checkbox right (matches the slider rows). */
 .bool-row { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--row-h); }

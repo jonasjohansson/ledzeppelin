@@ -26,12 +26,11 @@ export function createControlPanel({ mount, getShow, send, status }) {
     head.textContent = '';
     const s = status?.() || {};
     if (!s.url) return;
-    // QR, then the URL with a status dot inline (red = daemon offline, accent =
-    // live). No prose — the dot says it.
+    // QR, then the URL. (Daemon status lives on the System › CONTROL tab dot — no
+    // need to repeat it here.)
     head.append(el('div', { className: 'ctrl-qr', innerHTML: qrSvg(s.url, 116) }));
-    const dot = el('span', { className: 'ctrl-status-dot' + (s.connected ? ' on' : ''), title: s.connected ? 'daemon live' : 'daemon offline' });
     const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the Control surface in a new tab' });
-    head.append(el('div', { className: 'ctrl-urlrow' }, [dot, a]));
+    head.append(el('div', { className: 'ctrl-urlrow' }, [a]));
   }
 
   function renderBody(force) {
