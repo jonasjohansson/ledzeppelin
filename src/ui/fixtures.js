@@ -497,6 +497,13 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
 
     // === LIBRARY tab = the catalog of MODELS you build with ===================
 
+    // Add controls at the TOP, inline (matches the Fixtures tab) — one row, two
+    // buttons: a new fixture definition and a new controller model.
+    libraryBox.append(el('div', { className: 'output-addrow' }, [
+      el('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addType(show) }),
+      el('button', { className: 'fx-add', textContent: '+ controller', onclick: () => addController(show) }),
+    ]));
+
     // --- Controller MODELS (device types) — DigUno/Quad/Octa + generic. Editing
     //     a model fans out to every device that uses it. ---
     const devTypes = show.deviceTypes || [];
@@ -511,7 +518,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       }
       if (!devTypes.length) b.append(el('div', { className: 'seg-hint', textContent: 'no controller models yet' }));
       b.append(list);
-      b.append(el('button', { className: 'fx-add', textContent: '+ controller', onclick: () => addController(show) }));
     }));
 
     // --- Fixture DEFINITIONS (types) — define once, place many in the Fixtures
@@ -528,7 +534,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       }
       if (!types.length) b.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
       b.append(list);
-      b.append(el('button', { className: 'fx-add', textContent: '+ definition', onclick: () => addType(show) }));
     }));
     // Project file I/O lives in the Settings tab.
     if (mounted) onSelect?.();   // lists rebuilt → refresh the left sidebar editor too (covers status pings, edits)

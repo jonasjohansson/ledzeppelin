@@ -28,9 +28,8 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
 
   function render() {
     root.textContent = '';
-    root.append(el('div', { className: 'fx-title', textContent: 'import' }));
 
-    // --- Import button + hidden file input ---
+    // --- Hidden file input (opened from the File menu's "Import from LEDger…") ---
     const banner = el('div', { className: 'fx-err imp-banner' });
     banner.style.display = 'none';
     const showError = (msg) => { banner.style.display = ''; banner.className = 'fx-err imp-banner'; banner.textContent = msg; };
@@ -62,10 +61,10 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
       render();
     });
 
-    root.append(el('button', {
-      className: 'fx-add imp-btn', textContent: 'import from LEDger…',
-      onclick: () => fileIn.click(),
-    }), fileIn, banner);
+    // No in-panel button/header — import is launched from the File menu, which
+    // calls trigger() to open this picker. When idle the panel is empty; the
+    // assign-IPs flow below only appears once a file has been picked.
+    root.append(fileIn, banner);
 
     if (!pending) return;
 

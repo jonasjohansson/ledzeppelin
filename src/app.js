@@ -932,7 +932,7 @@ function addInstance(typeId) {
   panel.refresh(); renderOutput(); redrawOverlay();
 }
 
-// The "+ fixture" / "+ device" / "scan" toolbar above the placement list — the
+// The "+ fixture" / "+ controller" / "scan" toolbar above the placement list — the
 // three actions sit side by side; the fixture-type picker (what "+ fixture" places)
 // is a full-width row below them, then any scan results. Definitions live in Inventory.
 function addControls() {
@@ -950,9 +950,9 @@ function addControls() {
     title: types.length ? 'place a fixture' : 'define a fixture type in the Inventory tab first',
     onclick: () => { if (types.length) addInstance(sel.value); } });
   addFx.disabled = !types.length;
-  // "+ device" — create a controller right here (a generic one; edit its IP / model /
-  // colour order below). New devices appear as empty containers you can drop onto.
-  const addDev = oel('button', { className: 'fx-add', textContent: '+ device', onclick: () => {
+  // "+ controller" — create a controller right here (a generic one; edit its IP /
+  // model / colour order below). New controllers appear as empty containers you drop onto.
+  const addDev = oel('button', { className: 'fx-add', textContent: '+ controller', onclick: () => {
     let n = structuredClone(show);
     let k = (n.devices?.length || 0) + 1, id; do { id = `c${k}`; k++; } while (n.devices.some((d) => d.id === id));
     n = addDevice(n, { id, name: `Controller ${n.devices.length + 1}`, typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });
