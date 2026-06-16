@@ -42,7 +42,7 @@ const thumbnails = renderSourceThumbnails(gl);
 function defaultShow() {
   let show = emptyShow();
   const cv = show.composition.canvas;
-  cv.w = 1024; cv.h = 1024;        // square default canvas
+  cv.w = 1280; cv.h = 1280;        // square default canvas
   // Generic placeholder hardware so the first run shows SOMETHING on the wall —
   // the user reconfigures (or scans) these to match their real rig.
   show = addDevice(show, { id: 'c1', name: 'Generic Controller', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live

@@ -68,7 +68,7 @@ export function clampCanvasSize(w, h) {
 // Aspect-ratio presets for the composition panel. Each `set` is a clamped size.
 export const CANVAS_PRESETS = [
   { label: '16:9', w: 1280, h: 720 },
-  { label: '1:1', w: 1024, h: 1024 },
+  { label: '1:1', w: 1280, h: 1280 },
   { label: '4:3', w: 1024, h: 768 },
 ];
 
