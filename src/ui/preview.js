@@ -166,9 +166,9 @@ export function createPreview(canvasEl, opts = {}) {
     const vx0 = -vr.left * Lx - 24, vx1 = (window.innerWidth - vr.left) * Lx + 24;
     const vy0 = -vr.top * Ly - 24, vy1 = (window.innerHeight - vr.top) * Ly + 24;
 
-    // When a fixture is selected, ISOLATE it: its cells stay full strength and the
-    // rest fade back, so the selection is easy to spot in a dense rig.
-    const selActive = selectedIds && (selectedIds.size ? selectedIds.size > 0 : !!selectedIds);
+    // Bright = SELECTED. Unselected cells always sit back at ~22% (even when nothing
+    // is selected), so a lit fixture reads as "selected", not the default — and a
+    // marquee/selection lights up only what it actually catches.
 
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
@@ -199,8 +199,8 @@ export function createPreview(canvasEl, opts = {}) {
       const lpm = Number(f.ledsPerMeter)
         || (Number(f.meters) > 0 ? count / Number(f.meters) : 60);
       const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
-      // Fade unselected fixtures' cells when something is selected (isolate it).
-      ctx.globalAlpha = selActive && !isSelected(selectedIds, f.id) ? 0.22 : 1;
+      // Selected → full strength; everything else sits back at 22%.
+      ctx.globalAlpha = isSelected(selectedIds, f.id) ? 1 : 0.22;
       if (count >= 1 && rgba) {
         if (!isPolylineFixture(f.input) && count >= 2) {
           // BINARY cells: each LED is an axis-aligned square SNAPPED to the device
