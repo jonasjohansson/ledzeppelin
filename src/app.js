@@ -237,6 +237,7 @@ function setComposition(next) {
   show = tidyEmptyLayers(next);   // collapse any pile-up of empty layers (never auto-adds)
   saveShow(show);
   broadcastManifest();
+  postMapParams();   // a clip/layer/param change → refresh the Mapping window now (not on the 2s poll)
 }
 
 // Publish the companion-remote manifest (master layers + ticked params) to any
@@ -296,6 +297,10 @@ function applyExternal(next) {
   if (!extSaveTimer) extSaveTimer = setTimeout(() => { extSaveTimer = null; saveShow(show); }, 400);
   broadcastManifest();
 }
+// Debounced persist for LIVE-dragged settings (e.g. the audio gain slider) so a
+// drag doesn't write localStorage on every tick.
+let cfgSaveTimer = null;
+function saveShowSoon() { if (!cfgSaveTimer) cfgSaveTimer = setTimeout(() => { cfgSaveTimer = null; saveShow(show); }, 400); }
 
 // Resolution-change path. Updates composition.canvas (clamped, immutable),
 // resizes the stage canvas, and RECREATES the compositor so all its internal
@@ -1749,7 +1754,7 @@ async function buildSettings(mount) {
   mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
   mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
     min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
-    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShow(show); },
+    onInput: (v) => { show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
   }));
 
   // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
