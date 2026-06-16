@@ -352,8 +352,16 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         })(),
       ] : []),
       // Output delay (ms) — hold this controller's packets back to time-align it
-      // with the rest of the rig (e.g. against projection). 0 = immediate.
-      field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))),
+      // with the rest of the rig (e.g. against projection). 0 = immediate. Niche, so
+      // it lives under an Advanced disclosure (collapsed unless already non-zero)
+      // to keep the common per-device editor short.
+      (() => {
+        const det = el('details', { className: 'fx-advanced' });
+        if ((d.syncDelayMs ?? 0) > 0) det.open = true;
+        det.append(el('summary', { textContent: 'Advanced' }));
+        det.append(field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))));
+        return det;
+      })(),
       patchRuler(show, d),
       controllerBlock(d),
     ]);

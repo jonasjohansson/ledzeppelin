@@ -440,6 +440,9 @@ body.gui-hidden #layout { display: none; }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
    the button / shift the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
+/* Thin rules splitting the cluster into groups: menus | view-toggles | record —
+   so the row reads as related sets, not one long undifferentiated strip. */
+.corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
 #corner-controls button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
@@ -559,6 +562,12 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
 .fx-detail { margin-top: 2px; }
+/* "Advanced" disclosure inside a device editor — a quiet, marker-free summary so
+   niche fields (sync delay) stay tucked away without cluttering the common case. */
+.fx-advanced > summary { cursor: pointer; user-select: none; list-style: none; padding: 4px 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-ui); }
+.fx-advanced > summary::-webkit-details-marker { display: none; }
+.fx-advanced > summary::before { content: '▸ '; }
+.fx-advanced[open] > summary::before { content: '▾ '; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
 .scan-block { display: flex; flex-direction: column; gap: 3px; }
 .scan-row .ctrl-btn { margin-left: auto; }
@@ -783,6 +792,10 @@ input[type=checkbox]:checked::after {
 .fx-menu-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
 .is-audio input[type=range] { accent-color: var(--green); }
 .is-animated input[type=range] { accent-color: var(--green); }
+/* Modulation rail: any DRIVEN param (timeline/audio/external) wears an inset accent
+   bar down its left edge, so it's obvious at a glance which params are animated vs
+   static — no badge or label. Inset shadow ⇒ zero layout shift. */
+.anim-param.is-animated { box-shadow: inset 2px 0 0 var(--accent-line); }
 /* BPM field + TAP button (Composition inspector). */
 .cmp-bpm > input { flex: 1 1 0; min-width: 0; }
 .cmp-tap {
