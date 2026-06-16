@@ -1417,7 +1417,10 @@ document.addEventListener('keydown', (e) => {
     const axis = (pan, base, content, vStart, vSize) => {
       let lo, hi;
       if (content <= vSize) { lo = vStart - base; hi = vStart + vSize - content - base; }
-      else { const keep = vSize / 2; lo = vStart + keep - base - content; hi = vStart + vSize - keep - base; }
+      // Zoomed in: pan freely until only a sliver (`keep`) of the composite is left
+      // in view — so ANY corner or edge can be pushed all the way to the viewport
+      // corner/edge for full inspection, while the canvas can never be lost entirely.
+      else { const keep = 48; lo = vStart + keep - base - content; hi = vStart + vSize - keep - base; }
       return lo > hi ? (lo + hi) / 2 : clampNum(pan, lo, hi);
     };
     panX = axis(panX, f.bx, f.W * z, f.vx, f.vw);
@@ -1781,15 +1784,15 @@ function syncCompAspect() {
 }
 syncCompAspect();
 
-// In OUTPUT, fit the canvas to the left of the main panel (the editor now lives
-// INSIDE that panel, so there's a single right-side chrome). The canvas takes the
-// whole left up to #side. Measured after layout (rAF) and published as CSS insets;
-// 0 in every other view (full window).
+// Fit the canvas to the left of the right panel (#side) in EVERY section — the
+// composite always takes all the space minus the right sidebar (the deck floats
+// over its top-left, like a HUD). Measured after layout (rAF) and published as CSS
+// insets; only dropped to full-window when the whole UI is hidden.
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
   insetRaf = requestAnimationFrame(() => {
     const root = document.documentElement;
-    const active = !outputPaneEl?.hidden && !document.body.classList.contains('gui-hidden');
+    const active = !document.body.classList.contains('gui-hidden');
     let right = 0;
     if (active) {
       const vw = window.innerWidth;
