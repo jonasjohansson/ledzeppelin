@@ -346,9 +346,9 @@ export function createPreview(canvasEl, opts = {}) {
         }
         const selected = isSelected(selectedIds, f.id);
         const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
-        // A faint accent wash as the body fill makes the (unselected) fixture easy to
-        // spot against the canvas; the selected one keeps its highlight (no wash).
-        const bodyFill = selected ? 'none' : accCss(.14);
+        // Only the SELECTED fixture gets the accent wash background; unselected ones
+        // are outline-only (no coloured fill).
+        const bodyFill = selected ? accCss(.18) : 'none';
         const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
         const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
         if (!selected && runKey(f) !== focusKey && lblLen * viewZoom < 13) continue;   // LOD: tiny → no chrome
