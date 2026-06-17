@@ -2422,6 +2422,9 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { sep: true },
     { label: 'Save composition…', act: saveCompositionToFile },
     { label: 'Load composition…', act: () => openCompInput.click() },
+    { sep: true },
+    // Feedback / bug reports go to GitHub Issues (prefilled with the app version).
+    { label: 'Report a bug ↗', act: () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION} — `)}`, '_blank', 'noopener') },
   ]));
 });
 // (Audio input + gain and the snap grid/distance config moved to System ›

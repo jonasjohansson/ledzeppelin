@@ -352,7 +352,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Controller MODEL — drives the output count (a live template from Library).
       field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
       field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
-      field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
       // Output protocol — DDP (WLED's realtime stream) or Art-Net for generic
       // gear (nodes, consoles, MadMapper/Resolume). Switching also resets the
       // port to the protocol's default (4048 / 6454).
@@ -399,6 +398,9 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         const det = el('details', { className: 'fx-advanced' });
         if ((d.syncDelayMs ?? 0) > 0) det.open = true;
         det.append(el('summary', { textContent: 'Advanced' }));
+        // Physical wiring spec — set once at setup, NOT a live-performance control,
+        // so it lives here (collapsed) rather than up top.
+        det.append(field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))));
         det.append(field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))));
         return det;
       })(),
