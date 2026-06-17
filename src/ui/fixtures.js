@@ -97,7 +97,7 @@ function distributionPicker(value, onPick) {
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow, onSelect }) {
+export function createFixturePanel({ getShow, setShow, onSelect, getConnected = () => true }) {
   // The Devices + Library tabs render LISTS only; the selected item's editor goes
   // into the left sidebar (app wires that via deviceDetailEl / libraryDetailEl and
   // re-renders it on onSelect).
@@ -251,12 +251,14 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
   // list with it marked "added".
   // Just the scan toggle button (so it can sit beside + fixture / + device).
   function scanButton(rerender = render) {
+    const online = getConnected();   // false on the hosted demo (no local daemon)
     return el('button', {
       className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan',
-      title: 'find WLED controllers on your network (needs the daemon running)',
-      disabled: scanState.running,
+      title: online ? 'find WLED controllers on your network (needs the daemon running)'
+        : 'scanning needs the local app (the daemon) — not available on the web demo',
+      disabled: scanState.running || !online,
       onclick: async () => {
-        if (scanState.running) return;
+        if (scanState.running || !getConnected()) return;
         scanState = { running: true, result: null, error: null }; rerender();
         const r = await scanDevices();
         scanState = { running: false, result: r.ok ? r.data : null, error: r.ok ? null : r.error };

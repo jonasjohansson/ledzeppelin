@@ -11,7 +11,7 @@
 // relays OSC + socket-JSON channel values as { type:'ext', channel, value } —
 // pass an onExt(channel, value) handler to consume them (optional; the old
 // single-argument call still works).
-export function connectBridge(route, { onExt, onManifestReq, fps } = {}) {
+export function connectBridge(route, { onExt, onManifestReq, onStatus, fps } = {}) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   let outFps = Number(fps) || 42;   // global output framerate cap sent to the daemon
   let ws = null;
@@ -33,6 +33,7 @@ export function connectBridge(route, { onExt, onManifestReq, fps } = {}) {
         // (Re)publish the companion manifest on connect so phones get the current
         // show immediately (and after an editor restart they aren't left stale).
         onManifestReq?.();
+        onStatus?.(true);   // daemon reachable → e.g. enable LAN-scan UI
       });
       // Inbound JSON from the daemon (binary never arrives browser-side).
       ws.addEventListener('message', (ev) => {
@@ -49,6 +50,7 @@ export function connectBridge(route, { onExt, onManifestReq, fps } = {}) {
         if (closed) return;
         if (!lastErr) lastErr = everOpen ? 'daemon disconnected' : 'daemon unreachable';
         ws = null;
+        onStatus?.(false);                            // daemon gone → grey out scan again
         timer = setTimeout(open, backoff);            // retry, backing off
         backoff = Math.min(backoff * 2, 5000);
       });

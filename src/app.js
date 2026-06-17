@@ -190,7 +190,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: () => panel?.refresh?.(), fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -342,6 +342,9 @@ const panel = createFixturePanel({
   setShow: (next) => rebuild(next),
   // A device/model row was clicked or edited → refresh the left inspector.
   onSelect: () => updateInspector(),
+  // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
+  // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
+  getConnected: () => bridge?.connected?.() ?? false,
 });
 // Timeline transport: plays the clip deck left→right, holding each clip for its
 // durationMs, looping. It only drives RENDERING (derives the active clip per
