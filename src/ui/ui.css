@@ -459,8 +459,10 @@ body.gui-hidden #layout { display: none; }
      standalone PWA with viewport-fit=cover; falls back to 10px on normal screens. */
   left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
   max-width: calc(100vw - 22px);
-  display: inline-flex; align-items: center; gap: 6px;   /* center, not stretch — buttons keep one intrinsic height whether alone (Show UI) or among taller siblings */
+  /* Stacked: telemetry on top, view toggles, then the menus row at the bottom. */
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
 }
+.corner-row { display: inline-flex; align-items: center; gap: 6px; }
 /* Let the telemetry shrink/ellipsis first when space is tight (buttons keep size). */
 #hud { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
@@ -475,12 +477,9 @@ body.gui-hidden #layout { display: none; }
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto; white-space: nowrap;   /* never shrink/wrap a glyph+label onto two lines */
 }
-/* Telemetry sits just ABOVE the bottom-left control cluster — its own muted,
-   non-wrapping line that grows rightward from the left edge, so a long readout
-   never overruns the side panel or collides with the buttons (which it did when
-   right-anchored on a narrow window). */
+/* Telemetry is the TOP line of the stacked corner cluster (in flow now) — muted,
+   non-wrapping, grows rightward from the left edge. */
 #hud {
-  position: fixed; left: 10px; bottom: calc(10px + var(--ctrl-h) + 7px); right: auto; z-index: 5;
   pointer-events: none; white-space: nowrap; justify-content: flex-start; gap: 12px;
   font-size: var(--fs-micro); opacity: .9;
 }
@@ -494,7 +493,11 @@ body.gui-hidden #layout { display: none; }
 #corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
 /* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show
    toggle (in its usual spot) — everything else hides so the canvas is clear. */
-body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
+/* When UI is hidden, leave ONLY "Show UI" (in the bottom menus row): hide the
+   telemetry, the toggles row, and every menu button except #g-hide. */
+body.gui-hidden #corner-controls #hud,
+body.gui-hidden #corner-controls #corner-toggles,
+body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none; }
 
 
 /* Layer header: B/S toggles + click-to-select. */

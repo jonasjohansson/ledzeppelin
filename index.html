@@ -32,22 +32,26 @@ canvas{display:block}
 <!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI
      toggles, the zoom pill (appended at runtime), then the live telemetry inline. -->
 <div id="corner-controls">
-  <!-- Hide/show UI is FIRST so it keeps the same far-left spot whether or not the
-       rest of the cluster is visible (it's the only control shown while hidden). -->
-  <button id="g-hide" class="g-btn" title="hide all UI (H)">Hide UI</button>
-  <button id="menu-file" class="g-btn" title="project file actions">File</button>
-  <button id="menu-mapping" class="g-btn" title="MIDI / keyboard / OSC mapping (opens a window)">Mapping</button>
-  <button id="menu-install" class="g-btn" title="download / update the app on GitHub">Install</button>
-  <button id="menu-align" class="g-btn" title="align / distribute the selected fixtures" disabled>Align</button>
-  <span class="corner-sep" aria-hidden="true"></span>
-  <button id="overlay-toggle" title="show/hide fixtures on the canvas">fixtures</button>
-  <button id="snap-btn" title="snap fixtures to each other & the grid">snap</button>
-  <button id="grid-btn" title="show/hide the alignment grid">grid</button>
-  <button id="color-btn" title="tint fixtures by controller colour">color</button>
-  <button id="wall-btn" title="live view — dim the composite; the fixtures' pixels light up with what they sample">live</button>
-  <span class="corner-sep" aria-hidden="true"></span>
-  <button id="rec-btn" title="record the screen to a WebM video (pick this tab/window when prompted)">⏺ rec</button>
   <div id="hud">booting…</div>
+  <!-- View toggles on TOP; the menus (incl. Hide/Show UI) on the bottom row. -->
+  <div class="corner-row" id="corner-toggles">
+    <button id="overlay-toggle" title="show/hide fixtures on the canvas">fixtures</button>
+    <button id="snap-btn" title="snap fixtures to each other & the grid">snap</button>
+    <button id="grid-btn" title="show/hide the alignment grid">grid</button>
+    <button id="color-btn" title="tint fixtures by controller colour">color</button>
+    <button id="wall-btn" title="live view — dim the composite; the fixtures' pixels light up with what they sample">live</button>
+    <span class="corner-sep" aria-hidden="true"></span>
+    <button id="rec-btn" title="record the screen to a WebM video (pick this tab/window when prompted)">⏺ rec</button>
+  </div>
+  <div class="corner-row" id="corner-menus">
+    <!-- Hide/show UI is FIRST so it keeps the same far-left spot whether or not the
+         rest of the cluster is visible (it's the only control shown while hidden). -->
+    <button id="g-hide" class="g-btn" title="hide all UI (H)">Hide UI</button>
+    <button id="menu-file" class="g-btn" title="project file actions">File</button>
+    <button id="menu-mapping" class="g-btn" title="MIDI / keyboard / OSC mapping (opens a window)">Mapping</button>
+    <button id="menu-install" class="g-btn" title="download / update the app on GitHub">Install</button>
+    <button id="menu-align" class="g-btn" title="align / distribute the selected fixtures" disabled>Align</button>
+  </div>
 </div>
 <!-- Full-bleed canvas background (matte-style): the composite is centred and
      letterboxed to the composition aspect; the UI panels float over it. -->

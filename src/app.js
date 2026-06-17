@@ -1770,8 +1770,8 @@ document.addEventListener('keydown', (e) => {
   // A reset/zoom-% pill in the corner cluster — appears only when zoomed/panned.
   const resetBtn = document.createElement('button');
   resetBtn.className = 'g-btn'; resetBtn.title = 'reset view (0)'; resetBtn.textContent = '⤢ 100%';
-  // Insert the zoom pill before the telemetry (#hud) so order reads: …buttons · zoom% · fps.
-  document.getElementById('corner-controls')?.insertBefore(resetBtn, document.getElementById('hud'));
+  // Append the zoom pill to the TOP (toggles) row, after rec.
+  document.getElementById('corner-toggles')?.appendChild(resetBtn);
   const apply = () => {
     clampPan();
     inner.style.transformOrigin = '0 0';
