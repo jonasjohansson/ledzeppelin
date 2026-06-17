@@ -52,4 +52,4 @@ See [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## License
 
-[MIT](LICENSE) © 2026 Jonas Johansson. Built with [Claude Code](https://claude.com/claude-code).
+[MIT](LICENSE) © 2026 Jonas Johansson.
