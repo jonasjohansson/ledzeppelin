@@ -977,10 +977,11 @@ function openAlignMenu() {
   openMenu(alignBtnEl, menuList(items));
 }
 alignBtnEl?.addEventListener('click', (e) => { e.stopPropagation(); openAlignMenu(); });
-// Show the Align button only where it applies: Output › Fixtures with 1+ selected.
+// Align is always visible (like File/Mapping/Install) — just DISABLED when there's
+// nothing selected to align.
 function updateAlignBtn() {
   if (!alignBtnEl) return;
-  alignBtnEl.hidden = !(outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library' && selectedFixtureIds.size >= 1);
+  alignBtnEl.disabled = selectedFixtureIds.size < 1;
 }
 
 // Wiring for the selected fixture: its INPUT comes FROM another fixture's output
@@ -1482,7 +1483,7 @@ const typingIn = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' ||
 // left alone, so those regions are excluded.
 function clearFixtureSelection() {
   if (!selectedFixtureIds.size) return false;
-  selectedFixtureIds.clear(); renderOutput(); redrawOverlay(); return true;
+  selectedFixtureIds.clear(); renderOutput(); redrawOverlay(); updateInspector(); return true;   // also disables Align + hides the dock
 }
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || typingIn(e.target)) return;
@@ -1490,7 +1491,9 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('pointerdown', (e) => {
   if (!selectedFixtureIds.size) return;
-  if (e.target.closest?.('#stageinner, #side, #deckbar, #corner-controls, #show-ui')) return;
+  // #menu-pop is a body-level popover (File/Align menus); acting in it must NOT
+  // clear the selection the action operates on.
+  if (e.target.closest?.('#stageinner, #side, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
   clearFixtureSelection();
 });
 
