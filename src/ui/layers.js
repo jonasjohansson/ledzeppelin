@@ -998,6 +998,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     opCol.addEventListener('pointerup', opEnd);
     opCol.addEventListener('pointercancel', opEnd);
     opCol.addEventListener('click', (e) => e.stopPropagation());
+    // Right-click → reset opacity to the default (0.5). A committed change (not a
+    // live drag), so it's a single undo step.
+    opCol.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      paintOp(0.5); commit(patchLayer(show(), id, { opacity: 0.5 })); syncLayerOpacity(id, 0.5);
+    });
 
     // Body = FOUR equal quarters, Resolume order: ✕ · B · S · opacity. ✕ (eject)
     // is far left; stopPropagation so the buttons don't also fire layer-select.

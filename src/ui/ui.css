@@ -702,11 +702,11 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 
 /* Controller controls — a button row + a brightness slider. */
 /* The colour fills the whole control (no inner black margin) — just a hairline. */
-.fx-color { width: 100%; height: var(--ctrl-h); padding: 0; background: none; border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; overflow: hidden; }
+.fx-color { width: 100%; height: var(--ctrl-h); padding: 0; background: none; border: 1px solid var(--field-border); border-radius: 0; cursor: pointer; overflow: hidden; }
 /* Make the swatch fill the control so the colour actually reads. */
 .fx-color::-webkit-color-swatch-wrapper { padding: 0; }
-.fx-color::-webkit-color-swatch { border: none; border-radius: 2px; }
-.fx-color::-moz-color-swatch { border: none; border-radius: 2px; }
+.fx-color::-webkit-color-swatch { border: none; border-radius: 0; }
+.fx-color::-moz-color-swatch { border: none; border-radius: 0; }
 .ctrl-block { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
 /* Controller status as a multi-line key/value list (clear, uses vertical space). */
 .ctrl-stat { margin: 2px 0 6px; }
