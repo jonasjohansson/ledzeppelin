@@ -1033,10 +1033,14 @@ function chainStatusRow(sel) {
   const next = ch && ch.index < ch.members.length - 1 ? ch.members[ch.index + 1] : null;
   const toSel = oel('select');
   toSel.append(oel('option', { value: '', textContent: full ? '— end (output full)' : '— end of chain' }));
-  for (const f of show.fixtures) if (f.id !== sel.id) toSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
+  const candidates = show.fixtures.filter((f) => f.id !== sel.id);
+  for (const f of candidates) toSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
   toSel.value = next || '';
-  toSel.disabled = full && !next;
+  // End of chain with nothing to offer — the output is full, or there are simply no
+  // other fixtures to wire after this one → nothing to pick, so disable the picker.
+  toSel.disabled = !next && (full || candidates.length === 0);
   if (full) toSel.title = `${devName} Output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  else if (!next && candidates.length === 0) toSel.title = 'no other fixtures to wire after this one';
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
   return oel('div', {}, [
