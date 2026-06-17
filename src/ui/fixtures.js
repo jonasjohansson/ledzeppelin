@@ -683,9 +683,14 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         next.deviceTypes = (next.deviceTypes || []).filter((t) => t.id !== selDevTypeId);
         selDevTypeId = null; commit(next); return true;
       }
-      if (lastSel === 'type' && selTypeId && selTypeId !== 'generic' && typeInstanceCount(show, selTypeId) === 0) {
+      if (lastSel === 'type' && selTypeId && selTypeId !== 'generic') {
+        const used = typeInstanceCount(show, selTypeId);
+        const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
+        // In use → confirm, then delete the definition AND its placed fixtures.
+        if (used && !confirmDelete(`Delete “${t?.name || selTypeId}”?\n\n${used} placed fixture${used === 1 ? '' : 's'} will also be removed.`)) return false;
         const next = structuredClone(show);
-        next.fixtureTypes = (next.fixtureTypes || []).filter((t) => t.id !== selTypeId);
+        next.fixtureTypes = (next.fixtureTypes || []).filter((x) => x.id !== selTypeId);
+        next.fixtures = (next.fixtures || []).filter((f) => f.typeId !== selTypeId);
         selTypeId = null; commit(next); return true;
       }
       return false;

@@ -346,6 +346,57 @@ void main(){
   frag = vec4(clamp(c, 0.0, 1.0), src.a);
 }`;
 
+// Noise — animated fbm value noise (the "clouds / MadNoise" staple), mapped
+// between two colours. `scale` zooms, `speed` drifts it (phase-continuous),
+// `contrast` hardens the bands.
+const NOISE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float contrast; uniform float uPhase;
+uniform vec3 colorA; uniform vec3 colorB;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+void main(){
+  vec2 p = uv*max(0.5,scale) + vec2(uPhase);
+  float n=0.0, amp=0.5, fr=1.0;
+  for(int i=0;i<5;i++){ n += amp*vnoise(p*fr); fr*=2.0; amp*=0.5; }
+  n = clamp((n-0.5)*mix(1.0,3.0,clamp(contrast,0.0,1.0))+0.5, 0.0, 1.0);
+  frag = vec4(mix(colorA, colorB, n), 1.0);
+}`;
+
+// Flash — full-frame strobe at `rate` (phase-continuous via uPhase), `duty` =
+// fraction of each cycle that's ON. The classic blinder. (Named 'flash' since
+// 'strobe' is already a per-source effect.)
+const FLASH = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float duty; uniform float level; uniform vec3 color; uniform float uPhase;
+void main(){ float on = fract(uPhase) < clamp(duty,0.0,1.0) ? 1.0 : 0.0; frag = vec4(color*level*on, 1.0); }`;
+
+// Dots — a polka grid of `count` round dots (kept circular via aspect), dot colour
+// over a background colour. `size` is the dot radius within its cell.
+const DOTS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float count; uniform float size; uniform float aspect; uniform vec3 colorA; uniform vec3 colorB;
+void main(){
+  vec2 cell = fract(uv*max(1.0,count)) - 0.5; cell.x *= max(0.001, aspect);
+  float d = length(cell);
+  float m = 1.0 - smoothstep(clamp(size,0.0,0.5), clamp(size,0.0,0.5)+0.03, d);
+  frag = vec4(mix(colorA, colorB, m), 1.0);
+}`;
+
+// Spectrum — a rainbow sweep of `bands` hue cycles along `angle`, scrolling via
+// uPhase; `sat` blends toward white. (HSV hue → RGB, no branches.)
+const SPECTRUM = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float bands; uniform float sat; uniform float angle; uniform float uPhase;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float a=radians(angle); float coord = uv.x*cos(a)+uv.y*sin(a);
+  float h = fract(coord*max(1.0,bands) - uPhase);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat,0.0,1.0)), 1.0);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -446,6 +497,43 @@ export const REGISTRY = {
       { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'reverse', type: 'bool', default: false },
       { key: 'autoFire', type: 'bool', default: true },
+    ],
+  },
+  noise: {
+    name: 'noise', type: 'generator', src: NOISE,
+    params: [
+      { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
+      { key: 'contrast', type: 'float', min: 0, max: 1, default: 0.4 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
+    ],
+  },
+  flash: {
+    name: 'flash', type: 'generator', src: FLASH, phaseParam: 'rate',
+    params: [
+      { key: 'rate', type: 'float', min: 0, max: 20, default: 6 },
+      { key: 'duty', type: 'float', min: 0.02, max: 0.98, default: 0.5 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  dots: {
+    name: 'dots', type: 'generator', src: DOTS,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 40, default: 8, step: 1 },
+      { key: 'size', type: 'float', min: 0.05, max: 0.5, default: 0.3 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
+    ],
+  },
+  spectrum: {
+    name: 'spectrum', type: 'generator', src: SPECTRUM,
+    params: [
+      { key: 'bands', type: 'float', min: 1, max: 12, default: 1, step: 1 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
     ],
   },
   displace: {

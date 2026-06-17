@@ -2376,18 +2376,15 @@ openCompInput.addEventListener('change', async () => {
 let isfCounter = 0;
 const openISFInput = oel('input', { type: 'file', accept: '.fs,.isf,.frag,.glsl,.txt' });
 openISFInput.style.display = 'none'; document.body.append(openISFInput);
-openISFInput.addEventListener('change', async () => {
-  const file = openISFInput.files[0]; openISFInput.value = '';
-  if (!file) return;
-  const r = parseISF(await file.text());
+function importISFText(text, filename) {
+  const r = parseISF(text);
   if (!r.ok) { window.alert(`Not a valid ISF shader: ${r.error}`); return; }
   const layers = show.composition?.layers || [];
   if (!layers.length) { window.alert('Add a layer first.'); return; }
-  const params = isfParams(r.inputs);
   const isf = {
     id: `isf${++isfCounter}`,
-    name: file.name.replace(/\.[^.]+$/, '') || r.name,
-    glsl: r.glsl, inputs: r.inputs, params,
+    name: (filename || '').replace(/\.[^.]+$/, '') || r.name,
+    glsl: r.glsl, inputs: r.inputs, params: isfParams(r.inputs),
     src: wrapISF(r.glsl, r.inputs),
   };
   if (r.type === 'effect') {
@@ -2403,6 +2400,19 @@ openISFInput.addEventListener('change', async () => {
     rebuild(addISFClip(show, layerId, isf));
   }
   setSection('design'); layerPanel?.refresh?.();
+}
+openISFInput.addEventListener('change', async () => {
+  const file = openISFInput.files[0]; openISFInput.value = '';
+  if (file) importISFText(await file.text(), file.name);
+});
+// Drag-and-drop an ISF shader (.fs/.isf/.frag/.glsl) anywhere onto the window.
+const isISFName = (n) => /\.(fs|isf|frag|glsl)$/i.test(n || '');
+window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) e.preventDefault(); });
+window.addEventListener('drop', async (e) => {
+  const files = [...(e.dataTransfer?.files || [])].filter((f) => isISFName(f.name));
+  if (!files.length) return;
+  e.preventDefault();
+  for (const f of files) importISFText(await f.text(), f.name);
 });
 
 // (Project file actions — new/save/load/import — live in the corner File menu
