@@ -2343,7 +2343,9 @@ openCompInput.addEventListener('change', async () => {
 
 // Import an ISF shader (.fs/.isf) as a new generator clip on the active layer.
 // Its INPUTS become animatable, OSC/MIDI-mappable clip params automatically.
-let isfCounter = 0;
+// Content-stable id (a hash of the GLSL) so the same shader dedupes and a saved
+// clip's id never collides with a fresh import across sessions.
+const isfId = (g) => { let h = 5381; for (let i = 0; i < (g || '').length; i++) h = ((h << 5) + h + g.charCodeAt(i)) | 0; return 'isf' + (h >>> 0).toString(36); };
 const openISFInput = oel('input', { type: 'file', accept: '.fs,.isf,.frag,.glsl,.txt' });
 openISFInput.style.display = 'none'; document.body.append(openISFInput);
 // Import an ISF shader. `target` (from a drop) hints WHERE to land it:
@@ -2355,7 +2357,7 @@ function importISFText(text, filename, target) {
   const layers = show.composition?.layers || [];
   if (!layers.length) { window.alert('Add a layer first.'); return; }
   const isf = {
-    id: `isf${++isfCounter}`,
+    id: isfId(r.glsl),
     name: (filename || '').replace(/\.[^.]+$/, '') || r.name,
     glsl: r.glsl, inputs: r.inputs, params: isfParams(r.inputs),
     src: wrapISF(r.glsl, r.inputs),

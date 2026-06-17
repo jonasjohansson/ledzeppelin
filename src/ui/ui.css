@@ -711,7 +711,8 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-devstatus.is-off { color: var(--amber, #e8b27f); }
 
 /* Controller controls — a button row + a brightness slider. */
-.fx-color { width: 100%; height: var(--ctrl-h); padding: 2px; background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; }
+/* The colour fills the whole control (no inner black margin) — just a hairline. */
+.fx-color { width: 100%; height: var(--ctrl-h); padding: 0; background: none; border: 1px solid var(--field-border); border-radius: var(--radius); cursor: pointer; overflow: hidden; }
 /* Make the swatch fill the control so the colour actually reads. */
 .fx-color::-webkit-color-swatch-wrapper { padding: 0; }
 .fx-color::-webkit-color-swatch { border: none; border-radius: 2px; }
@@ -1312,9 +1313,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .pick-item:hover { background: var(--hover); color: var(--accent); }
 .pick-video { color: var(--faint); }
-/* Grouped source picker: wider, a 2-column grid under each category header. */
-.pick-pop.pick-grouped { width: 320px; }
-.pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+/* Grouped source picker: full-width tiled rows under each category header (matches
+   the app's list language — no gaps, no half-width cards). */
+.pick-pop.pick-grouped { width: 240px; }
+.pick-grid { display: flex; flex-direction: column; gap: 0; }
 .pick-group { font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans); letter-spacing: var(--ls-caps);
   text-transform: uppercase; color: var(--faint); padding: 7px 7px 3px; }
 .pick-group:first-child { padding-top: 2px; }

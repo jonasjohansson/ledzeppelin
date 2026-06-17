@@ -68,7 +68,7 @@ const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride
 // Build a control for one manifest param.
 function paramControl(p, value, onInput) {
   if (p.type === 'color') {
-    const i = el('input', { type: 'color', value: value || '#ffffff' });
+    const i = el('input', { type: 'color', className: 'fx-color', value: value || '#ffffff' });
     i.addEventListener('input', () => onInput(i.value));
     return field(prettyParam(p.key), i);
   }

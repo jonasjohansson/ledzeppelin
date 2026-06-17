@@ -25,6 +25,7 @@
 // id (NOT in the show JSON). See transitionProgress() for the timing math.
 
 import { program, makeTarget, drawFullscreen, ISF_VERT } from './gl.js';
+import { wrapISF } from './shaders/isf.js';
 import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.js';
 
 // Reused scratch for the uTrigs uniform (consumed synchronously each runEntry call,
@@ -226,8 +227,13 @@ export function makeCompositor(gl, w, h) {
   // Run an ISF shader (generator OR effect) into `dst`. `srcTex` is the chain input
   // bound to ISF's `inputImage` (the prior clip output for an effect); a generator
   // passes null → a 1×1 black inputImage so sampling stays defined.
+  const isfSrcCache = new Map();   // id → wrapped GLSL (re-wrapped from raw glsl)
   function runISF(isf, params, dst, timeSec, srcTex) {
-    const c = getProgram(isf.id, isf.src, ISF_VERT);   // ISF varying = isf_FragNormCoord
+    // Re-wrap from the RAW glsl (don't trust a persisted isf.src — an older save may
+    // have baked a wrapper that mismatches the current ISF_VERT varying).
+    let wrapped = isfSrcCache.get(isf.id);
+    if (wrapped === undefined) { wrapped = isf.glsl != null ? wrapISF(isf.glsl, isf.inputs) : isf.src; isfSrcCache.set(isf.id, wrapped); }
+    const c = getProgram(isf.id, wrapped, ISF_VERT);   // ISF varying = isf_FragNormCoord
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(c.prog);
