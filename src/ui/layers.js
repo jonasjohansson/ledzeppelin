@@ -1148,6 +1148,25 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }, () => commit(changeClipGenerator(show(), id, clip.id, clip.generator)), undefined, srcDirty));
     }
 
+    // ISF source: params parsed from the shader's INPUTS, stored flat (keyed by
+    // input NAME — runISF reads clip.params[NAME]). Same animatable/mappable rows
+    // as manifest sources. point2D/image inputs aren't editable here yet.
+    if (clip.isf && clip.isf.params?.length) {
+      box.append(Section('Source', 'source', (b) => {
+        for (const p of clip.isf.params) {
+          if (!(p.type === 'float' || p.type === 'long' || p.type === 'bool' || p.type === 'color')) continue;
+          const key = p.key;
+          b.append(animatableParam({
+            key, p, value: clip.params?.[key], anim: clip.anim?.[key],
+            oscAddress: addressFor({ kind: 'param', layerIndex, clipIndex, key }),
+            onValue: (v) => commitLive(setClipParam(show(), id, clip.id, key, v)),
+            onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, key, spec)),
+            onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, key, spec)),
+          }));
+        }
+      }));
+    }
+
     // Transform + opacity (the clip's placement on the canvas) — all animatable
     // (Timeline/Audio) via the cog, like the source params. Anim keyed `tf.*`.
     const t = clip.transform || {};

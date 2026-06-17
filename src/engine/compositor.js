@@ -194,15 +194,46 @@ export function makeCompositor(gl, w, h) {
     drawFullscreen(gl);
   }
 
+  // Render an ISF generator clip (single-pass) into `dst`. Uploads the ISF builtins
+  // (TIME/RENDERSIZE/TIMEDELTA/FRAMEINDEX) + each INPUT as a typed uniform. The
+  // wrapped GLSL (clip.isf.src) is compiled once and cached by the ISF id.
+  function runISF(clip, dst, timeSec) {
+    const isf = clip.isf;
+    const c = getProgram(isf.id, isf.src);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(c.prog);
+    const setF = (k, v) => { const l = loc(c, k); if (l !== null) gl.uniform1f(l, v); };
+    const setI = (k, v) => { const l = loc(c, k); if (l !== null) gl.uniform1i(l, v); };
+    setF('TIME', timeSec); setF('TIMEDELTA', 1 / 60); setI('FRAMEINDEX', frameEnv.frameIndex || 0);
+    const uRS = loc(c, 'RENDERSIZE'); if (uRS !== null) gl.uniform2f(uRS, w, h);
+    const params = clip.params || {};
+    for (const inp of isf.inputs || []) {
+      const l = loc(c, inp.NAME); if (l === null) continue;
+      const has = inp.NAME in params; const v = has ? params[inp.NAME] : inp.DEFAULT;
+      switch (inp.TYPE) {
+        case 'float': gl.uniform1f(l, Number(v ?? 0)); break;
+        case 'long': gl.uniform1i(l, Math.round(Number(v ?? 0))); break;
+        case 'bool': gl.uniform1i(l, v ? 1 : 0); break;
+        case 'color': { const [r, g, b] = hexToRgb(v ?? '#ffffff'); gl.uniform4f(l, r, g, b, 1); break; }
+        case 'point2D': { const p = v || { x: 0.5, y: 0.5 }; gl.uniform2f(l, Number(p.x) || 0, Number(p.y) || 0); break; }
+        default: break;   // image inputs: not bound in this phase
+      }
+    }
+    drawFullscreen(gl);
+  }
+
   // Render a clip (generator → clip.effects chain) into `hold`. Uses clipA/clipB
   // as the ping-pong scratch, then copies the final result into `hold` (a stable
   // target that won't be clobbered while we render the OTHER clip of a crossfade).
   // Returns true if anything was drawn, false if the clip is unrenderable.
   function renderClipInto(clip, hold, timeSec) {
-    if (!clip || !clip.generator) return false;
+    if (!clip || (!clip.generator && !clip.isf)) return false;
 
     let cur = clipA, other = clipB;
-    if (clip.generator === 'video') {
+    if (clip.isf) {
+      runISF(clip, cur, timeSec);   // ISF generator (custom shader)
+    } else if (clip.generator === 'video') {
       // Video clip: blit the runtime-uploaded video frame (from frameEnv) as the
       // base, instead of running a generator shader.
       const vtex = frameEnv.videoTex ? frameEnv.videoTex(clip) : null;

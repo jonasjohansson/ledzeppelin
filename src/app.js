@@ -14,8 +14,9 @@ import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, addISFClip,
 } from './model/layers.js';
+import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
@@ -2370,6 +2371,30 @@ openCompInput.addEventListener('change', async () => {
   openCompInput.value = '';
 });
 
+// Import an ISF shader (.fs/.isf) as a new generator clip on the active layer.
+// Its INPUTS become animatable, OSC/MIDI-mappable clip params automatically.
+let isfCounter = 0;
+const openISFInput = oel('input', { type: 'file', accept: '.fs,.isf,.frag,.glsl,.txt' });
+openISFInput.style.display = 'none'; document.body.append(openISFInput);
+openISFInput.addEventListener('change', async () => {
+  const file = openISFInput.files[0]; openISFInput.value = '';
+  if (!file) return;
+  const r = parseISF(await file.text());
+  if (!r.ok) { window.alert(`Not a valid ISF shader: ${r.error}`); return; }
+  const layers = show.composition?.layers || [];
+  if (!layers.length) { window.alert('Add a layer first.'); return; }
+  const params = isfParams(r.inputs);
+  const isf = {
+    id: `isf${++isfCounter}`,
+    name: file.name.replace(/\.[^.]+$/, '') || r.name,
+    glsl: r.glsl, inputs: r.inputs, params,
+    src: wrapISF(r.glsl, r.inputs),
+  };
+  const layerId = (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
+  rebuild(addISFClip(show, layerId, isf));
+  setSection('design'); layerPanel?.refresh?.();
+});
+
 // (Project file actions — new/save/load/import — live in the corner File menu
 // below; the old Settings-tab file block was removed with that tab.)
 
@@ -2419,6 +2444,7 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Load…', key: '⌘O', act: () => openShowInput?.click() },
     { sep: true },
     { label: 'Import from LEDger…', act: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } },
+    { label: 'Import ISF shader…', act: () => openISFInput.click() },
     { sep: true },
     { label: 'Save composition…', act: saveCompositionToFile },
     { label: 'Load composition…', act: () => openCompInput.click() },

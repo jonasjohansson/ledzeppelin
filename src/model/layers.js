@@ -299,6 +299,29 @@ export function makeClip(generator, name, id = 'c1') {
   };
 }
 
+// An ISF generator clip: carries the parsed+wrapped shader on `clip.isf`
+// ({ id, name, glsl, src, inputs, params }) and seeds clip.params from its INPUT
+// schema (keyed by input NAME). The compositor renders it via runISF.
+export function makeISFClip(isf, id = 'c1') {
+  const params = {};
+  for (const p of isf.params || []) params[p.key] = p.default;
+  return {
+    id, name: isf.name || 'ISF', isf, params, effects: [],
+    transform: { ...DEFAULT_TRANSFORM }, opacity: DEFAULT_OPACITY,
+    durationMs: DEFAULT_DURATION_MS,
+  };
+}
+
+export function addISFClip(show, layerId, isf) {
+  return updateLayer(show, layerId, (layer) => {
+    const id = uniqueId('c', allClipIds(show.composition.layers));
+    const clip = makeISFClip(isf, id);
+    const clips = [...(layer.clips || []), clip];
+    const activeClipId = layer.activeClipId == null ? id : layer.activeClipId;
+    return { ...layer, clips, activeClipId };
+  });
+}
+
 // Append a clip (new generator) to a layer. If the layer had no active clip,
 // the new clip becomes active.
 export function addClip(show, layerId, generator) {
