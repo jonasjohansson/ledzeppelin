@@ -56,3 +56,15 @@ test('wrapISF builds a WebGL2 shader with the ISF shims + input uniforms', () =>
   // exactly ONE main() (the shader body's — we don't append our own)
   assert.equal((out.match(/void main\(/g) || []).length, 1);
 });
+
+test('isfParams includes NAMED image inputs (file textures), drops inputImage', () => {
+  const inputs = [
+    { NAME: 'inputImage', TYPE: 'image' },
+    { NAME: 'logo', TYPE: 'image', LABEL: 'Logo' },
+    { NAME: 'amount', TYPE: 'float', MIN: 0, MAX: 1, DEFAULT: 0.5 },
+  ];
+  const p = isfParams(inputs);
+  assert.deepEqual(p.map((x) => x.key), ['logo', 'amount']);   // inputImage dropped, logo kept
+  assert.equal(p[0].type, 'image');
+  assert.equal(p[0].label, 'Logo');
+});

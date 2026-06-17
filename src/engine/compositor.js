@@ -194,6 +194,32 @@ export function makeCompositor(gl, w, h) {
     drawFullscreen(gl);
   }
 
+  // Image (data-URL) → WebGLTexture, cached by URL. Loads async behind a 1×1 black
+  // placeholder so runISF stays synchronous; the real pixels appear once decoded.
+  const imageTextures = new Map();
+  function imageTexture(url) {
+    if (!url) return null;
+    let e = imageTextures.get(url);
+    if (!e) {
+      e = { tex: gl.createTexture() };
+      imageTextures.set(url, e);
+      gl.bindTexture(gl.TEXTURE_2D, e.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+      if (url === '__black') return e.tex;   // sentinel: a reusable 1×1 black, no load
+      const img = new Image();
+      img.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, e.tex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        for (const p of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, p, gl.CLAMP_TO_EDGE);
+        for (const p of [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D, p, gl.LINEAR);
+      };
+      img.src = url;
+    }
+    return e.tex;
+  }
+
   // Render an ISF generator clip (single-pass) into `dst`. Uploads the ISF builtins
   // (TIME/RENDERSIZE/TIMEDELTA/FRAMEINDEX) + each INPUT as a typed uniform. The
   // wrapped GLSL (clip.isf.src) is compiled once and cached by the ISF id.
@@ -208,6 +234,10 @@ export function makeCompositor(gl, w, h) {
     setF('TIME', timeSec); setF('TIMEDELTA', 1 / 60); setI('FRAMEINDEX', frameEnv.frameIndex || 0);
     const uRS = loc(c, 'RENDERSIZE'); if (uRS !== null) gl.uniform2f(uRS, w, h);
     const params = clip.params || {};
+    // inputImage (a generator has no chain input) → 1×1 black so sampling is defined.
+    const uIn = loc(c, 'inputImage');
+    if (uIn !== null) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, imageTexture('__black')); gl.uniform1i(uIn, 0); }
+    let unit = 1;   // texture units for the shader's own image inputs
     for (const inp of isf.inputs || []) {
       const l = loc(c, inp.NAME); if (l === null) continue;
       const has = inp.NAME in params; const v = has ? params[inp.NAME] : inp.DEFAULT;
@@ -217,7 +247,12 @@ export function makeCompositor(gl, w, h) {
         case 'bool': gl.uniform1i(l, v ? 1 : 0); break;
         case 'color': { const [r, g, b] = hexToRgb(v ?? '#ffffff'); gl.uniform4f(l, r, g, b, 1); break; }
         case 'point2D': { const p = v || { x: 0.5, y: 0.5 }; gl.uniform2f(l, Number(p.x) || 0, Number(p.y) || 0); break; }
-        default: break;   // image inputs: not bound in this phase
+        case 'image': {   // user-supplied texture (data URL); '__black' fallback while empty/loading
+          gl.activeTexture(gl.TEXTURE0 + unit);
+          gl.bindTexture(gl.TEXTURE_2D, imageTexture(v || '__black'));
+          gl.uniform1i(l, unit); unit++; break;
+        }
+        default: break;
       }
     }
     drawFullscreen(gl);

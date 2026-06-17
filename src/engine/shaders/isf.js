@@ -40,7 +40,14 @@ export function isfParams(inputs) {
   const out = [];
   for (const inp of inputs || []) {
     const type = TYPE_MAP[inp.TYPE];
-    if (!type || type === 'image') continue;   // image inputs aren't user params
+    if (!type) continue;
+    if (type === 'image') {
+      // `inputImage` is the effect-chain input (not a user file); any OTHER image
+      // input is a user-supplied texture (stored as a data URL in clip.params).
+      if (inp.NAME === 'inputImage') continue;
+      out.push({ key: inp.NAME, label: inp.LABEL || inp.NAME, type: 'image', default: '' });
+      continue;
+    }
     const p = { key: inp.NAME, label: inp.LABEL || inp.NAME, type };
     if (type === 'float' || type === 'long') {
       p.min = Number(inp.MIN ?? 0); p.max = Number(inp.MAX ?? 1);

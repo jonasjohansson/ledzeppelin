@@ -1154,6 +1154,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (clip.isf && clip.isf.params?.length) {
       box.append(Section('Source', 'source', (b) => {
         for (const p of clip.isf.params) {
+          if (p.type === 'image') {   // a user-supplied texture (stored as a data URL)
+            const pick = el('input', { type: 'file', accept: 'image/*' });
+            pick.addEventListener('change', () => {
+              const f = pick.files?.[0]; if (!f) return;
+              const rd = new FileReader();
+              rd.onload = () => commit(setClipParam(show(), id, clip.id, p.key, rd.result));
+              rd.readAsDataURL(f);
+            });
+            b.append(field(p.label || p.key, pick));
+            continue;
+          }
           if (!(p.type === 'float' || p.type === 'long' || p.type === 'bool' || p.type === 'color')) continue;
           const key = p.key;
           b.append(animatableParam({
