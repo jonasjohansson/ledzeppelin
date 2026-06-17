@@ -58,38 +58,6 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform vec3 lowColor; uniform vec3 highColor;
 void main(){ vec4 s = texture(uTex, uv); float l = dot(s.rgb, vec3(0.299,0.587,0.114)); frag = vec4(mix(lowColor, highColor, l), s.a); }`;
 
-// Chase — `count` evenly-spaced heads travelling along the axis, each leaving a
-// decaying tail (the classic running-light). uPhase carries the speed so changes
-// don't jump. Grayscale; drop Colorize on it for a coloured chase.
-const CHASE = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform float count; uniform float headWidth; uniform float tail;
-uniform float angle; uniform float uPhase;
-void main(){
-  float a = radians(angle);
-  float coord = uv.x*cos(a) + uv.y*sin(a);
-  float n = max(1.0, count);
-  float cell = fract(coord*n - uPhase*n);      // 0 at a head, grows BEHIND it
-  float w = clamp(headWidth, 0.001, 1.0);
-  float v;
-  if (cell < w) v = 1.0;                        // solid head
-  else { float td = (cell - w) / max(1e-4, tail); v = (td <= 1.0) ? (1.0 - td) : 0.0; } // decaying tail
-  frag = vec4(vec3(v), 1.0);
-}`;
-
-// Wave — a smooth sine wash of `count` cycles flowing along the axis. `sharp`
-// tightens the crest from a soft swell to a hard band.
-const WAVE = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform float count; uniform float angle; uniform float sharp; uniform float uPhase;
-void main(){
-  float a = radians(angle);
-  float coord = uv.x*cos(a) + uv.y*sin(a);
-  float s = sin((coord*count - uPhase) * 6.2831853) * 0.5 + 0.5;  // 0..1
-  s = pow(s, mix(1.0, 5.0, clamp(sharp, 0.0, 1.0)));
-  frag = vec4(vec3(s), 1.0);
-}`;
-
 // Sine — a fully definable sine field with frequency MODULATION. The base wave
 // runs along `angle`; a second sine (modFreq · modAmt) bends its phase for an
 // FM warble. `speed` scrolls it (via uPhase, phase-continuous), `sharp` crisps
@@ -365,26 +333,6 @@ void main(){
   frag = vec4(mix(colorA, colorB, n), 1.0);
 }`;
 
-// Flash — full-frame strobe at `rate` (phase-continuous via uPhase), `duty` =
-// fraction of each cycle that's ON. The classic blinder. (Named 'flash' since
-// 'strobe' is already a per-source effect.)
-const FLASH = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform float duty; uniform float level; uniform vec3 color; uniform float uPhase;
-void main(){ float on = fract(uPhase) < clamp(duty,0.0,1.0) ? 1.0 : 0.0; frag = vec4(color*level*on, 1.0); }`;
-
-// Dots — a polka grid of `count` round dots (kept circular via aspect), dot colour
-// over a background colour. `size` is the dot radius within its cell.
-const DOTS = `#version 300 es
-precision highp float; in vec2 uv; out vec4 frag;
-uniform float count; uniform float size; uniform float aspect; uniform vec3 colorA; uniform vec3 colorB;
-void main(){
-  vec2 cell = fract(uv*max(1.0,count)) - 0.5; cell.x *= max(0.001, aspect);
-  float d = length(cell);
-  float m = 1.0 - smoothstep(clamp(size,0.0,0.5), clamp(size,0.0,0.5)+0.03, d);
-  frag = vec4(mix(colorA, colorB, m), 1.0);
-}`;
-
 // Spectrum — a rainbow sweep of `bands` hue cycles along `angle`, scrolling via
 // uPhase; `sat` blends toward white. (HSV hue → RGB, no branches.)
 const SPECTRUM = `#version 300 es
@@ -427,25 +375,6 @@ export const REGISTRY = {
       { key: 'useKelvin', type: 'bool', default: false },
       { key: 'kelvin', type: 'float', min: 1800, max: 12000, default: 3200, step: 50 },
       { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
-    ],
-  },
-  chase: {
-    name: 'chase', type: 'generator', src: CHASE,
-    params: [
-      { key: 'count', type: 'float', min: 1, max: 32, default: 3, step: 1 },
-      { key: 'headWidth', type: 'float', min: 0.01, max: 1, default: 0.15 },
-      { key: 'tail', type: 'float', min: 0, max: 1, default: 0.5 },
-      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
-      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
-    ],
-  },
-  wave: {
-    name: 'wave', type: 'generator', src: WAVE,
-    params: [
-      { key: 'count', type: 'float', min: 0.5, max: 16, default: 2 },
-      { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
-      { key: 'sharp', type: 'float', min: 0, max: 1, default: 0 },
-      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
     ],
   },
   sine: {
@@ -505,24 +434,6 @@ export const REGISTRY = {
       { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
       { key: 'contrast', type: 'float', min: 0, max: 1, default: 0.4 },
-      { key: 'colorA', type: 'color', default: '#000000' },
-      { key: 'colorB', type: 'color', default: '#ffffff' },
-    ],
-  },
-  flash: {
-    name: 'flash', type: 'generator', src: FLASH, phaseParam: 'rate',
-    params: [
-      { key: 'rate', type: 'float', min: 0, max: 20, default: 6 },
-      { key: 'duty', type: 'float', min: 0.02, max: 0.98, default: 0.5 },
-      { key: 'color', type: 'color', default: '#ffffff' },
-      { key: 'level', type: 'float', min: 0, max: 1, default: 1 },
-    ],
-  },
-  dots: {
-    name: 'dots', type: 'generator', src: DOTS,
-    params: [
-      { key: 'count', type: 'float', min: 1, max: 40, default: 8, step: 1 },
-      { key: 'size', type: 'float', min: 0.05, max: 0.5, default: 0.3 },
       { key: 'colorA', type: 'color', default: '#000000' },
       { key: 'colorB', type: 'color', default: '#ffffff' },
     ],
@@ -630,8 +541,7 @@ export function hexToRgb(hex) {
 // Display labels (Resolume-style). The registry `name` stays the stable key
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
-  line: 'Lines', gradient: 'Gradient', solid: 'Color',
-  chase: 'Chase', wave: 'Wave', sine: 'Sine',
+  line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',

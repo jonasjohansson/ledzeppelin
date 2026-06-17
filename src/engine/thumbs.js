@@ -33,6 +33,11 @@ export function renderSourceThumbnails(gl, w = 80, h = 50, timeSec = 0.6) {
     }
     const uT = gl.getUniformLocation(prog, 'uT'); if (uT !== null) gl.uniform1f(uT, timeSec);
     const uTrig = gl.getUniformLocation(prog, 'uTrig'); if (uTrig !== null) gl.uniform1f(uTrig, timeSec);
+    // `aspect` is normally injected by the compositor (live canvas w/h) so radial
+    // shapes stay circular; without it the x-axis collapses and Radial renders as
+    // flat bands. Feed the thumbnail's own aspect so it reads as actual rings.
+    const uAspect = gl.getUniformLocation(prog, 'aspect'); if (uAspect !== null) gl.uniform1f(uAspect, w / h);
+    const uPhase = gl.getUniformLocation(prog, 'uPhase'); if (uPhase !== null) gl.uniform1f(uPhase, timeSec);
 
     drawFullscreen(gl);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);

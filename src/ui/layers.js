@@ -1298,8 +1298,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // Source picker grouping (built-in generators) — uncategorised ones fall into "More".
   const SOURCE_CATEGORIES = [
     ['Basic', ['solid', 'gradient', 'line']],
-    ['Pattern', ['grid', 'checkers', 'dots', 'spectrum']],
-    ['Motion', ['chase', 'wave', 'sine', 'pulse', 'radial', 'flash']],
+    ['Pattern', ['grid', 'checkers', 'spectrum']],
+    ['Motion', ['sine', 'pulse', 'radial']],
     ['Organic', ['noise']],
   ];
   function openPicker(anchor, kind, onPick, opts = {}) {
