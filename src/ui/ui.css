@@ -489,7 +489,10 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
   height: var(--ctrl-h); min-width: 28px; padding: 0 6px; cursor: pointer; line-height: 1;
   font: var(--fs-body) var(--sans);
 }
-#align-bar button:hover { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
+#align-bar button:hover:not(:disabled) { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
+#align-bar .align-ref { display: inline-flex; gap: 4px; }
+#align-bar button.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }   /* active reference frame */
+#align-bar button:disabled { opacity: .4; cursor: default; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }

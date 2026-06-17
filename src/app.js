@@ -921,19 +921,30 @@ function fxMetrics(id, src = show) {
   const s = aabbSize(tf, thicknessOf(f, src.composition?.canvas));
   return { id, w: s.w, h: s.h, cx: tf.x, cy: tf.y, left: tf.x - s.w / 2, right: tf.x + s.w / 2, top: tf.y - s.h / 2, bottom: tf.y + s.h / 2 };
 }
+// Reference frame for align: 'selection' (the selected fixtures' union bbox) or
+// 'canvas' (the composition). With <2 selected there's nothing to align between,
+// so canvas is forced (align ONE fixture to the composition edges/centre).
+let alignRef = 'selection';
+function effectiveAlignRef() { return selectedFixtureIds.size < 2 ? 'canvas' : alignRef; }
 // mode: left|cx|right|top|cy|bottom (align) · distH|distV (distribute centres evenly).
 function alignSelected(mode) {
   const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
-  if (ids.length < 2) return;
+  if (!ids.length) return;
   const m = ids.map((id) => fxMetrics(id));
-  const minL = Math.min(...m.map((x) => x.left)), maxR = Math.max(...m.map((x) => x.right));
-  const minT = Math.min(...m.map((x) => x.top)), maxB = Math.max(...m.map((x) => x.bottom));
+  const cv = show.composition?.canvas || { w: 1280, h: 720 };
+  const ref = effectiveAlignRef();
+  // Reference bounds: the whole canvas, or the selection's union bbox.
+  const minL = ref === 'canvas' ? 0 : Math.min(...m.map((x) => x.left));
+  const maxR = ref === 'canvas' ? cv.w : Math.max(...m.map((x) => x.right));
+  const minT = ref === 'canvas' ? 0 : Math.min(...m.map((x) => x.top));
+  const maxB = ref === 'canvas' ? cv.h : Math.max(...m.map((x) => x.bottom));
   const patch = {};   // id → transform patch (centre)
   if (mode === 'distH' || mode === 'distV') {
+    if (ids.length < 3) return;   // distribute needs 3+ (spread the inner ones evenly)
     const k = mode === 'distH' ? 'cx' : 'cy';
     const sorted = [...m].sort((a, b) => a[k] - b[k]);
     const first = sorted[0][k], last = sorted[sorted.length - 1][k];
-    sorted.forEach((it, i) => { const v = sorted.length > 1 ? first + (last - first) * i / (sorted.length - 1) : it[k]; patch[it.id] = mode === 'distH' ? { x: v } : { y: v }; });
+    sorted.forEach((it, i) => { const v = first + (last - first) * i / (sorted.length - 1); patch[it.id] = mode === 'distH' ? { x: v } : { y: v }; });
   } else for (const it of m) {
     if (mode === 'left') patch[it.id] = { x: minL + it.w / 2 };
     else if (mode === 'right') patch[it.id] = { x: maxR - it.w / 2 };
@@ -947,28 +958,41 @@ function alignSelected(mode) {
   applyShow(next);
   updateInspector();   // positions changed wholesale → refresh the editor fields
 }
-// Floating align toolbar — bottom-centre of the canvas, only with 2+ fixtures
-// selected in the Output (Fixtures) view. Built once; visibility via updateAlignBar.
-let alignBarEl = null;
+// Floating align toolbar — bottom-centre of the canvas, shown with 1+ fixtures
+// selected in the Output (Fixtures) view. A leading items/canvas toggle picks the
+// reference frame. Built once; state synced by updateAlignBar.
+let alignBarEl = null; const alignRefBtns = {}; const alignDistBtns = [];
 (() => {
+  const bar = oel('div', { id: 'align-bar', hidden: true });
+  const refSeg = oel('div', { className: 'align-ref' });
+  for (const [ref, label, title] of [['selection', 'items', 'align between the selected fixtures'], ['canvas', 'canvas', 'align to the composition']]) {
+    const btn = oel('button', { textContent: label, title, onclick: () => { alignRef = ref; updateAlignBar(); } });
+    alignRefBtns[ref] = btn; refSeg.append(btn);
+  }
+  bar.append(refSeg);
   const groups = [
     [['left', '↤', 'Align left'], ['cx', '↔', 'Align horizontal centres'], ['right', '↦', 'Align right']],
     [['top', '↥', 'Align top'], ['cy', '↕', 'Align vertical centres'], ['bottom', '↧', 'Align bottom']],
     [['distH', '⇿', 'Distribute horizontally'], ['distV', '⇳', 'Distribute vertically']],
   ];
-  const bar = oel('div', { id: 'align-bar', hidden: true });
-  groups.forEach((g, gi) => {
-    if (gi) bar.append(oel('span', { className: 'corner-sep' }));
-    for (const [mode, glyph, title] of g) bar.append(oel('button', { textContent: glyph, title, onclick: () => alignSelected(mode) }));
-  });
+  for (const g of groups) {
+    bar.append(oel('span', { className: 'corner-sep' }));
+    for (const [mode, glyph, title] of g) { const b = oel('button', { textContent: glyph, title, onclick: () => alignSelected(mode) }); if (mode.startsWith('dist')) alignDistBtns.push(b); bar.append(b); }
+  }
   document.body.append(bar);
   alignBarEl = bar;
 })();
 function updateAlignBar() {
   if (!alignBarEl) return;
-  const on = outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library'
-    && selectedFixtureIds.size > 1 && !document.body.classList.contains('gui-hidden');
+  const n = selectedFixtureIds.size;
+  const on = outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library' && n >= 1 && !document.body.classList.contains('gui-hidden');
   alignBarEl.hidden = !on;
+  if (!on) return;
+  const ref = effectiveAlignRef();
+  alignRefBtns.selection.disabled = n < 2;                       // can't align "between" one item
+  alignRefBtns.selection.classList.toggle('on', ref === 'selection');
+  alignRefBtns.canvas.classList.toggle('on', ref === 'canvas');
+  for (const b of alignDistBtns) b.disabled = n < 3;            // distribute needs 3+
 }
 
 // Wiring for the selected fixture: its INPUT comes FROM another fixture's output
