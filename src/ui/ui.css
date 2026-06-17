@@ -458,7 +458,7 @@ body.gui-hidden #layout { display: none; }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
    the button / shift the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
-/* Thin rules splitting the cluster into groups: menus | view-toggles | record —
+/* Thin rules splitting the cluster into groups: menus | view-toggles —
    so the row reads as related sets, not one long undifferentiated strip. */
 .corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
 #corner-controls button {
@@ -479,7 +479,6 @@ body.gui-hidden #layout { display: none; }
 #corner-controls button.on, #corner-controls button.open {
   color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
 }
-#corner-controls #rec-btn.rec-on { color: var(--danger); border-color: var(--danger); }   /* recording = red */
 #corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
 /* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show
    toggle (in its usual spot) — everything else hides so the canvas is clear. */
@@ -1371,12 +1370,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    corner File menu.) */
 
 /* --- System › Settings ----------------------------------------------------- */
-/* Recording list (System › Settings). */
-.rec-list { display: flex; flex-direction: column; gap: 0; margin: 6px 0 4px; }
-.rec-row { display: flex; align-items: center; gap: 8px; }
-.rec-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rec-row .fx-add { flex: 0 0 auto; margin-top: 0; padding: 2px 10px; }
-.fx-add.rec-on { color: var(--danger); border-color: var(--danger); }
 .fx-add.on { color: var(--accent); border-color: var(--accent-line); }   /* toggle: enabled */
 .accent-swatches { display: flex; gap: 6px; margin: 4px 0 4px; }
 .accent-swatch {
