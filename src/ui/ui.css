@@ -473,26 +473,6 @@ body.gui-hidden #layout { display: none; }
    toggle (in its usual spot) — everything else hides so the canvas is clear. */
 body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 
-/* Align & distribute toolbar — floats at the bottom-centre of the CANVAS area
-   (centred between the left edge and the right panel), shown only with 2+ fixtures
-   selected. Glyph buttons; meaning carried by the icon + title. */
-#align-bar {
-  position: fixed; z-index: 6;
-  left: calc((100vw - var(--inset-right, 0px)) / 2); transform: translateX(-50%);
-  bottom: calc(10px + env(safe-area-inset-bottom));
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--panel-solid); border: 1px solid var(--line-2); padding: 4px 6px;
-}
-#align-bar[hidden], body.gui-hidden #align-bar { display: none; }
-#align-bar button {
-  background: var(--panel); border: 1px solid var(--line-2); color: var(--muted);
-  height: var(--ctrl-h); min-width: 28px; padding: 0 6px; cursor: pointer; line-height: 1;
-  font: var(--fs-body) var(--sans);
-}
-#align-bar button:hover:not(:disabled) { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
-#align-bar .align-ref { display: inline-flex; gap: 4px; }
-#align-bar button.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }   /* active reference frame */
-#align-bar button:disabled { opacity: .4; cursor: default; }
 
 /* Layer header: B/S toggles + click-to-select. */
 .lh-clickable { cursor: pointer; }

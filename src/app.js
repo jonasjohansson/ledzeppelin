@@ -921,19 +921,13 @@ function fxMetrics(id, src = show) {
   const s = aabbSize(tf, thicknessOf(f, src.composition?.canvas));
   return { id, w: s.w, h: s.h, cx: tf.x, cy: tf.y, left: tf.x - s.w / 2, right: tf.x + s.w / 2, top: tf.y - s.h / 2, bottom: tf.y + s.h / 2 };
 }
-// Reference frame for align: 'selection' (the selected fixtures' union bbox) or
-// 'canvas' (the composition). With <2 selected there's nothing to align between,
-// so canvas is forced (align ONE fixture to the composition edges/centre).
-let alignRef = 'selection';
-function effectiveAlignRef() { return selectedFixtureIds.size < 2 ? 'canvas' : alignRef; }
-// mode: left|cx|right|top|cy|bottom (align) · distH|distV (distribute centres evenly).
-function alignSelected(mode) {
+// Align/distribute the selection. mode: left|cx|right|top|cy|bottom · distH|distV.
+// ref: 'canvas' (the composition) or 'selection' (the selected fixtures' union bbox).
+function alignSelected(mode, ref) {
   const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
   if (!ids.length) return;
   const m = ids.map((id) => fxMetrics(id));
   const cv = show.composition?.canvas || { w: 1280, h: 720 };
-  const ref = effectiveAlignRef();
-  // Reference bounds: the whole canvas, or the selection's union bbox.
   const minL = ref === 'canvas' ? 0 : Math.min(...m.map((x) => x.left));
   const maxR = ref === 'canvas' ? cv.w : Math.max(...m.map((x) => x.right));
   const minT = ref === 'canvas' ? 0 : Math.min(...m.map((x) => x.top));
@@ -958,41 +952,32 @@ function alignSelected(mode) {
   applyShow(next);
   updateInspector();   // positions changed wholesale → refresh the editor fields
 }
-// Floating align toolbar — bottom-centre of the canvas, shown with 1+ fixtures
-// selected in the Output (Fixtures) view. A leading items/canvas toggle picks the
-// reference frame. Built once; state synced by updateAlignBar.
-let alignBarEl = null; const alignRefBtns = {}; const alignDistBtns = [];
-(() => {
-  const bar = oel('div', { id: 'align-bar', hidden: true });
-  const refSeg = oel('div', { className: 'align-ref' });
-  for (const [ref, label, title] of [['selection', 'items', 'align between the selected fixtures'], ['canvas', 'canvas', 'align to the composition']]) {
-    const btn = oel('button', { textContent: label, title, onclick: () => { alignRef = ref; updateAlignBar(); } });
-    alignRefBtns[ref] = btn; refSeg.append(btn);
-  }
-  bar.append(refSeg);
-  const groups = [
-    [['left', '↤', 'Align left'], ['cx', '↔', 'Align horizontal centres'], ['right', '↦', 'Align right']],
-    [['top', '↥', 'Align top'], ['cy', '↕', 'Align vertical centres'], ['bottom', '↧', 'Align bottom']],
-    [['distH', '⇿', 'Distribute horizontally'], ['distV', '⇳', 'Distribute vertically']],
-  ];
-  for (const g of groups) {
-    bar.append(oel('span', { className: 'corner-sep' }));
-    for (const [mode, glyph, title] of g) { const b = oel('button', { textContent: glyph, title, onclick: () => alignSelected(mode) }); if (mode.startsWith('dist')) alignDistBtns.push(b); bar.append(b); }
-  }
-  document.body.append(bar);
-  alignBarEl = bar;
-})();
-function updateAlignBar() {
-  if (!alignBarEl) return;
+// "Align" corner button (like File/Mapping) → a menu of all align/distribute
+// options. Sections: between the selected fixtures (2+) and to the composition.
+const alignBtnEl = document.getElementById('menu-align');
+const ALIGN_ITEMS = [['left', '↤', 'Left'], ['cx', '↔', 'Centre'], ['right', '↦', 'Right'], ['top', '↥', 'Top'], ['cy', '↕', 'Middle'], ['bottom', '↧', 'Bottom']];
+function openAlignMenu() {
   const n = selectedFixtureIds.size;
-  const on = outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library' && n >= 1 && !document.body.classList.contains('gui-hidden');
-  alignBarEl.hidden = !on;
-  if (!on) return;
-  const ref = effectiveAlignRef();
-  alignRefBtns.selection.disabled = n < 2;                       // can't align "between" one item
-  alignRefBtns.selection.classList.toggle('on', ref === 'selection');
-  alignRefBtns.canvas.classList.toggle('on', ref === 'canvas');
-  for (const b of alignDistBtns) b.disabled = n < 3;            // distribute needs 3+
+  if (!n) return;
+  const items = [];
+  if (n >= 2) {
+    items.push({ head: 'Between items' });
+    for (const [mode, g, label] of ALIGN_ITEMS) items.push({ label: `${g}  ${label}`, act: () => alignSelected(mode, 'selection') });
+    if (n >= 3) {
+      items.push({ label: '⇿  Distribute horizontally', act: () => alignSelected('distH', 'selection') });
+      items.push({ label: '⇳  Distribute vertically', act: () => alignSelected('distV', 'selection') });
+    }
+    items.push({ sep: true });
+  }
+  items.push({ head: 'To canvas' });
+  for (const [mode, g, label] of ALIGN_ITEMS) items.push({ label: `${g}  ${label}`, act: () => alignSelected(mode, 'canvas') });
+  openMenu(alignBtnEl, menuList(items));
+}
+alignBtnEl?.addEventListener('click', (e) => { e.stopPropagation(); openAlignMenu(); });
+// Show the Align button only where it applies: Output › Fixtures with 1+ selected.
+function updateAlignBtn() {
+  if (!alignBtnEl) return;
+  alignBtnEl.hidden = !(outputPaneEl && !outputPaneEl.hidden && outputTab !== 'library' && selectedFixtureIds.size >= 1);
 }
 
 // Wiring for the selected fixture: its INPUT comes FROM another fixture's output
@@ -1184,7 +1169,7 @@ function updateInspector() {
     outputEditorEl.hidden = true;
   }
   updateStageInsets();
-  updateAlignBar();
+  updateAlignBtn();
 }
 // The editor dock height is set by dragging its CURTAIN bar. Clamp between the bar
 // alone (≈ collapsed) and most of the pane (leave room for the list). Persisted.
@@ -2354,6 +2339,7 @@ const menuList = (items) => {
   const f = document.createDocumentFragment();
   for (const it of items) {
     if (it.sep) { f.append(oel('div', { className: 'menu-sep' })); continue; }
+    if (it.head) { f.append(oel('div', { className: 'menu-title', textContent: it.head })); continue; }
     const row = oel('div', { className: 'menu-item' }, [oel('span', { textContent: it.label })]);
     if (it.key) row.append(oel('span', { className: 'menu-key', textContent: it.key }));
     row.onclick = () => { closeMenu(); it.act?.(); };
