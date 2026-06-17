@@ -130,7 +130,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .subtab {
   flex: 1 1 0; text-align: center;            /* Clip · Layer · Composition = equal thirds */
   background: transparent; color: var(--faint); border: none;
-  border-radius: var(--radius) var(--radius) 0 0; padding: 6px 0; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
+  border-radius: 0; padding: 6px 0; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .subtab:hover { color: var(--muted); }
@@ -632,12 +632,12 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
    nest under it (indented, not sticky). A colour swatch on each ties to the
    canvas (controller hue + per-output tint). */
 .out-group { position: sticky; top: 0; z-index: 2; background: var(--panel);
-  display: flex; align-items: center; gap: 6px; margin: 9px 0 3px; padding: 6px 0 3px; border-top: 1px solid var(--line); cursor: pointer; }
+  display: flex; align-items: center; gap: 6px; margin: 0 0 3px; padding: 6px 0 3px; border-top: 1px solid var(--line); cursor: pointer; }
 .out-group:first-child { border-top: none; margin-top: 0; }
 /* Drag-to-assign: a fixture row is draggable onto a device/output header. */
 .output-row[draggable="true"] { cursor: grab; }
 .output-row[draggable="true"]:active { cursor: grabbing; }
-.out-group.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.out-group.drop-hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .out-dev .out-group-dev { color: var(--text); font-weight: var(--fw-med); }   /* controller header reads as the heading */
 .out-sub { position: static; margin: 2px 0 2px 14px; padding: 3px 0; border-top: none; }   /* nested output, not sticky */
 .out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
@@ -662,12 +662,12 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .out-node:hover { border-color: var(--line-2); }
 .out-node.selected { background: var(--accent-soft); border-color: var(--accent-line); }
 .out-node.selected .out-name { color: var(--accent-text); }
-.out-node.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.out-node.drop-hover { background: var(--accent-soft); border-color: var(--accent-line); }
 .out-node[draggable="true"] { cursor: grab; }
 .out-node[draggable="true"]:active { cursor: grabbing; }
-/* Controller = the container header; a small, deliberate gap separates each group
-   (the one gap we keep — between controllers — for legibility). */
-.out-dev { margin-top: 6px; }
+/* Controllers tile flush; the .out-group border-top hairline separates each one
+   (no floating gap — consistent with the gapless mosaic). */
+.out-dev { margin-top: 0; }
 .out-dev:first-of-type { margin-top: 0; }
 /* Fixtures INSIDE a controller: indented under it (no guide line). */
 .out-fix.nested { margin-left: 16px; }
@@ -689,7 +689,7 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .out-stagger-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 
 /* Per-device patch ruler — proportional fixture segments over the address space. */
-.patch-bar { display: flex; gap: 1px; height: 18px; margin: 2px 0 6px; border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.patch-bar { display: flex; gap: 1px; height: 18px; margin: 2px 0 6px; border-radius: 0; overflow: hidden; background: var(--line); }
 .patch-seg { flex: 1 1 0; min-width: 2px; display: flex; align-items: center; justify-content: center;
   background: color-mix(in srgb, var(--cyan) 22%, var(--panel-2)); overflow: hidden; }
 .patch-seg:nth-child(even) { background: color-mix(in srgb, var(--cyan) 34%, var(--panel-2)); }
@@ -1246,23 +1246,24 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 
 /* --- Single-layer composer (deck + draggable Sources/Effects rail) --- */
 .cmp2-panel { margin-bottom: var(--s4); }
-.composer-body { display: flex; gap: 10px; align-items: flex-start; }
+.composer-body { display: flex; gap: 0; align-items: stretch; }
 .composer-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .composer-rail {
-  flex: 0 0 116px; display: flex; flex-direction: column; gap: 3px;
-  border-left: 1px solid var(--border-2); padding-left: 8px;
+  flex: 0 0 116px; display: flex; flex-direction: column; gap: 0;
+  border-left: 1px solid var(--border-2); padding-left: 8px; margin-left: 8px;
 }
 .composer-label { color: var(--cyan); margin-top: var(--s2); }   /* recipe handles font/casing */
-.composer-label-fx { color: var(--amber); margin-top: var(--s4); }
+.composer-label-fx { color: var(--amber); margin-top: var(--s3); }
 
-.lib-list { display: flex; flex-direction: column; gap: 2px; }
+.lib-list { display: flex; flex-direction: column; gap: 0; }
 .lib-item {
   font-size: var(--fs-body); color: var(--text); background: var(--panel-2); border: 1px solid var(--line);
-  border-radius: var(--radius-sm); padding: 3px 7px; cursor: grab; user-select: none;
+  border-radius: 0; padding: 3px 7px; cursor: grab; user-select: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.lib-item + .lib-item { margin-top: -1px; }   /* collapse shared borders into a 1px hairline (tile flush) */
 .lib-item:active { cursor: grabbing; }
-.lib-video { color: var(--green); border-style: dashed; justify-content: center; cursor: pointer; margin-top: 3px; }
+.lib-video { color: var(--green); border-style: dashed; justify-content: center; cursor: pointer; }
 
 /* Drop affordance shared by clip cells, the "+" cell, and the effect drop zone. */
 .drop-hover {
