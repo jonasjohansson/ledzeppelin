@@ -4,11 +4,22 @@ A standalone realtime LED show tool — *"Resolume for addressable LED"*. Render
 generative visuals on a 2D canvas, map your LED fixtures onto it, and stream each
 fixture's sampled pixels to WLED / Art-Net controllers at ~40fps.
 
+## Try it
+
+The editor runs in the browser — **[ledzeppelin.jonasjohansson.se](http://ledzeppelin.jonasjohansson.se/)**.
+(Designing + preview work anywhere; *streaming* to controllers needs the local app
+below, which runs the small daemon that does the UDP browsers can't.)
+
 ## Install
 
-**Just want the app?** Grab the latest notarized macOS build from
-[**Releases**](https://github.com/jonasjohansson/ledzeppelin/releases) — unzip,
-drag **LEDZeppelin.app** to Applications, double-click. No Node required.
+**Just want the app?** Grab the latest build from
+[**Releases**](https://github.com/jonasjohansson/ledzeppelin/releases) — no Node
+required:
+
+- **macOS** (Apple Silicon + Intel) — notarized `.app`; unzip → drag to
+  Applications → double-click.
+- **Linux / Raspberry Pi** (64-bit) — extract the tarball, `./ledzeppelin`, open
+  `http://localhost:7070`.
 
 **From source:**
 
@@ -39,6 +50,6 @@ npm test           # pure logic: DDP packing, routing, sampling, validation…
 Build the macOS app yourself: `npm run build:mac` (needs [Bun](https://bun.sh)).
 See [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
----
+## License
 
-© 2026 Jonas Johansson
+[MIT](LICENSE) © 2026 Jonas Johansson. Built with [Claude Code](https://claude.com/claude-code).
