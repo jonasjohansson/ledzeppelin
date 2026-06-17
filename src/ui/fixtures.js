@@ -375,7 +375,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
   function controllerTypeDetail(show, t) {
     const ti = show.deviceTypes.indexOf(t);
     const upd = (mutate) => { const next = structuredClone(show); mutate(next.deviceTypes[ti]); commit(next); };
-    const count = deviceTypeInstanceCount(show, t.id);
     return el('div', { className: 'fx-card fx-detail' }, [
       field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = x; }))),
       // Physical OUTPUTS on this controller (e.g. a QuinLED DigQuad = 4). Fixtures
@@ -384,7 +383,6 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Max pixels a single output can drive (0 = unlimited). A full output greys
       // out extending its chain.
       sliderRow('Max px/output', t.maxPerOutput ?? 0, (x) => upd((nt) => { nt.maxPerOutput = Math.max(0, Math.round(x)); }), 0, 2048, 1),
-      el('div', { className: 'fx-pts', textContent: count ? `${count} in use · ⌫ to delete (remove them first)` : `0 in use · ⌫ to delete` }),
     ]);
   }
 
@@ -411,22 +409,32 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       if (nt.name === defName(nt.ledsPerMeter, nt.meters)) nt.name = defName(a, b);
       nt.ledsPerMeter = a; nt.meters = b; nt.pixelCount = Math.max(1, Math.round(a * b));
     };
-    const count = typeInstanceCount(show, t.id);
     return el('div', { className: 'fx-card fx-detail' }, [
-      field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = x; }))),
+      field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, x, nt.id); }))),
       sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => applyT(nt, x, nt.meters)), 0, 200, 1),
       sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => applyT(nt, nt.ledsPerMeter, x)), 0, 20, 0.1),
       field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })),
       // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
-      el('div', { className: 'fx-pts', textContent: count ? `${count} placed · ⌫ to delete (remove them first)` : `0 placed · ⌫ to delete` }),
     ]);
+  }
+
+  // A name not already taken by another fixture definition — duplicate names are
+  // confusing in the placement dropdown. Appends " 2", " 3"… on collision.
+  function uniqueTypeName(types, base, exceptId) {
+    const taken = new Set((types || []).filter((t) => t.id !== exceptId).map((t) => String(t.name || '').trim().toLowerCase()));
+    const b = String(base || 'Fixture').trim() || 'Fixture';
+    if (!taken.has(b.toLowerCase())) return b;
+    let n = 2; while (taken.has(`${b} ${n}`.toLowerCase())) n++;
+    return `${b} ${n}`;
   }
 
   // Add a fresh definition (60/m × 2.5m = 150px) and select it.
   function addType(show) {
     const next = structuredClone(show);
     const id = `t${(next.fixtureTypes?.length || 0) + 1}`;
-    (next.fixtureTypes ||= []).push(makeFixtureType(60, 2.5, 'GRB', id));
+    const t = makeFixtureType(60, 2.5, 'GRB', id);
+    t.name = uniqueTypeName(next.fixtureTypes, t.name, id);   // never collide with an existing definition
+    (next.fixtureTypes ||= []).push(t);
     selTypeId = id; lastSel = 'type'; libSel = 'fixture';
     commit(next);
   }
