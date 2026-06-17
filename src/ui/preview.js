@@ -619,6 +619,21 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     return [(ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height];
   };
 
+  // A bar's DRAWN frame, in canvas px: axis u runs along the centreline
+  // (endpoint→endpoint), p is perpendicular. Built from the derived `points` (the
+  // same geometry hitTest and draw() use), so the aspect-based orientation — a box
+  // taller than wide draws VERTICAL — is honoured. The raw transform.rotation alone
+  // is 90° off for such fixtures, which is what made horizontal drags warp the shape.
+  function drawnFrame(f, cv) {
+    const pts = f.input.points;
+    const ax = pts[0][0] * cv.w, ay = pts[0][1] * cv.h;
+    const bx = pts[pts.length - 1][0] * cv.w, by = pts[pts.length - 1][1] * cv.h;
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    return { ux, uy, pxx: -uy, pyy: ux, cx: (ax + bx) / 2, cy: (ay + by) / 2,
+      len, thick: thicknessOf(f, cv), rotDeg: Math.atan2(dy, dx) * 180 / Math.PI };
+  }
+
   evEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     if (ev.button !== 0) return;   // left only — middle is the hand-pan, right the context menu
@@ -653,31 +668,53 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     } else if (hit.rotate) {
       dragState = { kind: 'rotate', id: hit.fxId, cv };
     } else if (hit.scaleCorner != null) {
-      // Resize from the grabbed corner, keeping the OPPOSITE corner pinned and
-      // rotation fixed. Work in the bar's local frame (axis u, perpendicular p).
+      // Resize from the grabbed corner, keeping the OPPOSITE corner pinned.
       const f = show.fixtures.find((x) => x.id === hit.fxId);
-      const t = f.input.transform || transformFromPoints(f.input.points, cv);
-      const a = (Number(t.rotation) || 0) * Math.PI / 180;
-      const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
-      const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
       const sgn = [[-1, 1], [1, 1], [1, -1], [-1, -1]];   // corner 0..3 in (u,p)
       const [su, sp] = sgn[(hit.scaleCorner + 2) % 4];     // opposite corner = anchor
-      const anchor = { x: t.x + ux * su * hw + pxx * sp * hh, y: t.y + uy * su * hw + pyy * sp * hh };
-      dragState = { kind: 'scale', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor };
+      if (f.input?.mode !== 'grid') {
+        // Plain bar: work in the DRAWN frame and commit a canonical transform
+        // (w=length, h=thickness, rotation=axis angle) so it never flips mid-drag.
+        const fr = drawnFrame(f, cv), hw = fr.len / 2, hh = fr.thick / 2;
+        const anchor = { x: fr.cx + fr.ux * su * hw + fr.pxx * sp * hh, y: fr.cy + fr.uy * su * hw + fr.pyy * sp * hh };
+        dragState = { kind: 'scale', id: hit.fxId, cv, ux: fr.ux, uy: fr.uy, pxx: fr.pxx, pyy: fr.pyy, anchor, rotDeg: fr.rotDeg, canonical: true };
+      } else {
+        // Matrix: w/h are the rectangle dims (not length/thickness) — keep the
+        // raw-transform frame so a grid resizes as a rectangle.
+        const t = f.input.transform || transformFromPoints(f.input.points, cv);
+        const a = (Number(t.rotation) || 0) * Math.PI / 180;
+        const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
+        const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
+        const anchor = { x: t.x + ux * su * hw + pxx * sp * hh, y: t.y + uy * su * hw + pyy * sp * hh };
+        dragState = { kind: 'scale', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor };
+      }
     } else if (hit.scaleEdge != null) {
-      // Resize ONE axis (width or thickness), keeping the OPPOSITE edge pinned.
+      // Resize ONE axis (length or thickness), keeping the OPPOSITE edge pinned.
       const f = show.fixtures.find((x) => x.id === hit.fxId);
-      const t = f.input.transform || transformFromPoints(f.input.points, cv);
-      const a = (Number(t.rotation) || 0) * Math.PI / 180;
-      const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
-      const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
       const e = hit.scaleEdge;
-      if (e === 0 || e === 1) {                              // width edge → anchor = opposite END centre
-        const su = e === 0 ? -1 : 1;
-        dragState = { kind: 'scaleEdge', axis: 'u', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + ux * su * hw, y: t.y + uy * su * hw } };
-      } else {                                               // thickness edge → anchor = opposite SIDE centre
-        const sp = e === 2 ? -1 : 1;
-        dragState = { kind: 'scaleEdge', axis: 'p', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + pxx * sp * hh, y: t.y + pyy * sp * hh } };
+      if (f.input?.mode !== 'grid') {
+        // Plain bar: DRAWN frame + canonical commit (see scaleCorner above).
+        const fr = drawnFrame(f, cv), hw = fr.len / 2, hh = fr.thick / 2;
+        const base = { id: hit.fxId, cv, ux: fr.ux, uy: fr.uy, pxx: fr.pxx, pyy: fr.pyy, rotDeg: fr.rotDeg, len0: fr.len, thick0: fr.thick, canonical: true };
+        if (e === 0 || e === 1) {                            // length edge → anchor = opposite END
+          const su = e === 0 ? -1 : 1;
+          dragState = { kind: 'scaleEdge', axis: 'u', ...base, anchor: { x: fr.cx + fr.ux * su * hw, y: fr.cy + fr.uy * su * hw } };
+        } else {                                             // thickness edge → anchor = opposite SIDE
+          const sp = e === 2 ? -1 : 1;
+          dragState = { kind: 'scaleEdge', axis: 'p', ...base, anchor: { x: fr.cx + fr.pxx * sp * hh, y: fr.cy + fr.pyy * sp * hh } };
+        }
+      } else {
+        const t = f.input.transform || transformFromPoints(f.input.points, cv);
+        const a = (Number(t.rotation) || 0) * Math.PI / 180;
+        const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
+        const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
+        if (e === 0 || e === 1) {
+          const su = e === 0 ? -1 : 1;
+          dragState = { kind: 'scaleEdge', axis: 'u', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + ux * su * hw, y: t.y + uy * su * hw } };
+        } else {
+          const sp = e === 2 ? -1 : 1;
+          dragState = { kind: 'scaleEdge', axis: 'p', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + pxx * sp * hh, y: t.y + pyy * sp * hh } };
+        }
       }
     } else if (hit.vertex != null) {
       dragState = { kind: 'vertex', id: hit.fxId, index: hit.vertex };
@@ -743,6 +780,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       next = setFixtureTransform(next, id, {
         x: anchor.x + ux * (du / 2) + pxx * (dp / 2),
         y: anchor.y + uy * (du / 2) + pyy * (dp / 2), w, h,
+        ...(dragState.canonical ? { rotation: dragState.rotDeg } : {}),
       });
       hintText = `${Math.round(w)}×${Math.round(h)} px`;
     } else if (dragState.kind === 'scaleEdge') {
@@ -753,11 +791,15 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const vx = cxp - anchor.x, vy = cyp - anchor.y;
       if (axis === 'u') {
         const du = vx * ux + vy * uy; const w = Math.max(MIN_W, Math.abs(du));
-        next = setFixtureTransform(next, id, { x: anchor.x + ux * (du / 2), y: anchor.y + uy * (du / 2), w });
+        // Canonical commit also re-asserts thickness + drawn angle so the box keeps
+        // its orientation (length stays the long axis; no aspect flip).
+        next = setFixtureTransform(next, id, { x: anchor.x + ux * (du / 2), y: anchor.y + uy * (du / 2), w,
+          ...(dragState.canonical ? { h: dragState.thick0, rotation: dragState.rotDeg } : {}) });
         hintText = `${Math.round(w)} px`;
       } else {
         const dp = vx * pxx + vy * pyy; const h = Math.max(MIN_H, Math.abs(dp));
-        next = setFixtureTransform(next, id, { x: anchor.x + pxx * (dp / 2), y: anchor.y + pyy * (dp / 2), h });
+        next = setFixtureTransform(next, id, { x: anchor.x + pxx * (dp / 2), y: anchor.y + pyy * (dp / 2), h,
+          ...(dragState.canonical ? { w: dragState.len0, rotation: dragState.rotDeg } : {}) });
         hintText = `${Math.round(h)} px`;
       }
     } else if (dragState.kind === 'gscale') {
