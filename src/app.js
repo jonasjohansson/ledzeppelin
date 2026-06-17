@@ -628,8 +628,6 @@ const outputEditorEl = document.getElementById('output-editor');
 const outputEditorBodyEl = document.getElementById('output-editor-body');
 const outputEditorTitleEl = document.getElementById('output-editor-title');
 const outputEditorBarEl = document.getElementById('output-editor-bar');
-// Editor dock height (px), set by dragging the curtain bar. Persisted.
-let editorHeight = (() => { try { return Number(localStorage.getItem('lz.editor.h')) || 260; } catch { return 260; } })();
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
@@ -1206,37 +1204,9 @@ function updateInspector() {
   updateStageInsets();
   updateAlignBtn();
 }
-// The editor dock height is set by dragging its CURTAIN bar. Clamp between the bar
-// alone (≈ collapsed) and most of the pane (leave room for the list). Persisted.
-function applyEditorHeight() {
-  if (!outputEditorEl || outputEditorEl.hidden) return;
-  const barH = outputEditorBarEl?.offsetHeight || 30;
-  const paneH = outputPaneEl?.getBoundingClientRect().height || window.innerHeight;
-  const max = Math.max(barH, paneH - 140);   // keep ≥140px for the tabs + list
-  editorHeight = Math.max(barH, Math.min(editorHeight, max));
-  outputEditorEl.style.height = editorHeight + 'px';
-}
-function setEditorHeight(h) {
-  editorHeight = h;
-  applyEditorHeight();
-  try { localStorage.setItem('lz.editor.h', String(Math.round(editorHeight))); } catch { /* private */ }
-}
-// Drag the bar (curtain) up to grow the editor, down to shrink it.
-let curtainDrag = null;
-outputEditorBarEl?.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  curtainDrag = { y: e.clientY, h: outputEditorEl.getBoundingClientRect().height };
-  outputEditorBarEl.setPointerCapture?.(e.pointerId);
-  document.body.style.cursor = 'row-resize';
-});
-outputEditorBarEl?.addEventListener('pointermove', (e) => {
-  if (!curtainDrag) return;
-  setEditorHeight(curtainDrag.h + (curtainDrag.y - e.clientY));   // up = taller
-});
-const endCurtain = (e) => { if (!curtainDrag) return; curtainDrag = null; document.body.style.cursor = ''; outputEditorBarEl.releasePointerCapture?.(e.pointerId); };
-outputEditorBarEl?.addEventListener('pointerup', endCurtain);
-outputEditorBarEl?.addEventListener('pointercancel', endCurtain);
+// The editor dock AUTO-FITS its content (capped by CSS max-height) — it's not
+// drag-resizable; it just uses the space it needs. Clear any stale inline height.
+function applyEditorHeight() { if (outputEditorEl) outputEditorEl.style.height = ''; }
 
 function renderOutput() {
   updateInspector();
