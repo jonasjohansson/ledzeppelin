@@ -113,20 +113,46 @@ export function animatedValue(spec, timeSec, signals) {
   return spec.from + (spec.to - spec.from) * p;
 }
 
+// Per-(instance,param) SOFT-TAKEOVER state for EXTERNAL channels: two sources
+// bound to one param (e.g. a phone fader + a MIDI CC) must not fight every frame.
+// A channel only OWNS the param while it's MOVING; once held it yields to a direct
+// write (phone / slider / canonical-OSC) — and keeps its last value, so a lone MIDI
+// still holds. This is what stops the phone↔MIDI flicker.
+const takeover = new Map();   // `${instanceKey}|${key}` → { owner, lastChan, lastBase, held }
+export function resetTakeover() { takeover.clear(); }
+const MOVE_EPS = 1e-4;
+
+function externalValue(spec, key, params, signals, timeSec, instanceKey) {
+  const base = params ? params[key] : undefined;
+  const hasChan = !!(signals && spec.channel in signals);
+  // No instance key → can't track ownership across frames; fall back to the simple
+  // rule (live channel wins; else rest at base so a direct write drives it).
+  if (instanceKey == null) return (!hasChan && base !== undefined) ? base : animatedValue(spec, timeSec, signals);
+  const id = `${instanceKey}|${key}`;
+  const st = takeover.get(id) || { owner: 'base', lastChan: undefined, lastBase: undefined, held: undefined };
+  const chan = hasChan ? signals[spec.channel] : undefined;
+  const chanMoved = hasChan && st.lastChan !== undefined && Math.abs(chan - st.lastChan) > MOVE_EPS;
+  const baseChanged = st.lastBase !== undefined && base !== st.lastBase;
+  if (chanMoved) { st.owner = 'ext'; st.held = animatedValue(spec, timeSec, signals); }   // moving control grabs it
+  else if (baseChanged) { st.owner = 'base'; }                                            // someone wrote it directly
+  st.lastChan = chan; st.lastBase = base;
+  takeover.set(id, st);
+  if (st.owner === 'ext' && st.held !== undefined) return st.held;
+  return base !== undefined ? base : animatedValue(spec, timeSec, signals);
+}
+
 // Resolve a params map against an anim map at `timeSec` (+ signals): animated
 // keys are overridden by their computed value; everything else passes through.
+// `instanceKey` (a stable layer/clip id) enables per-param external soft-takeover.
 // Returns the SAME params reference when there are no animations (fast-path).
-export function resolveParams(params, anim, timeSec, signals) {
+export function resolveParams(params, anim, timeSec, signals, instanceKey) {
   if (!anim) return params;
   const keys = Object.keys(anim);
   if (!keys.length) return params;
   const out = { ...(params || {}) };
   for (const k of keys) {
     const spec = anim[k];
-    // An EXTERNAL-bound param with no live value on its channel rests at the BASE
-    // value (so a direct canonical-address write / the slider still drives it),
-    // rather than snapping to the anim's `from`. A live channel value still wins.
-    if (spec && spec.mode === 'external' && !(signals && spec.channel in signals) && params && k in params) continue;
+    if (spec && spec.mode === 'external') { out[k] = externalValue(spec, k, params, signals, timeSec, instanceKey); continue; }
     out[k] = animatedValue(spec, timeSec, signals);
   }
   return out;

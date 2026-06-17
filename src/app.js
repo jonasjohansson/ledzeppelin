@@ -2213,13 +2213,13 @@ function loop(ts) {
     setAudioGain(show.composition?.audioGain ?? 1);
     const signals = { ...updateAudio(), ...extChannels(), __bpm: show.composition?.bpm ?? 120 };
     renderLayers = renderLayers.map((L) => {
-      const lp = resolveParams(L.params, L.anim, t, signals);
+      const lp = resolveParams(L.params, L.anim, t, signals, L.id);
       let clips = L.clips;
       if (clips && clips.some((c) => c && c.anim && Object.keys(c.anim).length)) {
         clips = clips.map((c) => {
           const a = c.anim;
           if (!(a && Object.keys(a).length)) return c;
-          const params = resolveParams(c.params, a, t, signals);
+          const params = resolveParams(c.params, a, t, signals, c.id);
           // Animated TRANSFORM (keys tf.x/tf.y/tf.scale/tf.rotation) + OPACITY (tf.opacity).
           let transform = c.transform, opacity = c.opacity;
           if (a['tf.x'] || a['tf.y'] || a['tf.scale'] || a['tf.rotation']) {
