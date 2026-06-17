@@ -328,10 +328,10 @@ export function createPreview(canvasEl, opts = {}) {
       p.push(`<line x1="${nz(x1)}" y1="${nz(y1)}" x2="${nz(x2)}" y2="${nz(y2)}" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
     const poly = (epspts, stroke, w, dash) =>
       p.push(`<polyline points="${epspts.map((e) => `${nz(e[0] * W)},${nz(e[1] * Hh)}`).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
-    // Dash unit: CONSTANT screen size (1/zoom, NOT the dampened ck), with generous
-    // lengths so dashes stay readable lines when zoomed in instead of shrinking to
-    // dots. Strokes still use the dampened `ck` to read as hairlines.
-    const du = 1 / viewZoom;
+    // Dash unit: constant SCREEN size at zoom ≤ 1, then GROWS gently when zoomed in
+    // (screen length ∝ zoom^0.4) so the dashes don't read as tiny ticks against a
+    // big, zoomed-in fixture. Strokes still use the dampened `ck` to read as hairlines.
+    const du = viewZoom <= 1 ? 1 / viewZoom : 1 / Math.pow(viewZoom, 0.6);
     const DASH = `${nz(9 * du)} ${nz(5 * du)}`;        // fixture outlines — long dashes
     const LINK_DASH = `${nz(1.5 * du)} ${nz(4 * du)}`; // chain connections — fine dots (distinct)
 
