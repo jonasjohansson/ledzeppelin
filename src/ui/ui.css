@@ -1312,6 +1312,12 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .pick-item:hover { background: var(--hover); color: var(--accent); }
 .pick-video { color: var(--faint); }
+/* Grouped source picker: wider, a 2-column grid under each category header. */
+.pick-pop.pick-grouped { width: 320px; }
+.pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; }
+.pick-group { font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--faint); padding: 7px 7px 3px; }
+.pick-group:first-child { padding-top: 2px; }
 .comp-fx { margin-top: 8px; }   /* section provides its own top hairline */
 
 /* Transport bar (play-through of the clip timeline). */

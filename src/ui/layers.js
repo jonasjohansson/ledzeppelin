@@ -1295,21 +1295,42 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     document.removeEventListener('keydown', pickKey, true);
   }
   function pickKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closePicker(); } }
+  // Source picker grouping (built-in generators) — uncategorised ones fall into "More".
+  const SOURCE_CATEGORIES = [
+    ['Basic', ['solid', 'gradient', 'line']],
+    ['Pattern', ['grid', 'checkers', 'dots', 'spectrum']],
+    ['Motion', ['chase', 'wave', 'sine', 'pulse', 'radial', 'flash']],
+    ['Organic', ['noise']],
+  ];
   function openPicker(anchor, kind, onPick, opts = {}) {
     closePicker();
-    const pop = el('div', { className: 'pick-pop' });
-    for (const name of kind === 'source' ? generatorNames() : effectNames()) {
+    const pop = el('div', { className: 'pick-pop' + (kind === 'source' ? ' pick-grouped' : '') });
+    const item = (name) => {
       const thumb = kind === 'source' ? thumbnails[name] : null;
       const row = el('div', { className: 'pick-item' });
       if (thumb) row.append(el('img', { className: 'lib-thumb', src: thumb, alt: '', draggable: false }));
       row.append(el('span', { className: 'lib-label', textContent: labelOf(name) }));
       row.onclick = (e) => { e.stopPropagation(); closePicker(); onPick(name); };
-      pop.append(row);
-    }
-    if (kind === 'source' && opts.onVideo) {
-      const vid = el('div', { className: 'pick-item pick-video' }, [el('span', { className: 'lib-label', textContent: '+ video…' })]);
-      vid.onclick = (e) => { e.stopPropagation(); closePicker(); opts.onVideo(); };
-      pop.append(vid);
+      return row;
+    };
+    const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
+    if (kind === 'source') {
+      // Grouped, 2-column grid (easier to scan than one long list).
+      const all = generatorNames(); const seen = new Set();
+      for (const [label, names] of SOURCE_CATEGORIES) {
+        const have = names.filter((n) => all.includes(n)); if (!have.length) continue;
+        have.forEach((n) => seen.add(n));
+        pop.append(el('div', { className: 'pick-group', textContent: label }), grid(have));
+      }
+      const rest = all.filter((n) => !seen.has(n));   // any uncategorised generator still shows
+      if (rest.length) pop.append(el('div', { className: 'pick-group', textContent: 'More' }), grid(rest));
+      if (opts.onVideo) {
+        const vid = el('div', { className: 'pick-item pick-video', textContent: '+ video…' });
+        vid.onclick = (e) => { e.stopPropagation(); closePicker(); opts.onVideo(); };
+        pop.append(vid);
+      }
+    } else {
+      pop.append(grid(effectNames()));
     }
     document.body.append(pop);
     // Anchor below the trigger, clamped to the viewport (flip up if no room).
