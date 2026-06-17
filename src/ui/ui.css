@@ -356,9 +356,12 @@ body.output-mode #deckbar button { pointer-events: auto; }
   padding: 8px 8px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--line); text-align: center; }
 .ctrl-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: 0 0 auto; }
 .ctrl-status-dot.on { background: var(--accent); }
-/* Inverted, theme-merged QR: accent modules on a dark inset (no white card). */
-.ctrl-qr { line-height: 0; color: var(--accent); background: var(--field-bg);
-  padding: 10px; border-radius: var(--radius); border: 1px solid var(--line); width: max-content; }
+/* Inverted, theme-merged QR: accent modules on a dark inset (no white card). Fills
+   the sidebar width (big = easy to scan) and is a link (click → open the surface). */
+.ctrl-qr { display: block; line-height: 0; color: var(--accent); background: var(--field-bg);
+  padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); width: 100%; cursor: pointer; }
+.ctrl-qr svg { display: block; width: 100%; height: auto; }
+.ctrl-qr:hover { border-color: var(--accent-line); }
 .ctrl-urlrow { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .ctrl-url { font: var(--fs-body) var(--mono); color: var(--accent); text-decoration: none; word-break: break-all; }
 .ctrl-url:hover { color: var(--accent-text); }

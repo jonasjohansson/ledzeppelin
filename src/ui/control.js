@@ -26,9 +26,10 @@ export function createControlPanel({ mount, getShow, send, status }) {
     head.textContent = '';
     const s = status?.() || {};
     if (!s.url) return;
-    // QR, then the URL. (Daemon status lives on the System › CONTROL tab dot — no
-    // need to repeat it here.)
-    head.append(el('div', { className: 'ctrl-qr', innerHTML: qrSvg(s.url, 116) }));
+    // QR (fills the sidebar so it's easy to scan; the whole thing is a link →
+    // click to open the Control surface), then the URL. (Daemon status lives on the
+    // System › CONTROL tab dot — no need to repeat it here.)
+    head.append(el('a', { className: 'ctrl-qr', href: s.url, target: '_blank', rel: 'noopener', title: 'open / scan the Control surface', innerHTML: qrSvg(s.url, 240) }));
     const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the Control surface in a new tab' });
     head.append(el('div', { className: 'ctrl-urlrow' }, [a]));
   }
