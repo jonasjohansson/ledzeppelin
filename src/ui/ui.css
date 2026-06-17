@@ -592,6 +592,14 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
 .fx-detail { margin-top: 2px; }
+/* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
+   panel line through as hairline seams (no floating cells / unnecessary gaps). */
+.dist-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); margin: 2px 0 6px; }
+.dist-cell { display: flex; align-items: center; justify-content: center; padding: 4px;
+  background: var(--field-bg); border: none; color: var(--muted); cursor: pointer; }
+.dist-cell:hover { color: var(--text); }
+.dist-cell.on { background: var(--accent-soft); color: var(--accent-text); }
 /* "Advanced" disclosure inside a device editor — a quiet, marker-free summary so
    niche fields (sync delay) stay tucked away without cluttering the common case. */
 .fx-advanced > summary { cursor: pointer; user-select: none; list-style: none; padding: 4px 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-ui); }

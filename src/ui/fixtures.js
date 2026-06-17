@@ -6,7 +6,7 @@ import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { confirmDelete } from './confirm.js';
-import { DISTRIBUTIONS } from '../model/grid.js';
+import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 // Controller colour ORDER: the RGB wiring order (the per-fixture Color Format below
@@ -68,6 +68,30 @@ const textInputCommit = (value, onCommit) => {
 
 // Round to 2 decimals for editor display (density/length can be fractional).
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+// A small SVG glyph of one wiring (Distribution): the snake path through a 3×3
+// grid in that pattern's order, with a dot on the START pixel — so you can SEE
+// the corner + direction + serpentine instead of reading "TL · rows · snake".
+function distIcon(dist) {
+  const n = 3, pad = 4, size = 28, step = (size - 2 * pad) / (n - 1);
+  const pts = gridCellOrder(n, n, dist).map(([c, r]) => [pad + c * step, pad + r * step]);
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">`
+    + `<path d="${path}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/>`
+    + `<circle cx="${pts[0][0].toFixed(1)}" cy="${pts[0][1].toFixed(1)}" r="2.4" fill="currentColor"/></svg>`;
+}
+
+// A 4×4 grid of those glyphs — click one to pick the wiring. The selected cell is
+// accent-filled. Replaces the opaque text dropdown (MadMapper/Resolume-style).
+function distributionPicker(value, onPick) {
+  const grid = el('div', { className: 'dist-grid' });
+  for (const d of DISTRIBUTIONS) {
+    const cell = el('button', { className: 'dist-cell' + (d.index === value ? ' on' : ''), title: d.label, innerHTML: distIcon(d) });
+    cell.addEventListener('click', () => onPick(d.index));
+    grid.append(cell);
+  }
+  return grid;
+}
 
 // createFixturePanel({ getShow, setShow, onChange })
 // - getShow(): current show
@@ -452,12 +476,10 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))),
     ];
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
-    // in, row/column order, and snake vs. straight.
+    // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
-      rows.push(field('Wiring', selectInput(
-        DISTRIBUTIONS.map((d) => ({ value: String(d.index), label: d.label })),
-        String(t.distribution ?? 0),
-        (x) => upd((nt) => { nt.distribution = Number(x); }))));
+      rows.push(el('div', { className: 'fx-pts', textContent: 'Wiring' }));
+      rows.push(distributionPicker(t.distribution ?? 0, (x) => upd((nt) => { nt.distribution = x; })));
     }
     // Physical size (optional) — only drives true-scale strip THICKNESS on the
     // canvas, and offers density×length as a convenience to set a strip's Width.
