@@ -26,6 +26,21 @@ for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts
   [ -e "$p" ] && cp -R "$p" "$C/Resources/"
 done
 
+# App icon — build AppIcon.icns from the 512px logo so the .app/Dock/Finder show
+# the LEDZeppelin mark instead of the generic blank icon.
+ICON_SRC="icons/icon-512.png"
+if [ -f "$ICON_SRC" ] && command -v sips >/dev/null && command -v iconutil >/dev/null; then
+  echo "→ building app icon…"
+  ICONSET="$(mktemp -d)/AppIcon.iconset"; mkdir -p "$ICONSET"
+  for s in 16 32 128 256 512; do
+    sips -z "$s" "$s" "$ICON_SRC" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+    d=$((s * 2)); sips -z "$d" "$d" "$ICON_SRC" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "$C/Resources/AppIcon.icns" && rm -rf "$(dirname "$ICONSET")"
+else
+  echo "  (skipped app icon — need $ICON_SRC + sips + iconutil)"
+fi
+
 VERSION=$(grep -oE "[0-9]+\.[0-9]+\.[0-9]+" src/version.js | head -1)
 cat > "$C/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -37,6 +52,7 @@ cat > "$C/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${VERSION:-1.0.0}</string>
   <key>CFBundleShortVersionString</key><string>${VERSION:-1.0.0}</string>
   <key>CFBundleExecutable</key><string>ledzeppelin</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <!-- It sends DDP/Art-Net + scans the LAN for controllers → macOS shows the
