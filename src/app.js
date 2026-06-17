@@ -611,8 +611,10 @@ if (previewCanvas) {
     },
     onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
-    // Hit-test/drag over the whole stage (incl. the pasteboard margin around the
-    // composition), so fixtures dragged off-canvas stay selectable + movable.
+  }, {
+    // opts (3rd arg). Hit-test/drag over the whole stage (incl. the pasteboard
+    // margin around the composition) so fixtures dragged off-canvas stay
+    // selectable + movable.
     eventTarget: document.getElementById('stagewrap'),
   });
 }

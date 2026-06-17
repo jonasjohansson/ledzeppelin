@@ -94,11 +94,14 @@ export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribut
 
 // Normalize a type's grid fields: legacy strip types (no cols/rows) become
 // cols=pixelCount, rows=1; pixelCount is always cols·rows so the two never drift.
+// colorFormat is optional ('' = inherit the controller's colour order) — when set
+// (e.g. 'RGBW') it overrides per-fixture, so RGB and RGBW strips can share a
+// controller.
 function normFixtureType(t) {
   const rows = Math.max(1, Math.round(Number(t.rows) || 1));
   const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
-  return { ...t, cols, rows, distribution, pixelCount: cols * rows };
+  return { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows };
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
@@ -122,9 +125,10 @@ export function syncFixtureTypes(show) {
     return {
       ...f, typeId,
       ledsPerMeter: t.ledsPerMeter, meters: t.meters, pixelCount: t.pixelCount, colorOrder: t.colorOrder,
-      // Grid (matrix) spec cached onto the instance so pipeline.js / preview / grid.js
-      // read fixture.cols/rows/distribution directly (rows=1 ⇒ a plain strip).
-      cols: t.cols, rows: t.rows, distribution: t.distribution,
+      // Grid (matrix) spec + per-fixture colour format cached onto the instance so
+      // pipeline.js / preview / grid.js read them directly (rows=1 ⇒ a plain strip;
+      // colorFormat '' ⇒ inherit the controller's colour order).
+      cols: t.cols, rows: t.rows, distribution: t.distribution, colorFormat: t.colorFormat || '',
       output: { ...f.output, pixelCount: t.pixelCount },
       input: { ...f.input, samples: t.pixelCount },
     };

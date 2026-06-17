@@ -2,6 +2,17 @@
   "name": "ledzeppelin",
   "version": "0.0.0",
   "type": "module",
-  "scripts": { "start": "node server/index.js", "launch": "OPEN=1 node server/index.js", "test": "node --test \"test/*.test.js\"", "build:app": "scripts/build-app.sh", "build:mac": "scripts/build-macapp.sh" },
-  "dependencies": { "ws": "^8.18.0" }
+  "scripts": {
+    "start": "node server/index.js",
+    "launch": "OPEN=1 node server/index.js",
+    "test": "node --test \"test/*.test.js\"",
+    "build:app": "scripts/build-app.sh",
+    "build:mac": "scripts/build-macapp.sh"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.0"
+  }
 }

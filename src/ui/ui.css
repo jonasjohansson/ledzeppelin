@@ -186,9 +186,11 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-row:hover .ly-rmfx, .output-row:hover .output-eye,
 .output-row.selected .ly-rmfx, .output-row.selected .output-eye,
 .output-row .output-eye.off { opacity: 1; }
-/* Selected = quiet TEXT emphasis only — no border, no bar, no fill (Jonas: don't
-   use borders/highlights to show focus). The name brightens to the accent. */
-.output-row.selected > span:first-of-type { color: var(--accent); }
+/* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
+   controller / definition reads clearly as selected, with its name in the accent
+   text colour. (The output tree's filled-selection pattern, applied here too.) */
+.output-row.selected { background: var(--accent-soft); border-color: var(--accent-line); }
+.output-row.selected > span:first-of-type { color: var(--accent-text); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 /* When the editor is the inspector's only content (a selected fixture), the
    separator margin/rule above it is dead space — drop it so GEOMETRY sits at
@@ -246,6 +248,11 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   background-size: 26px 26px;
   background-position: 0 0, 13px 13px;
 }
+/* In OUTPUT mode the desk is the fixture-editing surface and is inset BETWEEN the
+   sidebars (so it never overlaps a panel) — make it catch pointer events so a
+   fixture dragged onto the pasteboard MARGIN (outside the composition) is still
+   hit-testable. Elsewhere it stays pass-through (empty clicks fall to body). */
+body.output-mode #stagewrap { pointer-events: auto; }
 /* The canvas region: solid (so empty output reads as "off"/black, distinct from
    the checker desk) with a thin frame marking the output bounds. */
 #stageinner {

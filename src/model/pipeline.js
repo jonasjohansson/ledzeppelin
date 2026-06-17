@@ -59,10 +59,10 @@ export function buildPipelineInputs(show) {
       spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
-      // Colour order is a CONTROLLER setting (how its strips are wired), so the
-      // DEVICE's order wins; a fixture's own order is only a fallback for a device
-      // that somehow has none. (Edit it in the Devices tab.)
-      segments.push({ start: devLocal, count: pts.length, colorOrder: d.colorOrder || f.colorOrder });
+      // Colour format per segment: a fixture's own colorFormat WINS when set (so an
+      // RGBW strip can sit on the same controller as RGB ones); otherwise inherit
+      // the controller's colour order (the common case — its strips are wired alike).
+      segments.push({ start: devLocal, count: pts.length, colorOrder: f.colorFormat || d.colorOrder || f.colorOrder });
       devLocal += pts.length;
       cursor += pts.length;
     }

@@ -9,10 +9,14 @@ import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS } from '../model/grid.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
-// Colour formats: the 6 RGB orders, plus RGBW variants (a 4th White channel,
-// derived from the composite as min(R,G,B) at output time). Pick the one matching
-// the controller's wired strip.
-const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG', 'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB'];
+// Controller colour ORDER: the RGB wiring order (the per-fixture Color Format below
+// can override this and add a White channel).
+const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
+// Per-FIXTURE colour FORMAT options: '' inherits the controller's order; the rest
+// pin this fixture's format, including RGBW variants (White = min(R,G,B) at output)
+// so RGB and RGBW strips can share one controller.
+const COLOR_FORMATS = [{ value: '', label: '(controller)' }, ...COLOR_ORDERS,
+  'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB'];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 
 export function loadShow() {
@@ -324,7 +328,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Controller MODEL — drives the output count (a live template from Library).
       field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
       field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
-      field('Color Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
       // Output protocol — DDP (WLED's realtime stream) or Art-Net for generic
       // gear (nodes, consoles, MadMapper/Resolume). Switching also resets the
       // port to the protocol's default (4048 / 6454).
@@ -443,6 +447,9 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
       field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))),
       field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })),
+      // Colour format: '' inherits the controller's order; pick RGBW here for a
+      // white-channel strip (mixes freely with RGB fixtures on the same controller).
+      field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))),
     ];
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight.

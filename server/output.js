@@ -89,10 +89,13 @@ export function sendFrame(rgb, devices) {
       const key = `${d.ip}:${port}`;
       const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
       artSeq.set(key, s);
-      // Stride from the device's colour format (RGBW→4) so universes break on whole
-      // pixels. (Per-segment format overrides aren't reflected here — a controller's
-      // strips share a format in practice.)
-      const stride = formatStride(d.colorOrder || 'RGB');
+      // Stride for universe chunking: if every segment shares a format, break on
+      // whole pixels (RGBW→512B/univ, RGB→510B). With MIXED formats on one
+      // controller, fall back to byte-packed 512-channel universes (a pixel may
+      // straddle a boundary — patch the controller's per-universe channel counts).
+      const segs = d.segments?.length ? d.segments : [{ colorOrder: d.colorOrder }];
+      const strides = segs.map((sg) => formatStride(sg.colorOrder || d.colorOrder || 'RGB'));
+      const stride = strides.every((x) => x === strides[0]) ? strides[0] : 1;
       const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s, stride });
       // ArtSync: after this device's ArtDmx, latch all its universes at once (no
       // multi-universe tearing). Unicast to the node (widely honored; avoids needing
