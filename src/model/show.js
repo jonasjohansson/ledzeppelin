@@ -76,14 +76,33 @@ export function makeFixtureType(ledsPerMeter, meters, colorOrder = 'GRB', id, na
   const pixelCount = Math.max(1, Math.round(lpm * m));
   // Resolume-style identity: length · pixel count (the two facts you check
   // against the real strip). Density stays an editable field, not in the name.
-  return { id, name: name || `${round2(m)}m · ${pixelCount}px`, ledsPerMeter: lpm, meters: m, pixelCount, colorOrder };
+  // A strip is the rows=1 case of the unified grid model (cols = pixelCount).
+  return { id, name: name || `${round2(m)}m · ${pixelCount}px`, ledsPerMeter: lpm, meters: m, pixelCount, colorOrder, cols: pixelCount, rows: 1, distribution: 0 };
+}
+
+// A 2-D matrix/panel definition: cols×rows pixels wired in `distribution` order.
+// ledsPerMeter/meters are 0 (no physical-strip scale); pixelCount = cols·rows.
+export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribution = 0) {
+  const c = Math.max(1, Math.round(Number(cols) || 1));
+  const r = Math.max(1, Math.round(Number(rows) || 1));
+  const pixelCount = c * r;
+  return { id, name: name || `${c}×${r} · ${pixelCount}px`, ledsPerMeter: 0, meters: 0, pixelCount, colorOrder, cols: c, rows: r, distribution: Math.max(0, Math.round(Number(distribution) || 0)) };
+}
+
+// Normalize a type's grid fields: legacy strip types (no cols/rows) become
+// cols=pixelCount, rows=1; pixelCount is always cols·rows so the two never drift.
+function normFixtureType(t) {
+  const rows = Math.max(1, Math.round(Number(t.rows) || 1));
+  const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
+  const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
+  return { ...t, cols, rows, distribution, pixelCount: cols * rows };
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
 // legacy fixtures — which stored spec inline — into deduped types), then copy
 // each type's spec onto its instances as a denormalized cache. Pure.
 export function syncFixtureTypes(show) {
-  const types = (show.fixtureTypes || []).map((t) => ({ ...t }));
+  const types = (show.fixtureTypes || []).map((t) => normFixtureType(t));
   // Always keep a permanent generic fixture definition in the catalog.
   if (!types.some((t) => t.id === 'generic')) types.push(makeFixtureType(60, 1, 'GRB', 'generic', 'Generic'));
   const byId = new Map(types.map((t) => [t.id, t]));
@@ -100,6 +119,9 @@ export function syncFixtureTypes(show) {
     return {
       ...f, typeId,
       ledsPerMeter: t.ledsPerMeter, meters: t.meters, pixelCount: t.pixelCount, colorOrder: t.colorOrder,
+      // Grid (matrix) spec cached onto the instance so pipeline.js / preview / grid.js
+      // read fixture.cols/rows/distribution directly (rows=1 ⇒ a plain strip).
+      cols: t.cols, rows: t.rows, distribution: t.distribution,
       output: { ...f.output, pixelCount: t.pixelCount },
       input: { ...f.input, samples: t.pixelCount },
     };

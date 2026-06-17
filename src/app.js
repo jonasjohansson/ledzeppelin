@@ -611,6 +611,9 @@ if (previewCanvas) {
     },
     onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
+    // Hit-test/drag over the whole stage (incl. the pasteboard margin around the
+    // composition), so fixtures dragged off-canvas stay selectable + movable.
+    eventTarget: document.getElementById('stagewrap'),
   });
 }
 
@@ -1071,7 +1074,19 @@ function addInstance(typeId) {
   // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
-  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 10, h: t.pixelCount, rotation: 0 };
+  // A matrix (rows>1) drops as a RECTANGLE sized by its cols:rows aspect (≈16px
+  // per cell, capped to 60% of the canvas). A strip drops as a thin upright bar.
+  const isGrid = (Number(t.rows) || 1) > 1;
+  let transform, inputMode;
+  if (isGrid) {
+    const cell = 16;
+    const sc = Math.min(1, (cv.w * 0.6) / (t.cols * cell), (cv.h * 0.6) / (t.rows * cell));
+    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: Math.round(t.cols * cell * sc), h: Math.round(t.rows * cell * sc), rotation: 0 };
+    inputMode = 'grid';
+  } else {
+    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 10, h: t.pixelCount, rotation: 0 };
+    inputMode = 'bar';
+  }
   // If a controller is selected, the new fixture lands ON it; otherwise it's
   // unassigned. Either way it gets its OWN free output (port) so added strips are
   // NOT auto-chained together — chain them deliberately via the chain action.
@@ -1079,7 +1094,7 @@ function addInstance(typeId) {
   next.fixtures.push({
     id, typeId: t.id,
     output: { deviceId: onDev, port: freePort(next, onDev), pixelOffset: 0, pixelCount: t.pixelCount },
-    input: { mode: 'bar', transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
+    input: { mode: inputMode, transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
   });
   selectedFixtureIds = new Set([id]);
   expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
@@ -1155,7 +1170,11 @@ function updateInspector() {
   if (!outputEditorEl) return;
   let detail = null, title = '';
   if (outputPaneEl && !outputPaneEl.hidden) {
-    if (outputTab === 'library') { detail = panel.libraryDetailEl?.(); title = 'Inventory item'; }
+    if (outputTab === 'library') {
+      detail = panel.libraryDetailEl?.();
+      const sel = panel.librarySelection?.();   // {kind:'Fixture'|'Controller', name}
+      title = sel ? `${sel.kind}: ${sel.name}` : 'Inventory item';
+    }
     else {
       // Merged Fixtures+Devices tab: one fixture selected → its position/patch
       // editor; else a device selected → its settings editor; else nothing.
@@ -1515,7 +1534,10 @@ document.addEventListener('pointerdown', (e) => {
   if (!selectedFixtureIds.size) return;
   // #menu-pop is a body-level popover (File/Align menus); acting in it must NOT
   // clear the selection the action operates on.
-  if (e.target.closest?.('#stageinner, #side, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
+  // #stagewrap (the whole stage incl. the pasteboard margin) is the drag surface
+  // now — it does its own empty-click clear via the marquee, and must NOT be
+  // double-cleared here or it would wipe a just-made off-canvas selection.
+  if (e.target.closest?.('#stagewrap, #side, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
   clearFixtureSelection();
 });
 
@@ -1637,6 +1659,7 @@ function placeFixtureCopies(srcList) {
     .filter((x) => (x.output?.deviceId || '') === devId)
     .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
   const newIds = [];
+  const placed = [];   // clones of what we just made → the next paste cascades from these
   for (const src of srcList) {
     const copy = structuredClone(src);
     const base = (src.id || 'f').replace(/-copy\d*$/, '');
@@ -1653,9 +1676,11 @@ function placeFixtureCopies(srcList) {
     } else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
     next.fixtures.push(copy);
     newIds.push(copy.id);
+    placed.push(structuredClone(copy));
   }
   selectedDeviceId = null; selectedFixtureIds.clear(); newIds.forEach((id) => selectedFixtureIds.add(id));
   saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+  return placed;
 }
 // Clone a controller (its settings, not its fixtures) and select it.
 function placeDeviceCopy(srcDev) {
@@ -1681,8 +1706,12 @@ document.addEventListener('keydown', (e) => {
   } else if (k === 'v') {
     if (!clipboard) return;
     e.preventDefault();
-    if (clipboard.kind === 'fixtures') placeFixtureCopies(clipboard.data);
-    else placeDeviceCopy(clipboard.data);
+    if (clipboard.kind === 'fixtures') {
+      // Cascade: each paste lands next to the LAST paste, not the original — so
+      // repeated Cmd-V steps across the canvas instead of stacking in one spot.
+      const placed = placeFixtureCopies(clipboard.data);
+      if (placed?.length) clipboard.data = placed;
+    } else placeDeviceCopy(clipboard.data);
   } else if (k === 'd') {
     if (selectedFixtureIds.size) { e.preventDefault(); placeFixtureCopies(show.fixtures.filter((f) => selectedFixtureIds.has(f.id))); }
     else if (dev) { e.preventDefault(); placeDeviceCopy(dev); }

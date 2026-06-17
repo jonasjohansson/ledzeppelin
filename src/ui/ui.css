@@ -159,9 +159,14 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-eye { padding: 0 6px; line-height: var(--lh-ctrl); font-size: var(--fs-body); color: var(--cyan); }
 .output-eye.off { color: var(--faint); }
 .output-row {
-  display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); font-size: var(--fs-ctrl);
+  display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0;
+  background: var(--panel-2); border: 1px solid var(--line); font-size: var(--fs-ctrl);
 }
+/* Condensed list: rows TILE seamlessly — no gaps, no rounded-card notches; their
+   1px borders overlap into a single hairline. Round only the block's outer ends. */
+.output-row + .output-row { margin-top: -1px; }
+.output-row:first-child { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
+.output-row:last-child { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
 .output-row { cursor: pointer; }
 .output-row span:first-of-type { flex: 1 1 auto; color: var(--text); }
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
@@ -508,6 +513,9 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
   background: transparent; border: none; border-radius: 0;
   border-top: 1px solid var(--line); padding: var(--s2) 0 0;
 }
+/* The FIRST card sits directly under a panel/inspector title — no leading rule
+   (the title already separates it); keeps dividers BETWEEN stacked cards. */
+.fx-card:first-child { border-top: none; padding-top: 0; }
 /* ONE group-header recipe — hierarchy via uppercase micro caps + whitespace, NOT
    a box/rule. Section colour (cyan sources / amber effects) is the only delta. */
 .fx-pts, .fx-section, .composer-label, .fx-menu-label, .lh-blend-label {
@@ -630,17 +638,21 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
    the two tabs read alike. A controller is a CONTAINER; its fixtures nest beneath
    it — indented, with a left guide line, so it's clear they live inside it. The
    selected row fills with the warm "selected" surface. */
-.out-node { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 10px; margin: 4px 0;
-  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius);
+.out-node { display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0;
+  background: var(--panel-2); border: 1px solid var(--line);
   cursor: pointer; user-select: none; box-sizing: border-box; }
+/* Tile rows seamlessly (match the Inventory list density — no gaps, no per-row
+   rounded notches); overlap 1px borders into one hairline. */
+.out-node + .out-node { margin-top: -1px; }
 .out-node:hover { border-color: var(--line-2); }
 .out-node.selected { background: var(--accent-soft); border-color: var(--accent-line); }
 .out-node.selected .out-name { color: var(--accent-text); }
 .out-node.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .out-node[draggable="true"] { cursor: grab; }
 .out-node[draggable="true"]:active { cursor: grabbing; }
-/* Controller = the container header; a touch of space above separates each group. */
-.out-dev { margin-top: 12px; }
+/* Controller = the container header; a small, deliberate gap separates each group
+   (the one gap we keep — between controllers — for legibility). */
+.out-dev { margin-top: 6px; }
 .out-dev:first-of-type { margin-top: 0; }
 /* Fixtures INSIDE a controller: indented under it (no guide line). */
 .out-fix.nested { margin-left: 16px; }

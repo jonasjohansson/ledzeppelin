@@ -1,5 +1,6 @@
 import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
+import { gridPoints, isGridFixture } from '../model/grid.js';
 import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
@@ -125,7 +126,12 @@ export function createPreview(canvasEl, opts = {}) {
   function pipelineFor(show) {
     if (piCache && piCache.show === show) return piCache;
     const { fixtureOrder, spans } = buildPipelineInputs(show);
-    const samplePts = fixtureOrder.map((f) => samplePoints(f.input.points, f.input.samples));
+    // Sample positions for the LIT preview, in NON-reversed geometric order (the
+    // loop maps colour index by `reversed`). A matrix samples its cols×rows block;
+    // a strip resamples its centreline.
+    const samplePts = fixtureOrder.map((f) => (isGridFixture(f)
+      ? gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, show.composition?.canvas)
+      : samplePoints(f.input.points, f.input.samples)));
     const { runColor } = controllerColorMap(show);
     const chainColors = {};
     for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
@@ -191,9 +197,10 @@ export function createPreview(canvasEl, opts = {}) {
 
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
-      // Cull off-screen fixtures (footprint AABB vs the visible region).
+      // Cull off-screen fixtures (footprint AABB vs the visible region). Grids skip
+      // the cull — their 2-pt centreline cache understates the rectangle footprint.
       const P0 = f.input.points;
-      if (P0 && P0.length) {
+      if (P0 && P0.length && !isGridFixture(f)) {
         let nx = 1, ny = 1, xx = 0, xy = 0;
         for (const p of P0) { if (p[0] < nx) nx = p[0]; if (p[0] > xx) xx = p[0]; if (p[1] < ny) ny = p[1]; if (p[1] > xy) xy = p[1]; }
         if (xx * W < vx0 || nx * W > vx1 || xy * Hh < vy0 || ny * Hh > vy1) continue;
@@ -221,7 +228,29 @@ export function createPreview(canvasEl, opts = {}) {
       // Live view → all cells full (the wall). Otherwise selected → full, rest 22%.
       ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
       if (count >= 1 && rgba) {
-        if (!isPolylineFixture(f.input) && count >= 2) {
+        if (isGridFixture(f)) {
+          // MATRIX: a filled cell per LED at its grid position. Cell size = the
+          // footprint divided by cols/rows (a small gap so cells read as pixels);
+          // rotated with the panel. Colour index follows the wiring via `reversed`.
+          const cvT2 = show.composition?.canvas;
+          const sX = W / ((cvT2 && cvT2.w) || W), sY = Hh / ((cvT2 && cvT2.h) || Hh);
+          const tw = Number(f.input?.transform?.w) || 0, th = Number(f.input?.transform?.h) || 0;
+          const cw = Math.max(1.5, (tw / Math.max(1, f.cols)) * sX) * 0.92;
+          const chh = Math.max(1.5, (th / Math.max(1, f.rows)) * sY) * 0.92;
+          const ang = (Number(f.input?.transform?.rotation) || 0) * Math.PI / 180;
+          const aa = Math.abs(ang) < 1e-3;
+          let last = '';
+          for (let i = 0; i < count; i++) {
+            const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
+            let r = 0, g = 0, b = 0;
+            if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+            const css = `rgb(${r},${g},${b})`;
+            if (css !== last) { ctx.fillStyle = css; last = css; }
+            const cx = sx(i), cy = sy(i);
+            if (aa) ctx.fillRect(Math.round(cx - cw / 2), Math.round(cy - chh / 2), Math.round(cw), Math.round(chh));
+            else { ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.fillRect(-cw / 2, -chh / 2, cw, chh); ctx.restore(); }
+          }
+        } else if (!isPolylineFixture(f.input) && count >= 2) {
           // BINARY cells: each LED is an axis-aligned square SNAPPED to the device
           // pixel grid — only its POSITION follows the bar's angle; the square
           // itself stays straight, so every edge lands exactly on pixels: hard,
@@ -459,6 +488,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   const vtxR = opts.vertexRadius ?? 12;   // handle grab radius
   let dragState = null;
   let enabled = opts.enabled ?? true;
+  // Listen on a LARGER surface than the composition canvas (the pasteboard) so a
+  // fixture dragged OUTSIDE the canvas stays grabbable. Coordinates are still
+  // measured against canvasEl (#preview), so points outside 0..1 map correctly.
+  const evEl = opts.eventTarget || canvasEl;
 
   const segDist = (px, py, ax, ay, bx, by) => {
     const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
@@ -577,7 +610,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     return [(ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height];
   };
 
-  canvasEl.addEventListener('pointerdown', (ev) => {
+  evEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     if (ev.button !== 0) return;   // left only — middle is the hand-pan, right the context menu
     const hit = hitTest(ev);
@@ -586,7 +619,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const [nx, ny] = norm(ev);
       dragState = { kind: 'marquee', x0: nx, y0: ny, additive: !!ev.shiftKey };
       onMarqueeStart?.(dragState.additive);
-      canvasEl.setPointerCapture(ev.pointerId); ev.preventDefault();
+      evEl.setPointerCapture(ev.pointerId); ev.preventDefault();
       return;
     }
     if (hit.fxId != null) onSelect?.(hit.fxId, ev);   // group-corner grabs have no fxId — keep the multi-selection
@@ -645,15 +678,15 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       : (dragState.kind === 'move') ? 'grabbing'
       : (dragState.kind === 'marquee') ? 'crosshair'
       : (hit.cursor || cursorFor(hit));
-    canvasEl.style.cursor = dragState.cursor;
-    canvasEl.setPointerCapture(ev.pointerId);
+    evEl.style.cursor = dragState.cursor;
+    evEl.setPointerCapture(ev.pointerId);
     ev.preventDefault();
   });
 
-  canvasEl.addEventListener('pointermove', (ev) => {
+  evEl.addEventListener('pointermove', (ev) => {
     if (!enabled) return;
-    if (!dragState) { canvasEl.style.cursor = cursorFor(hitTest(ev)); return; }   // hover feedback (resize/move cursors)
-    if (dragState.cursor) canvasEl.style.cursor = dragState.cursor;               // hold it through the drag
+    if (!dragState) { evEl.style.cursor = cursorFor(hitTest(ev)); return; }   // hover feedback (resize/move cursors)
+    if (dragState.cursor) evEl.style.cursor = dragState.cursor;               // hold it through the drag
     if (dragState.kind === 'marquee') {
       const [nx, ny] = norm(ev);
       onMarquee?.({
@@ -744,20 +777,20 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const wasMarquee = dragState.kind === 'marquee';
     const moved = dragState.moved;
     dragState = null; dragHint = null;
-    canvasEl.style.cursor = cursorFor(hitTest(ev));   // back to hover feedback
-    try { canvasEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
+    evEl.style.cursor = cursorFor(hitTest(ev));   // back to hover feedback
+    try { evEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
     // Only COMMIT (which rebuilds the sampler — a one-frame flash) when the drag
     // actually moved something. A plain click just SELECTS; committing it would
     // pointlessly rebuild and flicker the lit cells.
     if (wasMarquee) onMarqueeEnd?.();
     else if (moved) onCommit?.(getShow());
   }
-  canvasEl.addEventListener('pointerup', end);
-  canvasEl.addEventListener('pointercancel', end);
-  canvasEl.addEventListener('pointerleave', () => { if (!dragState) canvasEl.style.cursor = 'default'; });
+  evEl.addEventListener('pointerup', end);
+  evEl.addEventListener('pointercancel', end);
+  evEl.addEventListener('pointerleave', () => { if (!dragState) evEl.style.cursor = 'default'; });
 
   // Double-click a fixture body → insert a vertex there (bend / segment the run).
-  canvasEl.addEventListener('dblclick', (ev) => {
+  evEl.addEventListener('dblclick', (ev) => {
     if (!enabled) return;
     const hit = hitTest(ev);
     if (!hit || hit.vertex != null) return;
@@ -768,7 +801,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   });
 
   // Right-click a vertex → remove it.
-  canvasEl.addEventListener('contextmenu', (ev) => {
+  evEl.addEventListener('contextmenu', (ev) => {
     if (!enabled) return;
     const hit = hitTest(ev);
     if (hit && hit.vertex != null) {

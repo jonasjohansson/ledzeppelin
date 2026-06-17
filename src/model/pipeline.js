@@ -1,5 +1,18 @@
 import { samplePoints } from './sampling.js';
 import { chainOffset } from './chains.js';
+import { gridPoints, isGridFixture } from './grid.js';
+
+// The normalized sample UVs for one fixture, in LED-index order. A matrix (grid)
+// fixture samples a cols×rows block in its wiring order; a strip resamples its
+// polyline evenly. `reversed` flips which physical end is pixel 0 for both.
+function fixtureSampleUVs(f, canvas) {
+  if (isGridFixture(f)) {
+    const pts = gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, canvas);
+    return f.input?.reversed ? pts.reverse() : pts;
+  }
+  const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
+  return samplePoints(basePts, f.input.samples);
+}
 
 // Pure: derive the flat sampler UVs + daemon route from a show.
 //
@@ -24,6 +37,7 @@ export function buildPipelineInputs(show) {
   const spans = [];
   const fixtureOrder = [];
   const route = [];
+  const canvas = show.composition?.canvas;
   let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
   for (const d of show.devices) {
@@ -38,8 +52,7 @@ export function buildPipelineInputs(show) {
     for (const f of fs) {
       // FLIP = reverse pixel direction (which physical end is pixel 0). Applied
       // at sample time so the canonical input.points stay put (no double-reverse).
-      const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
-      const pts = samplePoints(basePts, f.input.samples);
+      const pts = fixtureSampleUVs(f, canvas);
       // Chain stagger: shift this fixture's sample position by its chain offset so
       // a travelling source cascades across the run (no-op when not chained).
       const [ox, oy] = chainOffset(show, f.id);
@@ -81,8 +94,7 @@ export function buildPipelineInputs(show) {
   const deviceIds = new Set(show.devices.map((d) => d.id));
   for (const f of show.fixtures) {
     if (deviceIds.has(f.output?.deviceId)) continue;   // already routed above
-    const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
-    const pts = samplePoints(basePts, f.input.samples);
+    const pts = fixtureSampleUVs(f, canvas);
     const [ox, oy] = chainOffset(show, f.id);
     spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
     fixtureOrder.push(f);

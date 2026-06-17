@@ -6,6 +6,7 @@ import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { confirmDelete } from './confirm.js';
+import { DISTRIBUTIONS } from '../model/grid.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
@@ -399,23 +400,59 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
   // density, length, pixel count, colour order. Editing it propagates to every
   // placed instance (via syncFixtureTypes on rebuild). Placement + patch live in
   // the Fixtures tab.
+  // The auto-name for a definition: a matrix reads "W×H · Npx"; a strip reads
+  // "Lm · Npx" (or just "Npx" with no physical length).
+  function autoTypeName(nt) {
+    const cols = Math.max(1, Math.round(Number(nt.cols) || 1));
+    const rows = Math.max(1, Math.round(Number(nt.rows) || 1));
+    if (rows > 1) return `${cols}×${rows} · ${cols * rows}px`;
+    return Number(nt.meters) > 0 ? `${round2(nt.meters)}m · ${cols}px` : `${cols}px`;
+  }
+
   function typeDetail(show, t) {
     const ti = show.fixtureTypes.indexOf(t);
-    const upd = (mutate) => { const next = structuredClone(show); mutate(next.fixtureTypes[ti]); commit(next); };
-    const defName = (lpm, m) => `${round2(m)}m · ${Math.max(1, Math.round(lpm * m))}px`;
-    const applyT = (nt, lpm, m) => {
-      const a = Math.max(0, Number(lpm) || 0), b = Math.max(0, Number(m) || 0);
-      // Keep an auto-generated name in sync with the spec; leave a custom name be.
-      if (nt.name === defName(nt.ledsPerMeter, nt.meters)) nt.name = defName(a, b);
-      nt.ledsPerMeter = a; nt.meters = b; nt.pixelCount = Math.max(1, Math.round(a * b));
+    // Every edit recomputes cols/rows/pixelCount coherently and keeps an
+    // auto-generated name in sync (a hand-typed name is left alone).
+    const upd = (mutate) => {
+      const next = structuredClone(show);
+      const nt = next.fixtureTypes[ti];
+      const wasAuto = nt.name === autoTypeName(nt);
+      mutate(nt);
+      nt.cols = Math.max(1, Math.round(Number(nt.cols) || 1));
+      nt.rows = Math.max(1, Math.round(Number(nt.rows) || 1));
+      nt.distribution = Math.max(0, Math.round(Number(nt.distribution) || 0));
+      nt.pixelCount = nt.cols * nt.rows;
+      if (wasAuto) nt.name = uniqueTypeName(next.fixtureTypes, autoTypeName(nt), nt.id);
+      commit(next);
     };
-    return el('div', { className: 'fx-card fx-detail' }, [
+    const isGrid = (Number(t.rows) || 1) > 1;
+    const rows = [
       field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, x, nt.id); }))),
-      sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => applyT(nt, x, nt.meters)), 0, 200, 1),
-      sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => applyT(nt, nt.ledsPerMeter, x)), 0, 20, 0.1),
+      // Width = pixels per row (a 1-row strip's pixel count — "set pixels directly").
+      field('Width', numInputCommit(t.cols ?? t.pixelCount, (x) => upd((nt) => { nt.cols = x; }))),
+      // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
+      field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))),
       field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })),
-      // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
-    ]);
+    ];
+    // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
+    // in, row/column order, and snake vs. straight.
+    if (isGrid) {
+      rows.push(field('Wiring', selectInput(
+        DISTRIBUTIONS.map((d) => ({ value: String(d.index), label: d.label })),
+        String(t.distribution ?? 0),
+        (x) => upd((nt) => { nt.distribution = Number(x); }))));
+    }
+    // Physical size (optional) — only drives true-scale strip THICKNESS on the
+    // canvas, and offers density×length as a convenience to set a strip's Width.
+    const phys = el('details', { className: 'fx-advanced' });
+    phys.append(el('summary', { textContent: 'Physical size' }));
+    phys.append(
+      sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => { nt.ledsPerMeter = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round(x * (Number(nt.meters) || 0))); }), 0, 200, 1),
+      sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => { nt.meters = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round((Number(nt.ledsPerMeter) || 0) * x)); }), 0, 20, 0.1),
+    );
+    rows.push(phys);
+    // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
+    return el('div', { className: 'fx-card fx-detail' }, rows);
   }
 
   // A name not already taken by another fixture definition — duplicate names are
@@ -573,6 +610,17 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       }
       const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
       return t ? typeDetail(show, t) : null;
+    },
+    // The inspector title: "Fixture: <name>" or "Controller: <name>" for the
+    // currently-selected Inventory item (null when nothing's selected).
+    librarySelection: () => {
+      const show = getShow();
+      if (libSel === 'controller') {
+        const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
+        return t ? { kind: 'Controller', name: t.name } : null;
+      }
+      const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
+      return t ? { kind: 'Fixture', name: t.name } : null;
     },
     // ⌫ deletes the last-clicked device (Devices tab) or model/definition
     // (Library tab). A model/definition still IN USE is NOT deleted. Returns

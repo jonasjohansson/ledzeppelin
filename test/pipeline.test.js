@@ -124,3 +124,19 @@ test('buildPipelineInputs assigns global buffer bases across devices', () => {
   assert.equal(b0.start, 200);
   assert.equal(b0.count, 50);
 });
+
+test('a grid fixture samples cols*rows pixels in wiring order', () => {
+  // A 2×2 matrix, unrouted, centred on a 1280×720 canvas, distribution 1
+  // (TL row-major LINE) → order [0,0],[1,0],[0,1],[1,1] = quadrant centres.
+  let s = emptyShow();
+  s = addFixture(s, {
+    id: 'm', name: 'matrix', cols: 2, rows: 2, distribution: 1, pixelCount: 4, colorOrder: 'RGB',
+    output: {}, input: { mode: 'grid', transform: { x: 640, y: 360, w: 1280, h: 720, rotation: 0 }, samples: 4, points: [[0, 0], [1, 1]] },
+  });
+  const { sampleUVs, spans } = buildPipelineInputs(s);
+  assert.equal(sampleUVs.length, 4 * 2);
+  assert.equal(spans.find((sp) => sp.id === 'm').count, 4);
+  const got = Array.from(sampleUVs);
+  const expect = [0.25, 0.25, 0.75, 0.25, 0.25, 0.75, 0.75, 0.75];
+  expect.forEach((v, i) => assert.ok(Math.abs(got[i] - v) < 1e-9, `uv[${i}] ${got[i]} ≈ ${v}`));
+});

@@ -12,7 +12,12 @@ void main(){
   vec2 suv = texelFetch(uMap, t, 0).rg;
   // Flip v: the GL texture's v=0 is the BOTTOM row, but fixture points (and the
   // preview/stage) treat v=0 as the TOP — so sample the matching-display row.
-  frag = texture(uCanvas, vec2(suv.x, 1.0 - suv.y));
+  vec2 c = vec2(suv.x, 1.0 - suv.y);
+  // LEDs whose sample point falls OUTSIDE the composition read black, not the
+  // smeared edge pixel that CLAMP_TO_EDGE would give — so a fixture pushed past
+  // the canvas edge simply goes dark there (per-LED, so a half-off bar is half-lit).
+  if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0) { frag = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  frag = texture(uCanvas, c);
 }`;
 
 export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
