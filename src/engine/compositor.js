@@ -24,7 +24,7 @@
 // TRANSITIONS: per-layer runtime crossfade state lives in a Map keyed by layer
 // id (NOT in the show JSON). See transitionProgress() for the timing math.
 
-import { program, makeTarget, drawFullscreen } from './gl.js';
+import { program, makeTarget, drawFullscreen, ISF_VERT } from './gl.js';
 import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.js';
 
 // Reused scratch for the uTrigs uniform (consumed synchronously each runEntry call,
@@ -106,10 +106,10 @@ export function makeCompositor(gl, w, h) {
   // Each cached entry: { prog, uniforms: Map<string, WebGLUniformLocation|null> }.
   const cache = new Map();
 
-  function getProgram(name, src) {
+  function getProgram(name, src, vertSrc) {
     let c = cache.get(name);
     if (!c) {
-      c = { prog: program(gl, src), uniforms: new Map() };
+      c = { prog: program(gl, src, vertSrc), uniforms: new Map() };
       cache.set(name, c);
     }
     return c;
@@ -227,7 +227,7 @@ export function makeCompositor(gl, w, h) {
   // bound to ISF's `inputImage` (the prior clip output for an effect); a generator
   // passes null → a 1×1 black inputImage so sampling stays defined.
   function runISF(isf, params, dst, timeSec, srcTex) {
-    const c = getProgram(isf.id, isf.src);
+    const c = getProgram(isf.id, isf.src, ISF_VERT);   // ISF varying = isf_FragNormCoord
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(c.prog);

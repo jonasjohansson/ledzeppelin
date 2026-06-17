@@ -91,8 +91,9 @@ function uniformDecl(inp) {
 
 // Wrap an ISF GLSL body into a complete WebGL2 fragment shader. ISF authors target
 // GLSL ES 1.0 (gl_FragColor, texture2D, isf_FragNormCoord); we shim those onto our
-// #version 300 es harness (out `frag`, `in vec2 uv`). Single-pass; PASSES/persistent
-// buffers are a later phase.
+// #version 300 es harness. The varying is `isf_FragNormCoord` (NOT `uv`) — paired
+// with ISF_VERT — so a shader body can freely declare its own `vec2 uv` (a very
+// common pattern) without colliding. Single-pass; PASSES are a later phase.
 export function wrapISF(glsl, inputs = []) {
   // `inputImage` is declared as a builtin below — skip it here to avoid a
   // redefinition when a shader lists it as an INPUT (effects always do).
@@ -100,7 +101,7 @@ export function wrapISF(glsl, inputs = []) {
   return `#version 300 es
 precision highp float;
 precision highp int;
-in vec2 uv;
+in vec2 isf_FragNormCoord;
 out vec4 isf_outColor;
 // --- ISF builtins (host-provided) ---
 uniform float TIME;
@@ -111,13 +112,12 @@ uniform sampler2D inputImage;
 ${decls}
 // --- ISF compatibility shims (GLSL ES 1.0 → 3.0) ---
 #define gl_FragColor isf_outColor
-#define isf_FragNormCoord uv
 #define texture2D texture
 #define IMG_SIZE(img) RENDERSIZE
 #define IMG_NORM_PIXEL(img, nc) texture(img, nc)
 #define IMG_PIXEL(img, pc) texture(img, (pc) / RENDERSIZE)
-#define IMG_THIS_NORM_PIXEL(img) texture(img, uv)
-#define IMG_THIS_PIXEL(img) texture(img, uv)
+#define IMG_THIS_NORM_PIXEL(img) texture(img, isf_FragNormCoord)
+#define IMG_THIS_PIXEL(img) texture(img, isf_FragNormCoord)
 // --- ISF shader body (brings its own entry point) ---
 ${glsl}
 `;

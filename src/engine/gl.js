@@ -20,9 +20,16 @@ const vec2 P[3] = vec2[](vec2(-1.,-1.), vec2(3.,-1.), vec2(-1.,3.));
 out vec2 uv;
 void main(){ vec2 p = P[gl_VertexID]; uv = p*0.5+0.5; gl_Position = vec4(p,0.,1.); }`;
 
-export function program(gl, fragSrc) {
+// ISF vertex: same fullscreen triangle, but the varying is `isf_FragNormCoord`
+// (NOT `uv`) so an ISF shader body can freely declare its own `vec2 uv`.
+export const ISF_VERT = `#version 300 es
+const vec2 P[3] = vec2[](vec2(-1.,-1.), vec2(3.,-1.), vec2(-1.,3.));
+out vec2 isf_FragNormCoord;
+void main(){ vec2 p = P[gl_VertexID]; isf_FragNormCoord = p*0.5+0.5; gl_Position = vec4(p,0.,1.); }`;
+
+export function program(gl, fragSrc, vertSrc = VERT) {
   const p = gl.createProgram();
-  const vs = compile(gl, gl.VERTEX_SHADER, VERT);
+  const vs = compile(gl, gl.VERTEX_SHADER, vertSrc);
   const fs = compile(gl, gl.FRAGMENT_SHADER, fragSrc);
   gl.attachShader(p, vs);
   gl.attachShader(p, fs);
