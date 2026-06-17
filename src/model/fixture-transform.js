@@ -21,8 +21,16 @@ const canvasOf = (c) => ({ w: (c && c.w) || DEFAULT_CANVAS.w, h: (c && c.h) || D
 // Transform (px) → the two centreline endpoints in normalized 0..1 space.
 export function pointsFromTransform(t, canvas) {
   const { w: W, h: H } = canvasOf(canvas);
-  const a = (Number(t?.rotation) || 0) * DEG;
-  const half = (Number(t?.w) || 0) / 2;
+  const w = Number(t?.w) || 0, h = Number(t?.h);
+  // Orientation comes from the BOX ASPECT: the LED centreline runs along the
+  // LONGER side, so editing width/height alone flips a strip vertical↔horizontal
+  // (no rotation needed). Legacy/auto fixtures (h is the auto-thickness sentinel)
+  // keep length = w (horizontal). `rotation` then tilts further on top.
+  const autoH = isAutoThickness(h);
+  const vertical = !autoH && h > w;
+  const len = vertical ? h : w;
+  const a = (Number(t?.rotation) || 0) * DEG + (vertical ? Math.PI / 2 : 0);
+  const half = len / 2;
   const dx = Math.cos(a) * half, dy = Math.sin(a) * half;
   const cx = Number(t?.x) || 0, cy = Number(t?.y) || 0;
   return [
@@ -75,7 +83,11 @@ export const STRIP_WIDTH_M = 0.010;
 // polyline: the summed segment lengths of its normalized points × canvas).
 export function centrelineLengthPx(f, canvas) {
   const input = f?.input;
-  if (input?.transform && !isPolylineFixture(input)) return Number(input.transform.w) || 0;
+  if (input?.transform && !isPolylineFixture(input)) {
+    const w = Number(input.transform.w) || 0, h = Number(input.transform.h);
+    // Length = the longer box side (the LED axis); auto-h fixtures keep length = w.
+    return isAutoThickness(h) ? w : Math.max(w, h);
+  }
   const { w: W, h: H } = canvasOf(canvas);
   const pts = Array.isArray(input?.points) ? input.points : [];
   let L = 0;
@@ -101,7 +113,9 @@ export const isAutoThickness = (h) => {
 // Clamped ≥2 px so a long-thin fixture never vanishes.
 export function thicknessOf(f, canvas) {
   const stored = Number(f?.input?.transform?.h);
-  if (!isAutoThickness(stored)) return stored;
+  // Explicit box height: thickness is the SHORTER of the two box dims (the longer
+  // is the LED length — see pointsFromTransform's aspect rule).
+  if (!isAutoThickness(stored)) return Math.max(2, Math.min(Number(f?.input?.transform?.w) || stored, stored));
   const meters = Number(f?.meters) || 0;
   const lenPx = centrelineLengthPx(f, canvas);
   if (meters > 0 && lenPx > 0) return Math.max(2, (lenPx / meters) * STRIP_WIDTH_M);

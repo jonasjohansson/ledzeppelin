@@ -728,7 +728,10 @@ const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.c
 function aabbSize(tf, effThickness) {
   const t = (tf.rotation || 0) * Math.PI / 180;
   const c = Math.abs(Math.cos(t)), s = Math.abs(Math.sin(t));
-  const w = tf.w || 0, h = effThickness || 0;
+  // Use the real box dims w×h (orientation is the aspect, not a fixed length axis);
+  // for legacy auto-thickness fixtures the height is the derived effective thickness.
+  const w = Math.abs(tf.w) || 0;
+  const h = isAutoThickness(tf.h) ? (effThickness || 0) : (Math.abs(tf.h) || 0);
   return { w: w * c + h * s, h: w * s + h * c };
 }
 
@@ -1053,12 +1056,13 @@ function addInstance(typeId) {
   let n = next.fixtures.length + 1, id;
   do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
   const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  // Drop new strips in the MIDDLE of the canvas, UNROTATED (a horizontal strip),
-  // cascaded a little so successive adds don't fully overlap, and leave them
-  // UNASSIGNED (no device) until you wire them to an output.
+  // Drop new strips in the MIDDLE of the canvas as a thin UPRIGHT strip — Width 10,
+  // Height = pixel count, Rotation 0. Orientation comes from the box aspect (h > w ⇒
+  // vertical), so it reads as a non-rotated vertical strip; widen it past its height
+  // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
-  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: t.pixelCount, h: 0, rotation: 0 };
+  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 10, h: t.pixelCount, rotation: 0 };
   // If a controller is selected, the new fixture lands ON it; otherwise it's
   // unassigned. Either way it gets its OWN free output (port) so added strips are
   // NOT auto-chained together — chain them deliberately via the chain action.
