@@ -2376,7 +2376,10 @@ openCompInput.addEventListener('change', async () => {
 let isfCounter = 0;
 const openISFInput = oel('input', { type: 'file', accept: '.fs,.isf,.frag,.glsl,.txt' });
 openISFInput.style.display = 'none'; document.body.append(openISFInput);
-function importISFText(text, filename) {
+// Import an ISF shader. `target` (from a drop) hints WHERE to land it:
+// {layerId, clipId} from the deck cell under the cursor — so dropping next to a
+// clip lands on THAT layer / applies the filter to THAT clip (not a new layer).
+function importISFText(text, filename, target) {
   const r = parseISF(text);
   if (!r.ok) { window.alert(`Not a valid ISF shader: ${r.error}`); return; }
   const layers = show.composition?.layers || [];
@@ -2387,16 +2390,20 @@ function importISFText(text, filename) {
     glsl: r.glsl, inputs: r.inputs, params: isfParams(r.inputs),
     src: wrapISF(r.glsl, r.inputs),
   };
+  const findClip = (cid) => { for (const L of layers) for (const c of (L.clips || [])) if (c && c.id === cid) return { layerId: L.id, clipId: c.id }; return null; };
   if (r.type === 'effect') {
-    // A filter (samples inputImage) → add to the selected/active clip's chain.
-    const selId = layerPanel?.getSelectedClipId?.();
-    let layerId, clipId;
-    for (const L of layers) for (const c of (L.clips || [])) if (c.id === selId) { layerId = L.id; clipId = c.id; }
+    // A filter (samples inputImage) → the clip under the drop, else the selected/
+    // active clip (optionally on the dropped-on layer).
+    const hit = (target?.clipId && findClip(target.clipId)) || findClip(layerPanel?.getSelectedClipId?.());
+    let layerId = hit?.layerId, clipId = hit?.clipId;
+    if (!clipId && target?.layerId) { const L = layers.find((x) => x.id === target.layerId); if (L) { layerId = L.id; clipId = L.activeClipId || L.clips?.[0]?.id; } }
     if (!clipId) { const L = layers.find((x) => x.activeClipId) || layers[0]; layerId = L.id; clipId = L.activeClipId || L.clips?.[0]?.id; }
     if (!clipId) { window.alert('Add/select a clip to apply the ISF effect to.'); return; }
     rebuild(addISFEffect(show, layerId, clipId, isf));
   } else {
-    const layerId = (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
+    // A generator → the dropped-on layer, else the selected/first layer.
+    const layerId = (target?.layerId && layers.some((L) => L.id === target.layerId)) ? target.layerId
+      : (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
     rebuild(addISFClip(show, layerId, isf));
   }
   setSection('design'); layerPanel?.refresh?.();
@@ -2405,14 +2412,17 @@ openISFInput.addEventListener('change', async () => {
   const file = openISFInput.files[0]; openISFInput.value = '';
   if (file) importISFText(await file.text(), file.name);
 });
-// Drag-and-drop an ISF shader (.fs/.isf/.frag/.glsl) anywhere onto the window.
+// Drag-and-drop an ISF shader (.fs/.isf/.frag/.glsl) onto the window; the deck cell
+// under the cursor sets where it lands.
 const isISFName = (n) => /\.(fs|isf|frag|glsl)$/i.test(n || '');
 window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) e.preventDefault(); });
 window.addEventListener('drop', async (e) => {
   const files = [...(e.dataTransfer?.files || [])].filter((f) => isISFName(f.name));
   if (!files.length) return;
   e.preventDefault();
-  for (const f of files) importISFText(await f.text(), f.name);
+  const node = document.elementFromPoint(e.clientX, e.clientY);
+  const target = { layerId: node?.closest?.('.deck-layer')?.dataset.layer, clipId: node?.closest?.('.clip-cell')?.dataset.clip };
+  for (const f of files) importISFText(await f.text(), f.name, target);
 });
 
 // (Project file actions — new/save/load/import — live in the corner File menu

@@ -793,6 +793,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : '') + (isSelected ? ' clip-selected' : ''),
         title: 'click to select · double-click to trigger · drag to reorder / move',
+        'data-clip': clip.id,
       });
       // Click = SELECT (edit in inspector) without activating; double-click = trigger.
       // Selecting also focuses the Clip inspector tab (onClipSelect) and makes the
