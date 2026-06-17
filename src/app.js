@@ -39,22 +39,30 @@ const gl = getGL(canvas);
 // Bake a small thumbnail (data URL) per source generator for the library + slots.
 const thumbnails = renderSourceThumbnails(gl);
 
-// --- Default show: one device, two fixtures (single-device M2 target). ---
+// --- Default show: one controller with a single fixture wired into it, so a fresh
+//     project already has a working patch to build from. ---
 function defaultShow() {
   let show = emptyShow();
   const cv = show.composition.canvas;
   cv.w = 1280; cv.h = 1280;        // square default canvas
   // Generic placeholder hardware so the first run shows SOMETHING on the wall —
   // the user reconfigures (or scans) these to match their real rig.
-  show = addDevice(show, { id: 'c1', name: 'Generic Controller', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
-  // A spread of generic strip DEFINITIONS in the library (96 / 60 / 30 led/m, in 5 m
-   // and 1 m lengths) — but NO instances placed (empty stage; the user maps their rig).
+  show = addDevice(show, { id: 'c1', name: 'Controller 1', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
+  // A plain "Generic Fixture" (96 px) as the primary definition, plus a spread of
+  // density variants (96 / 60 / 30 led/m, in 5 m and 1 m lengths) for variety.
   const genericType = (lpm, m) => ({ id: `g${lpm}_${m}`, name: `${lpm}/m · ${m}m`, ledsPerMeter: lpm, meters: m, pixelCount: lpm * m, colorOrder: 'RGB' });
   show.fixtureTypes = [
-    genericType(96, 5), genericType(96, 1),
-    genericType(60, 5), genericType(60, 1),
-    genericType(30, 5), genericType(30, 1),
+    { id: 'gen', name: 'Generic Fixture', ledsPerMeter: 96, meters: 1, pixelCount: 96, colorOrder: 'RGB' },
+    genericType(96, 5), genericType(60, 5), genericType(60, 1), genericType(30, 5), genericType(30, 1),
   ];
+  // One placed fixture (the Generic Fixture) wired to Controller 1 — a thin upright
+  // strip in the middle of the canvas (Width 10 × Height 96, rotation 0).
+  const tf = { x: cv.w / 2, y: cv.h / 2, w: 10, h: 96, rotation: 0 };
+  show.fixtures = [{
+    id: 'f1', typeId: 'gen',
+    input: { transform: tf, points: pointsFromTransform(tf, cv) },
+    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 96 },
+  }];
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
   // opacity so both read). Prefixed manifest defaults per source.
