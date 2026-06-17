@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildArtnetPackets, nextSequence, ARTNET_PORT } from '../server/artnet.js';
+import { buildArtnetPackets, buildArtnetSync, nextSequence, ARTNET_PORT } from '../server/artnet.js';
 // buildArtnetPackets returns GATHER LISTS [header(18B), chunk] like ddp.js —
 // each test reads the header from pkt[0] and the DMX payload from pkt[1].
 test('ArtDmx header bytes are exact (universe 0)', () => {
@@ -61,4 +61,12 @@ test('sequence helper rolls 1..255 and skips 0', () => {
 });
 test('port constant is 6454', () => {
   assert.equal(ARTNET_PORT, 6454);
+});
+test('buildArtnetSync is a valid 14-byte OpSync packet', () => {
+  const s = buildArtnetSync();
+  assert.equal(s.length, 14);
+  assert.equal(s.subarray(0, 7).toString('ascii'), 'Art-Net');
+  assert.equal(s[8], 0x00); assert.equal(s[9], 0x52);   // OpSync 0x5200, little-endian
+  assert.equal(s[10], 0x00); assert.equal(s[11], 0x0e); // ProtVer 14, big-endian
+  assert.equal(s[12], 0); assert.equal(s[13], 0);        // Aux1 / Aux2
 });

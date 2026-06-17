@@ -1,6 +1,6 @@
 import dgram from 'node:dgram';
 import { buildPackets } from './ddp.js';
-import { buildArtnetPackets, nextSequence, ARTNET_PORT } from './artnet.js';
+import { buildArtnetPackets, buildArtnetSync, nextSequence, ARTNET_PORT } from './artnet.js';
 import { buildLut, isIdentity } from './calibrate.js';
 const sock = dgram.createSocket('udp4');
 sock.on('error', (err) => console.error('[output] socket error', err.message));
@@ -17,7 +17,6 @@ function udpSend(pkt, port, ip) {
   });
 }
 const artSeq = new Map();   // `${ip}:${port}` → last ArtDmx sequence (rolls 1..255, never 0)
-const IDX = { R: 0, G: 1, B: 2 };
 
 // Cache calibration LUTs by (gamma|brightness) so we don't rebuild per frame.
 const lutCache = new Map();
@@ -29,24 +28,37 @@ function deviceLut(d) {
   return lut;
 }
 
-// Build a device's output bytes in ONE pass: per-segment colour-order remap AND
-// the gamma/brightness LUT folded together into a single fresh buffer (was three
-// buffers: reorder-temp + per-segment copy + LUT copy). Allocated fresh per frame
-// so the in-flight UDP sends that reference it stay valid.
-function buildDeviceBytes(slice, d, lut) {
-  // Zero-filled (not allocUnsafe): if a device's segments don't fully tile its
-  // slice (stale/partial route), the uncovered pixels stay dark instead of
-  // shipping whatever garbage was in memory.
-  const out = Buffer.alloc(slice.length);
+// Channels-per-pixel implied by a colour FORMAT string (the stride): "GRB" = 3,
+// "RGBW" = 4. The format is the device/segment colour order, optionally with a W
+// (white) channel for RGBW strips. W is DERIVED from the RGB composite (there is
+// no white in the source) as min(R,G,B) — the neutral component a dedicated white
+// LED can render — leaving R/G/B as-is (the common "additive white" behaviour).
+export const formatStride = (fmt) => (fmt || 'RGB').length;
+
+// Build a device's output bytes in ONE pass: per-segment colour-format remap (incl.
+// RGBW expansion) AND the gamma/brightness LUT folded together into a single fresh
+// buffer. Allocated fresh per frame so in-flight UDP sends that reference it stay
+// valid. Output length is per-format (RGB→3B/px, RGBW→4B/px), not the 3B/px input.
+export function buildDeviceBytes(slice, d, lut) {
   const segs = d.segments?.length ? d.segments : [{ start: 0, count: slice.length / 3, colorOrder: d.colorOrder }];
+  let total = 0;
+  for (const s of segs) total += s.count * formatStride(s.colorOrder || d.colorOrder || 'RGB');
+  // Zero-filled (not allocUnsafe): if segments don't fully tile the slice (stale/
+  // partial route), uncovered channels stay dark, not random memory.
+  const out = Buffer.alloc(total);
+  let o = 0;
   for (const s of segs) {
-    const order = s.colorOrder || d.colorOrder || 'RGB';
-    const o0 = IDX[order[0]] ?? 0, o1 = IDX[order[1]] ?? 1, o2 = IDX[order[2]] ?? 2;
-    const a = s.start * 3, b = (s.start + s.count) * 3;
-    if (lut) {
-      for (let i = a; i < b; i += 3) { out[i] = lut[slice[i + o0]]; out[i + 1] = lut[slice[i + o1]]; out[i + 2] = lut[slice[i + o2]]; }
-    } else {
-      for (let i = a; i < b; i += 3) { out[i] = slice[i + o0]; out[i + 1] = slice[i + o1]; out[i + 2] = slice[i + o2]; }
+    const fmt = s.colorOrder || d.colorOrder || 'RGB';
+    const stride = fmt.length;
+    const a = s.start * 3;
+    for (let p = 0; p < s.count; p++) {
+      const r = slice[a + p * 3], g = slice[a + p * 3 + 1], b = slice[a + p * 3 + 2];
+      const w = r < g ? (r < b ? r : b) : (g < b ? g : b);   // min(R,G,B) — only used if fmt has W
+      for (let c = 0; c < stride; c++) {
+        const ch = fmt[c];
+        const v = ch === 'R' ? r : ch === 'G' ? g : ch === 'B' ? b : ch === 'W' ? w : 0;
+        out[o++] = lut ? lut[v] : v;
+      }
     }
   }
   return out;
@@ -77,8 +89,16 @@ export function sendFrame(rgb, devices) {
       const key = `${d.ip}:${port}`;
       const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
       artSeq.set(key, s);
-      const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s });
-      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };   // pkt = [header, chunk] gather list
+      // Stride from the device's colour format (RGBW→4) so universes break on whole
+      // pixels. (Per-segment format overrides aren't reflected here — a controller's
+      // strips share a format in practice.)
+      const stride = formatStride(d.colorOrder || 'RGB');
+      const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s, stride });
+      // ArtSync: after this device's ArtDmx, latch all its universes at once (no
+      // multi-universe tearing). Unicast to the node (widely honored; avoids needing
+      // broadcast perms / disturbing unrelated nodes).
+      const sync = d.artnetSync ? buildArtnetSync() : null;
+      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); if (sync) udpSend(sync, port, d.ip); };   // pkt = [header, chunk] gather list
     } else {
       const port = d.port ?? 4048;
       const pkts = buildPackets(bytes, { sequence: seq });

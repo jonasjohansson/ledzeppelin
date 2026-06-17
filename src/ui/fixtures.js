@@ -9,7 +9,10 @@ import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS } from '../model/grid.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
-const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
+// Colour formats: the 6 RGB orders, plus RGBW variants (a 4th White channel,
+// derived from the composite as min(R,G,B) at output time). Pick the one matching
+// the controller's wired strip.
+const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG', 'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB'];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 
 export function loadShow() {
@@ -321,7 +324,7 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
       // Controller MODEL — drives the output count (a live template from Library).
       field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
       field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
-      field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      field('Color Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
       // Output protocol — DDP (WLED's realtime stream) or Art-Net for generic
       // gear (nodes, consoles, MadMapper/Resolume). Switching also resets the
       // port to the protocol's default (4048 / 6454).
@@ -333,6 +336,13 @@ export function createFixturePanel({ getShow, setShow, onSelect }) {
         // Base universe — the device's pixels occupy consecutive universes from it.
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
+        // ArtSync: latch all of this device's universes together each frame, so a
+        // multi-universe rig doesn't tear. Off by default (some nodes ignore it).
+        field('Art-Net sync', (() => {
+          const c = el('input', { type: 'checkbox' }); c.checked = !!d.artnetSync;
+          c.addEventListener('change', () => upd({ artnetSync: c.checked }));
+          return c;
+        })()),
         // Discover Art-Net nodes on the network (ArtPoll) → click one to bind this
         // device's IP to it without re-mapping pixels.
         (() => {

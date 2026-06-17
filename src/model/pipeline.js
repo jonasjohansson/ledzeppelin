@@ -73,6 +73,7 @@ export function buildPipelineInputs(show) {
       // Output protocol per device: DDP (default) or Art-Net from a base universe.
       protocol: d.protocol === 'artnet' ? 'artnet' : 'ddp',
       universe: d.universe ?? 0,
+      artnetSync: !!d.artnetSync,   // OpSync after each frame's ArtDmx (tear-free)
       colorOrder: d.colorOrder,
       byteStart: globalBase * 3,
       byteEnd: cursor * 3,
