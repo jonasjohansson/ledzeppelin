@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Downloads / releases
+    url: https://github.com/jonasjohansson/ledzeppelin/releases
+    about: Get the latest macOS / Linux / Raspberry Pi build.
