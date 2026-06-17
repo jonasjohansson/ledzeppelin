@@ -44,16 +44,25 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
   const out = new Uint8Array(byteLen);
   const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
 
-  // ASYNC READBACK via double-buffered Pixel-Pack Buffers: `readPixels` into a PBO
-  // is non-blocking, and we fetch the PREVIOUS frame's PBO (already finished) — so
-  // the CPU never stalls waiting on the GPU. Costs +1 frame of latency (~24ms at
-  // 42fps, imperceptible for LED output). A fence guards the read; if the GPU is
-  // momentarily behind we reuse the last good frame rather than block.
-  const pbos = [gl.createBuffer(), gl.createBuffer()];
+  // ASYNC READBACK via a RING of Pixel-Pack Buffers: `readPixels` into a PBO is
+  // non-blocking; a fence guards each one and we only read it back once the GPU has
+  // finished, so the CPU never stalls. Costs ~1-2 frames of latency (imperceptible
+  // for LED output at ~42fps).
+  //
+  // Crucially we NEVER issue a new readback into a PBO whose previous readback hasn't
+  // been consumed yet — overwriting an in-flight READ buffer is exactly what triggers
+  // the "READ-usage buffer written…before being read back" perf warning (and discards
+  // the driver's shadow copy). Two buffers gave only ONE frame of slack, so under any
+  // GPU hiccup the buffer got reused unread. Three lets a readback stay in flight for
+  // a couple of frames; if all are busy we simply skip this frame's readback and reuse
+  // the last good result rather than clobber an unread buffer.
+  const NUM = 3;
+  const pbos = Array.from({ length: NUM }, () => gl.createBuffer());
   for (const b of pbos) { gl.bindBuffer(gl.PIXEL_PACK_BUFFER, b); gl.bufferData(gl.PIXEL_PACK_BUFFER, byteLen, gl.STREAM_READ); }
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-  const fences = [null, null];
-  let widx = 0, primed = false, lastValid = null;
+  const fences = new Array(NUM).fill(null);   // fences[i] != null ⇒ pbo i has an unconsumed readback in flight
+  const queue = [];                           // FIFO of pbo indices awaiting readback (oldest first)
+  let lastValid = null;
 
   return { n,
     dispose() {
@@ -74,32 +83,33 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
       gl.uniform1i(locMap, 1);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-      // Kick off this frame's readback into the write-PBO (async).
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[widx]);
-      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // 0 = offset into bound PBO ⇒ async
-      if (fences[widx]) gl.deleteSync(fences[widx]);
-      fences[widx] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-      // Fetch the OTHER PBO (last frame's, already complete) if its fence signaled.
-      const ridx = widx ^ 1;
-      widx = ridx;
-      if (primed && fences[ridx]) {
-        // SYNC_FLUSH_COMMANDS_BIT flushes the fence so clientWaitSync can actually
-        // observe completion — without it the fence may never read as signaled, the
-        // read is skipped every frame, and the PBO gets overwritten unread (that's
-        // the "READ-usage buffer written…before being read back" perf warning).
-        const s = gl.clientWaitSync(fences[ridx], gl.SYNC_FLUSH_COMMANDS_BIT, 0);
+      // Retire the OLDEST in-flight readback if its fence has signaled. SYNC_FLUSH_-
+      // COMMANDS_BIT flushes so clientWaitSync can actually observe completion.
+      if (queue.length) {
+        const i = queue[0];
+        const s = gl.clientWaitSync(fences[i], gl.SYNC_FLUSH_COMMANDS_BIT, 0);
         if (s === gl.ALREADY_SIGNALED || s === gl.CONDITION_SATISFIED) {
-          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[ridx]);
+          queue.shift();
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[i]);
           gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
           lastValid = trim(out);
-          gl.deleteSync(fences[ridx]); fences[ridx] = null;   // consumed → don't re-check/overwrite unread
+          gl.deleteSync(fences[i]); fences[i] = null;   // free this pbo for reuse
         }
       }
-      primed = true;
+
+      // Kick a new readback ONLY into a FREE pbo (fence cleared). If all are still in
+      // flight, skip this frame — never overwrite an unread buffer.
+      let w = -1;
+      for (let i = 0; i < NUM; i++) { if (fences[i] === null) { w = i; break; } }
+      if (w >= 0) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[w]);
+        gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // 0 = offset into bound PBO ⇒ async
+        fences[w] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        queue.push(w);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       return lastValid;   // null on the first frame(s); app.js guards on falsy
     } };
 }
