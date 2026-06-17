@@ -369,6 +369,7 @@ const transport = {
 
 // The composer renders into the Resolume-style shell's three regions: the DECK
 // strip above the canvas, the INSPECTOR column, and the LIBRARY column.
+let isfExamples = [];   // bundled example shaders (examples/isf/index.json), for the source picker
 const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
@@ -377,6 +378,8 @@ const layerPanel = createLayerPanel({
   onClipSelect: () => { setSection('design'); setInspectorTab('clip'); }, // jump to Design › Clip to tweak it
   onLayerSelect: () => { setSection('design'); setInspectorTab('layer'); }, // jump to Design › Layer
   onCompositionSelect: () => { setSection('design'); setInspectorTab('composition'); }, // jump to Design › Composition
+  getISFExamples: () => isfExamples,
+  onAddISF: (file) => importISFExample(file),
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -2396,6 +2399,15 @@ window.addEventListener('drop', async (e) => {
   const target = { layerId: node?.closest?.('.deck-layer')?.dataset.layer, clipId: node?.closest?.('.clip-cell')?.dataset.clip };
   for (const f of files) importISFText(await f.text(), f.name, target);
 });
+// Bundled ISF examples (source picker's "ISF" group): fetch one + import it.
+function importISFExample(file) {
+  fetch('./examples/isf/' + encodeURIComponent(file))
+    .then((r) => (r.ok ? r.text() : Promise.reject(new Error('not found'))))
+    .then((t) => importISFText(t, file))
+    .catch(() => window.alert('Could not load ' + file));
+}
+// Load the example index for the picker (best-effort; absent in some builds).
+fetch('./examples/isf/index.json').then((r) => r.json()).then((list) => { if (Array.isArray(list)) isfExamples = list; }).catch(() => {});
 
 // (Project file actions — new/save/load/import — live in the corner File menu
 // below; the old Settings-tab file block was removed with that tab.)

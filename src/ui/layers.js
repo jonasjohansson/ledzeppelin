@@ -398,7 +398,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
   if (transport?.now) animClock = transport.now;
   animBpm = () => getShow().composition?.bpm ?? 120;
   // Wire the cog-menu Companion tick to the show's exposed-controls set.
@@ -1324,6 +1324,18 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       }
       const rest = all.filter((n) => !seen.has(n));   // any uncategorised generator still shows
       if (rest.length) pop.append(el('div', { className: 'pick-group', textContent: 'More' }), grid(rest));
+      // Bundled ISF example shaders — pick one to import it as a clip/effect.
+      const examples = (getISFExamples && getISFExamples()) || [];
+      if (examples.length && onAddISF) {
+        const g = el('div', { className: 'pick-grid' });
+        for (const file of examples) {
+          const row = el('div', { className: 'pick-item' });
+          row.append(el('span', { className: 'lib-label', textContent: file.replace(/\.[^.]+$/, '') }));
+          row.onclick = (e) => { e.stopPropagation(); closePicker(); onAddISF(file); };
+          g.append(row);
+        }
+        pop.append(el('div', { className: 'pick-group', textContent: 'ISF' }), g);
+      }
       if (opts.onVideo) {
         const vid = el('div', { className: 'pick-item pick-video', textContent: '+ video…' });
         vid.onclick = (e) => { e.stopPropagation(); closePicker(); opts.onVideo(); };
