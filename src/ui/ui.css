@@ -440,15 +440,6 @@ body.gui-hidden #layout { display: none; }
    overlay toggle + hide UI. Decoupled from any tab. */
 /* OSC-address readout: the canonical address of the hovered/selected parameter,
    parked just above the corner telemetry. Empty = hidden. */
-#param-osc {
-  position: fixed; z-index: 5; pointer-events: none;
-  /* One line ABOVE the telemetry HUD (which sits at 10px + ctrl-h + 7px), so the
-     OSC address and the viewport metadata don't collide. */
-  left: calc(10px + env(safe-area-inset-left));
-  bottom: calc(10px + var(--ctrl-h) + 7px + 17px + env(safe-area-inset-bottom));
-  font: 11px var(--mono, ui-monospace, monospace); color: var(--accent); font-variant-numeric: tabular-nums;
-}
-#param-osc:empty { display: none; }
 #corner-controls {
   /* z 7 → the bottom toolbar sits IN FRONT of the right panel (#layout z6), so its
      buttons are never clipped by the sidebar. The sidebar reserves --corner-h of

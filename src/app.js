@@ -2478,22 +2478,6 @@ snapBtn?.addEventListener('click', (e) => {
 document.addEventListener('pointerdown', (e) => { if (openMenuBtn && !menuPop.contains(e.target) && e.target !== openMenuBtn) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenuBtn) closeMenu(); });
 
-// Parameter OSC-address readout: hovering (or focusing) a param row shows its
-// canonical address in the corner (#param-osc), so you always know what to send
-// over OSC / the socket. Delegated — rows carry data-osc (set in layers.js).
-const paramOscEl = document.getElementById('param-osc');
-if (paramOscEl) {
-  // Park the readout just ABOVE the whole corner cluster (telemetry + buttons), so
-  // it reads as a line over the "v… · fps …" row rather than on top of it.
-  const cornerEl = document.getElementById('corner-controls');
-  // Re-measured on each show (layout settles after the zoom pill etc. are added),
-  // so the readout always sits just ABOVE the corner cluster, not over the fps row.
-  const placeParamOsc = () => { if (cornerEl) { const r = cornerEl.getBoundingClientRect(); paramOscEl.style.bottom = (window.innerHeight - r.top + 8) + 'px'; } };
-  const showOsc = (addr) => { if (addr) { placeParamOsc(); paramOscEl.textContent = addr; } else paramOscEl.textContent = ''; };
-  document.addEventListener('mouseover', (e) => showOsc(e.target.closest?.('[data-osc]')?.dataset.osc || ''));
-  document.addEventListener('focusin', (e) => { const a = e.target.closest?.('[data-osc]')?.dataset.osc; if (a) showOsc(a); });
-}
-
 // A ~6s synthesized full-band hard-rock intro on launch (procedural homage, not a
 // sample). Tries to play on load; if autoplay is blocked, fires on first input.
 // Pick a style / disable via localStorage 'lz.riff' (see startup-riff.js).
