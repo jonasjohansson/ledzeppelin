@@ -811,10 +811,12 @@ input[type=checkbox]:checked::after {
 /* TAP pulses on the beat (animation-duration = one beat, set inline as --beat).
    Restarting the animation on each tap re-phases the flash to your taps; the
    on-beat flash at 0% also serves as the click reaction. */
+/* Subtle on-beat tick: only the BORDER flashes to the accent (no background fill
+   or glow), so it reads as a quiet metronome rather than a strobing button. */
 @keyframes cmp-tap-beat {
-  0%        { background: var(--accent); color: #1a0e0e; border-color: var(--accent); box-shadow: 0 0 9px 1px color-mix(in srgb, var(--accent) 70%, transparent); }
-  18%       { background: var(--accent); color: #1a0e0e; }
-  45%, 100% { background: var(--field-bg); color: var(--accent); border-color: var(--line-2); box-shadow: none; }
+  0%        { border-color: var(--accent); }
+  22%       { border-color: var(--accent); }
+  55%, 100% { border-color: var(--line-2); }
 }
 .cmp-tap.pulsing { animation: cmp-tap-beat var(--beat, 500ms) linear infinite; }
 /* Timeline duration unit toggle (s ⇄ ♪ beat-synced). */
