@@ -16,8 +16,9 @@ export const nextSequence = (s) => (s % 255) + 1;
 // pad (that tail alone is copied).
 export function buildArtnetPackets(bytes, { startUniverse = 0, sequence = 0, stride = 3 } = {}) {
   const packets = [];
+  if (!bytes.length) return packets;   // nothing to send (no stray 0-length universe)
   const maxData = maxDataFor(stride);
-  for (let off = 0, u = startUniverse; off < bytes.length || off === 0; off += maxData, u++) {
+  for (let off = 0, u = startUniverse; off < bytes.length; off += maxData, u++) {
     let chunk = bytes.subarray(off, off + maxData);
     const isLast = off + maxData >= bytes.length;
     if (chunk.length & 1) { const p = Buffer.alloc(chunk.length + 1); chunk.copy(p); chunk = p; }

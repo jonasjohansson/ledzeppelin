@@ -5,6 +5,13 @@ import { buildLut, isIdentity } from './calibrate.js';
 const sock = dgram.createSocket('udp4');
 sock.on('error', (err) => console.error('[output] socket error', err.message));
 let seq = 0;
+// ArtSync is sent as a DIRECTED BROADCAST (the spec forbids unicast sync); enable
+// broadcast on the socket lazily on first use.
+let broadcastReady = false;
+function broadcast(pkt, port) {
+  if (!broadcastReady) { try { sock.setBroadcast(true); broadcastReady = true; } catch { /* not permitted yet */ } }
+  udpSend(pkt, port, '255.255.255.255');
+}
 // Per-send errors (a single dead/unreachable device) were silently swallowed —
 // surface them, but rate-limited so one bad controller on a 120-fixture rig
 // can't flood the log every frame.
@@ -77,6 +84,7 @@ export function suppressOutput(ip, ms = 6000) { suppressUntil.set(ip, Date.now()
 export function sendFrame(rgb, devices) {
   seq = (seq + 1) & 0x0f;
   const now = Date.now();
+  let syncPort = 0, syncAfter = -1;   // ArtSync wanted? track the latest send delay
   for (const d of devices) {
     const until = suppressUntil.get(d.ip);
     if (until && until > now) continue;   // paused for a control op
@@ -97,11 +105,12 @@ export function sendFrame(rgb, devices) {
       const strides = segs.map((sg) => formatStride(sg.colorOrder || d.colorOrder || 'RGB'));
       const stride = strides.every((x) => x === strides[0]) ? strides[0] : 1;
       const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s, stride });
-      // ArtSync: after this device's ArtDmx, latch all its universes at once (no
-      // multi-universe tearing). Unicast to the node (widely honored; avoids needing
-      // broadcast perms / disturbing unrelated nodes).
-      const sync = d.artnetSync ? buildArtnetSync() : null;
-      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); if (sync) udpSend(sync, port, d.ip); };   // pkt = [header, chunk] gather list
+      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };   // pkt = [header, chunk] gather list
+      // ArtSync is one BROADCAST after the WHOLE frame's ArtDmx (below) — never
+      // per-device (that latches one controller before the others get their frame,
+      // and the spec disallows unicast sync). Track that any device wants it, after
+      // the longest per-device send delay so the latch follows all the data.
+      if (d.artnetSync) { syncPort = port; syncAfter = Math.max(syncAfter, Number(d.delayMs) || 0); }
     } else {
       const port = d.port ?? 4048;
       const pkts = buildPackets(bytes, { sequence: seq });
@@ -109,5 +118,11 @@ export function sendFrame(rgb, devices) {
     }
     const delay = Number(d.delayMs) || 0;
     if (delay > 0) setTimeout(emit, delay); else emit();
+  }
+  // One broadcast ArtSync after every controller's ArtDmx → the whole rig latches
+  // together (tear-free). Nodes match it to their last ArtDmx by source IP.
+  if (syncAfter >= 0) {
+    const fire = () => broadcast(buildArtnetSync(), syncPort || ARTNET_PORT);
+    if (syncAfter > 0) setTimeout(fire, syncAfter); else fire();
   }
 }

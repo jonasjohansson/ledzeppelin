@@ -93,10 +93,10 @@ test('addFixtureVertex turns a bar into a 3-point polyline (a bend)', () => {
   assert.deepEqual(inp.points[1], [0.5, 0.1]);           // inserted mid-vertex
 });
 
-test('setFixtureVertex moves one vertex (clamped to 0..1)', () => {
+test('setFixtureVertex moves one vertex (unclamped — may go off-canvas)', () => {
   const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.5], [0.9, 0.5]], samples: 6 } }] };
   const next = setFixtureVertex(show, 'f1', 1, 0.4, 1.7);
-  assert.deepEqual(next.fixtures[0].input.points[1], [0.4, 1]); // y clamped
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.4, 1.7]); // off-canvas allowed (samples black)
 });
 
 test('removeFixtureVertex drops a bend; at two points it reverts to a bar', () => {

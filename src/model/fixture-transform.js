@@ -62,9 +62,12 @@ const normTransform = (t) => ({
   rotation: Number(t?.rotation) || 0,
 });
 
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+// Normalized points are NOT clamped to 0..1: like bar transforms, a polyline can
+// extend onto the pasteboard (off-canvas), where the sampler reads black. Keeping
+// both fixture kinds unclamped makes off-canvas placement behave the same for all.
+const num = (v) => Number(v) || 0;
 const normPts = (pts) =>
-  (Array.isArray(pts) ? pts : []).map((p) => [clamp01(Number(p?.[0]) || 0), clamp01(Number(p?.[1]) || 0)]);
+  (Array.isArray(pts) ? pts : []).map((p) => [num(p?.[0]), num(p?.[1])]);
 
 // A fixture is POLYLINE mode (a bendable, multi-segment run) when it carries an
 // explicit mode flag or more than two points; otherwise BAR mode (a single
@@ -175,7 +178,7 @@ export function setFixtureVertex(show, fxId, index, nx, ny) {
   return mapFixture(show, fxId, (f) => {
     const pts = normPts(f.input?.points);
     if (!(index >= 0 && index < pts.length)) return f;
-    pts[index] = [clamp01(nx), clamp01(ny)];
+    pts[index] = [num(nx), num(ny)];
     return { ...f, input: { ...f.input, mode: 'polyline', points: pts } };
   });
 }
@@ -191,7 +194,7 @@ export function addFixtureVertex(show, fxId, afterIndex, at, canvas) {
     if (base.length < 2) return f;
     const i = Math.max(0, Math.min(afterIndex, base.length - 2));
     const mid = at
-      ? [clamp01(at[0]), clamp01(at[1])]
+      ? [num(at[0]), num(at[1])]
       : [(base[i][0] + base[i + 1][0]) / 2, (base[i][1] + base[i + 1][1]) / 2];
     const points = [...base.slice(0, i + 1), mid, ...base.slice(i + 1)];
     const { transform, ...rest } = f.input || {};

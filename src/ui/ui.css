@@ -210,7 +210,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 .chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .chain-name { color: var(--cyan); font-size: var(--fs-ctrl); flex: 1 1 auto; }
 .chain-fire { padding: 0 7px; line-height: var(--lh-ctrl); min-width: 0; color: var(--amber); border-color: var(--line); }
-.chain-members { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.chain-members { display: flex; flex-direction: column; gap: 0; margin-bottom: 6px; }
 .chain-member { display: flex; align-items: center; gap: 5px; font-size: var(--fs-body); }
 .chain-member .chain-mname { flex: 1 1 auto; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chain-member button { padding: 0 5px; line-height: var(--lh-ctrl); min-width: 0; font-size: var(--fs-micro); }
@@ -578,7 +578,7 @@ body.gui-hidden #corner-controls > *:not(#g-hide) { display: none; }
 .insp-sec-body .ly-param.ly-row:first-child, .insp-sec-body .anim-param:first-child { border-top: none; }
 
 /* Master-detail Fixtures tab: compact selectable list rows + one detail editor. */
-.fx-list { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
+.fx-list { display: flex; flex-direction: column; gap: 0; margin: 4px 0 6px; }
 .fx-badge {
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
@@ -1355,7 +1355,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 
 /* --- System › Settings ----------------------------------------------------- */
 /* Recording list (System › Settings). */
-.rec-list { display: flex; flex-direction: column; gap: 3px; margin: 6px 0 4px; }
+.rec-list { display: flex; flex-direction: column; gap: 0; margin: 6px 0 4px; }
 .rec-row { display: flex; align-items: center; gap: 8px; }
 .rec-name { flex: 1 1 auto; min-width: 0; font-size: var(--fs-body); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rec-row .fx-add { flex: 0 0 auto; margin-top: 0; padding: 2px 10px; }
