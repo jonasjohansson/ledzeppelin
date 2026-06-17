@@ -1281,18 +1281,32 @@ function renderOutput() {
   for (const d of show.devices) {
     if (!devMap.has(d.id)) { const dg = { deviceId: d.id, groups: [], gmap: new Map() }; devMap.set(d.id, dg); devOrder.push(dg); }
   }
+  // Always show an "Unassigned" container, even when empty — it's a persistent drop
+  // target: drag a fixture onto it to UNASSIGN it (deviceId '').
+  if (!devMap.has('')) { const dg = { deviceId: '', groups: [], gmap: new Map() }; devMap.set('', dg); devOrder.push(dg); }
   const swatch = (color) => { const s = oel('span', { className: 'out-swatch' }); s.style.background = color; return s; };
-  // Unassigned fixtures (no device) sort to the TOP so freshly-added strips are
-  // obvious and easy to find before you wire them.
-  devOrder.sort((a, b) => (a.deviceId === '' ? 0 : 1) - (b.deviceId === '' ? 0 : 1));
+  // Controllers first; the Unassigned holding group sits LAST (the place strips drop
+  // out to, below the real rig).
+  devOrder.sort((a, b) => (a.deviceId === '' ? 1 : 0) - (b.deviceId === '' ? 1 : 0));
 
   // Add buttons sit ABOVE the list (+ fixture / + device side by side).
   outputListEl.append(addControls());
 
   for (const dg of devOrder) {
-    // UNASSIGNED fixtures have no container — list them flat at the top (no group).
+    // UNASSIGNED fixtures get a device-style group (a neutral swatch + "Unassigned"
+    // header) that's a drop target — drop here to unassign — with its fixtures
+    // nested beneath, exactly like a controller's.
     if (!dg.deviceId) {
-      for (const g of dg.groups) for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i));
+      const items = dg.groups.flatMap((g) => g.items);
+      const uhead = oel('div', { className: 'out-node out-dev', title: `Unassigned · ${items.length} fixture${items.length === 1 ? '' : 's'}` }, [
+        oel('div', { className: 'out-node-main' }, [
+          oel('div', { className: 'out-name-row' }, [swatch(NEUTRAL), oel('span', { className: 'out-name', textContent: 'Unassigned' })]),
+        ]),
+        oel('span', { className: 'out-badge', textContent: `${items.length} fx` }),
+      ]);
+      dropZone(uhead, '', null);   // drop a fixture here → unassign it
+      outputListEl.append(uhead);
+      for (const { f, i } of items) outputListEl.append(fixtureRow(f, i, true));   // nested, like a controller's fixtures
       continue;
     }
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
