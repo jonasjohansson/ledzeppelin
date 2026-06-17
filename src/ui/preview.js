@@ -426,6 +426,9 @@ export function createPreview(canvasEl, opts = {}) {
         const single = selected && (!selectedIds.has || selectedIds.size === 1);
         if (single) {
           for (const c of [c1, c2, c3, c4]) p.push(rectS(c[0] - 3 * ck, c[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
+          // Edge-midpoint handles (resize ONE axis): end, start, +thick, -thick.
+          const mid = (u, v) => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2];
+          for (const m of [mid(c2, c3), mid(c4, c1), mid(c1, c2), mid(c3, c4)]) p.push(rectS(m[0] - 3 * ck, m[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
           const e0 = eps[0], e1 = eps[eps.length - 1], cxN = (e0[0] + e1[0]) / 2, cyN = (e0[1] + e1[1]) / 2;
           const adx = e1[0] - e0[0], ady = e1[1] - e0[1], adl = Math.hypot(adx, ady) || 1;
           const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W, kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
@@ -521,7 +524,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   function cursorFor(hit) {
     if (!hit) return 'default';
     if (hit.rotate) return 'grab';                 // rotate knob
-    if (hit.scaleCorner != null || hit.groupHandle) return hit.cursor || 'nwse-resize';
+    if (hit.scaleCorner != null || hit.scaleEdge != null || hit.groupHandle) return hit.cursor || 'nwse-resize';
     if (hit.vertex != null || hit.seg != null) return 'move';   // body / vertex → move
     return 'default';
   }
@@ -570,6 +573,12 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const ccx = cxN * rw, ccy = cyN * rh;
         for (let c = 0; c < 4; c++) {
           if (Math.hypot(px - corners[c][0], py - corners[c][1]) <= vtxR) return { fxId: selId, scaleCorner: c, cursor: resizeCursor(corners[c][0] - ccx, corners[c][1] - ccy) };
+        }
+        // Edge midpoints (resize one axis): 0=end(+u), 1=start(−u), 2=+thick(+p), 3=−thick(−p).
+        const mid = (u, v) => [(corners[u][0] + corners[v][0]) / 2, (corners[u][1] + corners[v][1]) / 2];
+        const edges = [[mid(1, 2), 0], [mid(3, 0), 1], [mid(0, 1), 2], [mid(2, 3), 3]];
+        for (const [m, e] of edges) {
+          if (Math.hypot(px - m[0], py - m[1]) <= vtxR) return { fxId: selId, scaleEdge: e, cursor: resizeCursor(m[0] - ccx, m[1] - ccy) };
         }
       }
     }
@@ -655,6 +664,21 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const [su, sp] = sgn[(hit.scaleCorner + 2) % 4];     // opposite corner = anchor
       const anchor = { x: t.x + ux * su * hw + pxx * sp * hh, y: t.y + uy * su * hw + pyy * sp * hh };
       dragState = { kind: 'scale', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor };
+    } else if (hit.scaleEdge != null) {
+      // Resize ONE axis (width or thickness), keeping the OPPOSITE edge pinned.
+      const f = show.fixtures.find((x) => x.id === hit.fxId);
+      const t = f.input.transform || transformFromPoints(f.input.points, cv);
+      const a = (Number(t.rotation) || 0) * Math.PI / 180;
+      const ux = Math.cos(a), uy = Math.sin(a), pxx = -Math.sin(a), pyy = Math.cos(a);
+      const hw = (Number(t.w) || 0) / 2, hh = (Number(t.h) || 8) / 2;
+      const e = hit.scaleEdge;
+      if (e === 0 || e === 1) {                              // width edge → anchor = opposite END centre
+        const su = e === 0 ? -1 : 1;
+        dragState = { kind: 'scaleEdge', axis: 'u', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + ux * su * hw, y: t.y + uy * su * hw } };
+      } else {                                               // thickness edge → anchor = opposite SIDE centre
+        const sp = e === 2 ? -1 : 1;
+        dragState = { kind: 'scaleEdge', axis: 'p', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + pxx * sp * hh, y: t.y + pyy * sp * hh } };
+      }
     } else if (hit.vertex != null) {
       dragState = { kind: 'vertex', id: hit.fxId, index: hit.vertex };
     } else {
@@ -721,6 +745,21 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         y: anchor.y + uy * (du / 2) + pyy * (dp / 2), w, h,
       });
       hintText = `${Math.round(w)}×${Math.round(h)} px`;
+    } else if (dragState.kind === 'scaleEdge') {
+      // One-axis resize about the pinned opposite edge.
+      const { ux, uy, pxx, pyy, anchor, id, axis } = dragState;
+      let [cxp, cyp] = canvasPx(ev, dragState.cv);
+      if (snap) { const s = snap(cxp, cyp, id, [id]); cxp = s[0]; cyp = s[1]; }
+      const vx = cxp - anchor.x, vy = cyp - anchor.y;
+      if (axis === 'u') {
+        const du = vx * ux + vy * uy; const w = Math.max(MIN_W, Math.abs(du));
+        next = setFixtureTransform(next, id, { x: anchor.x + ux * (du / 2), y: anchor.y + uy * (du / 2), w });
+        hintText = `${Math.round(w)} px`;
+      } else {
+        const dp = vx * pxx + vy * pyy; const h = Math.max(MIN_H, Math.abs(dp));
+        next = setFixtureTransform(next, id, { x: anchor.x + pxx * (dp / 2), y: anchor.y + pyy * (dp / 2), h });
+        hintText = `${Math.round(h)} px`;
+      }
     } else if (dragState.kind === 'gscale') {
       // Directional scale of the selection about the pinned anchor. Per-axis factors
       // sx/sy (1 on an inactive axis); Shift locks the aspect ratio (uniform).
