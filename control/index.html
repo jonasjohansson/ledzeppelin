@@ -29,8 +29,9 @@
   header .dot{ width:9px; height:9px; border-radius:50%; background:var(--danger); flex:0 0 auto; }
   header .dot.on{ background:var(--accent); }
   header h1{ font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:400; margin:0; }
-  .empty{ color:var(--muted); text-align:center; padding:40px 16px; line-height:1.5; }
-  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:12px; }
+  .empty{ color:var(--muted); text-align:center; padding:24px 16px; line-height:1.5; }
+  /* Touch surface: keep comfortable padding/tap targets, but trim the inter-card gap. */
+  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:8px; }
   .layer-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .layer-name{ flex:1 1 auto; font-size:15px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2);
@@ -61,7 +62,7 @@
         border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
   input[type=range]::-moz-range-track{ height:10px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line-2); }
   input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
-  .section-label{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:18px 2px 8px; }
+  .section-label{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:14px 2px 8px; }
 </style>
 </head>
 <body>

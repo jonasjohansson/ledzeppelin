@@ -112,7 +112,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .tab {
   display: inline-flex; align-items: center;
   background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent;
-  padding: 0 18px; font: var(--fw-med) var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  padding: 0 var(--s5); font: var(--fw-med) var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase;
   cursor: pointer;
 }
 .tab:hover { color: var(--text); }
@@ -206,7 +206,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 
 /* Fixture chains (stagger) — ordered groups in the Output view. */
 .chains { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
-.chain-card { border: 1px solid var(--border-2); border-radius: var(--radius); padding: 7px; margin: 6px 0; background: var(--surface); }
+/* Flattened (no floating rounded card): a top hairline separates each chain, no
+   radius/outer-margin notches. */
+.chain-card { border: none; border-top: 1px solid var(--line); border-radius: 0; padding: var(--s3) 0 0; margin: 0; background: transparent; }
+.chain-card:first-child { border-top: none; padding-top: 0; }
 .chain-head { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
 .chain-name { color: var(--cyan); font-size: var(--fs-ctrl); flex: 1 1 auto; }
 .chain-fire { padding: 0 7px; line-height: var(--lh-ctrl); min-width: 0; color: var(--amber); border-color: var(--line); }
@@ -364,8 +367,8 @@ body.output-mode #deckbar button { pointer-events: auto; }
    green, independent of the theme accent). */
 .tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 7px; vertical-align: middle; }
 .tab-dot.on { background: #57c98a; }
-.ctrlpane-head { display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 8px 8px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--line); text-align: center; }
+.ctrlpane-head { display: flex; flex-direction: column; align-items: center; gap: var(--s3);
+  padding: 0 0 var(--s4); margin-bottom: var(--s4); border-bottom: 1px solid var(--line); text-align: center; }
 .ctrl-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: 0 0 auto; }
 .ctrl-status-dot.on { background: var(--accent); }
 /* Inverted, theme-merged QR: accent modules on a dark inset (no white card). Fills
@@ -377,7 +380,8 @@ body.output-mode #deckbar button { pointer-events: auto; }
 .ctrl-urlrow { display: flex; align-items: center; justify-content: center; gap: 7px; }
 .ctrl-url { font: var(--fs-body) var(--mono); color: var(--accent); text-decoration: none; word-break: break-all; }
 .ctrl-url:hover { color: var(--accent-text); }
-.ctrl-layer { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 8px; }
+/* Flattened: the exposed params sit directly in the pane (no floating card / gap). */
+.ctrl-layer { background: transparent; border: none; border-radius: 0; padding: 0; margin: 0; }
 .ctrl-layer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .ctrl-layer-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
 .ctrl-blk { flex: 0 0 auto; width: 26px; height: var(--ctrl-h); border-radius: var(--radius); border: 1px solid var(--line-2);
@@ -397,7 +401,7 @@ body.output-mode #deckbar button { pointer-events: auto; }
 /* A clip whose video file was lost on reload. */
 .clip-missing { position: absolute; left: 3px; top: 3px; font: var(--fs-micro) var(--mono); color: var(--danger);
   background: rgba(0,0,0,.6); padding: 1px 4px; border-radius: var(--radius-sm); }
-.ctrl-empty { color: var(--muted); text-align: center; padding: 30px 10px; }
+.ctrl-empty { color: var(--muted); text-align: center; padding: var(--s5) var(--s4); }
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;
   border-top: 1px solid var(--line); margin: var(--s3) calc(-1 * var(--s3)) calc(-1 * var(--s3));
