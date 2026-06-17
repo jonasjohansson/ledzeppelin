@@ -94,7 +94,9 @@ function uniformDecl(inp) {
 // #version 300 es harness (out `frag`, `in vec2 uv`). Single-pass; PASSES/persistent
 // buffers are a later phase.
 export function wrapISF(glsl, inputs = []) {
-  const decls = (inputs || []).map(uniformDecl).filter(Boolean).join('\n');
+  // `inputImage` is declared as a builtin below — skip it here to avoid a
+  // redefinition when a shader lists it as an INPUT (effects always do).
+  const decls = (inputs || []).filter((i) => i.NAME !== 'inputImage').map(uniformDecl).filter(Boolean).join('\n');
   return `#version 300 es
 precision highp float;
 precision highp int;

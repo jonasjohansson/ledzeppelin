@@ -14,7 +14,7 @@ import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, addISFClip,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, addISFClip, addISFEffect,
 } from './model/layers.js';
 import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
@@ -2390,8 +2390,18 @@ openISFInput.addEventListener('change', async () => {
     glsl: r.glsl, inputs: r.inputs, params,
     src: wrapISF(r.glsl, r.inputs),
   };
-  const layerId = (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
-  rebuild(addISFClip(show, layerId, isf));
+  if (r.type === 'effect') {
+    // A filter (samples inputImage) → add to the selected/active clip's chain.
+    const selId = layerPanel?.getSelectedClipId?.();
+    let layerId, clipId;
+    for (const L of layers) for (const c of (L.clips || [])) if (c.id === selId) { layerId = L.id; clipId = c.id; }
+    if (!clipId) { const L = layers.find((x) => x.activeClipId) || layers[0]; layerId = L.id; clipId = L.activeClipId || L.clips?.[0]?.id; }
+    if (!clipId) { window.alert('Add/select a clip to apply the ISF effect to.'); return; }
+    rebuild(addISFEffect(show, layerId, clipId, isf));
+  } else {
+    const layerId = (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
+    rebuild(addISFClip(show, layerId, isf));
+  }
   setSection('design'); layerPanel?.refresh?.();
 });
 

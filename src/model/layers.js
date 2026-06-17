@@ -615,6 +615,30 @@ export function playheadClip(clips, elapsedMs, loop = true) {
   return { clip: list[i], index: i, intoMs: dur[i] };
 }
 
+// An ISF EFFECT in a clip's chain: an object item { isf, params } (manifest effects
+// are plain string names). It samples the chain below via the shader's inputImage.
+export function makeISFEffect(isf) {
+  const params = {};
+  for (const p of isf.params || []) params[p.key] = p.default;
+  return { isf, params };
+}
+export function addISFEffect(show, layerId, clipId, isf) {
+  return updateClip(show, layerId, clipId, (clip) => ({
+    ...clip, effects: [...(clip.effects || []), makeISFEffect(isf)],
+  }));
+}
+// Set one param of the ISF effect at fxIndex (its params live on the effect item,
+// keyed by input NAME — distinct from manifest effects' prefixed clip.params).
+export function setClipEffectParam(show, layerId, clipId, fxIndex, key, value) {
+  return updateClip(show, layerId, clipId, (clip) => {
+    const effects = (clip.effects || []).slice();
+    const item = effects[fxIndex];
+    if (!item || !item.isf) return clip;
+    effects[fxIndex] = { ...item, params: { ...item.params, [key]: value } };
+    return { ...clip, effects };
+  });
+}
+
 // Append a clip effect and seed its default params (prefixed).
 export function addClipEffect(show, layerId, clipId, name) {
   return updateClip(show, layerId, clipId, (clip) => ({

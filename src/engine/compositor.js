@@ -223,8 +223,10 @@ export function makeCompositor(gl, w, h) {
   // Render an ISF generator clip (single-pass) into `dst`. Uploads the ISF builtins
   // (TIME/RENDERSIZE/TIMEDELTA/FRAMEINDEX) + each INPUT as a typed uniform. The
   // wrapped GLSL (clip.isf.src) is compiled once and cached by the ISF id.
-  function runISF(clip, dst, timeSec) {
-    const isf = clip.isf;
+  // Run an ISF shader (generator OR effect) into `dst`. `srcTex` is the chain input
+  // bound to ISF's `inputImage` (the prior clip output for an effect); a generator
+  // passes null → a 1×1 black inputImage so sampling stays defined.
+  function runISF(isf, params, dst, timeSec, srcTex) {
     const c = getProgram(isf.id, isf.src);
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo);
     gl.viewport(0, 0, w, h);
@@ -233,10 +235,10 @@ export function makeCompositor(gl, w, h) {
     const setI = (k, v) => { const l = loc(c, k); if (l !== null) gl.uniform1i(l, v); };
     setF('TIME', timeSec); setF('TIMEDELTA', 1 / 60); setI('FRAMEINDEX', frameEnv.frameIndex || 0);
     const uRS = loc(c, 'RENDERSIZE'); if (uRS !== null) gl.uniform2f(uRS, w, h);
-    const params = clip.params || {};
-    // inputImage (a generator has no chain input) → 1×1 black so sampling is defined.
+    params = params || {};
+    // inputImage = the chain input (effects) or 1×1 black (generators).
     const uIn = loc(c, 'inputImage');
-    if (uIn !== null) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, imageTexture('__black')); gl.uniform1i(uIn, 0); }
+    if (uIn !== null) { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, srcTex || imageTexture('__black')); gl.uniform1i(uIn, 0); }
     let unit = 1;   // texture units for the shader's own image inputs
     for (const inp of isf.inputs || []) {
       const l = loc(c, inp.NAME); if (l === null) continue;
@@ -267,7 +269,7 @@ export function makeCompositor(gl, w, h) {
 
     let cur = clipA, other = clipB;
     if (clip.isf) {
-      runISF(clip, cur, timeSec);   // ISF generator (custom shader)
+      runISF(clip.isf, clip.params, cur, timeSec, null);   // ISF generator (custom shader)
     } else if (clip.generator === 'video') {
       // Video clip: blit the runtime-uploaded video frame (from frameEnv) as the
       // base, instead of running a generator shader.
@@ -279,11 +281,16 @@ export function makeCompositor(gl, w, h) {
       if (!gen || gen.type !== 'generator') return false;
       runEntry(gen, clip.params, cur, null, timeSec, clip.id);
     }
-    (clip.effects || []).forEach((name, i) => {
-      const fx = getEntry(name);
-      if (!fx || fx.type !== 'effect') return;
-      runEntry(fx, clip.params, other, cur.tex, timeSec, clip.id + ':fx' + i);
-      const tmp = cur; cur = other; other = tmp;
+    (clip.effects || []).forEach((item, i) => {
+      let drew = false;
+      if (item && item.isf) {            // ISF effect: samples the chain via inputImage
+        runISF(item.isf, item.params, other, timeSec, cur.tex);
+        drew = true;
+      } else {                           // manifest effect (string name)
+        const fx = getEntry(item);
+        if (fx && fx.type === 'effect') { runEntry(fx, clip.params, other, cur.tex, timeSec, clip.id + ':fx' + i); drew = true; }
+      }
+      if (drew) { const tmp = cur; cur = other; other = tmp; }
     });
     // Place cur → hold applying the clip's transform + opacity. hold is never
     // part of the clip ping-pong, so no feedback loop. During a crossfade each

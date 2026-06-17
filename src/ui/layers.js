@@ -23,7 +23,7 @@ import {
 } from '../engine/shaders/manifest.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
-  setClipParam, addClipEffect, removeClipEffect, moveClipEffect,
+  setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
   setCompositionParam, mergeCompositionParams, setCompositionAnim,
@@ -1216,9 +1216,30 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return box;
   }
 
+  // An ISF effect block (effect item is an { isf, params } object). Its params are
+  // stored on the item (keyed by NAME) and edited via setClipEffectParam.
+  function isfEffectBlock(id, clip, fx, item) {
+    const block = el('div', { className: 'ly-fx ly-fx-clip' + (fxSel('clip', id, clip.id, fx) ? ' is-sel' : '') });
+    const head = el('div', { className: 'ly-fxhead', draggable: true }, [
+      el('span', { className: 'ly-fxname', textContent: `${fx + 1}. ${item.isf.name || 'ISF'}` }),
+    ]);
+    head.addEventListener('click', () => { selectedEffect = { scope: 'clip', layerId: id, clipId: clip.id, index: fx }; render(); });
+    head.addEventListener('dragstart', (e) => { drag = { kind: 'fx-clip', index: fx }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx'); });
+    head.addEventListener('dragend', () => { drag = null; });
+    head.append(fxMenu({ presetName: item.isf.name || 'ISF', onRemove: () => commit(removeClipEffect(show(), id, clip.id, fx)) }));
+    block.append(head);
+    for (const p of item.isf.params || []) {
+      if (!(p.type === 'float' || p.type === 'long' || p.type === 'bool' || p.type === 'color')) continue;
+      block.append(paramControl(p, item.params?.[p.key] ?? p.default,
+        (v) => commitLive(setClipEffectParam(show(), id, clip.id, fx, p.key, v))));
+    }
+    return block;
+  }
+
   // One clip effect block: a drag-to-reorder block with a "⋯" options menu.
   function clipEffectBlock(id, clip, fx, effects) {
     const name = effects[fx];
+    if (name && name.isf) return isfEffectBlock(id, clip, fx, name);
     const entry = getEntry(name);
     const block = el('div', { className: 'ly-fx ly-fx-clip' + (fxSel('clip', id, clip.id, fx) ? ' is-sel' : '') });
     makeDropTarget(block, (payload) => {
