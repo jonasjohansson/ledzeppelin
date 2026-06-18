@@ -15,3 +15,4 @@
 export { el, field as Field, selectInput as Select, shiftDown, coarseSnap } from '../dom.js';
 export { Slider } from './slider.js';
 export { Section, SEC_OPEN } from './section.js';
+export { NumInput, TextInput } from './field.js';

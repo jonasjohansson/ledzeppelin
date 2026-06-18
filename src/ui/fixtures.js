@@ -5,6 +5,7 @@ import { controllerColorMap } from '../model/chains.js';
 import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
+import { NumInput, TextInput } from './kit/field.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -31,39 +32,17 @@ export function saveShow(show) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(show)); } catch { /* quota */ }
 }
 
-const numInput = (value, onInput, step = 'any') => {
-  const i = el('input', { type: 'number', value: String(value ?? 0), step });
-  i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
-  return i;
-};
-
+// Input helpers now route through the kit (kit/field.js) so every input behaves
+// identically; these keep the local names/signatures the call sites already use.
+const numInput = (value, onInput, step = 'any') => NumInput(value, { onInput, step });
+const numInputCommit = (value, onCommit, step = 1) => NumInput(value, { onInput: onCommit, commit: 'release', step, min: 0 });
+const textInput = (value, onInput) => TextInput(value, { onInput });
+const textInputCommit = (value, onCommit) => TextInput(value, { onInput: onCommit, commit: 'release' });
 
 // Library / device spec slider. Same control as Design's, but commits on RELEASE
 // (not every drag tick) so the panel isn't rebuilt mid-drag. Thin wrapper over Slider.
 const sliderRow = (label, value, onCommit, min, max, step) =>
   Slider(label, value, { min, max, onInput: onCommit, step: step ?? ((max - min) <= 2 ? 0.01 : (max - min) <= 60 ? 0.1 : 1), commit: 'release' });
-
-// Commits on `change` (blur / Enter) — numeric twin of textInputCommit, for
-// detail-editor fields whose commit re-renders the panel.
-const numInputCommit = (value, onCommit, step = 1) => {
-  const i = el('input', { type: 'number', value: String(value ?? 0), step: String(step), min: '0' });
-  i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
-  return i;
-};
-
-const textInput = (value, onInput) => {
-  const i = el('input', { type: 'text', value: value ?? '' });
-  i.addEventListener('input', () => onInput(i.value));
-  return i;
-};
-
-// Commits on `change` (blur / Enter) — for detail-editor fields whose commit
-// re-renders the panel, so the input keeps focus while typing.
-const textInputCommit = (value, onCommit) => {
-  const i = el('input', { type: 'text', value: value ?? '' });
-  i.addEventListener('change', () => onCommit(i.value));
-  return i;
-};
 
 
 // Round to 2 decimals for editor display (density/length can be fractional).
