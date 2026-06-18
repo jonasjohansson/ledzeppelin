@@ -18,6 +18,8 @@ required:
 
 - **macOS** (Apple Silicon + Intel): notarized `.app`; unzip, drag to
   Applications, double-click.
+- **Windows** (64-bit): unzip, run `ledzeppelin.exe`, open `http://localhost:7070`.
+  Unsigned, so on first launch click "More info" then "Run anyway" past SmartScreen.
 - **Linux / Raspberry Pi** (64-bit): extract the tarball, run `./ledzeppelin`,
   open `http://localhost:7070`.
 
