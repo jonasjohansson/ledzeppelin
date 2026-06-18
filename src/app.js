@@ -1169,7 +1169,7 @@ function addInstance(typeId) {
 
 // Add a DMX fixture (default RGB par) at the canvas centre, patched to the selected
 // Art-Net controller (or the first one). It samples its centre point for colour.
-function addDmxFixture() {
+function addDmxFixture(profileId = 'rgb') {
   const next = structuredClone(show);
   let n = next.fixtures.length + 1, id;
   do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
@@ -1183,7 +1183,7 @@ function addDmxFixture() {
     id, typeId: 'dmx',
     output: { deviceId: dev?.id || '' },
     input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
-      dmx: { profileId: 'rgb', universe: dev?.universe ?? 0, address: 1, fixed: {} } },
+      dmx: { profileId, universe: dev?.universe ?? 0, address: 1, fixed: {} } },
   });
   selectedFixtureIds = new Set([id]); selectedDeviceId = null;
   if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
@@ -1198,18 +1198,23 @@ function addDmxFixture() {
 function addControls() {
   const wrap = oel('div', { className: 'output-tools' });
   const types = show.fixtureTypes || [];
-  const sel = oel('select', { title: 'fixture type to place (defined in the Inventory tab)' });
-  for (const t of types) {
-    // Don't re-append the px count when the type's NAME already states it —
-    // the default type is literally named "1.6m · 96px", so it rendered as the
-    // baffling "1.6m · 96px · 96px".
-    const label = /\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`;
-    sel.append(oel('option', { value: t.id, textContent: label }));
+  // ONE type picker for everything you can place: LED strips/matrices (Inventory
+  // definitions) AND DMX fixtures (profiles). A DMX entry's value is "dmx:<profileId>".
+  const sel = oel('select', { title: 'what to place — an LED strip/matrix or a DMX fixture' });
+  if (types.length) {
+    const g = oel('optgroup', { label: 'LED' });
+    for (const t of types) {
+      // Don't re-append the px count when the type's NAME already states it.
+      const label = /\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`;
+      g.append(oel('option', { value: t.id, textContent: label }));
+    }
+    sel.append(g);
   }
-  const addFx = oel('button', { className: 'fx-add', textContent: '+ fixture',
-    title: types.length ? 'place a fixture' : 'define a fixture type in the Inventory tab first',
-    onclick: () => { if (types.length) addInstance(sel.value); } });
-  addFx.disabled = !types.length;
+  const gd = oel('optgroup', { label: 'DMX' });
+  for (const p of DMX_PROFILES) gd.append(oel('option', { value: `dmx:${p.id}`, textContent: p.name }));
+  sel.append(gd);
+  const addFx = oel('button', { className: 'fx-add', textContent: '+ fixture', title: 'place the selected fixture',
+    onclick: () => { const v = sel.value; if (v.startsWith('dmx:')) addDmxFixture(v.slice(4)); else addInstance(v); } });
   // "+ controller" — create a controller right here (a generic one; edit its IP /
   // model / colour order below). New controllers appear as empty containers you drop onto.
   const addDev = oel('button', { className: 'fx-add', textContent: '+ controller', onclick: () => {
@@ -1224,10 +1229,8 @@ function addControls() {
   const daemonUp = !!bridge?.connected?.();
   const scanBtn = panel.scanButtonEl?.(renderOutput);
   if (scanBtn && !daemonUp) { scanBtn.disabled = true; scanBtn.title = 'start the daemon (npm start) to scan the network'; }
-  // "+ DMX" — place a traditional DMX fixture (par/generic) on an Art-Net controller.
-  const addDmx = oel('button', { className: 'fx-add', textContent: '+ DMX', title: 'place a DMX fixture (par / generic) on an Art-Net controller', onclick: () => addDmxFixture() });
-  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev, addDmx, ...(scanBtn ? [scanBtn] : [])]));
-  if (types.length) wrap.append(sel);
+  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev, ...(scanBtn ? [scanBtn] : [])]));
+  wrap.append(sel);   // the picker (LED + DMX) — always shown; DMX profiles are always available
   const scanRes = panel.scanResultsEl?.();
   if (scanRes) wrap.append(scanRes);
   return wrap;
