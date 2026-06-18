@@ -6,6 +6,7 @@ import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
+import { ListRow } from './kit/listrow.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -514,13 +515,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
 
     // Compact selectable row (master): name + a couple of badges. Clicking opens
     // its editor below. Reuses the Output tab's list styling.
-    const listRow = (label, badges, selected, onClick) => {
-      const row = el('div', { className: 'output-row' + (selected ? ' selected' : '') });
-      row.append(el('span', { textContent: label }));
-      for (const bdg of badges) row.append(el('span', { className: 'fx-badge', textContent: bdg }));
-      row.onclick = onClick;
-      return row;
-    };
+    const listRow = (label, badges, selected, onClick) => ListRow(label, { badges, selected, onClick });
 
     // Pixels routed to one device (hidden fixtures still occupy DDP address space).
     const devicePixels = (devId) => show.fixtures

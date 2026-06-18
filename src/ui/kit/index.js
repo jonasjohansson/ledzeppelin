@@ -17,3 +17,5 @@ export { Slider } from './slider.js';
 export { Section, SEC_OPEN } from './section.js';
 export { NumInput, TextInput } from './field.js';
 export { activateTabs } from './tabs.js';
+export { Button, IconButton } from './button.js';
+export { ListRow, Badge } from './listrow.js';
