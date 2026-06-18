@@ -23,6 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
@@ -846,6 +847,75 @@ function positionEditor(sel) {
   ]);
 }
 
+// Editor for a selected DMX fixture: profile + position, Art-Net patch (controller,
+// universe, address), and a slider per fixed channel — plus a channel-layout editor
+// for the Generic profile. Colour is sampled from the canvas at the fixture's centre.
+function dmxEditor(sel) {
+  const cfg = sel.input.dmx || {};
+  const channels = dmxChannelsOf(cfg);
+  const generic = cfg.profileId === 'generic' || !!(cfg.channels && cfg.channels.length);
+  const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
+  const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
+  const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
+  const patchFix = (mut) => { const n = structuredClone(show); const f = n.fixtures.find((x) => x.id === sel.id); if (f) mut(f); apply(n); };
+  const setDmx = (patch) => patchFix((f) => { f.input.dmx = { ...f.input.dmx, ...patch }; });
+  const sel2 = (opts, value, onChange) => {
+    const s = oel('select');
+    for (const o of opts) { const op = oel('option', { value: o.value, textContent: o.label }); if (o.value === value) op.selected = true; s.append(op); }
+    s.addEventListener('change', () => onChange(s.value));
+    return s;
+  };
+  const fld = (label, ctrl) => oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), ctrl]);
+  const liveChannels = () => [...((show.fixtures.find((x) => x.id === sel.id)?.input?.dmx?.channels) || channels)];
+
+  const out = oel('div', {}, [
+    Section('Fixture', 'dmx-fixture', (body) => {
+      body.append(oel('div', { className: 'output-grid' }, [
+        fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
+          if (id === 'generic') setDmx({ profileId: 'generic', channels: cfg.channels?.length ? cfg.channels : [{ kind: 'fixed', value: 0 }] });
+          else setDmx({ profileId: id, channels: undefined });
+        })),
+        txField('X', tf.x, (v) => setT({ x: v })),
+        txField('Y', tf.y, (v) => setT({ y: v })),
+      ]));
+    }),
+    Section('Patch', 'dmx-patch', (body) => {
+      const devs = [{ value: '', label: '— unassigned —' },
+        ...show.devices.map((d) => ({ value: d.id, label: (d.name || d.id) + (d.protocol === 'artnet' ? '' : ' (not Art-Net)') }))];
+      body.append(oel('div', { className: 'output-grid' }, [
+        fld('Controller', sel2(devs, sel.output?.deviceId || '', (id) => patchFix((f) => { f.output = { ...f.output, deviceId: id }; }))),
+        txField('Universe', cfg.universe ?? 0, (v) => setDmx({ universe: Math.max(0, Math.round(v)) })),
+        txField('Address', cfg.address ?? 1, (v) => setDmx({ address: Math.min(512, Math.max(1, Math.round(v))) })),
+        fld('Footprint', oel('span', { className: 'fx-readonly', textContent: `${channels.length} ch · U${cfg.universe ?? 0}.${cfg.address ?? 1}` })),
+      ]));
+    }),
+  ]);
+
+  // Channels: generic gets a kind-picker + remove per channel; any `fixed` channel
+  // gets a 0..255 slider. (A pure colour par has neither, so the section is skipped.)
+  const hasFixed = channels.some((c) => c.kind === 'fixed');
+  if (generic || hasFixed) {
+    out.append(Section('Channels', 'dmx-channels', (body) => {
+      channels.forEach((c, i) => {
+        if (generic) {
+          const kindSel = sel2(DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: k })), c.kind,
+            (k) => patchFix((f) => { const ch = liveChannels(); ch[i] = { ...ch[i], kind: k }; f.input.dmx = { ...f.input.dmx, channels: ch }; }));
+          const rm = oel('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
+            onclick: () => patchFix((f) => { const ch = liveChannels(); ch.splice(i, 1); f.input.dmx = { ...f.input.dmx, channels: ch.length ? ch : [{ kind: 'fixed', value: 0 }] }; }) });
+          const r = fld(`Ch ${i + 1}`, kindSel); r.append(rm); body.append(r);
+        }
+        if (c.kind === 'fixed') {
+          body.append(Slider(`Ch ${i + 1}`, cfg.fixed?.[i] ?? c.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
+            onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [i]: Math.round(v) } }) }));
+        }
+      });
+      if (generic) body.append(oel('button', { className: 'fx-add', textContent: '+ channel',
+        onclick: () => patchFix((f) => { f.input.dmx = { ...f.input.dmx, channels: [...liveChannels(), { kind: 'fixed', value: 0 }] }; }) }));
+    }));
+  }
+  return out;
+}
+
 // Like txField, but the value may be null = "mixed" across the multi-selection:
 // shows a "— mixed —" placeholder and commits only when the user types something.
 function txFieldMulti(label, value, onCommit) {
@@ -1097,6 +1167,31 @@ function addInstance(typeId) {
   panel.refresh(); renderOutput(); redrawOverlay();
 }
 
+// Add a DMX fixture (default RGB par) at the canvas centre, patched to the selected
+// Art-Net controller (or the first one). It samples its centre point for colour.
+function addDmxFixture() {
+  const next = structuredClone(show);
+  let n = next.fixtures.length + 1, id;
+  do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
+  const cv = next.composition?.canvas || { w: 1280, h: 720 };
+  const off = (next.fixtures.length % 8) * 16 - 56;
+  // DMX rides Art-Net; land it on the selected Art-Net controller, else the first one.
+  const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
+  const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
+  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
+  next.fixtures.push({
+    id, typeId: 'dmx',
+    output: { deviceId: dev?.id || '' },
+    input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
+      dmx: { profileId: 'rgb', universe: dev?.universe ?? 0, address: 1, fixed: {} } },
+  });
+  selectedFixtureIds = new Set([id]); selectedDeviceId = null;
+  if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
+  saveShow(next); rebuild(next); setOverlay(true);
+  setSection('output'); setOutputTab('fixtures');
+  panel.refresh(); renderOutput(); redrawOverlay();
+}
+
 // The "+ fixture" / "+ controller" / "scan" toolbar above the placement list — the
 // three actions sit side by side; the fixture-type picker (what "+ fixture" places)
 // is a full-width row below them, then any scan results. Definitions live in Inventory.
@@ -1129,7 +1224,9 @@ function addControls() {
   const daemonUp = !!bridge?.connected?.();
   const scanBtn = panel.scanButtonEl?.(renderOutput);
   if (scanBtn && !daemonUp) { scanBtn.disabled = true; scanBtn.title = 'start the daemon (npm start) to scan the network'; }
-  wrap.append(oel('div', { className: 'output-addrow' }, scanBtn ? [addFx, addDev, scanBtn] : [addFx, addDev]));
+  // "+ DMX" — place a traditional DMX fixture (par/generic) on an Art-Net controller.
+  const addDmx = oel('button', { className: 'fx-add', textContent: '+ DMX', title: 'place a DMX fixture (par / generic) on an Art-Net controller', onclick: () => addDmxFixture() });
+  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev, addDmx, ...(scanBtn ? [scanBtn] : [])]));
   if (types.length) wrap.append(sel);
   const scanRes = panel.scanResultsEl?.();
   if (scanRes) wrap.append(scanRes);
@@ -1169,7 +1266,7 @@ function updateInspector() {
       detail = panel.libraryDetailEl?.();
     } else if (selectedFixtureIds.size === 1) {
       const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
-      if (f) detail = positionEditor(f);
+      if (f) detail = isDmxFixture(f) ? dmxEditor(f) : positionEditor(f);
     } else if (selectedFixtureIds.size > 1) {
       // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
       const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
@@ -1227,7 +1324,9 @@ function renderOutput() {
     const label = typeName ? `${fixtureLabel(f, i)} ${typeName}` : fixtureLabel(f, i);
     row.append(oel('span', { textContent: label }));                            // flex-grow name
     if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
-    row.append(oel('span', { className: 'fx-badge', textContent: fixtureRange(f) }));
+    // DMX fixtures badge their Art-Net patch (U{universe}.{address}); pixel strips
+    // badge their pixel range.
+    row.append(oel('span', { className: 'fx-badge', textContent: isDmxFixture(f) ? `U${f.input.dmx.universe ?? 0}.${f.input.dmx.address ?? 1}` : fixtureRange(f) }));
     row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture (⌫ deletes it)
     return row;
   };

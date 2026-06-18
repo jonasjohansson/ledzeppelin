@@ -17,6 +17,8 @@ export const SEC_OPEN = new Set([
   'autopilot', 'layer-comp', 'layer-effects', 'comp-master', 'comp-fx',
   // Fixtures / Output tabs
   'devices', 'fixtures', 'position', 'chains', 'routing', 'identity',
+  // DMX fixture editor
+  'dmx-fixture', 'dmx-patch', 'dmx-channels',
 ]);
 
 // Section(title, key, build, onReset?, locked?, dirty?). When onReset is given, a
