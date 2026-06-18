@@ -19,6 +19,10 @@ export const DMX_PROFILES = [
 ];
 
 export const dmxProfile = (id) => DMX_PROFILES.find((p) => p.id === id) || null;
+// Built-ins + the show's saved custom profiles (show.dmxProfiles), for pickers/editors.
+export const allDmxProfiles = (custom = []) => [...DMX_PROFILES, ...(custom || [])];
+export const findDmxProfile = (id, custom = []) => allDmxProfiles(custom).find((p) => p.id === id) || null;
+export const isBuiltinProfile = (id) => DMX_PROFILES.some((p) => p.id === id);
 // How many DMX channels (slots) a profile occupies.
 export const dmxFootprint = (profile) => (profile?.channels?.length || 0);
 

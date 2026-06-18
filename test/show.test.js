@@ -45,3 +45,20 @@ test('syncDeviceTypes preserves artnet protocol + universe and sanitises bad val
   assert.equal(s.devices[1].protocol, 'ddp');     // unknown protocol collapses to ddp
   assert.equal(s.devices[1].universe, 0);         // universe clamped to int ≥ 0
 });
+
+test('fixture types carry normalised Parameters (extra DMX channels)', async () => {
+  const { syncFixtureTypes } = await import('../src/model/show.js');
+  const s = syncFixtureTypes({
+    ...emptyShow(),
+    fixtureTypes: [{ id: 'par', name: 'Par', cols: 1, rows: 1, colorFormat: 'RGB',
+      params: [{ name: 'Dimmer', kind: 'dimmer' }, { name: 'Strobe', kind: 'bogus', value: 300 }, {}] }],
+  });
+  const t = s.fixtureTypes.find((x) => x.id === 'par');
+  assert.equal(t.params.length, 3);
+  assert.deepEqual(t.params[0], { name: 'Dimmer', kind: 'dimmer', value: 0 });
+  assert.deepEqual(t.params[1], { name: 'Strobe', kind: 'fixed', value: 255 });   // bad kind→fixed, value clamped
+  assert.equal(t.params[2].name, 'Param 3');                                       // defaulted name
+  // A type declared without params normalises to an empty array.
+  const noP = syncFixtureTypes({ ...emptyShow(), fixtureTypes: [{ id: 'x', name: 'X', cols: 1, rows: 1 }] });
+  assert.deepEqual(noP.fixtureTypes.find((x) => x.id === 'x').params, []);
+});

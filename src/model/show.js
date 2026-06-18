@@ -97,11 +97,23 @@ export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribut
 // colorFormat is optional ('' = inherit the controller's colour order) — when set
 // (e.g. 'RGBW') it overrides per-fixture, so RGB and RGBW strips can share a
 // controller.
+// Extra DMX channels appended after a fixture's pixels (Resolume "parameters"):
+// dimmer/strobe/pan/etc. Each is { name, kind, value(0..255 default) }. `kind` is a
+// channel kind (see src/model/dmx.js); anything unknown falls back to 'fixed'.
+const DMX_PARAM_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'fixed'];
+const clamp8 = (v) => { const n = Math.round(Number(v) || 0); return n < 0 ? 0 : n > 255 ? 255 : n; };
+function normFixtureParams(params) {
+  return (Array.isArray(params) ? params : []).map((p, i) => ({
+    name: String(p?.name ?? `Param ${i + 1}`),
+    kind: DMX_PARAM_KINDS.includes(p?.kind) ? p.kind : 'fixed',
+    value: clamp8(p?.value),
+  }));
+}
 function normFixtureType(t) {
   const rows = Math.max(1, Math.round(Number(t.rows) || 1));
   const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
-  return { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows };
+  return { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows, params: normFixtureParams(t.params) };
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
