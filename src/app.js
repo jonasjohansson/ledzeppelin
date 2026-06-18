@@ -847,7 +847,7 @@ function positionEditor(sel) {
         // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
         // (the canvas arrow points at pixel 0).
         oel('div', { className: 'dir-btns out-transform' }, [
-          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ reverse',
+          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ Reverse direction',
             title: 'reverse the LED strip direction (which end is pixel 0)',
             onclick: () => apply(flipFixture(show, sel.id)) }),
         ]),
@@ -924,7 +924,7 @@ function multiPositionEditor(ids) {
           })(),
         ]),
         oel('div', { className: 'dir-btns out-transform' }, [
-          oel('button', { className: 'dir-btn' + (allRev ? ' on' : ''), textContent: '⇄ reverse',
+          oel('button', { className: 'dir-btn' + (allRev ? ' on' : ''), textContent: '⇄ Reverse direction',
             title: 'reverse each selected strip (which end is pixel 0)',
             onclick: () => applyAll((nx, id) => flipFixture(nx, id)) }),
         ]),
@@ -2057,12 +2057,11 @@ function updateStageInsets() {
     let right = 0;
     if (active) {
       const vw = window.innerWidth;
-      // The right edge of the canvas is the LEFT edge of the leftmost visible rail
-      // (#side-2 when a fixture is selected, otherwise #side) — so both rails carve
-      // out canvas space and it grows back when #side-2 collapses.
-      const s2 = document.getElementById('side-2');
-      const rail = (s2 && !s2.hidden ? s2 : document.getElementById('side'))?.getBoundingClientRect();
-      if (rail) right = Math.max(0, vw - rail.left);
+      // Only the MAIN inspector (#side) carves out canvas space. The #side-2 fixture
+      // rail floats OVER the canvas (like the deck), so opening/closing it never
+      // re-fits the composition.
+      const side = document.getElementById('side')?.getBoundingClientRect();
+      if (side) right = Math.max(0, vw - side.left);
     }
     root.style.setProperty('--inset-left', '0px');
     root.style.setProperty('--inset-right', right + 'px');
