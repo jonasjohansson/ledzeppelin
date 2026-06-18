@@ -792,6 +792,7 @@ function positionEditor(sel) {
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
   // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
+    outputKindRow(sel),   // LED strip ⇄ DMX fixture
     Section('Position', 'position', (body) => {
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
@@ -868,7 +869,8 @@ function dmxEditor(sel) {
   const fld = (label, ctrl) => oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), ctrl]);
   const liveChannels = () => [...((show.fixtures.find((x) => x.id === sel.id)?.input?.dmx?.channels) || channels)];
 
-  const out = oel('div', {}, [
+  const out = oel('div', { className: 'output-edit' }, [
+    outputKindRow(sel),   // DMX fixture ⇄ LED strip
     Section('Fixture', 'dmx-fixture', (body) => {
       body.append(oel('div', { className: 'output-grid' }, [
         fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
@@ -1190,6 +1192,41 @@ function addDmxFixture(profileId = 'rgb') {
   saveShow(next); rebuild(next); setOverlay(true);
   setSection('output'); setOutputTab('fixtures');
   panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+// Switch a fixture between LED-strip output (pixels) and DMX output (a channel
+// profile). Keeps its position; just swaps how it's sampled + sent.
+function convertFixture(fxId, kind) {
+  const next = structuredClone(show);
+  const f = next.fixtures.find((x) => x.id === fxId);
+  if (!f) return;
+  if (kind === 'dmx') {
+    const dev = next.devices.find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
+      || next.devices.find((d) => d.protocol === 'artnet');
+    f.input = { ...f.input, mode: 'dmx', dmx: { profileId: 'rgb', universe: dev?.universe ?? 0, address: 1, fixed: {} } };
+  } else {
+    const { dmx, ...rest } = f.input || {};                 // drop the DMX config → back to a strip
+    const t = (next.fixtureTypes || [])[0];
+    if (t) f.typeId = t.id;
+    const px = f.output?.pixelCount || t?.pixelCount || 96;
+    f.output = { ...f.output, pixelOffset: f.output?.pixelOffset ?? 0, pixelCount: px };
+    f.input = { ...rest, mode: 'bar', samples: px };
+  }
+  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+// Output-type selector for the fixture editor: LED strip (pixels) ⇄ DMX fixture
+// (channels). Changing it converts the selected fixture in place.
+function outputKindRow(sel) {
+  const isDmx = isDmxFixture(sel);
+  const s = oel('select', { title: 'output this fixture as an LED strip (pixels) or a DMX fixture (channels)' });
+  for (const o of [{ v: 'led', l: 'LED strip' }, { v: 'dmx', l: 'DMX fixture' }]) {
+    const op = oel('option', { value: o.v, textContent: o.l });
+    if ((o.v === 'dmx') === isDmx) op.selected = true;
+    s.append(op);
+  }
+  s.addEventListener('change', () => { if ((s.value === 'dmx') !== isDmx) convertFixture(sel.id, s.value); });
+  return oel('label', { className: 'fx-field fx-output-kind' }, [oel('span', { textContent: 'Output' }), s]);
 }
 
 // The "+ fixture" / "+ controller" / "scan" toolbar above the placement list — the
