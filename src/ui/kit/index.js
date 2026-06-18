@@ -16,3 +16,4 @@ export { el, field as Field, selectInput as Select, shiftDown, coarseSnap } from
 export { Slider } from './slider.js';
 export { Section, SEC_OPEN } from './section.js';
 export { NumInput, TextInput } from './field.js';
+export { activateTabs } from './tabs.js';

@@ -12,6 +12,7 @@ import { createCompositionPanel } from './ui/composition.js';
 import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
+import { activateTabs } from './ui/kit/tabs.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, addISFClip, addISFEffect,
@@ -1739,8 +1740,7 @@ const inspPanes = {
 };
 function setInspectorTab(which) {
   try { localStorage.setItem('lz.itab', which); } catch { /* private mode */ }   // restore on reload
-  inspTabsEl?.querySelectorAll('.subtab').forEach((x) =>
-    x.classList.toggle('subtab-active', x.dataset.itab === which));
+  activateTabs(inspTabsEl, 'itab', which);
   for (const [k, pane] of Object.entries(inspPanes)) if (pane) pane.hidden = k !== which;
 }
 inspTabsEl?.addEventListener('click', (ev) => {
@@ -1756,8 +1756,7 @@ const outputTabsEl = document.getElementById('io-tabs');
 function setOutputTab(which) {
   outputTab = which;
   try { localStorage.setItem('lz.otab', which); } catch { /* private mode */ }   // restore on reload
-  outputTabsEl?.querySelectorAll('.subtab').forEach((x) =>
-    x.classList.toggle('subtab-active', x.dataset.otab === which));
+  activateTabs(outputTabsEl, 'otab', which);
   // Three tabs: Fixtures = placement list · Devices = instances · Library = models.
   if (outputListEl) outputListEl.hidden = which !== 'fixtures';
   if (devicesDesignEl) devicesDesignEl.hidden = which !== 'devices';
@@ -1795,8 +1794,7 @@ controlPanel = createControlPanel({
 
 function setSection(which) {
   try { localStorage.setItem('lz.section', which); } catch { /* private mode */ }   // restore on reload
-  sectionSwitchEl?.querySelectorAll('.section-tab').forEach((x) =>
-    x.classList.toggle('section-active', x.dataset.section === which));
+  activateTabs(sectionSwitchEl, 'section', which, 'section-active');
   if (designPaneEl) designPaneEl.hidden = which !== 'design';
   if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
   if (systemPaneEl) systemPaneEl.hidden = which !== 'system';
@@ -1856,7 +1854,7 @@ document.getElementById('menu-mapping')?.addEventListener('click', openMappingsW
 function setSystemTab(which) {
   systemTab = VALID_SYSTABS.includes(which) ? which : 'settings';
   try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
-  document.querySelectorAll('#system-tabs .subtab').forEach((b) => b.classList.toggle('subtab-active', b.dataset.systab === systemTab));
+  activateTabs(document.getElementById('system-tabs'), 'systab', systemTab);
   if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
   if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
   if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
