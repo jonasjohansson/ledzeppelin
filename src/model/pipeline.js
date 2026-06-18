@@ -65,7 +65,10 @@ export function buildPipelineInputs(show) {
       // Colour format per segment: a fixture's own colorFormat WINS when set (so an
       // RGBW strip can sit on the same controller as RGB ones); otherwise inherit
       // the controller's colour order (the common case — its strips are wired alike).
-      segments.push({ start: devLocal, count: pts.length, colorOrder: f.colorFormat || d.colorOrder || f.colorOrder });
+      // 'NONE' is a channels-only (par) format with no pixel colour order — treat it
+      // as "inherit" here so a par toggled to pixel output still gets a valid order.
+      const fmt = f.colorFormat && f.colorFormat !== 'NONE' ? f.colorFormat : null;
+      segments.push({ start: devLocal, count: pts.length, colorOrder: fmt || d.colorOrder || f.colorOrder });
       devLocal += pts.length;
       cursor += pts.length;
     }

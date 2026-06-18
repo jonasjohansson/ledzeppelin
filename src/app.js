@@ -56,6 +56,13 @@ function defaultShow() {
   show.fixtureTypes = [
     { id: 'gen', name: 'Generic Fixture', ledsPerMeter: 96, meters: 1, pixelCount: 96, colorOrder: 'RGB' },
     genericType(96, 5), genericType(60, 5), genericType(60, 1), genericType(30, 5), genericType(30, 1),
+    // Built-in "pars" — 1×1 channel layouts (a fixture is just its channel layout).
+    // Placed as DMX output; their channels = Color Format + Parameters. Edit/clone
+    // them like any definition in the Inventory.
+    { id: 'par_rgb', name: 'RGB Par', cols: 1, rows: 1, colorFormat: 'RGB' },
+    { id: 'par_rgbw', name: 'RGBW Par', cols: 1, rows: 1, colorFormat: 'RGBW' },
+    { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] },
+    { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] },
   ];
   // One placed fixture (the Generic Fixture) wired to Controller 1 — a thin upright
   // strip in the middle of the canvas (Width 10 × Height 96, rotation 0).
@@ -1137,6 +1144,25 @@ function addInstance(typeId) {
   // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
+  // A 1×1 type is a PAR/point fixture → output as a DMX channel-block (colour from
+  // its Color Format + its Parameters), patched to an Art-Net controller. Strips and
+  // matrices stream pixels. Either can be re-toggled via the fixture's Output kind.
+  if ((Number(t.cols) || 1) === 1 && (Number(t.rows) || 1) === 1) {
+    const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
+    const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
+    const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
+    next.fixtures.push({
+      id, typeId: t.id,
+      output: { deviceId: dev?.id || '' },
+      input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
+        dmx: { channels: fixtureTypeChannels(t), universe: dev?.universe ?? 0, address: 1, fixed: {} } },
+    });
+    selectedFixtureIds = new Set([id]); selectedDeviceId = null;
+    if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
+    saveShow(next); rebuild(next); setOverlay(true);
+    panel.refresh(); renderOutput(); redrawOverlay();
+    return;
+  }
   // A matrix (rows>1) drops as a RECTANGLE sized by its cols:rows aspect (≈16px
   // per cell, capped to 60% of the canvas). A strip drops as a thin upright bar.
   const isGrid = (Number(t.rows) || 1) > 1;
@@ -1166,31 +1192,6 @@ function addInstance(typeId) {
   // id if the fixture weren't in `show` yet (leaving it unselected, editor hidden).
   saveShow(next); rebuild(next);
   setOverlay(true);   // reveal the canvas overlay so the new strip is visible
-  panel.refresh(); renderOutput(); redrawOverlay();
-}
-
-// Add a DMX fixture (default RGB par) at the canvas centre, patched to the selected
-// Art-Net controller (or the first one). It samples its centre point for colour.
-function addDmxFixture(profileId = 'rgb') {
-  const next = structuredClone(show);
-  let n = next.fixtures.length + 1, id;
-  do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
-  const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  const off = (next.fixtures.length % 8) * 16 - 56;
-  // DMX rides Art-Net; land it on the selected Art-Net controller, else the first one.
-  const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
-  const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
-  const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
-  next.fixtures.push({
-    id, typeId: 'dmx',
-    output: { deviceId: dev?.id || '' },
-    input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
-      dmx: { profileId, universe: dev?.universe ?? 0, address: 1, fixed: {} } },
-  });
-  selectedFixtureIds = new Set([id]); selectedDeviceId = null;
-  if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
-  saveShow(next); rebuild(next); setOverlay(true);
-  setSection('output'); setOutputTab('fixtures');
   panel.refresh(); renderOutput(); redrawOverlay();
 }
 
@@ -1238,23 +1239,25 @@ function outputKindRow(sel) {
 function addControls() {
   const wrap = oel('div', { className: 'output-tools' });
   const types = show.fixtureTypes || [];
-  // ONE type picker for everything you can place: LED strips/matrices (Inventory
-  // definitions) AND DMX fixtures (profiles). A DMX entry's value is "dmx:<profileId>".
-  const sel = oel('select', { title: 'what to place — an LED strip/matrix or a DMX fixture' });
-  if (types.length) {
-    const g = oel('optgroup', { label: 'LED' });
-    for (const t of types) {
+  // ONE catalog: every fixture is an Inventory definition (a channel layout). Strips
+  // and matrices stream pixels; a 1×1 "par" outputs as a DMX channel-block. Grouped
+  // so the two read apart, but they are the same kind of thing (see Inventory).
+  const sel = oel('select', { title: 'what to place — a fixture definition from your Inventory' });
+  const isPar = (t) => (Number(t.cols) || 1) === 1 && (Number(t.rows) || 1) === 1;
+  const addToGroup = (label, list) => {
+    if (!list.length) return;
+    const g = oel('optgroup', { label });
+    for (const t of list) {
       // Don't re-append the px count when the type's NAME already states it.
-      const label = /\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`;
-      g.append(oel('option', { value: t.id, textContent: label }));
+      const lbl = isPar(t) ? t.name : (/\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`);
+      g.append(oel('option', { value: t.id, textContent: lbl }));
     }
     sel.append(g);
-  }
-  const gd = oel('optgroup', { label: 'DMX' });
-  for (const p of DMX_PROFILES) gd.append(oel('option', { value: `dmx:${p.id}`, textContent: p.name }));
-  sel.append(gd);
+  };
+  addToGroup('Strips & matrices', types.filter((t) => !isPar(t)));
+  addToGroup('Pars (DMX)', types.filter(isPar));
   const addFx = oel('button', { className: 'fx-add', textContent: '+ fixture', title: 'place the selected fixture',
-    onclick: () => { const v = sel.value; if (v.startsWith('dmx:')) addDmxFixture(v.slice(4)); else addInstance(v); } });
+    onclick: () => addInstance(sel.value) });
   // "+ controller" — create a controller right here (a generic one; edit its IP /
   // model / colour order below). New controllers appear as empty containers you drop onto.
   const addDev = oel('button', { className: 'fx-add', textContent: '+ controller', onclick: () => {

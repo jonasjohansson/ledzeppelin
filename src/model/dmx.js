@@ -44,10 +44,13 @@ const clamp8 = (v) => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v));
 // Each letter of a Color Format ('RGB', 'GRBW', 'RGBWA'…) is one colour channel.
 const FORMAT_KIND = { r: 'red', g: 'green', b: 'blue', w: 'white', a: 'amber' };
 
-// Ordered colour channels for a Color Format string; '' (inherit) defaults to RGB.
+// Ordered colour channels for a Color Format string; '' (inherit) defaults to RGB,
+// 'NONE' yields no colour channels (a params-only fixture, e.g. a Dimmer or Generic).
 export function colorFormatChannels(fmt) {
+  const s = String(fmt || '');
+  if (s.toUpperCase() === 'NONE') return [];
   const out = [];
-  for (const ch of String(fmt || '').toLowerCase()) {
+  for (const ch of s.toLowerCase()) {
     const k = FORMAT_KIND[ch];
     if (k) out.push({ kind: k });
   }

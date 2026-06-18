@@ -48,6 +48,13 @@ test('colorFormatChannels maps each letter to a colour channel', () => {
   assert.deepEqual(colorFormatChannels('RGBWA').map((c) => c.kind), ['red', 'green', 'blue', 'white', 'amber']);
   // '' (inherit from controller) defaults to plain RGB so a layout always has colour.
   assert.deepEqual(colorFormatChannels('').map((c) => c.kind), ['red', 'green', 'blue']);
+  // 'NONE' = a params-only fixture (dimmer/generic): no colour channels.
+  assert.deepEqual(colorFormatChannels('NONE'), []);
+});
+
+test('fixtureTypeChannels: a NONE (params-only) type is just its parameters', () => {
+  const dimmer = { colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] };
+  assert.deepEqual(fixtureTypeChannels(dimmer), [{ kind: 'dimmer' }]);
 });
 
 test('fixtureTypeChannels = colour channels then Parameters', () => {
