@@ -35,6 +35,34 @@ export const dmxChannelsOf = (cfg) =>
 
 const clamp8 = (v) => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v));
 
+// --- Unified fixtures: a fixture type's channel-block -------------------------
+// A fixture is a CHANNEL LAYOUT: a Color Format (its colour channels) plus optional
+// Parameters (extra channels). These helpers turn that unified type into the same
+// ordered channel list resolveDmxChannels/packDmxUniverses already consume, so a
+// fixture can be patched to a universe/address and output colour + params together.
+
+// Each letter of a Color Format ('RGB', 'GRBW', 'RGBWA'…) is one colour channel.
+const FORMAT_KIND = { r: 'red', g: 'green', b: 'blue', w: 'white', a: 'amber' };
+
+// Ordered colour channels for a Color Format string; '' (inherit) defaults to RGB.
+export function colorFormatChannels(fmt) {
+  const out = [];
+  for (const ch of String(fmt || '').toLowerCase()) {
+    const k = FORMAT_KIND[ch];
+    if (k) out.push({ kind: k });
+  }
+  return out.length ? out : [{ kind: 'red' }, { kind: 'green' }, { kind: 'blue' }];
+}
+
+// The full DMX channel-block for a unified fixture type: its colour channels (from
+// the Color Format) followed by its Parameters. A `fixed` param keeps its default
+// value; colour-kind params (dimmer/red/…) are driven by the sampled canvas colour.
+export function fixtureTypeChannels(type) {
+  const params = (Array.isArray(type?.params) ? type.params : []).map((p) =>
+    (p.kind === 'fixed' ? { kind: 'fixed', value: clamp8(p.value ?? 0) } : { kind: p.kind }));
+  return [...colorFormatChannels(type?.colorFormat), ...params];
+}
+
 // Resolve a profile + a sampled RGB (0..255) into the fixture's DMX channel bytes.
 // `fixed` is an optional { channelIndex: value } override for `fixed` channels.
 //   white  → pulls the shared min(r,g,b) into the W channel (standard RGBW).

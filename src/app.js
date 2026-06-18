@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
@@ -1203,7 +1203,10 @@ function convertFixture(fxId, kind) {
   if (kind === 'dmx') {
     const dev = next.devices.find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
       || next.devices.find((d) => d.protocol === 'artnet');
-    f.input = { ...f.input, mode: 'dmx', dmx: { profileId: 'rgb', universe: dev?.universe ?? 0, address: 1, fixed: {} } };
+    // Unified model: the DMX channel-block comes from the fixture's TYPE — its Color
+    // Format (colour channels) followed by its Parameters — not a separate profile.
+    const t = (next.fixtureTypes || []).find((x) => x.id === f.typeId);
+    f.input = { ...f.input, mode: 'dmx', dmx: { channels: fixtureTypeChannels(t), universe: dev?.universe ?? 0, address: 1, fixed: {} } };
   } else {
     const { dmx, ...rest } = f.input || {};                 // drop the DMX config → back to a strip
     const t = (next.fixtureTypes || [])[0];

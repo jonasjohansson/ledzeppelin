@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels } from '../src/model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels,
+  colorFormatChannels, fixtureTypeChannels } from '../src/model/dmx.js';
 
 const prof = (id) => dmxProfile(id);
 
@@ -38,4 +39,30 @@ test('fixed channel uses its value, overridable', () => {
   const p = { channels: [{ kind: 'fixed', value: 200 }, { kind: 'red' }] };
   assert.deepEqual([...resolveDmxChannels(p, [50, 0, 0])], [200, 50]);
   assert.deepEqual([...resolveDmxChannels(p, [50, 0, 0], { 0: 10 })], [10, 50]);
+});
+
+// --- Unified type → channel-block --------------------------------------------
+test('colorFormatChannels maps each letter to a colour channel', () => {
+  assert.deepEqual(colorFormatChannels('RGB').map((c) => c.kind), ['red', 'green', 'blue']);
+  assert.deepEqual(colorFormatChannels('GRBW').map((c) => c.kind), ['green', 'red', 'blue', 'white']);
+  assert.deepEqual(colorFormatChannels('RGBWA').map((c) => c.kind), ['red', 'green', 'blue', 'white', 'amber']);
+  // '' (inherit from controller) defaults to plain RGB so a layout always has colour.
+  assert.deepEqual(colorFormatChannels('').map((c) => c.kind), ['red', 'green', 'blue']);
+});
+
+test('fixtureTypeChannels = colour channels then Parameters', () => {
+  const type = { colorFormat: 'RGBW', params: [
+    { name: 'Dimmer', kind: 'dimmer', value: 0 },
+    { name: 'Strobe', kind: 'fixed', value: 128 },
+  ] };
+  assert.deepEqual(fixtureTypeChannels(type), [
+    { kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'white' },
+    { kind: 'dimmer' }, { kind: 'fixed', value: 128 },
+  ]);
+  // A pure colour fixture (no params, inherited format) is just RGB.
+  assert.deepEqual(fixtureTypeChannels({}), [{ kind: 'red' }, { kind: 'green' }, { kind: 'blue' }]);
+  // The derived block resolves end-to-end: RGBW pull + dimmer + fixed default.
+  const out = [...resolveDmxChannels({ channels: fixtureTypeChannels(type) }, [100, 100, 80])];
+  // white=min(100,100,80)=80 (rgb→20,20,0); dimmer=max(20,20,0,80)=80, colour ×255/80.
+  assert.deepEqual(out, [64, 64, 0, 255, 80, 128]);
 });
