@@ -37,12 +37,18 @@ pure-pixel fixture with no params can still stream DDP (WLED) as today.
 
 ## Phases
 
-1. **Model** — `params` on fixture types (`makeFixtureType`/`normFixtureType`),
-   pure + tested. ← start here
-2. **Inventory editor** — a Parameters list on the fixture-type editor (Width ×
-   Height + Color Format already there).
-3. **Output** — a placed fixture emits pixels + params as a channel block at its
-   universe/address (generalise the DMX pack path); per-fixture param value sliders.
+1. ✅ **Model** — `params` on fixture types (`makeFixtureType`/`normFixtureType`),
+   pure + tested (show.test.js).
+2. ✅ **Inventory editor** — a Parameters list on the fixture-type editor (name +
+   kind + default-value for `fixed`, add/remove). `typeDetail` in `src/ui/fixtures.js`.
+3. ✅ **Output (channel-block path)** — `colorFormatChannels`/`fixtureTypeChannels`
+   in `dmx.js` turn a unified type into an ordered channel-block (colour channels
+   from the Color Format + params); `convertFixture` (LED → DMX) derives a fixture's
+   DMX channels from its TYPE, so params reach Art-Net output at a universe/address.
+   Per-fixture `fixed` sliders already exist in the DMX editor. NOTE: params are
+   carried on the DMX/channel-block output path only — appending params AFTER the
+   pixels in the contiguous DDP/Art-Net pixel STREAM (multi-pixel fixtures) is still
+   open (needs the per-fixture patch from Phase 4).
 4. **Patch** — universe + start address on fixtures (reconcile with the existing
    pixelOffset/DDP path).
 5. **Fold in** the separate DMX fixture/profile concept (a par = a 1×1 fixture type).
