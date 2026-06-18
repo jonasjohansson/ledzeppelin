@@ -257,9 +257,6 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
    fixture dragged onto the pasteboard MARGIN (outside the composition) is still
    hit-testable. Elsewhere it stays pass-through (empty clicks fall to body). */
 body.output-mode #stagewrap { pointer-events: auto; }
-/* Canvas popped out to its own window → the editor's stage is just a faint backdrop
-   (the live composite is in the pop-out); the popout toggle shows filled/on. */
-body.canvas-popped #stagewrap { opacity: .08; }
 /* The canvas region: solid (so empty output reads as "off"/black, distinct from
    the checker desk) with a thin frame marking the output bounds. */
 #stageinner {

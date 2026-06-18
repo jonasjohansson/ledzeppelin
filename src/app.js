@@ -2074,30 +2074,6 @@ window.addEventListener('resize', updateStageInsets);
 enableRailResize(document.getElementById('side'), { cssVar: '--side-w', field: 'sideW', onResize: updateStageInsets });
 enableRailResize(document.getElementById('side-2'), { cssVar: '--side2-w', field: 'side2W', onResize: updateStageInsets });
 
-// --- Canvas pop-out: the composite in its own window (e.g. a second monitor) ---
-// The editor keeps the single GL context and ships frames (see the render loop); this
-// just manages the window + the editor's "popped" layout state.
-let stageWin = null, stageReady = false;
-window.addEventListener('message', (e) => { if (e.data?.lzStageReady) stageReady = true; });
-function setPopped(on) {
-  document.body.classList.toggle('canvas-popped', on);
-  document.getElementById('popout-btn')?.classList.toggle('on', on);
-  updateStageInsets();
-}
-function openStagePopout() {
-  if (stageWin && !stageWin.closed) { stageWin.focus(); return; }
-  stageReady = false;
-  stageWin = window.open('stage/', 'lz-stage', 'width=960,height=600');
-  setPopped(!!stageWin);
-}
-function closeStagePopout() {
-  try { stageWin?.close(); } catch { /* already gone */ }
-  stageWin = null; stageReady = false; setPopped(false);
-}
-function toggleStagePopout() { (stageWin && !stageWin.closed) ? closeStagePopout() : openStagePopout(); }
-document.getElementById('popout-btn')?.addEventListener('click', toggleStagePopout);
-// Don't leave an orphan window when the editor tab closes.
-window.addEventListener('pagehide', () => { try { stageWin?.close(); } catch { /* n/a */ } });
 function loop(ts) {
   syncCompAspect();
   if (!t0) t0 = ts;
@@ -2211,16 +2187,6 @@ function loop(ts) {
     gl.bindTexture(gl.TEXTURE_2D, compositor.tex);
     gl.uniform1i(uScreenTex, 0);
     drawFullscreen(gl);
-    // Mirror the just-drawn composite into the broken-out stage window, if open.
-    // One GL context stays here; we ship a transferable ImageBitmap (fire-and-forget,
-    // so a slow frame just drops rather than stalling the loop).
-    if (stageWin && stageReady && !stageWin.closed) {
-      createImageBitmap(canvas).then((bmp) => {
-        try { stageWin.postMessage({ frame: bmp }, '*', [bmp]); } catch { bmp.close?.(); }
-      }).catch(() => {});
-    } else if (stageWin && stageWin.closed) {
-      closeStagePopout();   // user closed the window → revert the editor layout
-    }
   }
   frames++;
   if (ts - last > 500) {
