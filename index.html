@@ -18,10 +18,7 @@
      ui.css (offline-safe). Preload the active face. -->
 <link rel="preload" href="./fonts/SplineSansMono.woff2" as="font" type="font/woff2" crossorigin>
 <style>html,body{margin:0;background:#0a0a0a;color:#eee;font-size:11px}
-canvas{display:block}
-/* Status bar: a solid footer strip (application chrome). Mono face mirrors --ui-font;
-   inline because this <style> runs before ui.css defines the token. */
-#hud{display:flex;align-items:center;gap:12px;padding:0 4px;color:var(--muted);font:11px var(--mono,"Spline Sans Mono",ui-monospace,Menlo,monospace);font-variant-numeric:tabular-nums}</style>
+canvas{display:block}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
 <!-- Hidden file input for Settings › Open show. -->
@@ -29,7 +26,6 @@ canvas{display:block}
 <!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI
      toggles, the zoom pill (appended at runtime), then the live telemetry inline. -->
 <div id="corner-controls">
-  <div id="hud">booting…</div>
   <!-- View toggles on TOP; the menus (incl. Hide/Show UI) on the bottom row. -->
   <div class="corner-row" id="corner-toggles">
     <button id="overlay-toggle" title="show/hide fixtures on the canvas">fixtures</button>

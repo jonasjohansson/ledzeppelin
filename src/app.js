@@ -35,7 +35,6 @@ import { confirmDelete, confirmDeletesOn, setConfirmDeletes } from './ui/confirm
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
 const canvas = document.getElementById('stage');
-const hud = document.getElementById('hud');
 const gl = getGL(canvas);
 
 // Bake a small thumbnail (data URL) per source generator for the library + slots.
@@ -218,25 +217,6 @@ function recomputeHiddenSpans() {
     const f = show.fixtures.find((x) => x.id === s.id);
     return f && f.hidden;
   });
-}
-
-// Count (device, port) outputs whose summed pixels exceed the controller's
-// maxPerOutput. Over-capacity isn't invalid (the route still builds) — it just
-// underruns the hardware framerate, so it's a warning, not a load-blocking error.
-function overCapacityOutputs(s) {
-  let n = 0;
-  for (const d of s.devices || []) {
-    const cap = Number(d.maxPerOutput) || 0;
-    if (cap <= 0) continue;
-    const byPort = new Map();
-    for (const f of s.fixtures || []) {
-      if ((f.output?.deviceId || '') !== d.id) continue;
-      const p = f.output?.port ?? 1;
-      byPort.set(p, (byPort.get(p) || 0) + (f.pixelCount || 0));
-    }
-    for (const px of byPort.values()) if (px > cap) n++;
-  }
-  return n;
 }
 
 // Composition-only edit path (layers/effects/params): the compositor reads
@@ -2165,28 +2145,11 @@ function loop(ts) {
   }
   frames++;
   if (ts - last > 500) {
-    const fps = (frames * 1000 / (ts - last)).toFixed(0);
-    const cv = show.composition?.canvas || {};
-    const nFix = (show.fixtures || []).length;
     const live = bridge?.connected?.();
-    const err = bridge?.lastError?.();
-    // 3-state output status. Only alarm (amber) when output is actually INTENDED —
-    // i.e. a device has a real IP — but the daemon is unreachable. With no IPs set
-    // (e.g. a fresh Kagora import) it reads a calm "output idle", not a red error.
-    const configured = (show.devices || []).some((d) => d.ip && d.ip.trim());
-    const out = live ? '● output live' : configured ? '◐ output offline — start the daemon' : '○ output idle';
-    // Over-capacity outputs underrun the controller's framerate — surface a count
-    // here so it's visible without expanding the Output list (rows are badged ⚠).
-    const over = overCapacityOutputs(show);
-    hud.classList.toggle('hud-offline', (!live && configured) || over > 0);
-    hud.classList.toggle('hud-live', !!live);
     // Companion/daemon status (red offline / green live) on the Control subtab.
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
     // Daemon came up / went down → refresh the Output list so "scan" enables/disables.
     if (!!live !== lastLive) { lastLive = !!live; if (outputPaneEl && !outputPaneEl.hidden && outputTab === 'fixtures') renderOutput(); }
-    if (err && !live && configured) hud.title = err; else hud.removeAttribute('title');
-    hud.textContent = `v${VERSION}  ·  ${fps} fps  ·  ${cv.w || '?'}×${cv.h || '?'}  ·  ${nFix} fixture${nFix === 1 ? '' : 's'}  ·  ${out}`
-      + (over > 0 ? `  ·  ⚠ ${over} over cap` : '');
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);

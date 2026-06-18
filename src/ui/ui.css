@@ -83,9 +83,6 @@ input:focus-visible, summary:focus-visible, a:focus-visible {
   outline: 1px solid var(--line-2); outline-offset: 1px;
 }
 /* ═══════════ end shared backbone ═══════════ */
-/* Status bar tints amber when output isn't reaching the daemon (was a silent boolean). */
-#hud.hud-offline { color: var(--amber); }
-#hud.hud-live { color: var(--green, #7bd88f); }
 /* Keyboard cheat-sheet overlay (near-black card, hairline, mono keys). */
 #shortcuts-overlay { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.55); }
 #shortcuts-overlay[hidden] { display: none; }
@@ -454,8 +451,6 @@ body.gui-hidden #layout { display: none; }
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
 }
 .corner-row { display: inline-flex; align-items: center; gap: 6px; }
-/* Let the telemetry shrink/ellipsis first when space is tight (buttons keep size). */
-#hud { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
    the button / shift the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
@@ -471,12 +466,6 @@ body.gui-hidden #layout { display: none; }
 /* Capitalise the view toggles (fixtures/snap/grid/color/live) so they read like
    the title-cased menu row beneath them. */
 #corner-toggles button { text-transform: capitalize; }
-/* Telemetry is the TOP line of the stacked corner cluster (in flow now) — muted,
-   non-wrapping, grows rightward from the left edge. */
-#hud {
-  pointer-events: none; white-space: nowrap; justify-content: flex-start; gap: 12px;
-  font-size: var(--fs-micro); opacity: .9;
-}
 /* Active toggle / open menu = a clearly FILLED pill (not just an accent-tinted
    word): the fill IS the on/off signal, so the buttons read as toggles at a
    glance without any glyph or label cue. */
@@ -488,7 +477,6 @@ body.gui-hidden #layout { display: none; }
    toggle (in its usual spot) — everything else hides so the canvas is clear. */
 /* When UI is hidden, leave ONLY "Show UI" (in the bottom menus row): hide the
    telemetry, the toggles row, and every menu button except #g-hide. */
-body.gui-hidden #corner-controls #hud,
 body.gui-hidden #corner-controls #corner-toggles,
 body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none; }
 
