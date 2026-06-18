@@ -30,11 +30,8 @@ import { renderSourceThumbnails } from './engine/thumbs.js';
 import { armStartupRiff } from './ui/startup-riff.js';
 import { VERSION } from './version.js';
 import { confirmDelete, confirmDeletesOn, setConfirmDeletes } from './ui/confirm.js';
-import { applyLayout, enableRailResize, resetLayout } from './ui/dock.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
-
-applyLayout();   // restore persisted rail widths BEFORE first layout (no width flash)
 
 const canvas = document.getElementById('stage');
 const hud = document.getElementById('hud');
@@ -2069,9 +2066,6 @@ function updateStageInsets() {
   });
 }
 window.addEventListener('resize', updateStageInsets);
-// Make both right rails resizable by dragging their inner edge (widths persist).
-enableRailResize(document.getElementById('side'), { cssVar: '--side-w', field: 'sideW', onResize: updateStageInsets });
-enableRailResize(document.getElementById('side-2'), { cssVar: '--side2-w', field: 'side2W', onResize: updateStageInsets });
 
 function loop(ts) {
   syncCompAspect();
@@ -2402,8 +2396,6 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { sep: true },
     { label: 'Save composition…', act: saveCompositionToFile },
     { label: 'Load composition…', act: () => openCompInput.click() },
-    { sep: true },
-    { label: 'Reset layout', act: () => resetLayout(updateStageInsets) },
     { sep: true },
     // Feedback / bug reports go to GitHub Issues (prefilled with the app version).
     { label: 'Report a bug ↗', act: () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION} — `)}`, '_blank', 'noopener') },

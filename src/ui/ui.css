@@ -351,11 +351,10 @@ body.output-mode #deckbar button { pointer-events: auto; }
   margin-left: -1px; display: flex; flex-direction: column; overflow: hidden;
   position: relative; z-index: 2; padding: 0; pointer-events: auto; }
 #side-2[hidden] { display: none; }
-/* Rail resize grabber — a hairline-thin strip on the rail's inner (left) edge.
-   Invisible until hovered/dragged so it doesn't add a visual seam. */
-.rail-resize { position: absolute; left: -2px; top: 0; bottom: 0; width: 5px; z-index: 5;
-  cursor: ew-resize; touch-action: none; }
-.rail-resize:hover, .rail-resize.dragging { background: var(--accent-line); }
+/* A tinted seam separates the fixture rail from the main inspector when it's open
+   (no drag handle — just the divider). #side overlaps #side-2 by -1px, so the border
+   on #side paints over that seam. */
+#side-2:not([hidden]) + #side { border-left: 1px solid var(--accent-line); }
 /* No title bar — the selected fixture is already obvious on the canvas/list. A
    lighter surface than the main inspector so the rail reads as the "selected
    context" and feels connected to the selection rather than part of the inspector. */
