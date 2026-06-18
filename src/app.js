@@ -635,7 +635,6 @@ const outputListEl = document.getElementById('output-list');
 // Second sidebar (#side-2): the selected fixture/device/model editor rail.
 const side2El = document.getElementById('side-2');
 const fxBodyEl = document.getElementById('fxinsp-body');
-const fxTitleEl = document.getElementById('fxinsp-title');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
@@ -1204,8 +1203,7 @@ function updateInspector() {
   }
   fxBodyEl.textContent = '';
   if (detail) {
-    fxTitleEl.textContent = title;
-    fxBodyEl.append(detail);
+    fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
     side2El.hidden = false;
   } else {
     side2El.hidden = true;
