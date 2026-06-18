@@ -57,13 +57,17 @@ export function colorFormatChannels(fmt) {
   return out.length ? out : [{ kind: 'red' }, { kind: 'green' }, { kind: 'blue' }];
 }
 
-// The full DMX channel-block for a unified fixture type: its colour channels (from
-// the Color Format) followed by its Parameters. A `fixed` param keeps its default
-// value; colour-kind params (dimmer/red/…) are driven by the sampled canvas colour.
+// The full DMX channel-block for a unified fixture type: Parameters marked `before`
+// the pixel block, then the colour channels (from the Color Format), then the rest of
+// the Parameters. Order is exact — DMX addressing depends on it (e.g. a master Dimmer
+// + Strobe ahead of RGBWA, with UV after). A `fixed` param keeps its default value;
+// colour-kind params (dimmer/red/…) are driven by the sampled canvas colour.
 export function fixtureTypeChannels(type) {
-  const params = (Array.isArray(type?.params) ? type.params : []).map((p) =>
-    (p.kind === 'fixed' ? { kind: 'fixed', value: clamp8(p.value ?? 0) } : { kind: p.kind }));
-  return [...colorFormatChannels(type?.colorFormat), ...params];
+  const all = Array.isArray(type?.params) ? type.params : [];
+  const toCh = (p) => (p.kind === 'fixed' ? { kind: 'fixed', value: clamp8(p.value ?? 0) } : { kind: p.kind });
+  const before = all.filter((p) => p.before).map(toCh);
+  const after = all.filter((p) => !p.before).map(toCh);
+  return [...before, ...colorFormatChannels(type?.colorFormat), ...after];
 }
 
 // Resolve a profile + a sampled RGB (0..255) into the fixture's DMX channel bytes.

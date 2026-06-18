@@ -55,8 +55,8 @@ test('fixture types carry normalised Parameters (extra DMX channels)', async () 
   });
   const t = s.fixtureTypes.find((x) => x.id === 'par');
   assert.equal(t.params.length, 3);
-  assert.deepEqual(t.params[0], { name: 'Dimmer', kind: 'dimmer', value: 0 });
-  assert.deepEqual(t.params[1], { name: 'Strobe', kind: 'fixed', value: 255 });   // bad kind→fixed, value clamped
+  assert.deepEqual(t.params[0], { name: 'Dimmer', kind: 'dimmer', value: 0, before: false });
+  assert.deepEqual(t.params[1], { name: 'Strobe', kind: 'fixed', value: 255, before: false });   // bad kind→fixed, value clamped
   assert.equal(t.params[2].name, 'Param 3');                                       // defaulted name
   // A type declared without params normalises to an empty array.
   const noP = syncFixtureTypes({ ...emptyShow(), fixtureTypes: [{ id: 'x', name: 'X', cols: 1, rows: 1 }] });

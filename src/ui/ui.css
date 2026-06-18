@@ -629,6 +629,10 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-param-row > input { flex: 2 1 0; }
 .fx-param-row > select { flex: 1 1 0; }
 .fx-param-row > .fx-act { flex: 0 0 auto; }
+/* The pixel/colour block shown inline among the parameters (params order around it). */
+.fx-param-pixels { min-height: var(--row-h); display: flex; align-items: center; padding: 0 8px;
+  color: var(--muted); font: var(--fs-micro) var(--mono); letter-spacing: var(--ls-ui);
+  background: var(--panel-2); border-left: 2px solid var(--accent-line); }
 /* Placement list grouped by CONTROLLER → output. The controller header is STICKY
    so you always know which device you're scrolling in; the output sub-headers
    nest under it (indented, not sticky). A colour swatch on each ties to the

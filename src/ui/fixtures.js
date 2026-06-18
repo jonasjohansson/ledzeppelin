@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { DMX_CHANNEL_KINDS } from '../model/dmx.js';
+import { DMX_CHANNEL_KINDS, colorFormatChannels } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -467,21 +467,53 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       rows.push(el('div', { className: 'fx-pts', textContent: 'Wiring' }));
       rows.push(distributionPicker(t.distribution ?? 0, (x) => upd((nt) => { nt.distribution = x; })));
     }
-    // Parameters — extra DMX channels appended AFTER the pixels (Resolume model):
-    // dimmer/strobe/etc. Colour kinds are driven by the canvas; `fixed` carries a
-    // default value. This is what turns a definition into a full DMX fixture.
+    // Parameters — extra DMX channels around the pixel/colour block (Resolume model):
+    // dimmer/strobe/UV/etc. Colour kinds are driven by the canvas; `fixed` carries a
+    // default value. A param sits BEFORE or AFTER the pixels (↑/↓ moves it across the
+    // block); DMX channel ORDER follows this list top-to-bottom exactly.
     rows.push(el('div', { className: 'fx-pts', textContent: 'Parameters' }));
     const params = t.params || [];
     const pUpd = (i, patch) => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params[i] = { ...nt.params[i], ...patch }; });
-    params.forEach((p, i) => {
+    // Display order = before-params, then the PIXELS divider, then after-params.
+    const beforeIdx = [], afterIdx = [];
+    params.forEach((p, i) => (p.before ? beforeIdx : afterIdx).push(i));
+    const tokens = [...beforeIdx, 'PX', ...afterIdx];   // 'PX' = the pixel block slot
+    const lastPos = tokens.length - 1;
+    // Move a param up/down across the display sequence; crossing 'PX' flips before/after.
+    const moveParam = (idx, dir) => upd((nt) => {
+      const ps = (nt.params || []).slice();
+      const bi = [], ai = [];
+      ps.forEach((p, i) => (p.before ? bi : ai).push(i));
+      const tk = [...bi, 'PX', ...ai];
+      const pos = tk.indexOf(idx), tgt = pos + dir;
+      if (pos < 0 || tgt < 0 || tgt >= tk.length) return;
+      [tk[pos], tk[tgt]] = [tk[tgt], tk[pos]];
+      const out = []; let before = true;
+      for (const t2 of tk) { if (t2 === 'PX') { before = false; continue; } out.push({ ...ps[t2], before }); }
+      nt.params = out;
+    });
+    const colourKinds = colorFormatChannels(t.colorFormat);
+    tokens.forEach((tok, pos) => {
+      if (tok === 'PX') {
+        const lbl = colourKinds.length
+          ? `Pixels · ${t.colorFormat || 'RGB'} (${t.cols}×${t.rows}, ${colourKinds.length} ch)`
+          : 'Pixels · none';
+        rows.push(el('div', { className: 'fx-param-pixels', textContent: lbl }));
+        return;
+      }
+      const i = tok, p = params[i];
       const name = textInputCommit(p.name, (x) => pUpd(i, { name: x }));
       const kind = selectInput(DMX_CHANNEL_KINDS, p.kind, (x) => pUpd(i, { kind: x }));
+      const up = el('button', { className: 'fx-act', textContent: '↑', title: 'move up', onclick: () => moveParam(i, -1) });
+      const down = el('button', { className: 'fx-act', textContent: '↓', title: 'move down', onclick: () => moveParam(i, +1) });
+      if (pos === 0) up.disabled = true;
+      if (pos === lastPos) down.disabled = true;
       const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
         onclick: () => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params.splice(i, 1); }) });
       const cells = [name, kind];
       // A `fixed` channel has a settable default; colour kinds come from the canvas.
       if (p.kind === 'fixed') cells.push(numInputCommit(p.value ?? 0, (x) => pUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
-      cells.push(rm);
+      cells.push(up, down, rm);
       rows.push(el('div', { className: 'fx-field fx-param-row' }, cells));
     });
     rows.push(el('button', { className: 'fx-add', textContent: '+ parameter',

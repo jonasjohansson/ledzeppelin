@@ -57,6 +57,21 @@ test('fixtureTypeChannels: a NONE (params-only) type is just its parameters', ()
   assert.deepEqual(fixtureTypeChannels(dimmer), [{ kind: 'dimmer' }]);
 });
 
+test('fixtureTypeChannels: params can sit BEFORE and AFTER the pixel block (8-ch spec)', () => {
+  // The exact Resolume 8-CH RGBWA par: Dimming, Strobe, [R G B W A], UV.
+  const par = { colorFormat: 'RGBWA', params: [
+    { name: 'Dimming', kind: 'fixed', value: 255, before: true },
+    { name: 'Strobe', kind: 'fixed', value: 0, before: true },
+    { name: 'UV', kind: 'fixed', value: 0, before: false },
+  ] };
+  assert.deepEqual(fixtureTypeChannels(par), [
+    { kind: 'fixed', value: 255 },   // 1 Dimming
+    { kind: 'fixed', value: 0 },     // 2 Strobe
+    { kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'white' }, { kind: 'amber' },  // 3-7
+    { kind: 'fixed', value: 0 },     // 8 UV
+  ]);
+});
+
 test('fixtureTypeChannels = colour channels then Parameters', () => {
   const type = { colorFormat: 'RGBW', params: [
     { name: 'Dimmer', kind: 'dimmer', value: 0 },

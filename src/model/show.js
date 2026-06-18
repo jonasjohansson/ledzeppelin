@@ -103,10 +103,14 @@ export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribut
 const DMX_PARAM_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'fixed'];
 const clamp8 = (v) => { const n = Math.round(Number(v) || 0); return n < 0 ? 0 : n > 255 ? 255 : n; };
 function normFixtureParams(params) {
+  // A param can sit BEFORE the pixel/colour block (e.g. a master Dimmer or Strobe
+  // ahead of the RGBWA channels) or after it (the default). Channel ORDER is what
+  // DMX addressing depends on, so this is preserved exactly.
   return (Array.isArray(params) ? params : []).map((p, i) => ({
     name: String(p?.name ?? `Param ${i + 1}`),
     kind: DMX_PARAM_KINDS.includes(p?.kind) ? p.kind : 'fixed',
     value: clamp8(p?.value),
+    before: !!p?.before,
   }));
 }
 function normFixtureType(t) {

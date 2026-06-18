@@ -61,8 +61,14 @@ function defaultShow() {
     // them like any definition in the Inventory.
     { id: 'par_rgb', name: 'RGB Par', cols: 1, rows: 1, colorFormat: 'RGB' },
     { id: 'par_rgbw', name: 'RGBW Par', cols: 1, rows: 1, colorFormat: 'RGBW' },
-    { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] },
-    { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] },
+    { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255, before: true }] },
+    { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255 }] },
+    // 8-CH RGBWA par (Resolume layout): Dimming, Strobe, [R G B W A], UV.
+    { id: 'par_rgbwa8', name: 'RGBWA Par (8ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
+      { name: 'Dimming', kind: 'fixed', value: 255, before: true },
+      { name: 'Strobe', kind: 'fixed', value: 0, before: true },
+      { name: 'UV', kind: 'fixed', value: 0, before: false },
+    ] },
   ];
   // One placed fixture (the Generic Fixture) wired to Controller 1 — a thin upright
   // strip in the middle of the canvas (Width 10 × Height 96, rotation 0).
