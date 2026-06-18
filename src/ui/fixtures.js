@@ -7,6 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
+import { DMX_CHANNEL_KINDS } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -465,6 +466,26 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       rows.push(el('div', { className: 'fx-pts', textContent: 'Wiring' }));
       rows.push(distributionPicker(t.distribution ?? 0, (x) => upd((nt) => { nt.distribution = x; })));
     }
+    // Parameters — extra DMX channels appended AFTER the pixels (Resolume model):
+    // dimmer/strobe/etc. Colour kinds are driven by the canvas; `fixed` carries a
+    // default value. This is what turns a definition into a full DMX fixture.
+    rows.push(el('div', { className: 'fx-pts', textContent: 'Parameters' }));
+    const params = t.params || [];
+    const pUpd = (i, patch) => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params[i] = { ...nt.params[i], ...patch }; });
+    params.forEach((p, i) => {
+      const name = textInputCommit(p.name, (x) => pUpd(i, { name: x }));
+      const kind = selectInput(DMX_CHANNEL_KINDS, p.kind, (x) => pUpd(i, { kind: x }));
+      const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
+        onclick: () => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params.splice(i, 1); }) });
+      const cells = [name, kind];
+      // A `fixed` channel has a settable default; colour kinds come from the canvas.
+      if (p.kind === 'fixed') cells.push(numInputCommit(p.value ?? 0, (x) => pUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
+      cells.push(rm);
+      rows.push(el('div', { className: 'fx-field fx-param-row' }, cells));
+    });
+    rows.push(el('button', { className: 'fx-add', textContent: '+ parameter',
+      onclick: () => upd((nt) => { nt.params = [...(nt.params || []), { name: `Param ${(nt.params?.length || 0) + 1}`, kind: 'fixed', value: 0 }]; }) }));
+
     // Physical size (optional) — only drives true-scale strip THICKNESS on the
     // canvas, and offers density×length as a convenience to set a strip's Width.
     const phys = el('details', { className: 'fx-advanced' });
