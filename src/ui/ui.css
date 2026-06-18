@@ -33,6 +33,8 @@
   --cyan:var(--accent);
   --readout:#d7dbe0;           /* numeric readouts — neutral (one step under --text) */
   --danger:#ff6b6b;
+  --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
+  --accent-dark:#07151f;       /* dark text/glyph ON an accent-filled surface */
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
      row and input shares ONE blue-tinted palette (was a second neutral-gray set
      that made identical controls look mismatched). */
@@ -42,7 +44,7 @@
   --border-2:var(--line);
   --glass:var(--panel);                   /* SOLID — panels are opaque, not floating glass */
   /* Spacing scale — tightened (slim, Resolume-dense). */
-  --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px;
+  --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px; --s6:8px;   /* --s6 fills the common 8px gap */
   /* Typography system — mono-forward: --sans aliases the one --ui-font face so
      the semantic chrome/data split survives if we ever re-introduce a true sans. */
   --sans: var(--ui-font);
@@ -367,7 +369,7 @@ body.output-mode #deckbar button { pointer-events: auto; }
 /* Daemon/companion status dot — red offline, green when running (a fixed status
    green, independent of the theme accent). */
 .tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); margin-left: 7px; vertical-align: middle; }
-.tab-dot.on { background: #57c98a; }
+.tab-dot.on { background: var(--success); }
 .ctrlpane-head { display: flex; flex-direction: column; align-items: center; gap: var(--s3);
   padding: 0 0 var(--s4); margin-bottom: var(--s4); border-bottom: 1px solid var(--line); text-align: center; }
 .ctrl-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: 0 0 auto; }
@@ -1107,7 +1109,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .deck-comp-titlewrap:hover .deck-comp-title { color: var(--accent-text); }
 .deck-comp-head.is-sel { background: var(--accent); }
-.deck-comp-head.is-sel .deck-comp-title { color: #07151f; }
+.deck-comp-head.is-sel .deck-comp-title { color: var(--accent-dark); }
 /* No horizontal row separators — there are no clip grids that need them. */
 .deck-layer.is-min .layer-head-box { flex-direction: column; gap: 0; padding: 0; justify-content: space-between; align-items: stretch; }
 .deck-layer.is-min .lh-body { padding: 4px 6px; }
@@ -1116,7 +1118,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   text-align: left; padding: 3px 7px; font-size: var(--fs-micro); font-weight: var(--fw-med);
   background: var(--surface-2); color: var(--text); border: none; border-top: 1px solid var(--line);
 }
-.deck-layer.is-min.is-sel .lh-name { background: var(--accent); color: #07151f; }
+.deck-layer.is-min.is-sel .lh-name { background: var(--accent); color: var(--accent-dark); }
 
 /* Multi-layer stack: flush rows, thin separators (flat Resolume grid). */
 /* Unlimited layers: the stack scrolls once it would exceed the viewport (the
@@ -1130,7 +1132,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   border-radius: 0; padding: 2px 4px; font: var(--fs-micro) var(--sans);
 }
 /* Selected layer (its inspector is open) = an accent NAME fill, matching clips. */
-.deck-layer.is-sel .lh-name { background: var(--accent); color: #07151f; }
+.deck-layer.is-sel .lh-name { background: var(--accent); color: var(--accent-dark); }
 .layer-head-box.drop-hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .layer-head-box {
   flex: 0 0 var(--layer-w); box-sizing: border-box; display: flex; flex-direction: column; gap: 0;
@@ -1234,7 +1236,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Same accent colour for both: SELECTED = a colour FILL on the label bar,
    LIVE = a colour OUTLINE around the cell (overlay so the thumbnail/label don't
    paint over it). A clip that's both shows the fill + the outline. */
-.clip-selected .clip-label-bar { background: var(--accent); color: #07151f; }
+.clip-selected .clip-label-bar { background: var(--accent); color: var(--accent-dark); }
 .clip-active::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
   box-shadow: inset 0 0 0 2px var(--accent); z-index: 2;
