@@ -4,7 +4,7 @@
 // the network is instant, so you always get fresh code (no stale-cache pain
 // during development), and the cache is purely an offline safety net. Live
 // daemon endpoints (/api/*) and the frame socket (/frames) are never cached.
-const VERSION = 'lz-v1';
+const VERSION = 'lz-v2';
 
 // Minimal app shell precached on install so the editor opens offline even on the
 // very first launch after install. Everything else (the rest of the ES modules,
@@ -55,9 +55,14 @@ self.addEventListener('fetch', (e) => {
     } catch {
       const cached = await caches.match(req);
       if (cached) return cached;
-      if (req.mode === 'navigate') {                       // offline page load → serve the app shell
-        const shell = await caches.match('./index.html');
-        if (shell) return shell;
+      if (req.mode === 'navigate') {
+        // Offline page load → serve the cached page for THIS route's own directory
+        // (so /mappings/ or /control/ never falls back to the MAIN editor shell, which
+        // looked like a broken editor stuck at "booting…"). Only the root falls back
+        // to index.html.
+        const dir = url.pathname.endsWith('/') ? url.pathname + 'index.html' : url.pathname;
+        const page = (dir !== '/index.html' && await caches.match(dir)) || await caches.match('./index.html');
+        if (page) return page;
       }
       throw new Error('offline and not cached');
     }
