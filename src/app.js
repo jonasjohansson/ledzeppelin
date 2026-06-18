@@ -1510,7 +1510,7 @@ document.addEventListener('pointerdown', (e) => {
   // #stagewrap (the whole stage incl. the pasteboard margin) is the drag surface
   // now — it does its own empty-click clear via the marquee, and must NOT be
   // double-cleared here or it would wipe a just-made off-canvas selection.
-  if (e.target.closest?.('#stagewrap, #side, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
+  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
   clearFixtureSelection();
 });
 
