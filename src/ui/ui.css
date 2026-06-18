@@ -159,16 +159,15 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .snap-toggle input { width: auto; accent-color: var(--accent); }
 .output-eye { padding: 0 6px; line-height: var(--lh-ctrl); font-size: var(--fs-body); color: var(--cyan); }
 .output-eye.off { color: var(--faint); }
+/* Full-bleed list rows: no outer border, no side margins, no rounded card — just a
+   1px hairline SEPARATOR between rows. The first row sits flush under the section
+   header (no doubled border between the group and its first item). */
 .output-row {
   display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0;
-  background: var(--panel-2); border: 1px solid var(--line); font-size: var(--fs-ctrl);
+  background: var(--panel-2); border: none; border-top: 1px solid var(--line);
+  font-size: var(--fs-ctrl); cursor: pointer;
 }
-/* Condensed list: rows TILE seamlessly — no gaps, no rounded-card notches; their
-   1px borders overlap into a single hairline. Round only the block's outer ends. */
-.output-row + .output-row { margin-top: -1px; }
-.output-row:first-child { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
-.output-row:last-child { border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
-.output-row { cursor: pointer; }
+.output-row:first-child { border-top: none; }
 .output-row span:first-of-type { flex: 1 1 auto; color: var(--text); }
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
    = faint, no-ip = hollow. Stays in the warm-mono palette (no green/blue). */
