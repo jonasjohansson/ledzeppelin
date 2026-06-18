@@ -50,7 +50,13 @@ pure-pixel fixture with no params can still stream DDP (WLED) as today.
    pixels in the contiguous DDP/Art-Net pixel STREAM (multi-pixel fixtures) is still
    open (needs the per-fixture patch from Phase 4).
 4. **Patch** — universe + start address on fixtures (reconcile with the existing
-   pixelOffset/DDP path).
-5. **Fold in** the separate DMX fixture/profile concept (a par = a 1×1 fixture type).
+   pixelOffset/DDP path). Still open. DMX fixtures already carry their own
+   universe/address; this phase is about per-fixture addressing on the PIXEL path.
+5. ✅ **Fold in** the separate DMX fixture/profile concept — a par is now a 1×1
+   fixture type. ONE Inventory catalog; the "+ fixture" picker lists it grouped
+   "Strips & matrices" / "Pars (DMX)". Color Format gained "None (channels only)"
+   for params-only fixtures; built-in pars seeded (RGB/RGBW/Dimmer+RGB/Dimmer);
+   placing a 1×1 type creates a DMX fixture (channels via `fixtureTypeChannels`).
+   `DMX_PROFILES` kept only for back-compat resolution of saved profile fixtures.
 
 Not yet: per-frame parameter automation (pan/tilt LFOs), sACN, GDTF/QLC+ import.
