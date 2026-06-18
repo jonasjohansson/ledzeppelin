@@ -351,15 +351,11 @@ body.output-mode #deckbar button { pointer-events: auto; }
   margin-left: -1px; display: flex; flex-direction: column; overflow: hidden;
   position: relative; z-index: 2; padding: 0; pointer-events: auto; }
 #side-2[hidden] { display: none; }
-/* A tinted seam separates the fixture rail from the main inspector when it's open
-   (no drag handle — just the divider). #side overlaps #side-2 by -1px, so the border
-   on #side paints over that seam. */
-#side-2:not([hidden]) + #side { border-left: 1px solid var(--accent-line); }
-/* No title bar — the selected fixture is already obvious on the canvas/list. A
-   lighter surface than the main inspector so the rail reads as the "selected
-   context" and feels connected to the selection rather than part of the inspector. */
-#fxinsp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3);
-  background: var(--hover); }
+/* No title bar — the selected fixture is already obvious on the canvas/list. The
+   rail is slightly TRANSLUCENT (it floats over the canvas) so it reads as a
+   transient "selected context" layer rather than part of the inspector. */
+#side-2 { background: color-mix(in srgb, var(--hover) 85%, transparent); backdrop-filter: blur(10px); }
+#fxinsp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); background: transparent; }
 
 /* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
    so content keeps the same side margin as the Design/Output panes. --- */
@@ -590,6 +586,11 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
+.fx-badge.out-over { color: var(--danger); border-color: var(--danger); }   /* output over capacity */
+/* Devices list = Inventory-style sections (one per controller). The title grows so
+   its pixel badge right-aligns; the header is a drop target + selects the controller. */
+.out-sec .insp-sec-title { flex: 1 1 auto; }
+.out-sec .insp-sec-head.is-sel { background: var(--accent-soft); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
    panel line through as hairline seams (no floating cells / unnecessary gaps). */

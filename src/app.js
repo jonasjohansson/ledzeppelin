@@ -21,7 +21,7 @@ import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
-import { chainOf, freePort, pruneChains, wireAfter, wireFirst, controllerColorMap } from './model/chains.js';
+import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
@@ -634,6 +634,7 @@ const side2El = document.getElementById('side-2');
 const fxBodyEl = document.getElementById('fxinsp-body');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
+let collapsedDevices = new Set();   // controller groups collapsed in the Devices list (empty = all open)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
@@ -1228,35 +1229,48 @@ function renderOutput() {
     el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
     return el;
   };
-  const fixtureRow = (f, i, nested) => {
-    const row = oel('div', { className: 'out-node out-fix' + (nested ? ' nested' : '') + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
+  // A fixture row — same chrome as the Inventory list rows (.output-row + boxed
+  // .fx-badge chips) so the two tabs read alike.
+  const fixtureRow = (f, i, outLabel) => {
+    const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
-    // Drag a fixture row onto a device / output header to assign it (the whole
-    // selection drags when this row is part of a multi-select).
+    // Drag a fixture row onto a device header to assign it (the whole selection drags
+    // when this row is part of a multi-select).
     row.draggable = true;
     row.addEventListener('dragstart', (e) => {
       dragFxIds = (selectedFixtureIds.has(f.id) && selectedFixtureIds.size > 1) ? [...selectedFixtureIds] : [f.id];
       e.dataTransfer.effectAllowed = 'move';
       try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
     });
-    // Label = the auto number ("#3") plus the fixture's TYPE name, so the row says
-    // what it is, not just its index.
     const typeName = (show.fixtureTypes || []).find((t) => t.id === f.typeId)?.name;
     const label = typeName ? `${fixtureLabel(f, i)} ${typeName}` : fixtureLabel(f, i);
-    const name = oel('span', { className: 'out-name', textContent: label });
-    const rng = oel('span', { className: 'out-badge', textContent: fixtureRange(f) });
+    row.append(oel('span', { textContent: label }));                            // flex-grow name
+    if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
+    row.append(oel('span', { className: 'fx-badge', textContent: fixtureRange(f) }));
     row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture (⌫ deletes it)
-    row.append(name, rng);
     return row;
   };
-  // GROUP the placement list by CONTROLLER → output. Two levels: a controller
-  // header (collapsible), and under it each output (a chain, in wiring order).
-  // Colour ties to the canvas — a base hue per controller, a tint per output.
-  const cmap = controllerColorMap(show);
-  // Controller-tint toggle (corner button): off ⇒ one neutral grey for all swatches.
-  const NEUTRAL = 'rgba(150,156,166,.85)';
-  const runColor = (d, p) => (controllerTint ? cmap.runColor(d, p) : NEUTRAL);
-  const deviceColor = (d) => (controllerTint ? cmap.deviceColor(d) : NEUTRAL);
+  // A collapsible controller group, styled exactly like the Inventory sections
+  // (▾ accent header + body). The triangle toggles; clicking the header selects the
+  // controller (or unassign group). Returns its parts so callers can wire drop-zones.
+  const devSection = (deviceId, title, badges, headClick) => {
+    const open = !collapsedDevices.has(deviceId);
+    const sec = oel('div', { className: 'insp-sec out-sec' + (open ? ' is-open' : '') });
+    const tri = oel('span', { className: 'insp-tri' });
+    tri.addEventListener('click', (e) => {
+      e.stopPropagation();
+      collapsedDevices.has(deviceId) ? collapsedDevices.delete(deviceId) : collapsedDevices.add(deviceId);
+      renderOutput();
+    });
+    const head = oel('div', { className: 'insp-sec-head' }, [tri, oel('span', { className: 'insp-sec-title', textContent: (title || '').toUpperCase() })]);
+    for (const b of (badges || [])) head.append(oel('span', { className: 'fx-badge', textContent: b }));
+    if (headClick) head.onclick = headClick;
+    const body = oel('div', { className: 'insp-sec-body' });
+    sec.append(head, body);
+    return { sec, head, body };
+  };
+  // GROUP the placement list by CONTROLLER → output, rendered as Inventory-style
+  // collapsible sections (one per controller) with the fixtures as rows beneath.
   const devOrder = []; const devMap = new Map();
   fixtures.forEach((f, i) => {
     const did = f.output?.deviceId || '';
@@ -1275,7 +1289,6 @@ function renderOutput() {
   // Always show an "Unassigned" container, even when empty — it's a persistent drop
   // target: drag a fixture onto it to UNASSIGN it (deviceId '').
   if (!devMap.has('')) { const dg = { deviceId: '', groups: [], gmap: new Map() }; devMap.set('', dg); devOrder.push(dg); }
-  const swatch = (color) => { const s = oel('span', { className: 'out-swatch' }); s.style.background = color; return s; };
   // Controllers first; the Unassigned holding group sits LAST (the place strips drop
   // out to, below the real rig).
   devOrder.sort((a, b) => (a.deviceId === '' ? 1 : 0) - (b.deviceId === '' ? 1 : 0));
@@ -1284,58 +1297,29 @@ function renderOutput() {
   outputListEl.append(addControls());
 
   for (const dg of devOrder) {
-    // UNASSIGNED fixtures get a device-style group (a neutral swatch + "Unassigned"
-    // header) that's a drop target — drop here to unassign — with its fixtures
-    // nested beneath, exactly like a controller's.
+    // UNASSIGNED — a section that's also a drop target: drop here to unassign.
     if (!dg.deviceId) {
       const items = dg.groups.flatMap((g) => g.items);
-      const uhead = oel('div', { className: 'out-node out-dev', title: `Unassigned · ${items.length} fixture${items.length === 1 ? '' : 's'}` }, [
-        oel('div', { className: 'out-node-main' }, [
-          oel('div', { className: 'out-name-row' }, [swatch(NEUTRAL), oel('span', { className: 'out-name', textContent: 'Unassigned' })]),
-        ]),
-        oel('span', { className: 'out-badge', textContent: `${items.length} fx` }),
-      ]);
-      dropZone(uhead, '', null);   // drop a fixture here → unassign it
-      outputListEl.append(uhead);
-      for (const { f, i } of items) outputListEl.append(fixtureRow(f, i, true));   // nested, like a controller's fixtures
+      const { sec, head, body } = devSection('', 'Unassigned', [`${items.length} fx`]);
+      dropZone(head, '', null);   // drop a fixture here → unassign it
+      for (const { f, i } of items) body.append(fixtureRow(f, i));
+      outputListEl.append(sec);
       continue;
     }
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
     const devName = gdev?.name || dg.deviceId;
-    const devFx = dg.groups.reduce((m, g) => m + g.items.length, 0);
     const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const devSelected = selectedDeviceId === dg.deviceId && !selectedFixtureIds.size;
-    // Controller node (MadMapper "Lumiverse" style): a colour swatch + the name, and
-    // the pixel load. No disclosure arrow (its fixtures always list beneath it) and
-    // no output-target sub-line — that detail lives in the editor when you click it.
-    const devMain = oel('div', { className: 'out-node-main' }, [
-      oel('div', { className: 'out-name-row' }, [swatch(deviceColor(dg.deviceId)), oel('span', { className: 'out-name', textContent: devName })]),
-    ]);
-    const dhead = oel('div', { className: 'out-node out-dev' + (devSelected ? ' selected' : ''), title: `${devName} · ${dg.groups.length} out · ${devFx} fx · ${devPx}px` },
-      [devMain, oel('span', { className: 'out-badge' + (devOver ? ' out-over' : ''), textContent: `${devPx}px${devOver ? ' ⚠' : ''}` })]);
-    dhead.onclick = () => selectDevice(dg.deviceId);   // click anywhere on the controller → edit it
-    dropZone(dhead, dg.deviceId, null);   // drop a fixture on a controller → assign it there
-    outputListEl.append(dhead);
-
-    const singleOut = dg.groups.length === 1;   // one output → skip the redundant "out N" sub-header
-    for (const g of dg.groups) {
-      if (singleOut) { for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i, true)); continue; }
-      const totalPx = g.items.reduce((m, it) => m + (it.f.pixelCount || 0), 0);
-      const over = gcap > 0 && totalPx > gcap;
-      const collapsed = !expandedGroups.has(g.key);
-      const ohead = oel('div', { className: 'out-node out-port', title: `${devName} · Output ${g.port}${g.items.length > 1 ? ' · chained' : ''}` }, [
-        oel('span', { className: 'out-tri' + (collapsed ? '' : ' open'), textContent: collapsed ? '▸' : '▾' }),
-        oel('span', { className: 'out-name', textContent: `out ${g.port}` }),
-        oel('span', { className: 'out-badge' + (over ? ' out-over' : ''), textContent: `${g.items.length} fx · ${over ? totalPx + '/' + gcap : totalPx}px${over ? ' ⚠' : ''}` }),
-      ]);
-      ohead.onclick = () => { expandedGroups.has(g.key) ? expandedGroups.delete(g.key) : expandedGroups.add(g.key); renderOutput(); };
-      dropZone(ohead, g.deviceId, g.port);   // drop a fixture on an output → assign it to that device + port
-      outputListEl.append(ohead);
-      if (collapsed) continue;
-      for (const { f, i } of g.items) outputListEl.append(fixtureRow(f, i, true));   // nested under its controller
-    }
+    const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
+      () => selectDevice(dg.deviceId));   // click the header → edit the controller
+    if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
+    if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
+    dropZone(head, dg.deviceId, null);   // drop a fixture on a controller → assign it there
+    // Fixtures as flat rows; a multi-output controller tags each row with its output.
+    const multiOut = dg.groups.length > 1;
+    for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null));
+    outputListEl.append(sec);
   }
 
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
