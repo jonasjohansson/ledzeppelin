@@ -467,6 +467,9 @@ body.gui-hidden #layout { display: none; }
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto; white-space: nowrap;   /* never shrink/wrap a glyph+label onto two lines */
 }
+/* Capitalise the view toggles (fixtures/snap/grid/color/live) so they read like
+   the title-cased menu row beneath them. */
+#corner-toggles button { text-transform: capitalize; }
 /* Telemetry is the TOP line of the stacked corner cluster (in flow now) — muted,
    non-wrapping, grows rightward from the left edge. */
 #hud {

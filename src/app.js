@@ -1032,7 +1032,7 @@ function chainStatusRow(sel) {
   // (can't drive more pixels on a single output → end of chain).
   const next = ch && ch.index < ch.members.length - 1 ? ch.members[ch.index + 1] : null;
   const toSel = oel('select');
-  toSel.append(oel('option', { value: '', textContent: full ? '— end (output full)' : '— end of chain' }));
+  toSel.append(oel('option', { value: '', textContent: full ? 'End (output full)' : 'End of chain' }));
   const candidates = show.fixtures.filter((f) => f.id !== sel.id);
   for (const f of candidates) toSel.append(oel('option', { value: f.id, textContent: tag(f.id) }));
   toSel.value = next || '';

@@ -15,7 +15,7 @@ const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
 // Per-FIXTURE colour FORMAT options: '' inherits the controller's order; the rest
 // pin this fixture's format, including RGBW variants (White = min(R,G,B) at output)
 // so RGB and RGBW strips can share one controller.
-const COLOR_FORMATS = [{ value: '', label: '(controller)' }, ...COLOR_ORDERS,
+const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
   'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB', 'RGBWA', 'RGBAW'];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 

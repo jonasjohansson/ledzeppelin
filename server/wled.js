@@ -98,11 +98,21 @@ export async function pushConfig(ip, outs = []) {
   }
 }
 
+// Real LAN interfaces only: skip CGNAT/VPN (100.64.0.0/10, e.g. Tailscale) and
+// link-local/APIPA (169.254.0.0/16). WLED never lives on those, and scanning a
+// VPN's /24 just doubles the time and finds nothing (the "scan does nothing" trap).
+function isLanAddress(addr) {
+  const [a, b] = addr.split('.').map(Number);
+  if (a === 169 && b === 254) return false;            // link-local / APIPA
+  if (a === 100 && b >= 64 && b <= 127) return false;  // 100.64/10 CGNAT (Tailscale et al.)
+  return true;
+}
+
 export async function scanSubnet({ timeoutMs = 1200, concurrency = 48 } = {}) {
   const bases = new Set();
   for (const list of Object.values(os.networkInterfaces() || {})) {
     for (const ni of list || []) {
-      if (ni.family === 'IPv4' && !ni.internal) {
+      if (ni.family === 'IPv4' && !ni.internal && isLanAddress(ni.address)) {
         const p = ni.address.split('.');
         if (p.length === 4) bases.add(`${p[0]}.${p[1]}.${p[2]}`);
       }
