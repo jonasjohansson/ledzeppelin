@@ -574,12 +574,12 @@ function selectFixture(fxId, ev, opts = {}) {
     // fixture keeps the group so it can be dragged together.)
     selectedFixtureIds = new Set([fxId]);
   }
-  // Picking a single fixture (not a shift multi-select / empty click) shows its
-  // editor in the #side-2 rail — in WHATEVER section you're in, so selecting on the
-  // canvas no longer yanks you to Output. (Keep the controller/group expanded so its
-  // row stays visible if/when you do look at the Output list.)
+  // Picking a single fixture (not a shift multi-select / empty click) jumps to Output
+  // › Fixtures, where its editor shows in the #side-2 rail (the rail is Output-only).
   if (fxId != null && !(ev && ev.shiftKey)) {
-    const sf = show.fixtures.find((f) => f.id === fxId);
+    setSection('output');
+    setOutputTab('fixtures');
+    const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
     if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
     panel.selectFixture?.(fxId);
   }
@@ -1174,32 +1174,30 @@ function confirmDeleteFixtures(ids) {
   return confirmDelete(msg);
 }
 
-// The editor DOCK at the bottom of the Output pane: shows the selected item's
-// properties — a fixture's position (Fixtures), a device's settings, or a model
-// (Inventory). It has a title bar (with a ▾ minimise toggle) above its body, and
-// hides entirely when nothing's selected / not in Output.
+// The #side-2 rail: shows the selected item's properties — a fixture's position
+// (Fixtures), a device's settings, or a model (Inventory). Output-mode only; hides
+// entirely when nothing's selected or when not in the Output section.
 function updateInspector() {
   if (!side2El) return;
-  let detail = null, title = '';
+  let detail = null;
+  // The #side-2 rail is an OUTPUT-mode feature — it only appears while patching, not
+  // while compositing in Design/System.
   const inOutput = outputPaneEl && !outputPaneEl.hidden;
-  // Inventory MODEL editor — only meaningful while the Output › Inventory tab is up.
-  if (inOutput && outputTab === 'library') {
-    detail = panel.libraryDetailEl?.();
-    const sel = panel.librarySelection?.();   // {kind:'Fixture'|'Controller', name}
-    title = sel ? `${sel.kind}: ${sel.name}` : 'Inventory item';
-  }
-  // A selected fixture / device shows its editor in ANY section, so you can keep
-  // the Design inspector up while tweaking the selected strip's geometry.
-  else if (selectedFixtureIds.size === 1) {
-    const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
-    if (f) { detail = positionEditor(f); const t = (show.fixtureTypes || []).find((x) => x.id === f.typeId)?.name; title = fixtureLabel(f, show.fixtures.indexOf(f)) + (t ? ` ${t}` : ''); }
-  } else if (selectedFixtureIds.size > 1) {
-    // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
-    const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
-    if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures selected`; }
-  } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
-    detail = panel.deviceDetailEl?.();
-    title = (show.devices.find((d) => d.id === selectedDeviceId)?.name) || selectedDeviceId;
+  if (inOutput) {
+    // Inventory MODEL editor when the Inventory tab is up; otherwise the selected
+    // fixture(s)/device editor.
+    if (outputTab === 'library') {
+      detail = panel.libraryDetailEl?.();
+    } else if (selectedFixtureIds.size === 1) {
+      const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
+      if (f) detail = positionEditor(f);
+    } else if (selectedFixtureIds.size > 1) {
+      // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
+      const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
+      if (ids.length > 1) detail = multiPositionEditor(ids);
+    } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
+      detail = panel.deviceDetailEl?.();
+    }
   }
   fxBodyEl.textContent = '';
   if (detail) {
