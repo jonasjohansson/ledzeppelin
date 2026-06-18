@@ -5,7 +5,7 @@
 
 const bus = new BroadcastChannel('lz-mappings');
 const $ = (id) => document.getElementById(id);
-const statusEl = $('status'), chipsEl = $('chips'), paramsEl = $('params');
+const paramsEl = $('params');
 
 // This window loads ui.css (which only carries the DEFAULT accent). Mirror the
 // editor's chosen accent (persisted in lz.accent) here — on load and live via the
@@ -71,27 +71,14 @@ const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
 bus.onmessage = (e) => {
   const m = e.data || {};
   lastBus = performance.now();
-  statusEl.textContent = 'connected';
   if (m.type === 'params') { params = m.data || []; renderParams(); }
-  else if (m.type === 'channels') { channels = m.data || {}; renderChips(); updateValues(); tickLearn(); }
+  else if (m.type === 'channels') { channels = m.data || {}; updateValues(); tickLearn(); }
   else if (m.type === 'midi') {
     const btn = $('enable-midi'), st = $('midi-status');
     btn.disabled = !!m.enabled; btn.textContent = m.enabled ? 'MIDI on ✓' : 'enable MIDI';
     st.textContent = m.enabled ? (m.inputs?.length ? m.inputs.join(', ') : 'no inputs') : '';
   }
 };
-setInterval(() => { if (performance.now() - lastBus > 1500) statusEl.textContent = 'editor closed?'; }, 1000);
-
-function renderChips() {
-  const names = Object.keys(channels).sort();
-  if (!names.length) { chipsEl.innerHTML = '<span class="chip-empty">touch a knob · press a key · send OSC</span>'; return; }
-  chipsEl.textContent = '';
-  for (const name of names) {
-    const chip = el('div', 'chip'); chip.append(el('span', 'chip-name', name));
-    const bar = el('div', 'chip-bar'); const fill = el('div', 'chip-fill'); fill.style.width = (clamp01(channels[name]) * 100) + '%';
-    bar.append(fill); chip.append(bar); chipsEl.append(chip);
-  }
-}
 
 // One MIDI/Key cell: armed prompt, bound channel + live bar + clear, or click-to-arm.
 function cell(p, slot) {
