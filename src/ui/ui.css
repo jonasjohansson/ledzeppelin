@@ -1046,6 +1046,14 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .fx-menu-label { font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 1px; text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .fx-menu-item { background: none; border: none; text-align: left; padding: 5px 8px; border-radius: 4px; font-size: var(--fs-body); color: var(--text); }
+/* "Control" publish tick — a real themed checkbox box (matches input[type=checkbox]),
+   not the tiny ☑ glyph it replaced. */
+.fx-menu-tick { display: flex; align-items: center; gap: 8px; }
+.fx-tick-box { width: 14px; height: 14px; flex: 0 0 auto; box-sizing: border-box; position: relative;
+  border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg); }
+.fx-menu-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
+.fx-menu-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 4px; top: 1px;
+  width: 3px; height: 7px; border: solid #06121b; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .fx-menu-danger { color: var(--danger); }
 .ly-rmfx { color: var(--danger); border-color: var(--line); }
 .ly-addfx { margin-top: 4px; }

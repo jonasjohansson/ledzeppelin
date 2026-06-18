@@ -257,12 +257,12 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
   // (Only for params that have a canonical address — i.e. everything routable.)
   if (oscAddress) {
     const on = remoteHook.has(oscAddress);
+    const box = el('span', { className: 'fx-tick-box' });   // themed checkbox (bigger than the ☑ glyph)
     menu.append(el('button', {
       className: 'fx-menu-item fx-menu-tick' + (on ? ' is-on' : ''),
-      textContent: `${on ? '☑' : '◻'} Control`,
       title: 'show this parameter on the Control surface',
       onclick: (e) => { e.stopPropagation(); close(); remoteHook.toggle(oscAddress); },
-    }));
+    }, [box, 'Control']));
   }
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {

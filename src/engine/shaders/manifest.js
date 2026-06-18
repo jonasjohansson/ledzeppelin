@@ -163,8 +163,11 @@ float ringAt(float prog, float r){
 }
 void main(){
   float r = radius(), sp = max(0.0001, speed), v = 0.0;
-  if (autoFire > 0.5) { v = ringAt(fract(uT * sp), r); }
-  else { for (int i = 0; i < 8; i++) { if (i >= uTrigCount) break; v = max(v, ringAt(uTrigs[i] * sp, r)); } }
+  if (autoFire > 0.5) v = ringAt(fract(uT * sp), r);
+  // Triggers ALWAYS fire — even with autoFire on — so the trigger button actually
+  // works (it used to sit in an else to autoFire, which swallowed every trigger).
+  // Each trigger injects a fresh ring expanding from the centre; brightest wins.
+  for (int i = 0; i < 8; i++) { if (i >= uTrigCount) break; v = max(v, ringAt(uTrigs[i] * sp, r)); }
   frag = vec4(vec3(v), 1.0);
 }`;
 
