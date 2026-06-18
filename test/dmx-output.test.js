@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
-import { dmxProfile } from '../src/model/dmx.js';
+import { dmxProfile, fixtureTypeChannels } from '../src/model/dmx.js';
 import { packDmxUniverses } from '../server/dmx-pack.js';
 
 const showWithDmx = () => ({
@@ -34,4 +34,16 @@ test('daemon: pack writes resolved channels at address-1 in the right universe',
   assert.equal(buf.length, 512);
   assert.deepEqual([buf[4], buf[5], buf[6]], [100, 50, 0]);  // address 5 → offset 4
   assert.equal(buf[0], 0);                                   // untouched channels stay 0
+});
+
+test('unified type → DMX bytes: colour channels + a dimmer + a fixed param', () => {
+  // A 1×1 RGB fixture type with a Dimmer param and a fixed param (value 200).
+  const channels = fixtureTypeChannels({ colorFormat: 'RGB',
+    params: [{ kind: 'dimmer', value: 0 }, { kind: 'fixed', value: 200 }] });
+  const dmx = [{ colourIndex: 0, universe: 1, address: 5, channels, fixed: {} }];
+  const u = packDmxUniverses(new Uint8Array([100, 50, 0]), dmx);
+  const buf = u.get(1);
+  // dimmer carries max(100)→100, colour normalises ×2.55 (255,127,0 — 50×2.55
+  // floats to 127.499…→127); fixed=200.
+  assert.deepEqual([buf[4], buf[5], buf[6], buf[7], buf[8]], [255, 127, 0, 100, 200]);
 });
