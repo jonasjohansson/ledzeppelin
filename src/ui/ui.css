@@ -502,7 +502,7 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .lh-tog {
   padding: 0; border-radius: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: var(--fs-ctrl); font-weight: var(--fw-bold); letter-spacing: var(--ls-ui);
+  font-size: var(--fs-ctrl); font-weight: var(--fw-med); letter-spacing: var(--ls-ui);
   color: var(--muted); background: var(--field-bg); border: 1px solid var(--line);
 }
 .lh-tog:hover { color: var(--text); background: var(--hover); }
