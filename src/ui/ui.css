@@ -423,7 +423,7 @@ body.output-mode #deckbar button { pointer-events: auto; }
 .section-tab {
   flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output = 50% each */
   border: none; border-radius: 0; padding: 4px 0; cursor: pointer;
-  font: var(--fw-med) var(--fs-ctrl) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  font: var(--fw-med) var(--fs-title) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .section-tab:hover { color: var(--muted); }
 .section-tab.section-active { color: var(--accent); }
