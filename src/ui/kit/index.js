@@ -19,3 +19,4 @@ export { NumInput, TextInput } from './field.js';
 export { activateTabs } from './tabs.js';
 export { Button, IconButton } from './button.js';
 export { ListRow, Badge } from './listrow.js';
+export { placePopover, dismissOnOutside } from './popover.js';

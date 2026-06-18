@@ -41,6 +41,7 @@ import { listPresets, savePreset, loadPreset, deletePreset } from '../model/pres
 import { Section } from './section.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
+import { placePopover, dismissOnOutside } from './kit/popover.js';
 import { confirmDelete } from './confirm.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
@@ -234,7 +235,8 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
 function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscAddress }) {
   const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
-  const close = () => { menu.hidden = true; };
+  let dismiss = null;
+  const close = () => { menu.hidden = true; if (dismiss) { dismiss(); dismiss = null; } };
   const cur = !animated ? 'basic'
     : isAudio ? (audioSource === 'composition' ? 'audio-composition' : 'audio-external')
     : isExternal ? 'external' : 'timeline';
@@ -271,12 +273,8 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
   });
   btn.onclick = (e) => {
     e.stopPropagation();
-    const opening = menu.hidden;
-    menu.hidden = !opening;
-    if (opening) setTimeout(() => {
-      const off = (ev) => { if (!wrap.contains(ev.target)) { close(); document.removeEventListener('click', off); } };
-      document.addEventListener('click', off);
-    }, 0);
+    if (menu.hidden) { menu.hidden = false; dismiss = dismissOnOutside(wrap, close); }
+    else close();
   };
   wrap.append(btn, menu);
   return wrap;
@@ -516,17 +514,15 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (names.length) {
       const pwrap = el('div', { className: 'fx-menu-wrap' });
       const menu = el('div', { className: 'fx-menu', hidden: true });
-      const close = () => { menu.hidden = true; };
+      let dismiss = null;
+      const close = () => { menu.hidden = true; if (dismiss) { dismiss(); dismiss = null; } };
       for (const n of names) menu.append(el('button', {
         className: 'fx-menu-item', textContent: n,
         onclick: (e) => { e.stopPropagation(); const p = loadPreset(kind, presetName, n); if (p) applyParams(p); close(); },
       }));
       const pbtn = act('▾', 'load preset', () => {
-        const opening = menu.hidden; menu.hidden = !opening;
-        if (opening) setTimeout(() => {
-          const off = (ev) => { if (!pwrap.contains(ev.target)) { close(); document.removeEventListener('click', off); } };
-          document.addEventListener('click', off);
-        }, 0);
+        if (menu.hidden) { menu.hidden = false; dismiss = dismissOnOutside(pwrap, close); }
+        else close();
       });
       pwrap.append(pbtn, menu);
       wrap.append(pwrap);
@@ -1292,14 +1288,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // Opened on demand from a "+" affordance: the empty clip slot offers SOURCES,
   // each Effects chain offers EFFECTS. Anchored to its trigger, click-out / Esc
   // dismisses. Sources show their rendered thumbnail (same as the old shelf).
-  let pickPop = null, pickOff = null;
+  let pickPop = null, pickDismiss = null;
   function closePicker() {
     if (!pickPop) return;
     pickPop.remove(); pickPop = null;
-    if (pickOff) { document.removeEventListener('click', pickOff, true); pickOff = null; }
-    document.removeEventListener('keydown', pickKey, true);
+    if (pickDismiss) { pickDismiss(); pickDismiss = null; }
   }
-  function pickKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closePicker(); } }
   // Source picker grouping (built-in generators) — uncategorised ones fall into "More".
   const SOURCE_CATEGORIES = [
     ['Basic', ['solid', 'gradient', 'line']],
@@ -1349,19 +1343,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     } else {
       pop.append(grid(effectNames()));
     }
-    document.body.append(pop);
-    // Anchor below the trigger, clamped to the viewport (flip up if no room).
-    const r = anchor.getBoundingClientRect();
-    const pw = pop.offsetWidth, ph = pop.offsetHeight;
-    let left = Math.min(r.left, window.innerWidth - 6 - pw);
-    let top = r.bottom + 4;
-    if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 4);
-    pop.style.left = Math.max(6, left) + 'px';
-    pop.style.top = top + 'px';
+    placePopover(pop, anchor);          // anchor + viewport-clamp (kit)
     pickPop = pop;
-    pickOff = (ev) => { if (pickPop && !pickPop.contains(ev.target)) closePicker(); };
-    setTimeout(() => document.addEventListener('click', pickOff, true), 0);
-    document.addEventListener('keydown', pickKey, true);
+    pickDismiss = dismissOnOutside(pop, closePicker);   // click-outside + Esc (kit)
   }
 
   // Pick a video file and add it as a new clip on `layerId` (or the active layer).
