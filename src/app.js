@@ -571,13 +571,12 @@ function selectFixture(fxId, ev, opts = {}) {
     // fixture keeps the group so it can be dragged together.)
     selectedFixtureIds = new Set([fxId]);
   }
-  // Picking a single fixture (not a shift multi-select / empty click) jumps
-  // straight to its editor — to the Output › Fixtures view, opened on that
-  // fixture — so selecting on the canvas or placement list shows its properties.
+  // Picking a single fixture (not a shift multi-select / empty click) shows its
+  // editor in the #side-2 rail — in WHATEVER section you're in, so selecting on the
+  // canvas no longer yanks you to Output. (Keep the controller/group expanded so its
+  // row stays visible if/when you do look at the Output list.)
   if (fxId != null && !(ev && ev.shiftKey)) {
-    setSection('output');
-    setOutputTab('fixtures');
-    const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
+    const sf = show.fixtures.find((f) => f.id === fxId);
     if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
     panel.selectFixture?.(fxId);
   }
@@ -630,10 +629,10 @@ if (previewCanvas) {
 const outputListEl = document.getElementById('output-list');
 // Editor dock at the BOTTOM of the Output pane: a bar (title + minimise) and a body
 // that holds the selected fixture/device editor. Collapsible.
-const outputEditorEl = document.getElementById('output-editor');
-const outputEditorBodyEl = document.getElementById('output-editor-body');
-const outputEditorTitleEl = document.getElementById('output-editor-title');
-const outputEditorBarEl = document.getElementById('output-editor-bar');
+// Second sidebar (#side-2): the selected fixture/device/model editor rail.
+const side2El = document.getElementById('side-2');
+const fxBodyEl = document.getElementById('fxinsp-body');
+const fxTitleEl = document.getElementById('fxinsp-title');
 let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
@@ -1178,45 +1177,39 @@ function confirmDeleteFixtures(ids) {
 // (Inventory). It has a title bar (with a ▾ minimise toggle) above its body, and
 // hides entirely when nothing's selected / not in Output.
 function updateInspector() {
-  if (!outputEditorEl) return;
+  if (!side2El) return;
   let detail = null, title = '';
-  if (outputPaneEl && !outputPaneEl.hidden) {
-    if (outputTab === 'library') {
-      detail = panel.libraryDetailEl?.();
-      const sel = panel.librarySelection?.();   // {kind:'Fixture'|'Controller', name}
-      title = sel ? `${sel.kind}: ${sel.name}` : 'Inventory item';
-    }
-    else {
-      // Merged Fixtures+Devices tab: one fixture selected → its position/patch
-      // editor; else a device selected → its settings editor; else nothing.
-      if (selectedFixtureIds.size === 1) {
-        const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
-        if (f) { detail = positionEditor(f); const t = (show.fixtureTypes || []).find((x) => x.id === f.typeId)?.name; title = fixtureLabel(f, show.fixtures.indexOf(f)) + (t ? ` ${t}` : ''); }
-      } else if (selectedFixtureIds.size > 1) {
-        // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
-        const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
-        if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures selected`; }
-      } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
-        detail = panel.deviceDetailEl?.();
-        title = (show.devices.find((d) => d.id === selectedDeviceId)?.name) || selectedDeviceId;
-      }
-    }
+  const inOutput = outputPaneEl && !outputPaneEl.hidden;
+  // Inventory MODEL editor — only meaningful while the Output › Inventory tab is up.
+  if (inOutput && outputTab === 'library') {
+    detail = panel.libraryDetailEl?.();
+    const sel = panel.librarySelection?.();   // {kind:'Fixture'|'Controller', name}
+    title = sel ? `${sel.kind}: ${sel.name}` : 'Inventory item';
   }
-  outputEditorBodyEl.textContent = '';
+  // A selected fixture / device shows its editor in ANY section, so you can keep
+  // the Design inspector up while tweaking the selected strip's geometry.
+  else if (selectedFixtureIds.size === 1) {
+    const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
+    if (f) { detail = positionEditor(f); const t = (show.fixtureTypes || []).find((x) => x.id === f.typeId)?.name; title = fixtureLabel(f, show.fixtures.indexOf(f)) + (t ? ` ${t}` : ''); }
+  } else if (selectedFixtureIds.size > 1) {
+    // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
+    const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
+    if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures selected`; }
+  } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
+    detail = panel.deviceDetailEl?.();
+    title = (show.devices.find((d) => d.id === selectedDeviceId)?.name) || selectedDeviceId;
+  }
+  fxBodyEl.textContent = '';
   if (detail) {
-    outputEditorTitleEl.textContent = title;
-    outputEditorBodyEl.append(detail);
-    outputEditorEl.hidden = false;
-    applyEditorHeight();
+    fxTitleEl.textContent = title;
+    fxBodyEl.append(detail);
+    side2El.hidden = false;
   } else {
-    outputEditorEl.hidden = true;
+    side2El.hidden = true;
   }
   updateStageInsets();
   updateAlignBtn();
 }
-// The editor dock AUTO-FITS its content (capped by CSS max-height) — it's not
-// drag-resizable; it just uses the space it needs. Clear any stale inline height.
-function applyEditorHeight() { if (outputEditorEl) outputEditorEl.style.height = ''; }
 
 function renderOutput() {
   updateInspector();
@@ -1834,7 +1827,7 @@ function setSection(which) {
   document.body.classList.toggle('output-mode', which === 'output');
   const leftEl = document.getElementById('left');
   if (leftEl) leftEl.hidden = false;
-  updateInspector();   // the editor column only shows in Output (and only when selected)
+  updateInspector();   // recompute the #side-2 rail (drops the Inventory editor when leaving Output)
   if (which === 'system' && systemTab === 'control') controlPanel.rebuild();
 }
 sectionSwitchEl?.addEventListener('click', (ev) => {
@@ -2065,8 +2058,12 @@ function updateStageInsets() {
     let right = 0;
     if (active) {
       const vw = window.innerWidth;
-      const side = document.getElementById('side')?.getBoundingClientRect();
-      if (side) right = Math.max(0, vw - side.left);
+      // The right edge of the canvas is the LEFT edge of the leftmost visible rail
+      // (#side-2 when a fixture is selected, otherwise #side) — so both rails carve
+      // out canvas space and it grows back when #side-2 collapses.
+      const s2 = document.getElementById('side-2');
+      const rail = (s2 && !s2.hidden ? s2 : document.getElementById('side'))?.getBoundingClientRect();
+      if (rail) right = Math.max(0, vw - rail.left);
     }
     root.style.setProperty('--inset-left', '0px');
     root.style.setProperty('--inset-right', right + 'px');

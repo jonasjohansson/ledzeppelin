@@ -54,6 +54,7 @@
      (no stray hardcoded px). Change one place, every consumer follows. */
   --radius:3px; --radius-sm:2px;
   --side-w:332px;    /* right panel (Design/Output/Control) width — shared so the HUD can dodge it */
+  --side2-w:300px;   /* second sidebar (selected fixture/device editor) width */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
   --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) */
@@ -343,19 +344,20 @@ body.output-mode #deckbar button { pointer-events: auto; }
   background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
   padding: var(--s3);
 }
-/* Editor DOCK: the selected fixture/device editor as a bottom window inside the
-   Output pane, below the list. Its bar is a CURTAIN — drag up/down to set the split;
-   drag to the bottom to all but hide it. Height is set inline by JS. */
-/* Auto-fits its content; capped so a huge inspector scrolls instead of taking the
-   whole pane. Not drag-resizable. */
-#output-editor { flex: 0 0 auto; min-height: 0; max-height: 55vh; display: flex; flex-direction: column;
-  border-top: 1px solid var(--line-2); background: var(--panel-2); }
-#output-editor[hidden] { display: none; }
-#output-editor-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-  padding: 5px var(--s3); user-select: none; background: var(--panel); }
-#output-editor-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+/* SECOND SIDEBAR (#side-2): the selected fixture/device/model editor as its own
+   rail, docked left of the main inspector. Tiles flush against #side via the -1px
+   seam; collapses (display:none) when nothing is selected so the canvas grows. */
+#side-2 { flex: 0 0 var(--side2-w, 300px); max-height: 100vh; align-self: stretch;
+  margin-left: -1px; display: flex; flex-direction: column; overflow: hidden;
+  position: relative; z-index: 2; padding: 0; pointer-events: auto; }
+#side-2[hidden] { display: none; }
+#fxinsp-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 5px var(--s3); user-select: none; background: var(--panel);
+  border-bottom: 1px solid var(--line); }
+#fxinsp-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
-#output-editor-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); }
+#fxinsp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3);
+  background: var(--panel-2); }
 
 /* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
    so content keeps the same side margin as the Design/Output panes. --- */

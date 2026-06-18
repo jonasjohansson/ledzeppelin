@@ -66,6 +66,14 @@ canvas{display:block}
     <section id="deckbar" class="panel"></section>
   </div>
 
+  <!-- SECOND SIDEBAR: the selected fixture/device/model editor, shown left of the
+       main inspector whenever something is selected — in ANY section — and collapsed
+       (canvas reclaims the width) when nothing is. -->
+  <aside id="side-2" class="panel" hidden>
+    <div id="fxinsp-bar"><span id="fxinsp-title"></span></div>
+    <div id="fxinsp-body"></div>
+  </aside>
+
   <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
        Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
        Devices routing. Only one section shows at a time (more canvas room). -->
@@ -111,16 +119,6 @@ canvas{display:block}
         <div id="devices-design"></div>
         <!-- Library tab: the catalog of models — controller types + fixture types. -->
         <div id="library-design"></div>
-      </div>
-      <!-- Editor dock: the selected fixture/device's editor as a bottom window,
-           below the list. Its bar is a CURTAIN — drag it up/down to set how much of
-           the panel the editor uses (drag to the bottom to all but hide it). Hidden
-           when nothing's selected. -->
-      <div id="output-editor" hidden>
-        <div id="output-editor-bar" title="drag to resize">
-          <span id="output-editor-title"></span>
-        </div>
-        <div id="output-editor-body"></div>
       </div>
     </div>
 
