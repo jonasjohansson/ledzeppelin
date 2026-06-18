@@ -39,6 +39,20 @@ export function pointsFromTransform(t, canvas) {
   ];
 }
 
+// Centre of a fixture in normalized 0..1 UV — a DMX fixture samples this single
+// spot (not a strip). Uses the points' midpoint when present, else the transform.
+export function fixtureCentreUV(f, canvas) {
+  const { w: W, h: H } = canvasOf(canvas);
+  const pts = f?.input?.points;
+  if (Array.isArray(pts) && pts.length) {
+    let sx = 0, sy = 0;
+    for (const p of pts) { sx += Number(p?.[0]) || 0; sy += Number(p?.[1]) || 0; }
+    return [sx / pts.length, sy / pts.length];
+  }
+  const t = f?.input?.transform;
+  return [(Number(t?.x) || 0) / W, (Number(t?.y) || 0) / H];
+}
+
 // Normalized endpoints → a pixel-space transform (migration / drag readback).
 export function transformFromPoints(points, canvas) {
   const { w: W, h: H } = canvasOf(canvas);

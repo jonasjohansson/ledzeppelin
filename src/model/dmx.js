@@ -22,6 +22,13 @@ export const dmxProfile = (id) => DMX_PROFILES.find((p) => p.id === id) || null;
 // How many DMX channels (slots) a profile occupies.
 export const dmxFootprint = (profile) => (profile?.channels?.length || 0);
 
+// A fixture is a DMX fixture when it carries a `dmx` config on its input.
+export const isDmxFixture = (f) => !!f?.input?.dmx;
+// The channel layout for a fixture's dmx config: inline `channels` win, else the
+// referenced built-in profile, else empty.
+export const dmxChannelsOf = (cfg) =>
+  (cfg?.channels?.length ? cfg.channels : dmxProfile(cfg?.profileId)?.channels) || [];
+
 const clamp8 = (v) => (v < 0 ? 0 : v > 255 ? 255 : Math.round(v));
 
 // Resolve a profile + a sampled RGB (0..255) into the fixture's DMX channel bytes.

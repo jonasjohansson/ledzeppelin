@@ -1,6 +1,7 @@
 import dgram from 'node:dgram';
 import { buildPackets } from './ddp.js';
 import { buildArtnetPackets, buildArtnetSync, nextSequence, ARTNET_PORT } from './artnet.js';
+import { packDmxUniverses } from './dmx-pack.js';
 import { buildLut, isIdentity } from './calibrate.js';
 const sock = dgram.createSocket('udp4');
 sock.on('error', (err) => console.error('[output] socket error', err.message));
@@ -88,36 +89,48 @@ export function sendFrame(rgb, devices) {
   for (const d of devices) {
     const until = suppressUntil.get(d.ip);
     if (until && until > now) continue;   // paused for a control op
+    const sends = [];   // a device can emit pixel strips AND/OR DMX fixtures
     const slice = rgb.subarray(d.byteStart, d.byteEnd);
-    if (!slice.length) continue;
-    const bytes = buildDeviceBytes(slice, d, deviceLut(d));   // reorder + gamma/brightness, one pass
-    let emit;
-    if (d.protocol === 'artnet') {
+    if (slice.length) {
+      const bytes = buildDeviceBytes(slice, d, deviceLut(d));   // reorder + gamma/brightness, one pass
+      if (d.protocol === 'artnet') {
+        const port = d.port ?? ARTNET_PORT;
+        const key = `${d.ip}:${port}`;
+        const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
+        artSeq.set(key, s);
+        // Stride for universe chunking: if every segment shares a format, break on
+        // whole pixels (RGBW→512B/univ, RGB→510B). With MIXED formats on one
+        // controller, fall back to byte-packed 512-channel universes (a pixel may
+        // straddle a boundary — patch the controller's per-universe channel counts).
+        const segs = d.segments?.length ? d.segments : [{ colorOrder: d.colorOrder }];
+        const strides = segs.map((sg) => formatStride(sg.colorOrder || d.colorOrder || 'RGB'));
+        const stride = strides.every((x) => x === strides[0]) ? strides[0] : 1;
+        const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s, stride });
+        sends.push(() => { for (const pkt of pkts) udpSend(pkt, port, d.ip); });   // pkt = [header, chunk] gather list
+        if (d.artnetSync) { syncPort = port; syncAfter = Math.max(syncAfter, Number(d.delayMs) || 0); }
+      } else {
+        const port = d.port ?? 4048;
+        const pkts = buildPackets(bytes, { sequence: seq });
+        sends.push(() => { for (const pkt of pkts) udpSend(pkt, port, d.ip); });
+      }
+    }
+    // DMX fixtures (Art-Net only): one ArtDmx per touched universe, each fixture's
+    // resolved channels written at its start address.
+    if (d.protocol === 'artnet' && d.dmx?.length) {
       const port = d.port ?? ARTNET_PORT;
       const key = `${d.ip}:${port}`;
-      const s = nextSequence(artSeq.get(key) ?? 0);   // per-device rolling 1..255
-      artSeq.set(key, s);
-      // Stride for universe chunking: if every segment shares a format, break on
-      // whole pixels (RGBW→512B/univ, RGB→510B). With MIXED formats on one
-      // controller, fall back to byte-packed 512-channel universes (a pixel may
-      // straddle a boundary — patch the controller's per-universe channel counts).
-      const segs = d.segments?.length ? d.segments : [{ colorOrder: d.colorOrder }];
-      const strides = segs.map((sg) => formatStride(sg.colorOrder || d.colorOrder || 'RGB'));
-      const stride = strides.every((x) => x === strides[0]) ? strides[0] : 1;
-      const pkts = buildArtnetPackets(bytes, { startUniverse: d.universe ?? 0, sequence: s, stride });
-      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };   // pkt = [header, chunk] gather list
-      // ArtSync is one BROADCAST after the WHOLE frame's ArtDmx (below) — never
-      // per-device (that latches one controller before the others get their frame,
-      // and the spec disallows unicast sync). Track that any device wants it, after
-      // the longest per-device send delay so the latch follows all the data.
+      const dpkts = [];
+      for (const [u, buf] of packDmxUniverses(rgb, d.dmx)) {
+        const s = nextSequence(artSeq.get(key) ?? 0); artSeq.set(key, s);
+        for (const pkt of buildArtnetPackets(buf, { startUniverse: u, sequence: s, stride: 4 })) dpkts.push(pkt);
+      }
+      sends.push(() => { for (const pkt of dpkts) udpSend(pkt, port, d.ip); });
       if (d.artnetSync) { syncPort = port; syncAfter = Math.max(syncAfter, Number(d.delayMs) || 0); }
-    } else {
-      const port = d.port ?? 4048;
-      const pkts = buildPackets(bytes, { sequence: seq });
-      emit = () => { for (const pkt of pkts) udpSend(pkt, port, d.ip); };
     }
+    if (!sends.length) continue;
     const delay = Number(d.delayMs) || 0;
-    if (delay > 0) setTimeout(emit, delay); else emit();
+    const fire = () => { for (const s of sends) s(); };
+    if (delay > 0) setTimeout(fire, delay); else fire();
   }
   // One broadcast ArtSync after every controller's ArtDmx → the whole rig latches
   // together (tear-free). Nodes match it to their last ArtDmx by source IP.

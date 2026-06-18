@@ -1,6 +1,8 @@
 import { samplePoints } from './sampling.js';
 import { chainOffset } from './chains.js';
 import { gridPoints, isGridFixture } from './grid.js';
+import { isDmxFixture, dmxChannelsOf } from './dmx.js';
+import { fixtureCentreUV } from './fixture-transform.js';
 
 // The normalized sample UVs for one fixture, in LED-index order. A matrix (grid)
 // fixture samples a cols×rows block in its wiring order; a strip resamples its
@@ -41,10 +43,11 @@ export function buildPipelineInputs(show) {
   let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
   for (const d of show.devices) {
-    const fs = show.fixtures
-      .filter((f) => f.output?.deviceId === d.id)
+    const mine = show.fixtures.filter((f) => f.output?.deviceId === d.id);
+    const fs = mine.filter((f) => !isDmxFixture(f))
       .sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
-    if (!fs.length) continue;
+    const dmxFs = mine.filter(isDmxFixture);
+    if (!fs.length && !dmxFs.length) continue;
 
     const globalBase = cursor;
     const segments = [];     // device-local pixel ranges, each with its colorOrder
@@ -66,6 +69,21 @@ export function buildPipelineInputs(show) {
       devLocal += pts.length;
       cursor += pts.length;
     }
+    const pixelEnd = cursor;   // the pixel slice ends here; DMX sample points come after
+
+    // DMX fixtures: each samples ONE canvas point (its centre); the daemon turns that
+    // colour + the profile into channel bytes at the fixture's universe/address.
+    const dmx = [];
+    for (const f of dmxFs) {
+      const [u, v] = fixtureCentreUV(f, canvas);
+      const [ox, oy] = chainOffset(show, f.id);
+      spans.push({ id: f.id, start: cursor, count: 1, hidden: !!f.hidden });
+      fixtureOrder.push(f);
+      uvs.push(u + ox, v + oy);
+      const cfg = f.input.dmx;
+      dmx.push({ colourIndex: cursor, universe: cfg.universe ?? 0, address: cfg.address ?? 1, channels: dmxChannelsOf(cfg), fixed: cfg.fixed || {} });
+      cursor += 1;
+    }
 
     route.push({
       ip: d.ip,
@@ -76,8 +94,9 @@ export function buildPipelineInputs(show) {
       artnetSync: !!d.artnetSync,   // OpSync after each frame's ArtDmx (tear-free)
       colorOrder: d.colorOrder,
       byteStart: globalBase * 3,
-      byteEnd: cursor * 3,
+      byteEnd: pixelEnd * 3,
       segments,
+      ...(dmx.length ? { dmx } : {}),
       // Output calibration applied daemon-side, BEFORE the LEDs (not the preview):
       // perceptual gamma + a max-brightness cap. Defaults are no-ops.
       gamma: d.gamma ?? 1,
