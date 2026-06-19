@@ -2,6 +2,7 @@ import { samplePoints } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
 import { gridPoints, isGridFixture } from '../model/grid.js';
 import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains.js';
+import { isDmxFixture } from '../model/dmx.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
   setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel,
@@ -394,6 +395,7 @@ export function createPreview(canvasEl, opts = {}) {
           continue;
         }
         const selected = isSelected(selectedIds, f.id);
+        const isDmx = isDmxFixture(f);   // point fixture (par): no direction arrow / rotate / chain
         const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
         // Only the SELECTED fixture gets the accent wash background; unselected ones
         // are outline-only (no coloured fill).
@@ -420,7 +422,7 @@ export function createPreview(canvasEl, opts = {}) {
         const ht = (thicknessOf(f, cv) / 2) * (Hh / (cv.h || Hh));
         const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
         p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="${bodyFill}" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
-        if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck));
+        if (!isDmx) { if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck)); }
         const cx = (ax + bx) / 2, cy = (ay + by) / 2;
         if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="${accCss(.3)}" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
         const single = selected && (!selectedIds.has || selectedIds.size === 1);
@@ -429,11 +431,13 @@ export function createPreview(canvasEl, opts = {}) {
           // Edge-midpoint handles (resize ONE axis): end, start, +thick, -thick.
           const mid = (u, v) => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2];
           for (const m of [mid(c2, c3), mid(c4, c1), mid(c1, c2), mid(c3, c4)]) p.push(rectS(m[0] - 3 * ck, m[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.5 * ck));
-          const e0 = eps[0], e1 = eps[eps.length - 1], cxN = (e0[0] + e1[0]) / 2, cyN = (e0[1] + e1[1]) / 2;
-          const adx = e1[0] - e0[0], ady = e1[1] - e0[1], adl = Math.hypot(adx, ady) || 1;
-          const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W, kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
-          ln(cx, cy, knx, kny, stroke, ck);
-          p.push(`<circle cx="${nz(knx)}" cy="${nz(kny)}" r="${nz(5 * ck)}" fill="rgba(20,20,24,.92)" stroke="${stroke}" stroke-width="${nz(1.5 * ck)}"/>`);
+          if (!isDmx) {   // par fixtures have no meaningful pixel direction → no rotate knob
+            const e0 = eps[0], e1 = eps[eps.length - 1], cxN = (e0[0] + e1[0]) / 2, cyN = (e0[1] + e1[1]) / 2;
+            const adx = e1[0] - e0[0], ady = e1[1] - e0[1], adl = Math.hypot(adx, ady) || 1;
+            const knx = (cxN + (-ady / adl) * ROTATE_KNOB) * W, kny = (cyN + (adx / adl) * ROTATE_KNOB) * Hh;
+            ln(cx, cy, knx, kny, stroke, ck);
+            p.push(`<circle cx="${nz(knx)}" cy="${nz(kny)}" r="${nz(5 * ck)}" fill="rgba(20,20,24,.92)" stroke="${stroke}" stroke-width="${nz(1.5 * ck)}"/>`);
+          }
         }
         if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), cx, cy - 10, selected, ck));
       }
@@ -447,7 +451,8 @@ export function createPreview(canvasEl, opts = {}) {
       };
       for (const ch of runsOf(show)) {
         if (ch.members.length < 2) continue;
-        const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean);
+        // Point fixtures (DMX pars) aren't daisy-chained pixel runs → no wiring lines.
+        const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean).filter((f) => !isDmxFixture(f));
         if (members.length < 2) continue;
         const col = dim(chainColors[ch.key] || 'rgba(150,156,166,.45)');
         for (let i = 0; i < members.length - 1; i++) {

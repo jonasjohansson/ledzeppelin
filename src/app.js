@@ -892,6 +892,10 @@ function dmxEditor(sel) {
         })),
         txField('X', tf.x, (v) => setT({ x: v })),
         txField('Y', tf.y, (v) => setT({ y: v })),
+        // The on-canvas box is the fixture's physical footprint (where it samples
+        // colour) — independent of the channel layout. Drag-resizable too.
+        txField('W', tf.w, (v) => setT({ w: Math.max(4, v) })),
+        txField('H', tf.h, (v) => setT({ h: Math.max(4, v) })),
       ]));
     }),
     Section('Patch', 'dmx-patch', (body) => {
