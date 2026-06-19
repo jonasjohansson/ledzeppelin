@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels, fixtureParamChannelIndices } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels, fixtureControlChannels } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
@@ -63,9 +63,11 @@ function defaultShow() {
     { id: 'par_rgbw', name: 'RGBW Par', cols: 1, rows: 1, colorFormat: 'RGBW' },
     { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255, before: true }] },
     { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255 }] },
-    // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode (R G B W A UV).
-    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
-      { name: 'UV', kind: 'fixed', value: 0, before: false },
+    // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode, as an explicit channel
+    // list (DMX-profile model): Red Green Blue White Amber UV.
+    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, channels: [
+      { kind: 'red', name: 'Red' }, { kind: 'green', name: 'Green' }, { kind: 'blue', name: 'Blue' },
+      { kind: 'white', name: 'White' }, { kind: 'amber', name: 'Amber' }, { kind: 'uv', name: 'UV', value: 0 },
     ] },
     // 8-CH RGBWA par (Resolume layout): Dimming, Strobe, [R G B W A], UV.
     { id: 'par_rgbwa8', name: 'RGBWA Par (8ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
@@ -900,7 +902,6 @@ function dmxEditor(sel) {
   // Type-derived fixture (unified model) → named Parameter faders; a legacy profile
   // fixture (no matching type) → the low-level Channels kind-editor.
   const ptype = (show.fixtureTypes || []).find((t) => t.id === sel.typeId);
-  const tparams = ptype?.params || [];
   const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
   const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
   const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
@@ -948,28 +949,29 @@ function dmxEditor(sel) {
     }),
   ]);
 
-  // Parameters: a named 0..255 fader per type parameter (manual controls like
-  // Dimming, Strobe, UV). Colour channels are driven by the sampled canvas colour.
-  // A blank fader (no override) falls back to the parameter's default value.
+  // Parameters: a named 0..255 fader per controllable channel (Dimmer/Strobe/UV/
+  // Fixed). Colour channels are driven by the sampled canvas colour. A fader is a
+  // manual override; bind it to a layer to drive it from that layer's level instead.
   const hasFixed = channels.some((c) => c.kind === 'fixed');
-  if (tparams.length) {
-    const pidx = fixtureParamChannelIndices(ptype);
-    const layers = show.composition?.layers || [];
-    out.append(Section('Parameters', 'dmx-params', (body) => {
-      tparams.forEach((p, i) => {
-        const ci = pidx[i];
-        const boundId = cfg.bind?.[ci] || '';
-        const boundLayer = boundId && layers.find((L) => L.id === boundId);
-        // When bound, the fader shows the layer's live level (0..1 → 0..255); the
-        // layer drives output each frame. Otherwise it's a manual override.
-        const shown = boundLayer ? Math.round(Math.max(0, Math.min(1, boundLayer.opacity ?? 0)) * 255) : (cfg.fixed?.[ci] ?? p.value ?? 0);
-        body.append(Slider(p.name || `Param ${i + 1}`, shown, { min: 0, max: 255, step: 1, commit: 'live',
-          onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
-        // Layer link: "— manual —" or a layer whose level drives this parameter.
-        body.append(fld('↳ from layer', sel2([{ value: '', label: '— manual —' }, ...layers.map((L) => ({ value: L.id, label: L.name || L.id }))], boundId,
-          (id) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (id) b[ci] = id; else delete b[ci]; return b; })() }))));
-      });
-    }));
+  const ctl = ptype ? fixtureControlChannels(ptype) : [];
+  if (ptype) {
+    if (ctl.length) {
+      const layers = show.composition?.layers || [];
+      out.append(Section('Parameters', 'dmx-params', (body) => {
+        ctl.forEach((c) => {
+          const ci = c.index;
+          const boundId = cfg.bind?.[ci] || '';
+          const boundLayer = boundId && layers.find((L) => L.id === boundId);
+          // When bound, the fader shows the layer's live level (0..1 → 0..255); the
+          // layer drives output each frame. Otherwise it's a manual override.
+          const shown = boundLayer ? Math.round(Math.max(0, Math.min(1, boundLayer.opacity ?? 0)) * 255) : (cfg.fixed?.[ci] ?? c.value ?? 0);
+          body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
+            onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
+          body.append(fld('↳ from layer', sel2([{ value: '', label: '— manual —' }, ...layers.map((L) => ({ value: L.id, label: L.name || L.id }))], boundId,
+            (id) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (id) b[ci] = id; else delete b[ci]; return b; })() }))));
+        });
+      }));
+    }
   } else if (generic || hasFixed) {
     out.append(Section('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
@@ -1070,9 +1072,8 @@ function groupParamSection(ids) {
   const typeId = sel[0].typeId;
   if (!sel.every((f) => f.typeId === typeId)) return [];
   const ptype = (show.fixtureTypes || []).find((t) => t.id === typeId);
-  const tparams = ptype?.params || [];
-  if (!tparams.length) return [];
-  const pidx = fixtureParamChannelIndices(ptype);
+  const ctl = ptype ? fixtureControlChannels(ptype) : [];
+  if (!ctl.length) return [];
   const setEachParam = (ci, v) => {
     const next = structuredClone(show);
     for (const id of ids) {
@@ -1082,12 +1083,12 @@ function groupParamSection(ids) {
     applyShow(next);
   };
   return [Section('Parameters', 'dmx-params', (body) => {
-    tparams.forEach((p, i) => {
-      const ci = pidx[i];
+    ctl.forEach((c) => {
+      const ci = c.index;
       // Shared value across the selection, else fall back to the first fixture's.
-      const vals = sel.map((f) => f.input?.dmx?.fixed?.[ci] ?? p.value ?? 0);
+      const vals = sel.map((f) => f.input?.dmx?.fixed?.[ci] ?? c.value ?? 0);
       const shown = vals.every((v) => v === vals[0]) ? vals[0] : vals[0];
-      body.append(Slider(p.name || `Param ${i + 1}`, shown, { min: 0, max: 255, step: 1, commit: 'live',
+      body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
         onInput: (v) => setEachParam(ci, v) }));
     });
   })];

@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { DMX_CHANNEL_KINDS, colorFormatChannels } from '../model/dmx.js';
+import { DMX_CHANNEL_KINDS, colorFormatChannels, fixtureTypeChannels } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -73,6 +73,33 @@ function distributionPicker(value, onPick) {
     grid.append(cell);
   }
   return grid;
+}
+
+// DMX-profile editor: an explicit ordered channel list on the type. Each channel has
+// a function (kind), a name, and — for manual kinds (fixed/uv/strobe) — a default
+// value. Reorder with ↑/↓; channel number = DMX slot offset from the start address.
+const CH_MANUAL_VAL = new Set(['fixed', 'uv', 'strobe']);
+function dmxChannelEditor(t, upd, rows) {
+  const channels = t.channels || [];
+  const cUpd = (i, patch) => upd((nt) => { nt.channels = (nt.channels || []).slice(); nt.channels[i] = { ...nt.channels[i], ...patch }; });
+  const moveCh = (i, dir) => upd((nt) => { const cs = (nt.channels || []).slice(); const j = i + dir; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; nt.channels = cs; });
+  rows.push(el('div', { className: 'fx-pts', textContent: `Channels · ${channels.length}` }));
+  channels.forEach((c, i) => {
+    const name = textInputCommit(c.name ?? `Ch ${i + 1}`, (x) => cUpd(i, { name: x }));
+    const kind = selectInput(DMX_CHANNEL_KINDS, c.kind, (x) => cUpd(i, { kind: x }));
+    const up = el('button', { className: 'fx-act', textContent: '↑', title: 'move up', onclick: () => moveCh(i, -1) });
+    const down = el('button', { className: 'fx-act', textContent: '↓', title: 'move down', onclick: () => moveCh(i, +1) });
+    if (i === 0) up.disabled = true;
+    if (i === channels.length - 1) down.disabled = true;
+    const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
+      onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Ch 1', value: 0 }]; }) });
+    const cells = [el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind];
+    if (CH_MANUAL_VAL.has(c.kind)) cells.push(numInputCommit(c.value ?? 0, (x) => cUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
+    cells.push(up, down, rm);
+    rows.push(el('div', { className: 'fx-field fx-param-row' }, cells));
+  });
+  rows.push(el('button', { className: 'fx-add', textContent: '+ channel',
+    onclick: () => upd((nt) => { nt.channels = [...(nt.channels || []), { kind: 'red', name: `Ch ${(nt.channels?.length || 0) + 1}`, value: 0 }]; }) }));
 }
 
 // createFixturePanel({ getShow, setShow, onChange })
@@ -450,17 +477,27 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       commit(next);
     };
     const isGrid = (Number(t.rows) || 1) > 1;
+    const isDmx = !!(t.channels && t.channels.length);   // DMX-profile mode (flat channel list)
     const rows = [
       field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, x, nt.id); }))),
-      // Width = pixels per row (a 1-row strip's pixel count — "set pixels directly").
-      field('Width', numInputCommit(t.cols ?? t.pixelCount, (x) => upd((nt) => { nt.cols = x; }))),
-      // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
-      field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))),
-      field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })),
-      // Colour format: '' inherits the controller's order; pick RGBW here for a
-      // white-channel strip (mixes freely with RGB fixtures on the same controller).
-      field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))),
+      // Layout: a pixel strip/matrix (W×H + Color Format) OR a DMX fixture defined by
+      // an explicit channel list. Switching to DMX seeds the list from the current
+      // colour format + parameters; switching back drops it.
+      field('Layout', selectInput([{ value: 'pixels', label: 'Pixels (strip / matrix)' }, { value: 'dmx', label: 'DMX channels' }], isDmx ? 'dmx' : 'pixels',
+        (mode) => upd((nt) => {
+          if (mode === 'dmx') { if (!(nt.channels && nt.channels.length)) nt.channels = fixtureTypeChannels(nt); nt.cols = 1; nt.rows = 1; }
+          else delete nt.channels;
+        }))),
     ];
+    if (isDmx) { dmxChannelEditor(t, upd, rows); return el('div', { className: 'fx-card fx-detail' }, rows); }
+    // Width = pixels per row (a 1-row strip's pixel count — "set pixels directly").
+    rows.push(field('Width', numInputCommit(t.cols ?? t.pixelCount, (x) => upd((nt) => { nt.cols = x; }))));
+    // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
+    rows.push(field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))));
+    rows.push(field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })));
+    // Colour format: '' inherits the controller's order; pick RGBW here for a
+    // white-channel strip (mixes freely with RGB fixtures on the same controller).
+    rows.push(field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
