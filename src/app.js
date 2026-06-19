@@ -63,8 +63,8 @@ function defaultShow() {
     { id: 'par_rgbw', name: 'RGBW Par', cols: 1, rows: 1, colorFormat: 'RGBW' },
     { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255, before: true }] },
     { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255 }] },
-    // RGBWA+UV par, 6-CH mode (R G B W A UV) — e.g. FOS Luminus PRO / H6.
-    { id: 'par_rgbwauv6', name: 'RGBWA+UV Par (6ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
+    // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode (R G B W A UV).
+    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
       { name: 'UV', kind: 'fixed', value: 0, before: false },
     ] },
     // 8-CH RGBWA par (Resolume layout): Dimming, Strobe, [R G B W A], UV.
