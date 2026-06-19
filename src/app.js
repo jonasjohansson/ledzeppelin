@@ -199,6 +199,7 @@ function rebuild(next) {
   //    device, 3) sync derived sample points to transforms + canvas.
   show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
   const { sampleUVs, route, spans } = buildPipelineInputs(show);
+  curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
   sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
   // Push the new route over the existing socket (no reconnect blip); only
@@ -226,6 +227,30 @@ function refreshSampler() {
 // before sending. Recompute when the hidden flag toggles (no full rebuild).
 let lastSpans = [];
 let hiddenSpans = [];
+let curRoute = null;   // current daemon route (for live layer-bound DMX params)
+
+// Resolve layer-bound DMX parameters from current layer opacity (0..1 → 0..255),
+// writing into the route's per-fixture `fixed` overrides. Returns true if any value
+// changed (→ the caller pushes the route to the daemon). Cheap no-op when nothing is
+// bound, so it's safe to call every frame.
+function resolveLayerBindings() {
+  if (!curRoute) return false;
+  const layers = show.composition?.layers || [];
+  let changed = false;
+  for (const dev of curRoute) {
+    if (!dev.dmx) continue;
+    for (const entry of dev.dmx) {
+      if (!entry.bind) continue;
+      for (const k in entry.bind) {
+        const L = layers.find((x) => x.id === entry.bind[k]);
+        const lvl = Math.max(0, Math.min(1, L?.opacity ?? 0));
+        const v = Math.round(lvl * 255), ci = +k;
+        if (entry.fixed[ci] !== v) { entry.fixed[ci] = v; changed = true; }
+      }
+    }
+  }
+  return changed;
+}
 function recomputeHiddenSpans() {
   hiddenSpans = (lastSpans || []).filter((s) => {
     const f = show.fixtures.find((x) => x.id === s.id);
@@ -920,11 +945,20 @@ function dmxEditor(sel) {
   const hasFixed = channels.some((c) => c.kind === 'fixed');
   if (tparams.length) {
     const pidx = fixtureParamChannelIndices(ptype);
+    const layers = show.composition?.layers || [];
     out.append(Section('Parameters', 'dmx-params', (body) => {
       tparams.forEach((p, i) => {
         const ci = pidx[i];
-        body.append(Slider(p.name || `Param ${i + 1}`, cfg.fixed?.[ci] ?? p.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
+        const boundId = cfg.bind?.[ci] || '';
+        const boundLayer = boundId && layers.find((L) => L.id === boundId);
+        // When bound, the fader shows the layer's live level (0..1 → 0..255); the
+        // layer drives output each frame. Otherwise it's a manual override.
+        const shown = boundLayer ? Math.round(Math.max(0, Math.min(1, boundLayer.opacity ?? 0)) * 255) : (cfg.fixed?.[ci] ?? p.value ?? 0);
+        body.append(Slider(p.name || `Param ${i + 1}`, shown, { min: 0, max: 255, step: 1, commit: 'live',
           onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
+        // Layer link: "— manual —" or a layer whose level drives this parameter.
+        body.append(fld('↳ from layer', sel2([{ value: '', label: '— manual —' }, ...layers.map((L) => ({ value: L.id, label: L.name || L.id }))], boundId,
+          (id) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (id) b[ci] = id; else delete b[ci]; return b; })() }))));
       });
     }));
   } else if (generic || hasFixed) {
@@ -2327,6 +2361,7 @@ function loop(ts) {
     lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
     if (lastRGBA) {
       for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
+      if (resolveLayerBindings()) bridge?.setRoute?.(curRoute);   // live layer-bound DMX params
       bridge?.send(lastRGBA);
     }
     // The composition-group "B" mutes all layers (bypass), so a master block reads

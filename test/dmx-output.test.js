@@ -36,6 +36,24 @@ test('daemon: pack writes resolved channels at address-1 in the right universe',
   assert.equal(buf[0], 0);                                   // untouched channels stay 0
 });
 
+test('pipeline: a DMX fixture carries its layer bindings + an own-copy fixed map', () => {
+  const show = {
+    composition: { canvas: { w: 100, h: 100 } },
+    devices: [{ id: 'a1', ip: '2.0.0.1', protocol: 'artnet', universe: 0 }],
+    fixtures: [{
+      id: 'f1', output: { deviceId: 'a1' },
+      input: { transform: { x: 50, y: 50 }, points: [[0.5, 0.5]],
+        dmx: { profileId: 'rgbw', universe: 0, address: 1, fixed: { 3: 100 }, bind: { 3: 'L2' } } },
+    }],
+  };
+  const { route } = buildPipelineInputs(show);
+  const entry = route[0].dmx[0];
+  assert.deepEqual(entry.bind, { 3: 'L2' });           // binding passed through
+  assert.deepEqual(entry.fixed, { 3: 100 });           // fixed copied
+  entry.fixed[3] = 200;                                 // route owns its copy…
+  assert.equal(show.fixtures[0].input.dmx.fixed[3], 100); // …show is untouched
+});
+
 test('unified type → DMX bytes: colour channels + a dimmer + a fixed param', () => {
   // A 1×1 RGB fixture type with a Dimmer param and a fixed param (value 200).
   const channels = fixtureTypeChannels({ colorFormat: 'RGB',

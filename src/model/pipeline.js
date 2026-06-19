@@ -84,7 +84,10 @@ export function buildPipelineInputs(show) {
       fixtureOrder.push(f);
       uvs.push(u + ox, v + oy);
       const cfg = f.input.dmx;
-      dmx.push({ colourIndex: cursor, universe: cfg.universe ?? 0, address: cfg.address ?? 1, channels: dmxChannelsOf(cfg), fixed: cfg.fixed || {} });
+      // `fixed` is COPIED (not referenced) so a per-frame layer-binding update can
+      // mutate the route's overrides without touching the saved show. `bind` maps a
+      // channel index → layerId; the editor resolves it live from layer opacity.
+      dmx.push({ colourIndex: cursor, universe: cfg.universe ?? 0, address: cfg.address ?? 1, channels: dmxChannelsOf(cfg), fixed: { ...(cfg.fixed || {}) }, bind: cfg.bind || null });
       cursor += 1;
     }
 
