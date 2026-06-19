@@ -1,3 +1,5 @@
+import { fixtureTypeChannels } from './dmx.js';
+
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
     composition: { canvas: { w: 1280, h: 720 }, layers: [] } };
@@ -130,7 +132,8 @@ export function syncFixtureTypes(show) {
   const byId = new Map(types.map((t) => [t.id, t]));
   const fixtures = (show.fixtures || []).map((f) => {
     let typeId = f.typeId;
-    if (!typeId || !byId.has(typeId)) {
+    const hadType = !!typeId && byId.has(typeId);   // a real, user-defined type (not orphan)
+    if (!hadType) {
       // Legacy / orphan instance → match an existing type by spec, else create one.
       const lpm = f.ledsPerMeter ?? 60, m = f.meters ?? 1, co = f.colorOrder ?? 'GRB';
       let t = types.find((x) => x.ledsPerMeter === lpm && x.meters === m && x.colorOrder === co);
@@ -138,7 +141,7 @@ export function syncFixtureTypes(show) {
       typeId = t.id;
     }
     const t = byId.get(typeId);
-    return {
+    const out = {
       ...f, typeId,
       ledsPerMeter: t.ledsPerMeter, meters: t.meters, pixelCount: t.pixelCount, colorOrder: t.colorOrder,
       // Grid (matrix) spec + per-fixture colour format cached onto the instance so
@@ -148,6 +151,14 @@ export function syncFixtureTypes(show) {
       output: { ...f.output, pixelCount: t.pixelCount },
       input: { ...f.input, samples: t.pixelCount },
     };
+    // A DMX fixture's channel LAYOUT is owned by its type (Inventory) — re-derive it
+    // here so editing the definition propagates to every placed instance in bulk. The
+    // instance keeps only per-instance state: universe/address/fixed/bind. Legacy
+    // profile fixtures (orphan typeId) keep their own inline channels.
+    if (hadType && out.input?.dmx) {
+      out.input = { ...out.input, dmx: { ...out.input.dmx, channels: fixtureTypeChannels(t) } };
+    }
+    return out;
   });
   return { ...show, fixtureTypes: types, fixtures };
 }

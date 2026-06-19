@@ -918,11 +918,16 @@ function dmxEditor(sel) {
   const out = oel('div', { className: 'output-edit' }, [
     outputKindRow(sel),   // DMX fixture ⇄ LED strip
     Section('Fixture', 'dmx-fixture', (body) => {
-      body.append(oel('div', { className: 'output-grid' }, [
-        fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
+      // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
+      // owned by the type (edit it in Inventory → applies to every placed copy).
+      const head = ptype
+        ? fld('Type', oel('span', { className: 'fx-readonly', textContent: `${ptype.name || ptype.id} · ${channels.length} ch (edit in Inventory)` }))
+        : fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
           if (id === 'generic') setDmx({ profileId: 'generic', channels: cfg.channels?.length ? cfg.channels : [{ kind: 'fixed', value: 0 }] });
           else setDmx({ profileId: id, channels: undefined });
-        })),
+        }));
+      body.append(oel('div', { className: 'output-grid' }, [
+        head,
         txField('X', tf.x, (v) => setT({ x: v })),
         txField('Y', tf.y, (v) => setT({ y: v })),
         // The on-canvas box is the fixture's physical footprint (where it samples
