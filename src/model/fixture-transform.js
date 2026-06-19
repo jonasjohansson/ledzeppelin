@@ -169,9 +169,9 @@ export function syncFixtureGeometry(fixture, canvas) {
     ? normTransform(input.transform)
     : transformFromPoints(input.points, canvas);
   const points = pointsFromTransform(transform, canvas);
-  // A matrix keeps its own mode (its footprint is a rectangle, not a centreline);
-  // everything else is a straight bar. `points` stays a 2-pt cache either way.
-  const mode = input.mode === 'grid' ? 'grid' : 'bar';
+  // A DMX/par fixture keeps its 'dmx' mode (point fixture); a matrix keeps 'grid'
+  // (rectangle footprint); everything else is a straight bar. `points` is a 2-pt cache.
+  const mode = input.dmx ? 'dmx' : (input.mode === 'grid' ? 'grid' : 'bar');
   return { ...fixture, input: { ...input, mode, transform, points } };
 }
 
