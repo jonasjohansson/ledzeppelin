@@ -1012,7 +1012,42 @@ function multiPositionEditor(ids) {
         ]),
       );
     }),
+    // GROUP parameter control: when every selected fixture is a DMX fixture of the
+    // SAME type, expose one named fader per parameter that drives ALL of them at once.
+    ...groupParamSection(ids),
   ]);
+}
+
+// A "Parameters" section for a multi-selection — only when all selected fixtures are
+// DMX of one shared type. Each fader sets that param's override on every fixture.
+function groupParamSection(ids) {
+  const fxOf = (id, src = show) => (src.fixtures || []).find((x) => x.id === id);
+  const sel = ids.map((id) => fxOf(id)).filter(Boolean);
+  if (!sel.length || !sel.every(isDmxFixture)) return [];
+  const typeId = sel[0].typeId;
+  if (!sel.every((f) => f.typeId === typeId)) return [];
+  const ptype = (show.fixtureTypes || []).find((t) => t.id === typeId);
+  const tparams = ptype?.params || [];
+  if (!tparams.length) return [];
+  const pidx = fixtureParamChannelIndices(ptype);
+  const setEachParam = (ci, v) => {
+    const next = structuredClone(show);
+    for (const id of ids) {
+      const f = next.fixtures.find((x) => x.id === id);
+      if (f) f.input.dmx = { ...f.input.dmx, fixed: { ...(f.input.dmx?.fixed || {}), [ci]: Math.round(v) } };
+    }
+    applyShow(next);
+  };
+  return [Section('Parameters', 'dmx-params', (body) => {
+    tparams.forEach((p, i) => {
+      const ci = pidx[i];
+      // Shared value across the selection, else fall back to the first fixture's.
+      const vals = sel.map((f) => f.input?.dmx?.fixed?.[ci] ?? p.value ?? 0);
+      const shown = vals.every((v) => v === vals[0]) ? vals[0] : vals[0];
+      body.append(Slider(p.name || `Param ${i + 1}`, shown, { min: 0, max: 255, step: 1, commit: 'live',
+        onInput: (v) => setEachParam(ci, v) }));
+    });
+  })];
 }
 
 const applyShow = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
