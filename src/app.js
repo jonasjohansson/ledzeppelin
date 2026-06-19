@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels, fixtureParamChannelIndices } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
@@ -868,6 +868,10 @@ function dmxEditor(sel) {
   const cfg = sel.input.dmx || {};
   const channels = dmxChannelsOf(cfg);
   const generic = cfg.profileId === 'generic' || !!(cfg.channels && cfg.channels.length);
+  // Type-derived fixture (unified model) → named Parameter faders; a legacy profile
+  // fixture (no matching type) → the low-level Channels kind-editor.
+  const ptype = (show.fixtureTypes || []).find((t) => t.id === sel.typeId);
+  const tparams = ptype?.params || [];
   const tf = sel.input.transform || transformFromPoints(sel.input.points, show.composition?.canvas);
   const apply = (next) => { saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay(); };
   const setT = (patch) => apply(setFixtureTransform(show, sel.id, patch));
@@ -910,10 +914,20 @@ function dmxEditor(sel) {
     }),
   ]);
 
-  // Channels: generic gets a kind-picker + remove per channel; any `fixed` channel
-  // gets a 0..255 slider. (A pure colour par has neither, so the section is skipped.)
+  // Parameters: a named 0..255 fader per type parameter (manual controls like
+  // Dimming, Strobe, UV). Colour channels are driven by the sampled canvas colour.
+  // A blank fader (no override) falls back to the parameter's default value.
   const hasFixed = channels.some((c) => c.kind === 'fixed');
-  if (generic || hasFixed) {
+  if (tparams.length) {
+    const pidx = fixtureParamChannelIndices(ptype);
+    out.append(Section('Parameters', 'dmx-params', (body) => {
+      tparams.forEach((p, i) => {
+        const ci = pidx[i];
+        body.append(Slider(p.name || `Param ${i + 1}`, cfg.fixed?.[ci] ?? p.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
+          onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
+      });
+    }));
+  } else if (generic || hasFixed) {
     out.append(Section('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
         if (generic) {

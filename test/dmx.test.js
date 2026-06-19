@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels,
-  colorFormatChannels, fixtureTypeChannels } from '../src/model/dmx.js';
+  colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices } from '../src/model/dmx.js';
 
 const prof = (id) => dmxProfile(id);
 
@@ -55,6 +55,28 @@ test('colorFormatChannels maps each letter to a colour channel', () => {
 test('fixtureTypeChannels: a NONE (params-only) type is just its parameters', () => {
   const dimmer = { colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] };
   assert.deepEqual(fixtureTypeChannels(dimmer), [{ kind: 'dimmer' }]);
+});
+
+test('fixtureParamChannelIndices: each param maps to its channel index in the block', () => {
+  // 8-CH RGBWA: Dimming(before), Strobe(before), UV(after) → channels 0,1,[2..6],7
+  const par = { colorFormat: 'RGBWA', params: [
+    { name: 'Dimming', kind: 'fixed', value: 255, before: true },
+    { name: 'Strobe', kind: 'fixed', value: 0, before: true },
+    { name: 'UV', kind: 'fixed', value: 0, before: false },
+  ] };
+  assert.deepEqual(fixtureParamChannelIndices(par), [0, 1, 7]);
+  // FOS 6-CH (RGBWA + UV after) → UV is channel index 5
+  const fos = { colorFormat: 'RGBWA', params: [{ name: 'UV', kind: 'fixed', value: 0, before: false }] };
+  assert.deepEqual(fixtureParamChannelIndices(fos), [5]);
+});
+
+test('resolveDmxChannels: an override drives ANY channel kind (manual fader)', () => {
+  const prof = { channels: fixtureTypeChannels({ colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', before: true }] }) };
+  // channels: [dimmer, red, green, blue]; override the dimmer (index 0) to 100
+  const out = [...resolveDmxChannels(prof, [255, 0, 0], { 0: 100 })];
+  assert.equal(out[0], 100);                 // manual dimmer override wins over computed
+  // override a colour channel too (red index 1 → 50, overriding sampled 255)
+  assert.equal([...resolveDmxChannels(prof, [255, 0, 0], { 1: 50 })][1], 50);
 });
 
 test('fixtureTypeChannels: params can sit BEFORE and AFTER the pixel block (8-ch spec)', () => {

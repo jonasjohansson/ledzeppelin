@@ -70,8 +70,25 @@ export function fixtureTypeChannels(type) {
   return [...before, ...colorFormatChannels(type?.colorFormat), ...after];
 }
 
+// For each of a type's Parameters (in declaration order), its channel index within
+// the resolved block — so a named per-fixture fader can target the right channel.
+// Layout: [before-params…, colour channels, after-params…].
+export function fixtureParamChannelIndices(type) {
+  const all = Array.isArray(type?.params) ? type.params : [];
+  const nColour = colorFormatChannels(type?.colorFormat).length;
+  const idx = new Array(all.length);
+  let b = 0;
+  all.forEach((p, i) => { if (p.before) idx[i] = b++; });
+  const afterBase = b + nColour;
+  let a = 0;
+  all.forEach((p, i) => { if (!p.before) idx[i] = afterBase + a++; });
+  return idx;
+}
+
 // Resolve a profile + a sampled RGB (0..255) into the fixture's DMX channel bytes.
-// `fixed` is an optional { channelIndex: value } override for `fixed` channels.
+// `fixed` is an optional { channelIndex: value } override map. It overrides the
+// 'fixed' channel default AND can manually drive ANY channel (a named per-fixture
+// fader, e.g. a master Dimmer or UV), winning over the sampled/computed value.
 //   white  → pulls the shared min(r,g,b) into the W channel (standard RGBW).
 //   amber  → rough warm pull min(r,g).
 //   dimmer → carries brightness; colour channels normalise to full so that
@@ -97,8 +114,13 @@ export function resolveDmxChannels(profile, rgb, fixed = {}) {
       case 'white': out[i] = clamp8(w); break;
       case 'amber': out[i] = clamp8(a); break;
       case 'dimmer': out[i] = clamp8(dim); break;
-      default: out[i] = clamp8(fixed[i] ?? chans[i].value ?? 0); break;   // 'fixed'
+      default: out[i] = clamp8(chans[i].value ?? 0); break;   // 'fixed'
     }
+  }
+  // Explicit overrides win for ANY channel (manual faders / layer-bound params).
+  for (const k in fixed) {
+    const i = +k;
+    if (Number.isInteger(i) && i >= 0 && i < out.length && fixed[k] != null) out[i] = clamp8(fixed[k]);
   }
   return out;
 }
