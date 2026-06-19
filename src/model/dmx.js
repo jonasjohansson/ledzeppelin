@@ -4,9 +4,12 @@
 // channels, while `fixed` channels carry a set value. Pure + unit-tested — see
 // docs/dmx-fixtures.md for the design.
 
-// Channel kinds. Colour kinds are driven by the sampled canvas colour; `fixed` is a
-// constant value (a slider, 0..255).
-export const DMX_CHANNEL_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'fixed'];
+// Channel kinds. Colour kinds (red/green/blue/white/amber) are driven by the sampled
+// canvas colour; `dimmer` carries brightness; the rest (uv/strobe/fixed) are manual
+// channels — a per-fixture fader (default value), optionally layer-bound.
+export const DMX_CHANNEL_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'uv', 'strobe', 'fixed'];
+// Colour kinds come from the canvas; everything else is a manually controllable channel.
+export const DMX_COLOUR_KINDS = new Set(['red', 'green', 'blue', 'white', 'amber']);
 
 // Built-in profiles. `Generic` starts as one fixed channel and is edited in the UI.
 export const DMX_PROFILES = [
@@ -63,11 +66,26 @@ export function colorFormatChannels(fmt) {
 // + Strobe ahead of RGBWA, with UV after). A `fixed` param keeps its default value;
 // colour-kind params (dimmer/red/…) are driven by the sampled canvas colour.
 export function fixtureTypeChannels(type) {
+  // DMX-profile mode: an explicit ordered channel list is the source of truth.
+  if (Array.isArray(type?.channels) && type.channels.length) {
+    return type.channels.map((c) => ({ kind: c.kind, value: clamp8(c.value ?? 0), ...(c.name ? { name: c.name } : {}) }));
+  }
+  // Pixel mode: colour channels from the Color Format, with named Parameters around.
   const all = Array.isArray(type?.params) ? type.params : [];
-  const toCh = (p) => (p.kind === 'fixed' ? { kind: 'fixed', value: clamp8(p.value ?? 0) } : { kind: p.kind });
+  const toCh = (p) => ({ kind: p.kind, value: clamp8(p.value ?? 0), ...(p.name ? { name: p.name } : {}) });
   const before = all.filter((p) => p.before).map(toCh);
   const after = all.filter((p) => !p.before).map(toCh);
   return [...before, ...colorFormatChannels(type?.colorFormat), ...after];
+}
+
+// The manually controllable channels of a type (everything that isn't a sampled
+// colour) with their channel index, kind, name + default — drives the per-fixture
+// faders and layer-binding pickers. Works for both DMX-profile and pixel+params types.
+const KIND_LABEL = { dimmer: 'Dimmer', uv: 'UV', strobe: 'Strobe', fixed: 'Fixed' };
+export function fixtureControlChannels(type) {
+  return fixtureTypeChannels(type)
+    .map((c, index) => ({ index, kind: c.kind, value: c.value ?? 0, name: c.name || KIND_LABEL[c.kind] || c.kind }))
+    .filter((c) => !DMX_COLOUR_KINDS.has(c.kind));
 }
 
 // For each of a type's Parameters (in declaration order), its channel index within

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels,
-  colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices } from '../src/model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels, DMX_CHANNEL_KINDS,
+  colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices, fixtureControlChannels } from '../src/model/dmx.js';
 
 const prof = (id) => dmxProfile(id);
 
@@ -54,7 +54,34 @@ test('colorFormatChannels maps each letter to a colour channel', () => {
 
 test('fixtureTypeChannels: a NONE (params-only) type is just its parameters', () => {
   const dimmer = { colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 0 }] };
-  assert.deepEqual(fixtureTypeChannels(dimmer), [{ kind: 'dimmer' }]);
+  assert.deepEqual(fixtureTypeChannels(dimmer), [{ kind: 'dimmer', value: 0, name: 'Dimmer' }]);
+});
+
+test('DMX_CHANNEL_KINDS includes uv + strobe', () => {
+  assert.ok(DMX_CHANNEL_KINDS.includes('uv'));
+  assert.ok(DMX_CHANNEL_KINDS.includes('strobe'));
+});
+
+test('fixtureTypeChannels: an explicit flat channel list is the source of truth', () => {
+  // DMX-profile mode: FOS 6-CH defined directly as channels (R G B W A UV).
+  const t = { channels: [
+    { kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'white' }, { kind: 'amber' },
+    { kind: 'uv', name: 'UV', value: 0 },
+  ] };
+  const chans = fixtureTypeChannels(t);
+  assert.equal(chans.length, 6);
+  assert.deepEqual(chans.map((c) => c.kind), ['red', 'green', 'blue', 'white', 'amber', 'uv']);
+  // Control channels = the non-colour ones, with index + name.
+  const ctl = fixtureControlChannels(t);
+  assert.deepEqual(ctl, [{ index: 5, kind: 'uv', value: 0, name: 'UV' }]);
+});
+
+test('fixtureControlChannels: dimmer/strobe/fixed are controllable, colour is not', () => {
+  const t = { channels: [
+    { kind: 'dimmer', name: 'Dim' }, { kind: 'strobe', name: 'Strobe' },
+    { kind: 'red' }, { kind: 'green' }, { kind: 'blue' },
+  ] };
+  assert.deepEqual(fixtureControlChannels(t).map((c) => `${c.index}:${c.kind}`), ['0:dimmer', '1:strobe']);
 });
 
 test('fixtureParamChannelIndices: each param maps to its channel index in the block', () => {
@@ -87,10 +114,10 @@ test('fixtureTypeChannels: params can sit BEFORE and AFTER the pixel block (8-ch
     { name: 'UV', kind: 'fixed', value: 0, before: false },
   ] };
   assert.deepEqual(fixtureTypeChannels(par), [
-    { kind: 'fixed', value: 255 },   // 1 Dimming
-    { kind: 'fixed', value: 0 },     // 2 Strobe
+    { kind: 'fixed', value: 255, name: 'Dimming' },   // 1 Dimming
+    { kind: 'fixed', value: 0, name: 'Strobe' },      // 2 Strobe
     { kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'white' }, { kind: 'amber' },  // 3-7
-    { kind: 'fixed', value: 0 },     // 8 UV
+    { kind: 'fixed', value: 0, name: 'UV' },          // 8 UV
   ]);
 });
 
@@ -101,7 +128,7 @@ test('fixtureTypeChannels = colour channels then Parameters', () => {
   ] };
   assert.deepEqual(fixtureTypeChannels(type), [
     { kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'white' },
-    { kind: 'dimmer' }, { kind: 'fixed', value: 128 },
+    { kind: 'dimmer', value: 0, name: 'Dimmer' }, { kind: 'fixed', value: 128, name: 'Strobe' },
   ]);
   // A pure colour fixture (no params, inherited format) is just RGB.
   assert.deepEqual(fixtureTypeChannels({}), [{ kind: 'red' }, { kind: 'green' }, { kind: 'blue' }]);

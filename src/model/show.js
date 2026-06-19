@@ -1,4 +1,4 @@
-import { fixtureTypeChannels } from './dmx.js';
+import { fixtureTypeChannels, DMX_CHANNEL_KINDS } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -102,7 +102,6 @@ export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribut
 // Extra DMX channels appended after a fixture's pixels (Resolume "parameters"):
 // dimmer/strobe/pan/etc. Each is { name, kind, value(0..255 default) }. `kind` is a
 // channel kind (see src/model/dmx.js); anything unknown falls back to 'fixed'.
-const DMX_PARAM_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'fixed'];
 const clamp8 = (v) => { const n = Math.round(Number(v) || 0); return n < 0 ? 0 : n > 255 ? 255 : n; };
 function normFixtureParams(params) {
   // A param can sit BEFORE the pixel/colour block (e.g. a master Dimmer or Strobe
@@ -110,16 +109,30 @@ function normFixtureParams(params) {
   // DMX addressing depends on, so this is preserved exactly.
   return (Array.isArray(params) ? params : []).map((p, i) => ({
     name: String(p?.name ?? `Param ${i + 1}`),
-    kind: DMX_PARAM_KINDS.includes(p?.kind) ? p.kind : 'fixed',
+    kind: DMX_CHANNEL_KINDS.includes(p?.kind) ? p.kind : 'fixed',
     value: clamp8(p?.value),
     before: !!p?.before,
+  }));
+}
+// A DMX-profile fixture's explicit channel list (flat, ordered): each channel a kind
+// + optional name + default value. Only kept when non-empty (else the type is a
+// pixel+Color-Format fixture).
+function normFixtureChannels(channels) {
+  if (!Array.isArray(channels) || !channels.length) return undefined;
+  return channels.map((c, i) => ({
+    kind: DMX_CHANNEL_KINDS.includes(c?.kind) ? c.kind : 'fixed',
+    name: String(c?.name ?? `Ch ${i + 1}`),
+    value: clamp8(c?.value),
   }));
 }
 function normFixtureType(t) {
   const rows = Math.max(1, Math.round(Number(t.rows) || 1));
   const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
-  return { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows, params: normFixtureParams(t.params) };
+  const channels = normFixtureChannels(t.channels);
+  const base = { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows, params: normFixtureParams(t.params) };
+  if (channels) base.channels = channels; else delete base.channels;
+  return base;
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
