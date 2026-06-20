@@ -2277,6 +2277,27 @@ function updateStageInsets() {
 }
 window.addEventListener('resize', updateStageInsets);
 
+// Collapsible inspector: a pull-tab on the canvas/#side seam collapses the main
+// inspector to reclaim canvas, with the state persisted and a `\` shortcut. (#side-2
+// already auto-collapses when nothing is selected.)
+(function setupSideCollapse() {
+  const KEY = 'lz.side.collapsed';
+  const tab = document.createElement('button');
+  tab.className = 'side-collapse';
+  tab.title = 'Collapse / expand the inspector  ( \\ )';
+  document.body.appendChild(tab);
+  let collapsed = false; try { collapsed = localStorage.getItem(KEY) === '1'; } catch { /* private mode */ }
+  const apply = () => { document.body.classList.toggle('side-collapsed', collapsed); tab.textContent = collapsed ? '‹' : '›'; updateStageInsets(); };
+  const toggle = () => { collapsed = !collapsed; try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch { /* private mode */ } apply(); };
+  tab.addEventListener('click', toggle);
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== '\\' || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^(input|textarea|select)$/i.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable) return;
+    e.preventDefault(); toggle();
+  });
+  apply();
+})();
+
 function loop(ts) {
   syncCompAspect();
   if (!t0) t0 = ts;

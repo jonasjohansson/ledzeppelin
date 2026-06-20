@@ -334,6 +334,20 @@ body.output-mode #deckbar button { pointer-events: auto; }
    sits in front of the viewport UI where they overlap. */
 #side { flex: 0 0 var(--side-w); max-height: 100vh;
   display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
+/* Collapse the inspector to reclaim canvas. A pull-tab on the canvas-facing seam
+   (anchored to --inset-right, which tracks #side's left edge) toggles it; collapsing
+   sets flex-basis 0 so updateStageInsets grows the canvas. Click the tab to reopen. */
+body.side-collapsed #side { flex-basis: 0; min-width: 0; }
+.side-collapse {
+  position: fixed; right: var(--inset-right, 0); top: 50%; transform: translateY(-50%);
+  width: 15px; height: 48px; z-index: 50; cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-2); color: var(--muted);
+  border: 1px solid var(--line); border-right: 0; border-radius: 5px 0 0 5px;
+  font: var(--fs-body) var(--sans);
+}
+.side-collapse:hover { color: var(--accent); border-color: var(--accent-line); }
+body.gui-hidden .side-collapse { display: none; }   /* full Hide-UI wins */
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
