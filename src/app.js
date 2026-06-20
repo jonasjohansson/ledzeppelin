@@ -50,37 +50,22 @@ function defaultShow() {
   // Generic placeholder hardware so the first run shows SOMETHING on the wall —
   // the user reconfigures (or scans) these to match their real rig.
   show = addDevice(show, { id: 'c1', name: 'Controller 1', typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });   // blank IP — no false "offline" alarm; set/scan to go live
-  // A plain "Generic Fixture" (96 px) as the primary definition, plus a spread of
-  // density variants (96 / 60 / 30 led/m, in 5 m and 1 m lengths) for variety.
-  const genericType = (lpm, m) => ({ id: `g${lpm}_${m}`, name: `${lpm}/m · ${m}m`, ledsPerMeter: lpm, meters: m, pixelCount: lpm * m, colorOrder: 'RGB' });
+  // Clean starter Inventory: just the built-in Generic Fixture (added by
+  // syncFixtureTypes) plus the FOS Luminus PRO (the real DMX light). Build any other
+  // definition in the Inventory (+ fixture → set the Layout / channels).
   show.fixtureTypes = [
-    { id: 'gen', name: 'Generic Fixture', ledsPerMeter: 96, meters: 1, pixelCount: 96, colorOrder: 'RGB' },
-    genericType(96, 5), genericType(60, 5), genericType(60, 1), genericType(30, 5), genericType(30, 1),
-    // Built-in "pars" — 1×1 channel layouts (a fixture is just its channel layout).
-    // Placed as DMX output; their channels = Color Format + Parameters. Edit/clone
-    // them like any definition in the Inventory.
-    { id: 'par_rgb', name: 'RGB Par', cols: 1, rows: 1, colorFormat: 'RGB' },
-    { id: 'par_rgbw', name: 'RGBW Par', cols: 1, rows: 1, colorFormat: 'RGBW' },
-    { id: 'par_dimrgb', name: 'Dimmer + RGB', cols: 1, rows: 1, colorFormat: 'RGB', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255, before: true }] },
-    { id: 'par_dim', name: 'Dimmer', cols: 1, rows: 1, colorFormat: 'NONE', params: [{ name: 'Dimmer', kind: 'dimmer', value: 255 }] },
     // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode, as an explicit channel
     // list (DMX-profile model): Red Green Blue White Amber UV.
     { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, channels: [
       { kind: 'red', name: 'Red' }, { kind: 'green', name: 'Green' }, { kind: 'blue', name: 'Blue' },
       { kind: 'white', name: 'White' }, { kind: 'amber', name: 'Amber' }, { kind: 'uv', name: 'UV', value: 0 },
     ] },
-    // 8-CH RGBWA par (Resolume layout): Dimming, Strobe, [R G B W A], UV.
-    { id: 'par_rgbwa8', name: 'RGBWA Par (8ch)', cols: 1, rows: 1, colorFormat: 'RGBWA', params: [
-      { name: 'Dimming', kind: 'fixed', value: 255, before: true },
-      { name: 'Strobe', kind: 'fixed', value: 0, before: true },
-      { name: 'UV', kind: 'fixed', value: 0, before: false },
-    ] },
   ];
   // One placed fixture (the Generic Fixture) wired to Controller 1 — a thin upright
   // strip in the middle of the canvas (Width 10 × Height 96, rotation 0).
   const tf = { x: cv.w / 2, y: cv.h / 2, w: 10, h: 96, rotation: 0 };
   show.fixtures = [{
-    id: 'f1', typeId: 'gen',
+    id: 'f1', typeId: 'generic',
     input: { transform: tf, points: pointsFromTransform(tf, cv) },
     output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 96 },
   }];

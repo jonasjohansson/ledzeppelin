@@ -498,6 +498,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     // Colour format: '' inherits the controller's order; pick RGBW here for a
     // white-channel strip (mixes freely with RGB fixtures on the same controller).
     rows.push(field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
+    // For a 1×1 par, show the running DMX channel total (colour + parameters) so it's
+    // clear that each parameter you add is another channel. (A strip's count is pixels.)
+    if (!isGrid && (Number(t.cols) || 1) === 1) rows.push(field('Channels', el('span', { className: 'fx-readonly', textContent: String(fixtureTypeChannels(t).length) })));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
