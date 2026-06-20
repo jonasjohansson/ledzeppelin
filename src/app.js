@@ -2277,19 +2277,25 @@ function updateStageInsets() {
 }
 window.addEventListener('resize', updateStageInsets);
 
-// Collapsible inspector: a pull-tab on the canvas/#side seam collapses the main
-// inspector to reclaim canvas, with the state persisted and a `\` shortcut. (#side-2
-// already auto-collapses when nothing is selected.)
+// Collapsible inspector: a chevron at the end of the section header collapses #side
+// to a thin edge rail (canvas reclaims the space); click the rail's ‹ — or press `\`
+// — to reopen. State persists. (#side-2 already auto-collapses when nothing's selected.)
 (function setupSideCollapse() {
   const KEY = 'lz.side.collapsed';
-  const tab = document.createElement('button');
-  tab.className = 'side-collapse';
-  tab.title = 'Collapse / expand the inspector  ( \\ )';
-  document.body.appendChild(tab);
+  const side = document.getElementById('side');
+  const header = document.getElementById('section-switch');
+  if (!side || !header) return;
+  const chev = document.createElement('button');
+  chev.className = 'side-collapse-btn'; chev.textContent = '›'; chev.title = 'Collapse the inspector  ( \\ )';
+  header.appendChild(chev);
+  const rail = document.createElement('button');
+  rail.className = 'side-rail'; rail.textContent = '‹'; rail.title = 'Expand the inspector  ( \\ )';
+  side.appendChild(rail);
   let collapsed = false; try { collapsed = localStorage.getItem(KEY) === '1'; } catch { /* private mode */ }
-  const apply = () => { document.body.classList.toggle('side-collapsed', collapsed); tab.textContent = collapsed ? '‹' : '›'; updateStageInsets(); };
+  const apply = () => { document.body.classList.toggle('side-collapsed', collapsed); updateStageInsets(); };
   const toggle = () => { collapsed = !collapsed; try { localStorage.setItem(KEY, collapsed ? '1' : '0'); } catch { /* private mode */ } apply(); };
-  tab.addEventListener('click', toggle);
+  chev.addEventListener('click', toggle);
+  rail.addEventListener('click', toggle);
   window.addEventListener('keydown', (e) => {
     if (e.key !== '\\' || e.metaKey || e.ctrlKey || e.altKey) return;
     if (/^(input|textarea|select)$/i.test(document.activeElement?.tagName || '') || document.activeElement?.isContentEditable) return;
