@@ -43,17 +43,18 @@ const prettyParam = (key) => {
 export function dashboardLinkLabels(show) {
   const labels = {};
   const note = (link, label) => { if (link && label && !labels[link]) labels[link] = label; };
+  const ctx = (where, param) => (where ? `${where} › ${param}` : param);   // "Lines › Pos"
   // Animations live in a parallel `anim` map (keyed by param key), NOT in `params`.
-  const scan = (animMap) => {
+  const scan = (animMap, where) => {
     for (const [key, a] of Object.entries(animMap || {})) {
-      if (a && a.mode === 'dashboard') note(a.link, prettyParam(key));
+      if (a && a.mode === 'dashboard') note(a.link, ctx(where, prettyParam(key)));
     }
   };
   const comp = show?.composition || {};
-  scan(comp.anim);
+  scan(comp.anim, 'Comp');
   for (const layer of comp.layers || []) {
-    scan(layer.anim);
-    for (const clip of layer.clips || []) scan(clip.anim);
+    scan(layer.anim, layer.name || 'Layer');
+    for (const clip of layer.clips || []) scan(clip.anim, clip.name || layer.name || 'Clip');
   }
   for (const f of show?.fixtures || []) {
     for (const ref of Object.values(f.input?.dmx?.bind || {})) {

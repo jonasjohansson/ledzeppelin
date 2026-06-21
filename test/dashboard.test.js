@@ -27,17 +27,17 @@ test('dashboardLinkLabels: a link is labelled by what it drives', () => {
   const show = {
     composition: {
       layers: [
-        { anim: { 'fx.opacity': { mode: 'dashboard', link: 'd2' } },
-          clips: [{ anim: { 'line.speed': { mode: 'dashboard', link: 'd1' }, 'line.zoom': { mode: 'timeline' } } }] },
+        { name: 'Layer 1', anim: { 'fx.opacity': { mode: 'dashboard', link: 'd2' } },
+          clips: [{ name: 'Lines', anim: { 'line.speed': { mode: 'dashboard', link: 'd1' }, 'line.zoom': { mode: 'timeline' } } }] },
       ],
     },
     fixtures: [{ id: 'fx9', name: 'FOS', input: { dmx: { bind: { 0: 'dash:d3' } } } }],
   };
   const labels = dashboardLinkLabels(show);
-  assert.equal(labels.d1, 'Speed');     // clip param key → pretty label
-  assert.equal(labels.d2, 'Opacity');   // layer param
-  assert.equal(labels.d3, 'FOS');       // DMX bind → fixture name
-  assert.equal(labels.d4, undefined);   // unused link → no label
+  assert.equal(labels.d1, 'Lines › Speed');     // clip name › param
+  assert.equal(labels.d2, 'Layer 1 › Opacity'); // layer name › param
+  assert.equal(labels.d3, 'FOS');               // DMX bind → fixture name
+  assert.equal(labels.d4, undefined);           // unused link → no label
 });
 
 test('setDashboardLinkValue clamps to 0..1', () => {

@@ -701,7 +701,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         // Name = a manual label if set, otherwise the auto label of what it drives
         // (display-only; typing a name persists it). Driven+auto reads dimmer.
         const auto = isAuto(lnk.name) && labels[lnk.id];
-        const nm = el('input', { className: 'dash-name' + (auto ? ' dash-auto' : ''), value: auto ? labels[lnk.id] : (lnk.name || lnk.id), title: auto ? 'auto-named from what it drives — type to rename' : 'rename link' });
+        const nm = el('input', { className: 'dash-name' + (auto ? ' dash-auto' : ''), value: auto ? labels[lnk.id] : (lnk.name || lnk.id), title: auto ? `${labels[lnk.id]} · auto-named from what it drives; type to rename` : 'rename link' });
         nm.addEventListener('change', () => commit(setDashboardLinkName(show(), lnk.id, nm.value)));
         cell.append(nm);
         grid.append(cell);
