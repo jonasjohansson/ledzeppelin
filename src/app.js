@@ -913,7 +913,7 @@ function dmxEditor(sel) {
       // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
       // owned by the type (edit it in Inventory → applies to every placed copy).
       const head = ptype
-        ? fld('Type', oel('span', { className: 'fx-readonly', textContent: `${ptype.name || ptype.id} · ${channels.length} ch (edit in Inventory)` }))
+        ? fld('Type', oel('span', { className: 'fx-readonly', textContent: ptype.name || ptype.id, title: 'edit this fixture’s channels in Inventory' }))
         : fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
           if (id === 'generic') setDmx({ profileId: 'generic', channels: cfg.channels?.length ? cfg.channels : [{ kind: 'fixed', value: 0 }] });
           else setDmx({ profileId: id, channels: undefined });
