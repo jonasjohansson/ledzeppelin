@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { animPhase, animatedValue, resolveParams, makeAnim, makeAudioAnim, specDurationMs } from '../src/model/anim.js';
+import { animPhase, animatedValue, resolveParams, makeAnim, makeAudioAnim, makeDashboardAnim, specDurationMs } from '../src/model/anim.js';
+
+test('dashboard anim maps a link value 0..1 into from..to, with invert', () => {
+  const a = makeDashboardAnim(10, 20, 'd1');
+  assert.equal(animatedValue(a, 0, { 'dash:d1': 0 }), 10);
+  assert.equal(animatedValue(a, 0, { 'dash:d1': 1 }), 20);
+  assert.equal(animatedValue(a, 0, { 'dash:d1': 0.5 }), 15);
+  const inv = makeDashboardAnim(10, 20, 'd1', true);
+  assert.equal(animatedValue(inv, 0, { 'dash:d1': 1 }), 10);   // inverted → 0 → from
+  assert.equal(animatedValue(a, 0, {}), 10);                   // missing link → 0 → from
+});
 
 test('animPhase forward wraps 0..1 over the duration', () => {
   assert.equal(animPhase(0, 4000, 'forward'), 0);

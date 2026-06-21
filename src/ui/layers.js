@@ -34,7 +34,7 @@ import {
   setDashboardLinkValue, setDashboardLinkName, addDashboardLink, removeDashboardLink,
 } from '../model/layers.js';
 import { Knob } from './kit/knob.js';
-import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
+import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
 import { AUDIO_BANDS, enableAudio } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
@@ -176,12 +176,15 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const animated = !!anim;
   const isAudio = anim?.mode === 'audio';
   const isExternal = anim?.mode === 'external';
+  const isDashboard = anim?.mode === 'dashboard';
   const wrap = el('div', { className: 'anim-param' });
   const cog = animModeMenu({
-    animated, isAudio, isExternal, audioSource: anim?.source, oscAddress,
+    animated, isAudio, isExternal, isDashboard, audioSource: anim?.source, oscAddress,
     onPick: (mode) => {
       // Default the sweep to the FULL slider range (in = min, out = max).
       if (mode === 'basic') onAnim(null);
+      // Dashboard: follow a global link (default the first), full range.
+      else if (mode === 'dashboard') onAnim(makeDashboardAnim(min, max, (isDashboard && anim.link) || dashLinks()[0]?.id || '', isDashboard ? anim.invert : false));
       // Two audio sources (Resolume-style): External input or Composition (clip)
       // audio. Switching source on an existing audio anim keeps its band/gain.
       else if (mode === 'audio-external' || mode === 'audio-composition') {
@@ -222,6 +225,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
   if (isExternal) wrap.classList.add('is-external');
+  if (isDashboard) wrap.classList.add('is-dashboard');
   const head = el('div', { className: 'ly-param anim-head' }, [
     el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout, cog,
   ]);
@@ -234,12 +238,13 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
 // The cog button + its Basic/Timeline/Audio/External popover (Resolume-style).
 // The cog reflects the current mode (accent when animated, green for Audio);
 // the menu marks the active mode. Replaces the old inline "T" toggle + dropdown.
-function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscAddress }) {
+function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource, onPick, oscAddress }) {
   const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
   const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
   let dismiss = null;
   const close = () => { menu.hidden = true; if (dismiss) { dismiss(); dismiss = null; } };
   const cur = !animated ? 'basic'
+    : isDashboard ? 'dashboard'
     : isAudio ? (audioSource === 'composition' ? 'audio-composition' : 'audio-external')
     : isExternal ? 'external' : 'timeline';
   // Compact one-line items; what each mode does lives on the HOVER title — a
@@ -252,6 +257,7 @@ function animModeMenu({ animated, isAudio, isExternal, audioSource, onPick, oscA
   menu.append(
     item('basic', 'Basic', 'hold a value, or sweep between two'),
     item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
+    item('dashboard', 'Dashboard', 'follow a global Dashboard link knob'),
     item('audio-external', 'Audio Ext.', 'follow a band of a hardware audio input'),
     item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio')
     // No 'External' item: any param is bound live via System › Mapping (which sets
@@ -321,7 +327,21 @@ function animControls(anim, onAnim, oscAddress, onAnimLive) {
   };
   const isAudio = anim.mode === 'audio';
   const isExternal = anim.mode === 'external';
+  const isDashboard = anim.mode === 'dashboard';
   const kids = [];
+  if (isDashboard) {
+    // Pick which global link drives this param; Invert flips the link; in/out live
+    // on the track handles above (so a link can map to a sub-range of the param).
+    const links = dashLinks();
+    kids.push(selectInput(links.length ? links.map((l) => ({ value: l.id, label: l.name || l.id })) : [{ value: '', label: '(no links)' }],
+      anim.link || '', (id) => onAnim({ ...anim, link: id })));
+    const inv = el('label', { className: 'anim-mini anim-invert' }, [el('span', { textContent: 'invert' })]);
+    const box = el('input', { type: 'checkbox' }); box.checked = !!anim.invert;
+    box.addEventListener('change', () => onAnim({ ...anim, invert: box.checked }));
+    inv.append(box);
+    kids.push(inv);
+    return el('div', { className: 'anim-ctrls' }, kids);
+  }
   if (isAudio) {
     // (in/out live on the track handles — grab a thumb for its value bubble)
     kids.push(selectInput(AUDIO_BANDS.map((bnd) => ({ value: bnd, label: bnd })), anim.band || 'level',
@@ -388,6 +408,8 @@ let drag = null; // { kind: 'source' | 'effect', name }
 let animClock = () => 0;
 // Live tempo (bpm) getter — lets the Timeline controls convert beats↔seconds.
 let animBpm = () => 120;
+// Live dashboard links getter — lets the Dashboard anim mode pick/show a link.
+let dashLinks = () => [];
 
 // Companion-remote hook — set by createLayerPanel so the (module-level) cog menu
 // can read/toggle whether a parameter is published to the phone companion.
@@ -400,6 +422,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
   if (transport?.now) animClock = transport.now;
   animBpm = () => getShow().composition?.bpm ?? 120;
+  dashLinks = () => getShow().composition?.dashboard?.links || [];
   // Wire the cog-menu Companion tick to the show's exposed-controls set.
   remoteHook = {
     has: (addr) => hasRemoteControl(getShow(), addr),

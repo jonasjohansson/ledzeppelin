@@ -45,6 +45,12 @@ export function makeExternalAnim(from, to, channel = '', gain = 1) {
   return { mode: 'external', from: Number(from) || 0, to: Number(to) || 0, channel, gain: Number(gain) || 1 };
 }
 
+// DASHBOARD: driven by a global dashboard link (0..1), mapped into from..to. `invert`
+// flips the link before mapping. The link value arrives in signals as `dash:<id>`.
+export function makeDashboardAnim(from, to, link = '', invert = false) {
+  return { mode: 'dashboard', from: Number(from) || 0, to: Number(to) || 0, link, invert: !!invert };
+}
+
 // Normalized 0..1 phase for the given clock time, duration and direction.
 // `phase` is an offset in CYCLES (0..1) — retimeAnim() writes it so edits to
 // direction/duration stay continuous on the free-running clock.
@@ -94,7 +100,11 @@ export function retimeAnim(spec, next, timeSec) {
 export function animatedValue(spec, timeSec, signals) {
   if (!spec) return undefined;
   let p;
-  if (spec.mode === 'audio' || spec.mode === 'external') {
+  if (spec.mode === 'dashboard') {
+    let v = (signals && signals[`dash:${spec.link}`]) || 0;
+    if (spec.invert) v = 1 - v;
+    p = Math.max(0, Math.min(1, v));
+  } else if (spec.mode === 'audio' || spec.mode === 'external') {
     // Audio reads a per-source band ("external:bass" / "composition:level"),
     // falling back to the plain band name when the namespaced key isn't present
     // (legacy/source-less anims, or signal maps that only expose plain bands).
