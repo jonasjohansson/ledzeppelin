@@ -23,6 +23,19 @@ test('pointsFromTransform: 90° rotation runs vertically', () => {
   assert.ok(Math.abs(pts[1][1] - 0.75) < 1e-9);
 });
 
+test('pointsFromTransform: a matrix (grid) does NOT aspect-flip when h > w', () => {
+  // A strip taller than wide flips vertical (+90); a grid must NOT — its rotation is
+  // explicit, so a near-square matrix doesn't jump ±90 while rotating (issue #3).
+  const strip = pointsFromTransform({ x: 500, y: 250, w: 200, h: 400, rotation: 0 }, CANVAS);
+  assert.ok(Math.abs(strip[0][0] - 0.5) < 1e-9, 'strip flips vertical');   // runs vertically
+  const grid = pointsFromTransform({ x: 500, y: 250, w: 200, h: 400, rotation: 0 }, CANVAS, true);
+  // grid: centreline runs along WIDTH (horizontal) at rotation 0 — v stays 0.5
+  assert.ok(Math.abs(grid[0][1] - 0.5) < 1e-9 && Math.abs(grid[1][1] - 0.5) < 1e-9, 'grid stays horizontal');
+  // and honours rotation directly (no +90): 90° → vertical, centred on x
+  const rot = pointsFromTransform({ x: 500, y: 250, w: 200, h: 400, rotation: 90 }, CANVAS, true);
+  assert.ok(Math.abs(rot[0][0] - 0.5) < 1e-9 && Math.abs(rot[1][0] - 0.5) < 1e-9);
+});
+
 test('transformFromPoints round-trips a horizontal strip', () => {
   const t = transformFromPoints([[0.1, 0.5], [0.9, 0.5]], CANVAS);
   assert.equal(t.x, 500);

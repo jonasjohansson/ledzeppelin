@@ -19,15 +19,19 @@ const DEFAULT_THICKNESS = 8;
 const canvasOf = (c) => ({ w: (c && c.w) || DEFAULT_CANVAS.w, h: (c && c.h) || DEFAULT_CANVAS.h });
 
 // Transform (px) → the two centreline endpoints in normalized 0..1 space.
-export function pointsFromTransform(t, canvas) {
+// `grid` = a matrix footprint: its rotation is EXPLICIT, so the strip aspect-flip
+// (vertical when h > w) must NOT apply — otherwise a near-square matrix jumps ±90°
+// as h crosses w while rotating.
+export function pointsFromTransform(t, canvas, grid = false) {
   const { w: W, h: H } = canvasOf(canvas);
   const w = Number(t?.w) || 0, h = Number(t?.h);
   // Orientation comes from the BOX ASPECT: the LED centreline runs along the
   // LONGER side, so editing width/height alone flips a strip vertical↔horizontal
   // (no rotation needed). Legacy/auto fixtures (h is the auto-thickness sentinel)
-  // keep length = w (horizontal). `rotation` then tilts further on top.
+  // keep length = w (horizontal). `rotation` then tilts further on top. A matrix
+  // is exempt — its centreline runs along width at the explicit rotation.
   const autoH = isAutoThickness(h);
-  const vertical = !autoH && h > w;
+  const vertical = !grid && !autoH && h > w;
   const len = vertical ? h : w;
   const a = (Number(t?.rotation) || 0) * DEG + (vertical ? Math.PI / 2 : 0);
   const half = len / 2;
@@ -168,10 +172,10 @@ export function syncFixtureGeometry(fixture, canvas) {
   const transform = input.transform
     ? normTransform(input.transform)
     : transformFromPoints(input.points, canvas);
-  const points = pointsFromTransform(transform, canvas);
   // A DMX/par fixture keeps its 'dmx' mode (point fixture); a matrix keeps 'grid'
   // (rectangle footprint); everything else is a straight bar. `points` is a 2-pt cache.
   const mode = input.dmx ? 'dmx' : (input.mode === 'grid' ? 'grid' : 'bar');
+  const points = pointsFromTransform(transform, canvas, mode === 'grid');
   return { ...fixture, input: { ...input, mode, transform, points } };
 }
 
@@ -315,7 +319,7 @@ export function setFixtureTransform(show, fxId, patch) {
     fixtures: show.fixtures.map((f) => {
       if (f.id !== fxId) return f;
       const transform = normTransform({ ...(f.input?.transform || transformFromPoints(f.input?.points, canvas)), ...patch });
-      return { ...f, input: { ...f.input, transform, points: pointsFromTransform(transform, canvas) } };
+      return { ...f, input: { ...f.input, transform, points: pointsFromTransform(transform, canvas, f.input?.mode === 'grid') } };
     }),
   };
 }
