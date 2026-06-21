@@ -31,3 +31,33 @@ export function dashboardSignals(composition) {
 // Options for a "pick a link" dropdown.
 export const dashboardLinkOptions = (composition) =>
   (composition?.dashboard?.links || []).map((l) => ({ value: l.id, label: l.name || l.id }));
+
+// A link auto-labels itself from whatever it drives. Reverse-scan the show for the
+// things that reference each link — param animations ({mode:'dashboard', link}) on
+// clips/layers/composition, and DMX channel binds ('dash:<id>') — and return a map
+// linkId → label (the first thing it drives). Used when the link has no manual name.
+const prettyParam = (key) => {
+  const s = String(key || '').split('.').pop().replace(/[_-]+/g, ' ').trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+};
+export function dashboardLinkLabels(show) {
+  const labels = {};
+  const note = (link, label) => { if (link && label && !labels[link]) labels[link] = label; };
+  const scan = (params) => {
+    for (const [key, v] of Object.entries(params || {})) {
+      if (v && typeof v === 'object' && v.mode === 'dashboard') note(v.link, prettyParam(key));
+    }
+  };
+  const comp = show?.composition || {};
+  scan(comp.params);
+  for (const layer of comp.layers || []) {
+    scan(layer.params);
+    for (const clip of layer.clips || []) scan(clip.params);
+  }
+  for (const f of show?.fixtures || []) {
+    for (const ref of Object.values(f.input?.dmx?.bind || {})) {
+      if (typeof ref === 'string' && ref.startsWith('dash:')) note(ref.slice(5), f.name || f.id || 'DMX');
+    }
+  }
+  return labels;
+}

@@ -669,6 +669,7 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .dash-name { width: 100%; text-align: center; background: transparent; border: 0; color: var(--muted);
   font: var(--fs-micro) var(--sans); padding: 1px 0; min-width: 0; }
 .dash-name:hover, .dash-name:focus { color: var(--text); background: var(--panel-2); border-radius: 3px; outline: none; }
+.dash-name.dash-auto { color: var(--accent); }   /* auto-named from what it drives */
 /* The pixel/colour block shown inline among the parameters (params order around it). */
 .fx-param-pixels { min-height: var(--row-h); display: flex; align-items: center; padding: 0 8px;
   color: var(--muted); font: var(--fs-micro) var(--mono); letter-spacing: var(--ls-ui);

@@ -33,6 +33,7 @@ import {
   mergeClipParams, mergeLayerParams, prefixedDefaults,
   setDashboardLinkValue, setDashboardLinkName,
 } from '../model/layers.js';
+import { dashboardLinkLabels } from '../model/dashboard.js';
 import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
@@ -207,21 +208,10 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
     return wrap;
   }
 
-  // Animated layout (un-crammed): three stacked rows —
-  //   1. label · live value · cog   2. full-width in/out track   3. direction · in · out · s
+  // Animated layout (un-crammed): label · live value · cog, then a full-width in/out
+  // track, then the mode's controls. EXCEPT dashboard — a global link drives the param
+  // across its full range, so it shows just the link picker (no in/out track).
   const readout = el('span', { className: 'ly-readout', textContent: fmtLive(anim.from) });
-  const track = rangeTrack({
-    min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
-    // Beat-synced loops show their beat grid as tick marks on the track.
-    ticks: anim.beats != null ? anim.beats : 0,
-    onFrom: (v) => onAnim({ ...anim, from: v }),
-    onTo: (v) => onAnim({ ...anim, to: v }),
-    // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
-    // sweep/mapping follows the thumb in realtime); the thumb's own value bubble
-    // tracks the drag. Release does the full commit + re-render.
-    onLiveFrom: (v) => onAnimLive?.({ ...anim, from: v }),
-    onLiveTo: (v) => onAnimLive?.({ ...anim, to: v }),
-  });
   wrap.classList.add('is-animated');
   if (isAudio) wrap.classList.add('is-audio');
   if (isExternal) wrap.classList.add('is-external');
@@ -230,7 +220,24 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
     el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout, cog,
   ]);
   wrap.append(head);
-  wrap.append(track);
+  if (isDashboard) {
+    // No track — tag the readout so the live loop still updates the shown value.
+    readout.dataset.animkey = key; readout.dataset.min = min; readout.dataset.max = max;
+  } else {
+    const track = rangeTrack({
+      min, max, step: p.step, from: anim.from, to: anim.to, animKey: key,
+      // Beat-synced loops show their beat grid as tick marks on the track.
+      ticks: anim.beats != null ? anim.beats : 0,
+      onFrom: (v) => onAnim({ ...anim, from: v }),
+      onTo: (v) => onAnim({ ...anim, to: v }),
+      // Mid-drag the spec is written LIVE (commitLive — no re-render, the running
+      // sweep/mapping follows the thumb in realtime); the thumb's own value bubble
+      // tracks the drag. Release does the full commit + re-render.
+      onLiveFrom: (v) => onAnimLive?.({ ...anim, from: v }),
+      onLiveTo: (v) => onAnimLive?.({ ...anim, to: v }),
+    });
+    wrap.append(track);
+  }
   wrap.append(animControls(anim, onAnim, oscAddress, onAnimLive));
   return wrap;
 }
@@ -677,7 +684,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   // per-frame signals. A FIXED 6×3 grid of 18 links — drag a knob to set, rename
   // inline (not addable/removable).
   function dashboardSection() {
-    const links = getShow().composition?.dashboard?.links || [];
+    const sh = getShow();
+    const links = sh.composition?.dashboard?.links || [];
+    // A link with no manual name auto-labels itself from whatever it drives.
+    const labels = dashboardLinkLabels(sh);
+    const isAuto = (n) => !n || /^Link \d+$/.test(n);
     const box = el('div', { className: 'comp-dashboard' });
     box.append(Section('Dashboard', 'dashboard', (b) => {
       const grid = el('div', { className: 'dash-grid' });
@@ -687,8 +698,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           onInput: (v) => commitLive(setDashboardLinkValue(show(), lnk.id, v)),
           onCommit: (v) => commit(setDashboardLinkValue(show(), lnk.id, v)),
         }));
-        // Editable name = the link's label (click to rename).
-        const nm = el('input', { className: 'dash-name', value: lnk.name || lnk.id, title: 'rename link' });
+        // Name = a manual label if set, otherwise the auto label of what it drives
+        // (display-only; typing a name persists it). Driven+auto reads dimmer.
+        const auto = isAuto(lnk.name) && labels[lnk.id];
+        const nm = el('input', { className: 'dash-name' + (auto ? ' dash-auto' : ''), value: auto ? labels[lnk.id] : (lnk.name || lnk.id), title: auto ? 'auto-named from what it drives — type to rename' : 'rename link' });
         nm.addEventListener('change', () => commit(setDashboardLinkName(show(), lnk.id, nm.value)));
         cell.append(nm);
         grid.append(cell);

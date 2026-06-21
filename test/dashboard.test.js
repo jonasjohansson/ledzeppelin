@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normDashboard, dashboardSignals, DASHBOARD_DEFAULT_LINKS } from '../src/model/dashboard.js';
+import { normDashboard, dashboardSignals, dashboardLinkLabels, DASHBOARD_DEFAULT_LINKS } from '../src/model/dashboard.js';
 import { setDashboardLinkValue, normalizeComposition } from '../src/model/layers.js';
 
 test('normDashboard is a fixed bank of the default link count + clamps values', () => {
@@ -21,6 +21,23 @@ test('normalizeComposition adds the fixed dashboard bank', () => {
 test('dashboardSignals exposes dash:<id> values', () => {
   const sig = dashboardSignals({ dashboard: { links: [{ id: 'd1', value: 0.5 }, { id: 'd2', value: 1 }] } });
   assert.deepEqual(sig, { 'dash:d1': 0.5, 'dash:d2': 1 });
+});
+
+test('dashboardLinkLabels: a link is labelled by what it drives', () => {
+  const show = {
+    composition: {
+      layers: [
+        { params: { 'fx.opacity': { mode: 'dashboard', link: 'd2' } },
+          clips: [{ params: { 'line.speed': { mode: 'dashboard', link: 'd1' }, 'line.zoom': 5 } }] },
+      ],
+    },
+    fixtures: [{ id: 'fx9', name: 'FOS', input: { dmx: { bind: { 0: 'dash:d3' } } } }],
+  };
+  const labels = dashboardLinkLabels(show);
+  assert.equal(labels.d1, 'Speed');     // clip param key → pretty label
+  assert.equal(labels.d2, 'Opacity');   // layer param
+  assert.equal(labels.d3, 'FOS');       // DMX bind → fixture name
+  assert.equal(labels.d4, undefined);   // unused link → no label
 });
 
 test('setDashboardLinkValue clamps to 0..1', () => {
