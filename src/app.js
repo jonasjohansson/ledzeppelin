@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
@@ -958,8 +958,14 @@ function dmxEditor(sel) {
   // visual, default for colour), Manual (a fader), a Layer's level, or a Dashboard
   // link. A colour block's source applies to all its channels together.
   const hasFixed = channels.some((c) => c.kind === 'fixed');
-  const params = (ptype?.params || []).filter((p) => p && p.count != null);
-  if (params.length) {
+  const typeParams = (ptype?.params || []).filter((p) => p && p.count != null);
+  // Always present a parameter VIEW — even when the type has no DMX params (e.g. an
+  // LED strip placed as DMX, whose channels come from its Color Format): derive params
+  // from the channels so an RGB strip reads as one "RGB" row, not four raw channels.
+  // Only a truly legacy "generic" profile keeps the low-level channel-kind editor.
+  const legacyGeneric = cfg.profileId === 'generic';
+  const params = typeParams.length ? typeParams : (channels.length ? channelsToParams(channels) : []);
+  if (params.length && !legacyGeneric) {
     const layers = show.composition?.layers || [];
     const dashLinks = show.composition?.dashboard?.links || [];
     const srcOptions = (isColour) => [
@@ -989,10 +995,10 @@ function dmxEditor(sel) {
           onInput: (v) => idxs.forEach((i) => dmxFixedLive(sel.id, i, Math.round(v))) }));
       });
     }));
-  } else if (generic || hasFixed) {
+  } else if (legacyGeneric || hasFixed) {
     out.append(Section('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
-        if (generic) {
+        if (legacyGeneric) {
           const kindSel = sel2(DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: k })), c.kind,
             (k) => patchFix((f) => { const ch = liveChannels(); ch[i] = { ...ch[i], kind: k }; f.input.dmx = { ...f.input.dmx, channels: ch }; }));
           const rm = oel('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
@@ -1004,7 +1010,7 @@ function dmxEditor(sel) {
             onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [i]: Math.round(v) } }) }));
         }
       });
-      if (generic) body.append(oel('button', { className: 'fx-add', textContent: '+ channel',
+      if (legacyGeneric) body.append(oel('button', { className: 'fx-add', textContent: '+ channel',
         onclick: () => patchFix((f) => { f.input.dmx = { ...f.input.dmx, channels: [...liveChannels(), { kind: 'fixed', value: 0 }] }; }) }));
     }));
   }
