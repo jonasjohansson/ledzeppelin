@@ -1,4 +1,4 @@
-import { fixtureTypeChannels, DMX_CHANNEL_KINDS, isDmxFormat, paramsToChannels, channelsToParams, defaultParamName } from './dmx.js';
+import { fixtureTypeChannels, DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -114,12 +114,16 @@ function normFixtureParams(params) {
     before: !!p?.before,
   }));
 }
-// A DMX-profile fixture's PARAMETERS: each has a format (a colour block like RGBWA,
-// or a single function). Only colour params have no value; single params keep one.
+// A DMX-profile fixture's PARAMETERS: each a NAME + a channel COUNT. The name decides
+// behaviour (a colour name → a colour block; a function name → a 1-ch control; else
+// `count` manual channels). An old `format` field migrates to the equivalent name.
 function normDmxParams(params) {
   return (Array.isArray(params) ? params : []).map((p) => {
-    const format = isDmxFormat(p?.format) ? p.format : (DMX_CHANNEL_KINDS.includes(p?.kind) ? p.kind : 'fixed');
-    return { name: String(p?.name ?? defaultParamName(format)), format, value: clamp8(p?.value) };
+    let name = p?.name;
+    if (p?.format && ['RGB', 'RGBW', 'RGBWA', 'RGBA'].includes(p.format)) name = p.format;   // old colour-format param → name = format
+    else if (p?.format && name == null) name = p.format;
+    name = String(name ?? 'Param');
+    return { name, count: paramKinds(name, p?.count).length, value: clamp8(p?.value) };
   });
 }
 function normFixtureType(t) {
@@ -127,10 +131,10 @@ function normFixtureType(t) {
   const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
   const base = { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows };
-  // A DMX type is a list of format params; its flat `channels` is the expansion.
+  // A DMX type is a list of name+count params; its flat `channels` is the expansion.
   // Migrate a legacy flat channel list (kind-per-channel) into params on the way in.
-  const hasFmtParams = Array.isArray(t.params) && t.params.some((p) => p && p.format);
-  const dmxParams = hasFmtParams ? t.params
+  const hasDmxParams = Array.isArray(t.params) && t.params.some((p) => p && (p.count != null || p.format));
+  const dmxParams = hasDmxParams ? t.params
     : (Array.isArray(t.channels) && t.channels.length ? channelsToParams(t.channels) : null);
   if (dmxParams) {
     base.params = normDmxParams(dmxParams);

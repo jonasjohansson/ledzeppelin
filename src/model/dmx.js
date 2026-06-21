@@ -86,54 +86,52 @@ export function fixtureTypeChannels(type) {
   return [...before, ...colorFormatChannels(type?.colorFormat), ...after];
 }
 
-// --- Parameters with a FORMAT (Resolume model) ------------------------------
-// A DMX fixture is a list of PARAMETERS, each with a format: a single channel (a
-// function) or a multi-channel colour block. The flat `channels` (runtime truth) is
-// the EXPANSION of the params — see paramsToChannels / channelsToParams.
-export const DMX_PARAM_FORMATS = [
-  { value: 'RGB', label: 'RGB (3 ch)' }, { value: 'RGBW', label: 'RGBW (4 ch)' },
-  { value: 'RGBWA', label: 'RGBWA (5 ch)' }, { value: 'RGBA', label: 'RGBA (4 ch)' },
-  { value: 'dimmer', label: 'Dimmer (1 ch)' }, { value: 'strobe', label: 'Strobe (1 ch)' },
-  { value: 'uv', label: 'UV (1 ch)' }, { value: 'white', label: 'White (1 ch)' },
-  { value: 'amber', label: 'Amber (1 ch)' }, { value: 'fixed', label: 'Fixed (1 ch)' },
-];
+// --- Parameters: NAME + channel COUNT ---------------------------------------
+// A DMX fixture is a list of PARAMETERS, each a NAME + a channel COUNT. The name
+// decides behaviour: a colour name (RGB/RGBW/RGBWA/RGBA) → a canvas-sampled colour
+// block; a known function (Dimmer/Strobe/UV/White/Amber/Red/Green/Blue) → a 1-channel
+// control; anything else → `count` manual channels. Flat `channels` is the expansion.
 const FORMAT_KINDS = {
   RGB: ['red', 'green', 'blue'], RGBW: ['red', 'green', 'blue', 'white'],
   RGBWA: ['red', 'green', 'blue', 'white', 'amber'], RGBA: ['red', 'green', 'blue', 'amber'],
-  dimmer: ['dimmer'], strobe: ['strobe'], uv: ['uv'], white: ['white'], amber: ['amber'], fixed: ['fixed'],
-  red: ['red'], green: ['green'], blue: ['blue'],   // single colour components (legacy/edge)
 };
-export const isDmxFormat = (f) => Object.prototype.hasOwnProperty.call(FORMAT_KINDS, f);
-export const paramFormatKinds = (format) => FORMAT_KINDS[format] || ['fixed'];
-export const isColourFormat = (format) => paramFormatKinds(format).length > 1;
-const DEFAULT_FORMAT_NAME = { RGB: 'Color', RGBW: 'Color', RGBWA: 'Color', RGBA: 'Color', dimmer: 'Dimmer', strobe: 'Strobe', uv: 'UV', white: 'White', amber: 'Amber', fixed: 'Fixed' };
-export const defaultParamName = (format) => DEFAULT_FORMAT_NAME[format] || 'Param';
+const COLOUR_NAME_FMT = { rgb: 'RGB', rgbw: 'RGBW', rgbwa: 'RGBWA', rgba: 'RGBA' };
+const SINGLE_NAME_KIND = { dimmer: 'dimmer', dimming: 'dimmer', strobe: 'strobe', uv: 'uv', white: 'white', amber: 'amber', red: 'red', green: 'green', blue: 'blue' };
+export const isColourParam = (name) => !!COLOUR_NAME_FMT[String(name || '').trim().toLowerCase()];
+// The channel kinds a parameter expands to, from its name (+ count for generic).
+export function paramKinds(name, count) {
+  const lc = String(name || '').trim().toLowerCase();
+  if (COLOUR_NAME_FMT[lc]) return FORMAT_KINDS[COLOUR_NAME_FMT[lc]];
+  if (SINGLE_NAME_KIND[lc]) return [SINGLE_NAME_KIND[lc]];
+  return Array(Math.max(1, Math.round(Number(count) || 1))).fill('fixed');
+}
+export const paramSpan = (p) => paramKinds(p?.name, p?.count).length;
 
-// Expand a param list → flat channels (the runtime/output truth). A colour-format
-// param yields its colour channels (auto-named R/G/B/W/A); a single param yields one.
+// Expand a param list → flat channels (the runtime/output truth).
 export function paramsToChannels(params) {
   const out = [];
   for (const p of (Array.isArray(params) ? params : [])) {
-    const kinds = paramFormatKinds(p.format);
-    if (kinds.length === 1) out.push({ kind: kinds[0], name: p.name || DMX_KIND_LABELS[kinds[0]] || kinds[0], value: clamp8(p.value ?? 0) });
-    else for (const k of kinds) out.push({ kind: k, name: DMX_KIND_LABELS[k] || k });
+    const kinds = paramKinds(p.name, p.count);
+    if (kinds.length === 1) { out.push({ kind: kinds[0], name: p.name || DMX_KIND_LABELS[kinds[0]] || kinds[0], value: clamp8(p.value ?? 0) }); continue; }
+    const colour = isColourParam(p.name);
+    kinds.forEach((k, j) => out.push({ kind: k, name: colour ? (DMX_KIND_LABELS[k] || k) : `${p.name} ${j + 1}` }));
   }
   return out;
 }
 
 // Group a flat channel list → params (migrate/display a legacy flat fixture): a run
-// of red,green,blue(+white)(+amber) collapses into a single colour-format param.
+// of red,green,blue(+white)(+amber) collapses into one colour param named by format.
 export function channelsToParams(channels) {
   const cs = Array.isArray(channels) ? channels : []; const out = []; let i = 0;
   const k = (j) => cs[j]?.kind;
   while (i < cs.length) {
     if (k(i) === 'red' && k(i + 1) === 'green' && k(i + 2) === 'blue') {
-      if (k(i + 3) === 'white' && k(i + 4) === 'amber') { out.push({ name: 'Color', format: 'RGBWA' }); i += 5; continue; }
-      if (k(i + 3) === 'white') { out.push({ name: 'Color', format: 'RGBW' }); i += 4; continue; }
-      if (k(i + 3) === 'amber') { out.push({ name: 'Color', format: 'RGBA' }); i += 4; continue; }
-      out.push({ name: 'Color', format: 'RGB' }); i += 3; continue;
+      if (k(i + 3) === 'white' && k(i + 4) === 'amber') { out.push({ name: 'RGBWA', count: 5 }); i += 5; continue; }
+      if (k(i + 3) === 'white') { out.push({ name: 'RGBW', count: 4 }); i += 4; continue; }
+      if (k(i + 3) === 'amber') { out.push({ name: 'RGBA', count: 4 }); i += 4; continue; }
+      out.push({ name: 'RGB', count: 3 }); i += 3; continue;
     }
-    const c = cs[i]; out.push({ name: c.name || DMX_KIND_LABELS[c.kind] || c.kind, format: c.kind, value: c.value }); i++;
+    const c = cs[i]; out.push({ name: c.name || DMX_KIND_LABELS[c.kind] || c.kind, count: 1, value: c.value }); i++;
   }
   return out;
 }

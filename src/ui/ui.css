@@ -643,10 +643,12 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-param-row > select { flex: 1 1 0; }
 .fx-param-row > .fx-act { flex: 0 0 auto; }
 .fx-param-row > .fx-ch-n { flex: 0 0 14px; text-align: right; color: var(--faint); font: var(--fs-micro) var(--mono); }
-/* DMX channel rows: a slim drag handle, then the channel name fills the row. */
-.fx-ch-row { gap: 6px; }
+/* DMX param rows: a slim drag handle, the name fills the row, a small count box. */
+.fx-ch-row { gap: 5px; }
 .fx-ch-row > input[type=text] { flex: 1 1 0; min-width: 0; }
-.fx-ch-drag { flex: 0 0 9px; width: 9px; cursor: grab; color: var(--faint); text-align: center; user-select: none; line-height: 1; font-size: 9px; }
+.fx-ch-row > .fx-ch-count { flex: 0 0 40px; min-width: 0; text-align: center; }
+.fx-ch-row > .fx-ch-count:disabled { opacity: 0.45; }
+.fx-ch-drag { flex: 0 0 7px; width: 7px; cursor: grab; color: var(--faint); text-align: center; user-select: none; line-height: 1; font-size: 8px; padding: 0; }
 .fx-ch-drag:active { cursor: grabbing; }
 .fx-ch-drag:hover { color: var(--accent); }
 .fx-ch-row.drop-hover { outline: 1px dashed var(--accent-line); outline-offset: -1px; }

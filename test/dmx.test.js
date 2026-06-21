@@ -3,16 +3,20 @@ import assert from 'node:assert/strict';
 import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels, DMX_CHANNEL_KINDS,
   colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices, fixtureControlChannels, kindFromName } from '../src/model/dmx.js';
 
-test('params with format expand to channels and group back', async () => {
-  const { paramsToChannels, channelsToParams } = await import('../src/model/dmx.js');
-  const params = [{ name: 'Color', format: 'RGBWA' }, { name: 'UV', format: 'uv', value: 0 }];
+test('name+count params expand to channels and group back', async () => {
+  const { paramsToChannels, channelsToParams, paramKinds } = await import('../src/model/dmx.js');
+  // A colour name → its colour block; a function name → 1 ch; a generic name → count.
+  assert.deepEqual(paramKinds('RGBWA'), ['red', 'green', 'blue', 'white', 'amber']);
+  assert.deepEqual(paramKinds('UV'), ['uv']);
+  assert.deepEqual(paramKinds('Pan', 2), ['fixed', 'fixed']);
+  const params = [{ name: 'RGBWA', count: 5 }, { name: 'UV', count: 1, value: 0 }];
   const ch = paramsToChannels(params);
   assert.equal(ch.length, 6);
   assert.deepEqual(ch.map((c) => c.kind), ['red', 'green', 'blue', 'white', 'amber', 'uv']);
-  // Grouping a flat list back collapses the colour run into one colour-format param.
-  assert.deepEqual(channelsToParams(ch).map((p) => p.format), ['RGBWA', 'uv']);
-  // RGB + a single Dimmer.
-  assert.equal(paramsToChannels([{ format: 'RGB' }, { name: 'Dim', format: 'dimmer' }]).length, 4);
+  // Grouping a flat list back collapses the colour run into one colour param.
+  assert.deepEqual(channelsToParams(ch).map((p) => p.name), ['RGBWA', 'UV']);
+  // RGB + a single Dimmer = 4 channels.
+  assert.equal(paramsToChannels([{ name: 'RGB' }, { name: 'Dimmer' }]).length, 4);
 });
 
 test('kindFromName infers a channel function from its name', () => {
