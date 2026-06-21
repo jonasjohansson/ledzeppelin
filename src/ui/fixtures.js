@@ -80,7 +80,7 @@ function distributionPicker(value, onPick) {
 const PARAM_PRESETS = [
   { value: 'RGB', count: 3 }, { value: 'RGBW', count: 4 }, { value: 'RGBWA', count: 5 }, { value: 'RGBA', count: 4 },
   { value: 'Dimmer', count: 1 }, { value: 'Strobe', count: 1 }, { value: 'UV', count: 1 },
-  { value: 'White', count: 1 }, { value: 'Amber', count: 1 }, { value: 'Fixed', count: 1 },
+  { value: 'White', count: 1 }, { value: 'Amber', count: 1 },
 ];
 const presetOf = (name) => PARAM_PRESETS.find((p) => p.value.toLowerCase() === String(name || '').trim().toLowerCase());
 
