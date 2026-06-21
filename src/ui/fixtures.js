@@ -75,10 +75,9 @@ function distributionPicker(value, onPick) {
   return grid;
 }
 
-// DMX-profile editor: an explicit ordered channel list on the type. Each channel has
-// a function (kind), a name, and — for manual kinds (fixed/uv/strobe) — a default
-// value. Reorder with ↑/↓; channel number = DMX slot offset from the start address.
-const CH_MANUAL_VAL = new Set(['fixed', 'uv', 'strobe']);
+// DMX-profile editor: an explicit ordered channel list on the type — each channel a
+// function (kind) + a name. Drag to reorder; channel number = DMX slot offset from
+// the start address. Per-fixture VALUES are set with the sliders in the Devices editor.
 function dmxChannelEditor(t, upd, rows) {
   const channels = t.channels || [];
   const cUpd = (i, patch) => upd((nt) => { nt.channels = (nt.channels || []).slice(); nt.channels[i] = { ...nt.channels[i], ...patch }; });
@@ -96,9 +95,9 @@ function dmxChannelEditor(t, upd, rows) {
     const kind = selectInput(dmxKindOptions(), c.kind, (x) => cUpd(i, { kind: x }));
     const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
       onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Ch 1', value: 0 }]; }) });
-    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind];
-    if (CH_MANUAL_VAL.has(c.kind)) cells.push(numInputCommit(c.value ?? 0, (x) => cUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
-    cells.push(rm);
+    // Layout only — order / function / name. A channel's live VALUE is set per
+    // fixture with the sliders in the Devices editor (or via a dashboard/layer link).
+    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind, rm];
     const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, cells);
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('drop-hover'); });
     row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
