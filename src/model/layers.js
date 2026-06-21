@@ -1,3 +1,5 @@
+import { normDashboard } from './dashboard.js';
+
 // Pure, immutable helpers for the clip-based composition layer schema.
 //
 // SCHEMA (NEW — "Resolume clips"):
@@ -240,7 +242,7 @@ export function normalizeComposition(show) {
     : { ...DEFAULT_CANVAS };
 
   const bpm = Number.isFinite(Number(comp.bpm)) ? Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(Number(comp.bpm)))) : BPM_DEFAULT;
-  return { ...src, composition: { ...comp, canvas, layers, bpm, blendV2: true, opacityV2: true } };
+  return { ...src, composition: { ...comp, canvas, layers, bpm, dashboard: normDashboard(comp.dashboard), blendV2: true, opacityV2: true } };
 }
 
 // --- internal: locate + immutably replace a layer / clip ---------------------
@@ -762,6 +764,30 @@ export function setLayerParam(show, layerId, key, value) {
 //     all layers, after each layer's own chain. Stored on composition.effects /
 //     composition.params (namespaced), mirroring the clip/layer chains. ---
 const updateComp = (show, fn) => ({ ...show, composition: fn(show.composition || {}) });
+// --- Dashboard links (global modulation knobs) -------------------------------
+export function setDashboardLinkValue(show, id, value) {
+  return updateComp(show, (c) => {
+    const links = (c.dashboard?.links || []).map((l) => (l.id === id ? { ...l, value: Math.max(0, Math.min(1, Number(value) || 0)) } : l));
+    return { ...c, dashboard: { ...c.dashboard, links } };
+  });
+}
+export function setDashboardLinkName(show, id, name) {
+  return updateComp(show, (c) => {
+    const links = (c.dashboard?.links || []).map((l) => (l.id === id ? { ...l, name: String(name || l.id) } : l));
+    return { ...c, dashboard: { ...c.dashboard, links } };
+  });
+}
+export function addDashboardLink(show) {
+  return updateComp(show, (c) => {
+    const links = (c.dashboard?.links || []).slice();
+    let n = links.length + 1, id; do { id = `d${n}`; n++; } while (links.some((l) => l.id === id));
+    links.push({ id, name: `Link ${links.length + 1}`, value: 0 });
+    return { ...c, dashboard: { ...c.dashboard, links } };
+  });
+}
+export function removeDashboardLink(show, id) {
+  return updateComp(show, (c) => ({ ...c, dashboard: { ...c.dashboard, links: (c.dashboard?.links || []).filter((l) => l.id !== id) } }));
+}
 export function addCompositionEffect(show, name) {
   return updateComp(show, (c) => ({ ...c, effects: [...(c.effects || []), name], params: { ...c.params, ...prefixedDefaults(name) } }));
 }

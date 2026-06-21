@@ -25,6 +25,7 @@ import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromT
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels, fixtureControlChannels } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
+import { dashboardSignals } from './model/dashboard.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
@@ -111,7 +112,7 @@ function initialShow() {
 
 // On load: migrate legacy flat fixtures into definitions + instances (so the
 // Library shows definitions immediately), then sync fixture geometry.
-let show = tidyEmptyLayers(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow()))));
+let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())))));
 
 // --- Canvas resolution (composition.canvas drives source render + stage) ---
 // The canvas resolution affects ONLY the source render targets + on-screen
@@ -2341,7 +2342,7 @@ function loop(ts) {
     // compositing. No-op (same ref) when nothing is animated. The signals map
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
-    const signals = { ...updateAudio(), ...extChannels(), __bpm: show.composition?.bpm ?? 120 };
+    const signals = { ...updateAudio(), ...extChannels(), ...dashboardSignals(show.composition), __bpm: show.composition?.bpm ?? 120 };
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, signals, L.id);
       let clips = L.clips;

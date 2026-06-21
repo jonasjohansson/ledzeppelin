@@ -31,7 +31,9 @@ import {
   setClipAnim, setLayerAnim, patchLayer,
   removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
+  setDashboardLinkValue, setDashboardLinkName, addDashboardLink, removeDashboardLink,
 } from '../model/layers.js';
+import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
@@ -640,10 +642,39 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // COMPOSITION inspector (the group's inspector): the composition effect chain
     // (3rd tier, applied to the final composite of ALL layers). Canvas resolution +
     // title sit above this in #comp-settings. (Master opacity was removed.)
+    compEl.append(dashboardSection());
     compEl.append(compositionFx());
     // (Sources/Effects are added via on-demand pickers — the empty clip slot's "+"
     //  for sources, each Effects chain's "+ effect" for effects — so there's no
     //  longer a docked library shelf.)
+  }
+
+  // Dashboard — global link knobs (0..1) that any parameter or DMX channel can be
+  // modulated by. Lives on composition.dashboard.links; values persist + feed the
+  // per-frame signals. Drag a knob to set; rename inline; + link adds more.
+  function dashboardSection() {
+    const links = getShow().composition?.dashboard?.links || [];
+    const box = el('div', { className: 'comp-dashboard' });
+    box.append(Section('Dashboard', 'dashboard', (b) => {
+      const row = el('div', { className: 'dash-row' });
+      for (const lnk of links) {
+        const cell = el('div', { className: 'dash-cell' });
+        cell.append(Knob('', lnk.value, {
+          onInput: (v) => commitLive(setDashboardLinkValue(show(), lnk.id, v)),
+          onCommit: (v) => commit(setDashboardLinkValue(show(), lnk.id, v)),
+        }));
+        // Editable name = the link's label (click to rename).
+        const nm = el('input', { className: 'dash-name', value: lnk.name || lnk.id, title: 'rename link' });
+        nm.addEventListener('change', () => commit(setDashboardLinkName(show(), lnk.id, nm.value)));
+        const rm = el('button', { className: 'fx-act dash-rm', textContent: '⌫', title: 'remove link',
+          onclick: () => commit(removeDashboardLink(show(), lnk.id)) });
+        cell.append(nm, rm);
+        row.append(cell);
+      }
+      b.append(row);
+      b.append(el('button', { className: 'fx-add', textContent: '+ link', onclick: () => commit(addDashboardLink(show())) }));
+    }));
+    return box;
   }
 
   // Composition effect chain — applied to the WHOLE composite (all layers), after

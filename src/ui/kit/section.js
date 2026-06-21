@@ -14,7 +14,7 @@ export const SEC_OPEN = new Set([
   // Composition inspector (clip)
   'playback', 'source', 'transform', 'effects',
   // Composition inspector (layer / composition)
-  'autopilot', 'layer-comp', 'layer-effects', 'comp-master', 'comp-fx',
+  'autopilot', 'layer-comp', 'layer-effects', 'comp-master', 'comp-fx', 'dashboard',
   // Fixtures / Output tabs
   'devices', 'fixtures', 'position', 'chains', 'routing', 'identity',
   // DMX fixture editor
