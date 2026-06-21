@@ -681,7 +681,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Dashboard — global link knobs (0..1) that any parameter or DMX channel can be
   // modulated by. Lives on composition.dashboard.links; values persist + feed the
-  // per-frame signals. A FIXED 6×3 grid of 18 links — drag a knob to set, rename
+  // per-frame signals. A FIXED 4×4 grid of 16 links — drag a knob to set, rename
   // inline (not addable/removable).
   function dashboardSection() {
     const sh = getShow();

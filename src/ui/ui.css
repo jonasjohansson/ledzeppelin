@@ -658,8 +658,8 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-ch-drag:hover { color: var(--accent); }
 .fx-ch-row.drop-hover { outline: 1px dashed var(--accent-line); outline-offset: -1px; }
 /* Dashboard: a wrapping row of global link knobs (Resolume-style). */
-/* Fixed 6×3 bank of dashboard links. */
-.dash-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px 6px; padding: 4px 0 8px; }
+/* Fixed 4×4 bank of dashboard links. */
+.dash-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 6px; padding: 4px 0 8px; }
 .dash-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .knob-dial { cursor: ns-resize; touch-action: none; line-height: 0; }
