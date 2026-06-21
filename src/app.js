@@ -221,22 +221,27 @@ let lastSpans = [];
 let hiddenSpans = [];
 let curRoute = null;   // current daemon route (for live layer-bound DMX params)
 
-// Resolve layer-bound DMX parameters from current layer opacity (0..1 → 0..255),
-// writing into the route's per-fixture `fixed` overrides. Returns true if any value
-// changed (→ the caller pushes the route to the daemon). Cheap no-op when nothing is
-// bound, so it's safe to call every frame.
+// Resolve bound DMX parameters from their source — a LAYER's opacity or a DASHBOARD
+// link's value (0..1 → 0..255) — writing into the route's per-fixture `fixed`
+// overrides. Bind refs are 'layer:<id>' / 'dash:<id>' (a bare id = legacy layer).
+// Returns true if any value changed (→ caller pushes the route). Safe every frame.
 function resolveLayerBindings() {
   if (!curRoute) return false;
   const layers = show.composition?.layers || [];
+  const links = show.composition?.dashboard?.links || [];
+  const levelOf = (ref) => {
+    if (!ref) return 0;
+    if (ref.startsWith('dash:')) return links.find((d) => d.id === ref.slice(5))?.value ?? 0;
+    const lid = ref.startsWith('layer:') ? ref.slice(6) : ref;
+    return layers.find((L) => L.id === lid)?.opacity ?? 0;
+  };
   let changed = false;
   for (const dev of curRoute) {
     if (!dev.dmx) continue;
     for (const entry of dev.dmx) {
       if (!entry.bind) continue;
       for (const k in entry.bind) {
-        const L = layers.find((x) => x.id === entry.bind[k]);
-        const lvl = Math.max(0, Math.min(1, L?.opacity ?? 0));
-        const v = Math.round(lvl * 255), ci = +k;
+        const v = Math.round(Math.max(0, Math.min(1, levelOf(entry.bind[k]))) * 255), ci = +k;
         if (entry.fixed[ci] !== v) { entry.fixed[ci] = v; changed = true; }
       }
     }
@@ -943,18 +948,31 @@ function dmxEditor(sel) {
   if (ptype) {
     if (ctl.length) {
       const layers = show.composition?.layers || [];
+      const dashLinks = show.composition?.dashboard?.links || [];
+      // Source options: manual, any LAYER (its level), or any DASHBOARD link. Refs are
+      // prefixed 'layer:'/'dash:'; a bare id is treated as a legacy layer ref.
+      const srcOptions = [{ value: '', label: '— manual —' },
+        ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
+        ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` }))];
+      const liveBindValue = (ref) => {
+        if (!ref) return null;
+        if (ref.startsWith('dash:')) return dashLinks.find((d) => d.id === ref.slice(5))?.value ?? 0;
+        const lid = ref.startsWith('layer:') ? ref.slice(6) : ref;
+        return layers.find((L) => L.id === lid)?.opacity ?? 0;
+      };
       out.append(Section('Parameters', 'dmx-params', (body) => {
         ctl.forEach((c) => {
           const ci = c.index;
-          const boundId = cfg.bind?.[ci] || '';
-          const boundLayer = boundId && layers.find((L) => L.id === boundId);
-          // When bound, the fader shows the layer's live level (0..1 → 0..255); the
-          // layer drives output each frame. Otherwise it's a manual override.
-          const shown = boundLayer ? Math.round(Math.max(0, Math.min(1, boundLayer.opacity ?? 0)) * 255) : (cfg.fixed?.[ci] ?? c.value ?? 0);
+          const rawRef = cfg.bind?.[ci] || '';
+          const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : '';   // normalise legacy
+          const live = liveBindValue(rawRef);
+          // When bound, the fader shows the source's live level (0..1 → 0..255); the
+          // source drives output each frame. Otherwise it's a manual override.
+          const shown = live != null ? Math.round(Math.max(0, Math.min(1, live)) * 255) : (cfg.fixed?.[ci] ?? c.value ?? 0);
           body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
             onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
-          body.append(fld('↳ from layer', sel2([{ value: '', label: '— manual —' }, ...layers.map((L) => ({ value: L.id, label: L.name || L.id }))], boundId,
-            (id) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (id) b[ci] = id; else delete b[ci]; return b; })() }))));
+          body.append(fld('↳ source', sel2(srcOptions, cur,
+            (ref) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (ref) b[ci] = ref; else delete b[ci]; return b; })() }))));
         });
       }));
     }
