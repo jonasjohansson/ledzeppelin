@@ -62,3 +62,28 @@ test('fixture types carry normalised Parameters (extra DMX channels)', async () 
   const noP = syncFixtureTypes({ ...emptyShow(), fixtureTypes: [{ id: 'x', name: 'X', cols: 1, rows: 1 }] });
   assert.deepEqual(noP.fixtureTypes.find((x) => x.id === 'x').params, []);
 });
+
+test('output kind follows the type: a pixel strip is never a DMX fixture', async () => {
+  const { syncFixtureTypes } = await import('../src/model/show.js');
+  // A pixel-strip type whose instance wrongly carries a DMX config → reverts to pixel.
+  const s = syncFixtureTypes({
+    ...emptyShow(),
+    devices: [{ id: 'd1', protocol: 'artnet', universe: 0 }],
+    fixtureTypes: [{ id: 'strip', name: 'Strip', cols: 60, rows: 1 }],
+    fixtures: [{ id: 'f1', typeId: 'strip', input: { mode: 'dmx', dmx: { channels: [{ kind: 'red' }], universe: 0, address: 1, fixed: {} } }, output: { deviceId: 'd1' } }],
+  });
+  const f1 = s.fixtures.find((x) => x.id === 'f1');
+  assert.equal(!!f1.input.dmx, false);   // DMX config dropped → a strip
+  assert.equal(f1.input.mode, 'bar');
+
+  // A DMX type (name+count params) whose instance is plain → becomes a DMX fixture.
+  const s2 = syncFixtureTypes({
+    ...emptyShow(),
+    devices: [{ id: 'd1', protocol: 'artnet', universe: 0 }],
+    fixtureTypes: [{ id: 'par', name: 'Par', cols: 1, rows: 1, params: [{ name: 'RGB', count: 3 }] }],
+    fixtures: [{ id: 'f2', typeId: 'par', input: { mode: 'bar' }, output: { deviceId: 'd1' } }],
+  });
+  const f2 = s2.fixtures.find((x) => x.id === 'f2');
+  assert.equal(f2.input.mode, 'dmx');
+  assert.equal(f2.input.dmx.channels.length, 3);
+});

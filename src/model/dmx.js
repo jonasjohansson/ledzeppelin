@@ -98,6 +98,12 @@ const FORMAT_KINDS = {
 const COLOUR_NAME_FMT = { rgb: 'RGB', rgbw: 'RGBW', rgbwa: 'RGBWA', rgba: 'RGBA' };
 const SINGLE_NAME_KIND = { dimmer: 'dimmer', dimming: 'dimmer', strobe: 'strobe', uv: 'uv', white: 'white', amber: 'amber', red: 'red', green: 'green', blue: 'blue' };
 export const isColourParam = (name) => !!COLOUR_NAME_FMT[String(name || '').trim().toLowerCase()];
+// A fixture TYPE is a DMX fixture (channel layout) vs a pixel strip/matrix (W×H +
+// Color Format). Every placed instance's output kind follows this — a pixel strip is
+// never a DMX fixture, a DMX type's instances always are.
+export const isDmxType = (t) =>
+  (Array.isArray(t?.params) && t.params.some((p) => p && p.count != null)) ||
+  (Array.isArray(t?.channels) && t.channels.length > 0);
 // The channel kinds a parameter expands to, from its name (+ count for generic).
 export function paramKinds(name, count) {
   const lc = String(name || '').trim().toLowerCase();

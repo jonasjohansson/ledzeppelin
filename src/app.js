@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
@@ -840,7 +840,6 @@ function positionEditor(sel) {
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
   // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
-    outputKindRow(sel),   // LED strip ⇄ DMX fixture
     Section('Position', 'position', (body) => {
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
@@ -921,7 +920,6 @@ function dmxEditor(sel) {
   const liveChannels = () => [...((show.fixtures.find((x) => x.id === sel.id)?.input?.dmx?.channels) || channels)];
 
   const out = oel('div', { className: 'output-edit' }, [
-    outputKindRow(sel),   // DMX fixture ⇄ LED strip
     Section('Fixture', 'dmx-fixture', (body) => {
       // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
       // owned by the type (edit it in Inventory → applies to every placed copy).
@@ -1270,10 +1268,11 @@ function addInstance(typeId) {
   // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
   const k = next.fixtures.length;
   const off = (k % 8) * 16 - 56;
-  // A 1×1 type is a PAR/point fixture → output as a DMX channel-block (colour from
-  // its Color Format + its Parameters), patched to an Art-Net controller. Strips and
-  // matrices stream pixels. Either can be re-toggled via the fixture's Output kind.
-  if ((Number(t.cols) || 1) === 1 && (Number(t.rows) || 1) === 1) {
+  // A DMX TYPE (one defined with DMX parameters in Inventory) places as a DMX
+  // channel-block fixture, patched to an Art-Net controller. Pixel types — strips and
+  // matrices, including a 1×1 single pixel — stream pixels. The output kind is the
+  // TYPE's kind; an LED strip is never a DMX fixture.
+  if (isDmxType(t)) {
     const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
     const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
     const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
@@ -1321,43 +1320,8 @@ function addInstance(typeId) {
   panel.refresh(); renderOutput(); redrawOverlay();
 }
 
-// Switch a fixture between LED-strip output (pixels) and DMX output (a channel
-// profile). Keeps its position; just swaps how it's sampled + sent.
-function convertFixture(fxId, kind) {
-  const next = structuredClone(show);
-  const f = next.fixtures.find((x) => x.id === fxId);
-  if (!f) return;
-  if (kind === 'dmx') {
-    const dev = next.devices.find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
-      || next.devices.find((d) => d.protocol === 'artnet');
-    // Unified model: the DMX channel-block comes from the fixture's TYPE — its Color
-    // Format (colour channels) followed by its Parameters — not a separate profile.
-    const t = (next.fixtureTypes || []).find((x) => x.id === f.typeId);
-    f.input = { ...f.input, mode: 'dmx', dmx: { channels: fixtureTypeChannels(t), universe: dev?.universe ?? 0, address: 1, fixed: {} } };
-  } else {
-    const { dmx, ...rest } = f.input || {};                 // drop the DMX config → back to a strip
-    const t = (next.fixtureTypes || [])[0];
-    if (t) f.typeId = t.id;
-    const px = f.output?.pixelCount || t?.pixelCount || 96;
-    f.output = { ...f.output, pixelOffset: f.output?.pixelOffset ?? 0, pixelCount: px };
-    f.input = { ...rest, mode: 'bar', samples: px };
-  }
-  saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
-}
-
-// Output-type selector for the fixture editor: LED strip (pixels) ⇄ DMX fixture
-// (channels). Changing it converts the selected fixture in place.
-function outputKindRow(sel) {
-  const isDmx = isDmxFixture(sel);
-  const s = oel('select', { title: 'output this fixture as an LED strip (pixels) or a DMX fixture (channels)' });
-  for (const o of [{ v: 'led', l: 'LED strip' }, { v: 'dmx', l: 'DMX fixture' }]) {
-    const op = oel('option', { value: o.v, textContent: o.l });
-    if ((o.v === 'dmx') === isDmx) op.selected = true;
-    s.append(op);
-  }
-  s.addEventListener('change', () => { if ((s.value === 'dmx') !== isDmx) convertFixture(sel.id, s.value); });
-  return oel('label', { className: 'fx-field fx-output-kind' }, [oel('span', { textContent: 'Output' }), s]);
-}
+// (Output kind — pixels vs DMX — follows the fixture's TYPE; there is no per-fixture
+// toggle. Define a DMX fixture as a DMX type in Inventory, a strip as a pixel type.)
 
 // The "+ fixture" / "+ controller" / "scan" toolbar above the placement list — the
 // three actions sit side by side; the fixture-type picker (what "+ fixture" places)
@@ -1369,7 +1333,7 @@ function addControls() {
   // and matrices stream pixels; a 1×1 "par" outputs as a DMX channel-block. Grouped
   // so the two read apart, but they are the same kind of thing (see Inventory).
   const sel = oel('select', { title: 'what to place — a fixture definition from your Inventory' });
-  const isPar = (t) => (Number(t.cols) || 1) === 1 && (Number(t.rows) || 1) === 1;
+  const isPar = (t) => isDmxType(t);   // a DMX type (defined with parameters) — not a pixel strip/matrix
   const addToGroup = (label, list) => {
     if (!list.length) return;
     const g = oel('optgroup', { label });

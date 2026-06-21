@@ -1,4 +1,4 @@
-import { fixtureTypeChannels, DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams } from './dmx.js';
+import { fixtureTypeChannels, DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams, isDmxType } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -175,12 +175,25 @@ export function syncFixtureTypes(show) {
       output: { ...f.output, pixelCount: t.pixelCount },
       input: { ...f.input, samples: t.pixelCount },
     };
-    // A DMX fixture's channel LAYOUT is owned by its type (Inventory) — re-derive it
-    // here so editing the definition propagates to every placed instance in bulk. The
-    // instance keeps only per-instance state: universe/address/fixed/bind. Legacy
-    // profile fixtures (orphan typeId) keep their own inline channels.
-    if (hadType && out.input?.dmx) {
-      out.input = { ...out.input, dmx: { ...out.input.dmx, channels: fixtureTypeChannels(t) } };
+    // OUTPUT KIND FOLLOWS THE TYPE. A DMX type → the instance is a DMX fixture (channel
+    // layout owned by the type, so editing the definition propagates in bulk); a pixel
+    // type (strip/matrix) → the instance streams pixels and is NEVER a DMX fixture. This
+    // is what stops an LED strip from becoming a DMX fixture. Legacy/orphan instances
+    // (no real type) keep whatever inline DMX channels they carry.
+    if (hadType) {
+      if (isDmxType(t)) {
+        const prev = out.input?.dmx || {};
+        const dev = (show.devices || []).find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
+          || (show.devices || []).find((d) => d.protocol === 'artnet');
+        out.input = { ...out.input, mode: 'dmx',
+          dmx: { universe: prev.universe ?? dev?.universe ?? 0, address: prev.address ?? 1, fixed: prev.fixed || {}, ...(prev.bind ? { bind: prev.bind } : {}), channels: fixtureTypeChannels(t) } };
+        if (!out.output?.deviceId && dev) out.output = { ...out.output, deviceId: dev.id };
+      } else if (out.input?.dmx) {
+        // Type became (or is) a pixel layout → drop the DMX config; back to a strip/matrix.
+        const { dmx, ...restInput } = out.input;
+        out.input = { ...restInput, mode: t.rows > 1 ? 'grid' : 'bar', samples: t.pixelCount };
+        out.output = { ...out.output, pixelOffset: out.output?.pixelOffset ?? 0, pixelCount: t.pixelCount };
+      }
     }
     return out;
   });
