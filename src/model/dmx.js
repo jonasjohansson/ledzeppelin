@@ -10,6 +10,9 @@
 export const DMX_CHANNEL_KINDS = ['dimmer', 'red', 'green', 'blue', 'white', 'amber', 'uv', 'strobe', 'fixed'];
 // Colour kinds come from the canvas; everything else is a manually controllable channel.
 export const DMX_COLOUR_KINDS = new Set(['red', 'green', 'blue', 'white', 'amber']);
+// Human labels for the kind dropdowns (lowercase keys are the stored values).
+export const DMX_KIND_LABELS = { dimmer: 'Dimmer', red: 'Red', green: 'Green', blue: 'Blue', white: 'White', amber: 'Amber', uv: 'UV', strobe: 'Strobe', fixed: 'Fixed' };
+export const dmxKindOptions = () => DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: DMX_KIND_LABELS[k] || k }));
 
 // Built-in profiles. `Generic` starts as one fixed channel and is edited in the UI.
 export const DMX_PROFILES = [

@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { DMX_CHANNEL_KINDS, colorFormatChannels, fixtureTypeChannels } from '../model/dmx.js';
+import { colorFormatChannels, fixtureTypeChannels, dmxKindOptions } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -82,21 +82,28 @@ const CH_MANUAL_VAL = new Set(['fixed', 'uv', 'strobe']);
 function dmxChannelEditor(t, upd, rows) {
   const channels = t.channels || [];
   const cUpd = (i, patch) => upd((nt) => { nt.channels = (nt.channels || []).slice(); nt.channels[i] = { ...nt.channels[i], ...patch }; });
-  const moveCh = (i, dir) => upd((nt) => { const cs = (nt.channels || []).slice(); const j = i + dir; if (j < 0 || j >= cs.length) return; [cs[i], cs[j]] = [cs[j], cs[i]]; nt.channels = cs; });
+  // Reorder: remove the dragged channel and re-insert it at the drop row.
+  const moveCh = (from, to) => upd((nt) => {
+    const cs = (nt.channels || []).slice();
+    if (from < 0 || from >= cs.length || to < 0 || to >= cs.length || from === to) return;
+    const [m] = cs.splice(from, 1); cs.splice(to, 0, m); nt.channels = cs;
+  });
   rows.push(el('div', { className: 'fx-pts', textContent: `Channels · ${channels.length}` }));
   channels.forEach((c, i) => {
+    const handle = el('span', { className: 'fx-ch-drag', textContent: '⠿', title: 'drag to reorder', draggable: true });
+    handle.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch { /* some browsers */ } });
     const name = textInputCommit(c.name ?? `Ch ${i + 1}`, (x) => cUpd(i, { name: x }));
-    const kind = selectInput(DMX_CHANNEL_KINDS, c.kind, (x) => cUpd(i, { kind: x }));
-    const up = el('button', { className: 'fx-act', textContent: '↑', title: 'move up', onclick: () => moveCh(i, -1) });
-    const down = el('button', { className: 'fx-act', textContent: '↓', title: 'move down', onclick: () => moveCh(i, +1) });
-    if (i === 0) up.disabled = true;
-    if (i === channels.length - 1) down.disabled = true;
+    const kind = selectInput(dmxKindOptions(), c.kind, (x) => cUpd(i, { kind: x }));
     const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
       onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Ch 1', value: 0 }]; }) });
-    const cells = [el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind];
+    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind];
     if (CH_MANUAL_VAL.has(c.kind)) cells.push(numInputCommit(c.value ?? 0, (x) => cUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
-    cells.push(up, down, rm);
-    rows.push(el('div', { className: 'fx-field fx-param-row' }, cells));
+    cells.push(rm);
+    const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, cells);
+    row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('drop-hover'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
+    row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('drop-hover'); const from = Number(e.dataTransfer.getData('text/plain')); if (Number.isInteger(from)) moveCh(from, i); });
+    rows.push(row);
   });
   rows.push(el('button', { className: 'fx-add', textContent: '+ channel',
     onclick: () => upd((nt) => { nt.channels = [...(nt.channels || []), { kind: 'red', name: `Ch ${(nt.channels?.length || 0) + 1}`, value: 0 }]; }) }));
@@ -543,7 +550,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       }
       const i = tok, p = params[i];
       const name = textInputCommit(p.name, (x) => pUpd(i, { name: x }));
-      const kind = selectInput(DMX_CHANNEL_KINDS, p.kind, (x) => pUpd(i, { kind: x }));
+      const kind = selectInput(dmxKindOptions(), p.kind, (x) => pUpd(i, { kind: x }));
       const up = el('button', { className: 'fx-act', textContent: '↑', title: 'move up', onclick: () => moveParam(i, -1) });
       const down = el('button', { className: 'fx-act', textContent: '↓', title: 'move down', onclick: () => moveParam(i, +1) });
       if (pos === 0) up.disabled = true;
