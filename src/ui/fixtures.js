@@ -578,16 +578,19 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   }
 
   const uniqueId = (list, prefix) => { let n = (list?.length || 0) + 1; while ((list || []).some((x) => x.id === `${prefix}${n}`)) n++; return `${prefix}${n}`; };
+  const stripNum = (s) => String(s || '').replace(/\s+\d+$/, '').trim();   // "FOS 2" → "FOS"
 
-  // Duplicate an Inventory item as an independent copy ("… copy") and select it. No
-  // placed instances are created — only the definition/model is copied.
+  // Duplicate an Inventory item as an independent copy and select it. The copy is
+  // numbered ("Name 2", "Name 3", …) rather than "Name copy". No placed instances are
+  // created — only the definition/model is copied.
   function duplicateController(show, id) {
     const t = (show.deviceTypes || []).find((x) => x.id === id);
     if (!t) return false;
     const next = structuredClone(show);
     const nid = uniqueId(next.deviceTypes, 'dt');
     const taken = new Set((next.deviceTypes || []).map((x) => String(x.name || '').toLowerCase()));
-    let name = `${t.name} copy`; let n = 2; while (taken.has(name.toLowerCase())) name = `${t.name} copy ${n++}`;
+    const base = stripNum(t.name) || 'Controller';
+    let name = base; let n = 2; while (taken.has(name.toLowerCase())) name = `${base} ${n++}`;
     next.deviceTypes.push({ ...structuredClone(t), id: nid, name });
     selDevTypeId = nid; lastSel = 'devtype'; libSel = 'controller'; commit(next); return true;
   }
@@ -596,7 +599,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     if (!t) return false;
     const next = structuredClone(show);
     const nid = uniqueId(next.fixtureTypes, 't');
-    next.fixtureTypes.push({ ...structuredClone(t), id: nid, name: uniqueTypeName(next.fixtureTypes, `${t.name} copy`, nid) });
+    // Number BEFORE the auto "(Nch)" suffix on a DMX type → "FOS Luminus PRO 2 (6ch)".
+    const isDmx = (t.params || []).some((p) => p && p.count != null);
+    const ch = paramsToChannels(t.params || []).length;
+    const core = stripNum(stripChSuffix(t.name));
+    const suffix = isDmx && ch ? ` (${ch}ch)` : '';
+    const taken = new Set(next.fixtureTypes.map((x) => String(x.name || '').toLowerCase()));
+    let n = 2; let name = `${core}${suffix}`; while (taken.has(name.toLowerCase())) name = `${core} ${n++}${suffix}`;
+    next.fixtureTypes.push({ ...structuredClone(t), id: nid, name });
     selTypeId = nid; lastSel = 'type'; libSel = 'fixture'; commit(next); return true;
   }
 
