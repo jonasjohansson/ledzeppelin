@@ -95,20 +95,23 @@ function dmxChannelEditor(t, upd, rows) {
   const moveP = (from, to) => { if (to < 0 || to >= params.length || from === to) return; const ps = params.slice(); const [m] = ps.splice(from, 1); ps.splice(to, 0, m); setParams(ps); };
   const total = paramsToChannels(params).length;
   rows.push(el('div', { className: 'fx-pts', textContent: `Parameters · ${total} ch` }));
-  const presetOptions = [...PARAM_PRESETS.map((p) => ({ value: p.value, label: p.value })), { value: '__custom__', label: 'Custom…' }];
+  const presetOpts = PARAM_PRESETS.map((p) => ({ value: p.value, label: p.value }));
   params.forEach((p, i) => {
     const span = paramSpan(p);
     const preset = presetOf(p.name);
     const isCustom = !preset;
     const handle = el('span', { className: 'fx-ch-drag', textContent: '⠿', title: 'drag to reorder', draggable: true });
     handle.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch { /* some browsers */ } });
-    // Type dropdown — a preset, or Custom (keeps a non-preset name so the field shows).
-    const type = selectInput(presetOptions, isCustom ? '__custom__' : preset.value, (v) => {
-      if (v === '__custom__') { if (!isCustom) pUpd(i, { name: 'Channel', count: 1 }); }
-      else { const pr = presetOf(v); pUpd(i, { name: pr.value, count: pr.count }); }
+    // Type dropdown — a preset, or the custom name (shown as the selected option).
+    // "Custom…" prompts for a name (and prefills the current one, so it also renames).
+    const opts = [...presetOpts, ...(isCustom ? [{ value: p.name, label: p.name }] : []), { value: '__custom__', label: 'Custom…' }];
+    const type = selectInput(opts, isCustom ? p.name : preset.value, (v) => {
+      if (v === '__custom__') {
+        const nm = (typeof window !== 'undefined' && window.prompt ? window.prompt('Channel name', isCustom ? p.name : '') : null)?.trim();
+        if (nm) pUpd(i, { name: nm, count: isCustom ? (p.count ?? 1) : 1 });
+      } else { const pr = presetOf(v); pUpd(i, { name: pr.value, count: pr.count }); }
     });
     const cells = [handle, type];
-    if (isCustom) cells.push(textInputCommit(p.name ?? 'Channel', (x) => pUpd(i, { name: x })));
     // Channel count: fixed by a preset (read-only), editable for a custom parameter.
     const count = numInputCommit(span, (x) => pUpd(i, { count: Math.max(1, Math.round(x)) }));
     count.classList.add('fx-ch-count');
