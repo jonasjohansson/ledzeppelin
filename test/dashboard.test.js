@@ -27,8 +27,8 @@ test('dashboardLinkLabels: a link is labelled by what it drives', () => {
   const show = {
     composition: {
       layers: [
-        { params: { 'fx.opacity': { mode: 'dashboard', link: 'd2' } },
-          clips: [{ params: { 'line.speed': { mode: 'dashboard', link: 'd1' }, 'line.zoom': 5 } }] },
+        { anim: { 'fx.opacity': { mode: 'dashboard', link: 'd2' } },
+          clips: [{ anim: { 'line.speed': { mode: 'dashboard', link: 'd1' }, 'line.zoom': { mode: 'timeline' } } }] },
       ],
     },
     fixtures: [{ id: 'fx9', name: 'FOS', input: { dmx: { bind: { 0: 'dash:d3' } } } }],

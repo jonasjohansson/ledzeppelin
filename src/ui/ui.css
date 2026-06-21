@@ -878,6 +878,9 @@ input[type=checkbox]:checked::after {
    bar down its left edge, so it's obvious at a glance which params are animated vs
    static — no badge or label. Inset shadow ⇒ zero layout shift. */
 .anim-param.is-animated { box-shadow: inset 2px 0 0 var(--accent-line); }
+/* Dashboard params have no in/out track and read as a plain link picker — drop the
+   modulation rail too (the link dropdown already shows the param is driven). */
+.anim-param.is-dashboard { box-shadow: none; }
 /* BPM field + TAP button (Composition inspector). */
 .cmp-bpm > input { flex: 1 1 0; min-width: 0; }
 .cmp-tap {
