@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
@@ -953,40 +953,42 @@ function dmxEditor(sel) {
     }),
   ]);
 
-  // Parameters: one row PER CHANNEL with a chosen SOURCE — Canvas (sample the visual,
-  // default for colour channels), Manual (a fader), a Layer's level, or a Dashboard
-  // link. So you decide what's driven by the canvas vs by hand/modulation.
+  // Parameters: one row PER PARAMETER (mirroring the Inventory definition — an RGB
+  // block is ONE row, not three), each with a chosen SOURCE — Canvas (sample the
+  // visual, default for colour), Manual (a fader), a Layer's level, or a Dashboard
+  // link. A colour block's source applies to all its channels together.
   const hasFixed = channels.some((c) => c.kind === 'fixed');
-  if (ptype) {
-    if (channels.length) {
-      const layers = show.composition?.layers || [];
-      const dashLinks = show.composition?.dashboard?.links || [];
-      const srcOptions = (isColour) => [
-        ...(isColour ? [{ value: 'canvas', label: 'Canvas' }] : []),
-        { value: 'manual', label: 'Manual' },
-        ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
-        ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` })),
-      ];
-      out.append(Section('Parameters', 'dmx-params', (body) => {
-        channels.forEach((c, ci) => {
-          const isColour = DMX_COLOUR_KINDS.has(c.kind);
-          const rawRef = cfg.bind?.[ci];
-          const hasManual = cfg.fixed && (ci in cfg.fixed);
-          // Current source: a bind ref wins; else an explicit manual value; else the
-          // default (colour → Canvas, everything else → Manual).
-          const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : (hasManual ? 'manual' : (isColour ? 'canvas' : 'manual'));
-          const nameLabel = c.name || DMX_KIND_LABELS[c.kind] || c.kind;
-          // Source picker: switching writes bind/fixed so the resolver/route follow.
-          body.append(fld(nameLabel, sel2(srcOptions(isColour), cur, (src) => setDmx({
-            bind: (() => { const b = { ...(cfg.bind || {}) }; if (src.includes(':')) b[ci] = src; else delete b[ci]; return b; })(),
-            fixed: (() => { const fx = { ...(cfg.fixed || {}) }; if (src === 'manual') { if (!(ci in fx)) fx[ci] = isColour ? 255 : (c.value ?? 0); } else delete fx[ci]; return fx; })(),
-          }))));
-          // Manual → a fader (live, no re-render). Canvas/Layer/Dash drive it instead.
-          if (cur === 'manual') body.append(Slider('', cfg.fixed?.[ci] ?? c.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
-            onInput: (v) => dmxFixedLive(sel.id, ci, Math.round(v)) }));
-        });
-      }));
-    }
+  const params = (ptype?.params || []).filter((p) => p && p.count != null);
+  if (params.length) {
+    const layers = show.composition?.layers || [];
+    const dashLinks = show.composition?.dashboard?.links || [];
+    const srcOptions = (isColour) => [
+      ...(isColour ? [{ value: 'canvas', label: 'Canvas' }] : []),
+      { value: 'manual', label: 'Manual' },
+      ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
+      ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` })),
+    ];
+    out.append(Section('Parameters', 'dmx-params', (body) => {
+      let ci = 0;
+      params.forEach((p) => {
+        const span = paramSpan(p);
+        const idxs = Array.from({ length: span }, (_, k) => ci + k);   // this param's channels
+        const start = ci; ci += span;
+        const isColour = paramKinds(p.name, p.count).some((k) => DMX_COLOUR_KINDS.has(k));
+        // The block moves as one — read/show the source from its first channel.
+        const rawRef = cfg.bind?.[start];
+        const hasManual = cfg.fixed && (start in cfg.fixed);
+        const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : (hasManual ? 'manual' : (isColour ? 'canvas' : 'manual'));
+        // Source picker: switching writes bind/fixed for EVERY channel in the block.
+        body.append(fld(p.name, sel2(srcOptions(isColour), cur, (src) => setDmx({
+          bind: (() => { const b = { ...(cfg.bind || {}) }; idxs.forEach((i) => { if (src.includes(':')) b[i] = src; else delete b[i]; }); return b; })(),
+          fixed: (() => { const fx = { ...(cfg.fixed || {}) }; idxs.forEach((i) => { if (src === 'manual') { if (!(i in fx)) fx[i] = isColour ? 255 : (p.value ?? 0); } else delete fx[i]; }); return fx; })(),
+        }))));
+        // Manual → one fader (live, no re-render) driving the whole block together.
+        if (cur === 'manual') body.append(Slider('', cfg.fixed?.[start] ?? p.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
+          onInput: (v) => idxs.forEach((i) => dmxFixedLive(sel.id, i, Math.round(v))) }));
+      });
+    }));
   } else if (generic || hasFixed) {
     out.append(Section('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
