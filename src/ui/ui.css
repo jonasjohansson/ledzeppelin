@@ -167,7 +167,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   font-size: var(--fs-ctrl); cursor: pointer;
 }
 .output-row:first-child { border-top: none; }
-.output-row span:first-of-type { flex: 1 1 auto; color: var(--text); }
+.output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
    = faint, no-ip = hollow. Stays in the warm-mono palette (no green/blue). */
 .dev-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--faint); }
