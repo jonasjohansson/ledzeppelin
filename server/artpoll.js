@@ -8,15 +8,27 @@ import { networkInterfaces } from 'node:os';
 const ID = Buffer.from('Art-Net\0', 'ascii');
 const ARTNET_PORT = 6454;
 
-// Broadcast targets: the global broadcast + each non-internal IPv4 interface's
-// /24 broadcast (covers the common case without needing the real netmask).
+// The directed broadcast for an interface: host bits all 1s, from its REAL netmask.
+// e.g. 10.5.6.7 / 255.0.0.0 → 10.255.255.255 (a /24 guess would wrongly give
+// 10.5.6.255 and miss most of a /8 or /16 — the cause of Art-Net nodes not being
+// discovered on big flat networks, esp. on Windows where 255.255.255.255 is dropped).
+export function directedBroadcast(ip, netmask) {
+  const a = String(ip).split('.').map(Number), m = String(netmask).split('.').map(Number);
+  if (a.length !== 4 || m.length !== 4 || [...a, ...m].some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  return a.map((o, i) => ((o & m[i]) | (~m[i] & 255))).join('.');
+}
+
+// Broadcast targets: the global broadcast, plus each non-internal IPv4 interface's
+// netmask-correct directed broadcast (with a /24 fallback when no netmask is given).
 function broadcastTargets() {
   const t = new Set(['255.255.255.255']);
   try {
     for (const ifs of Object.values(networkInterfaces())) {
       for (const i of ifs || []) {
         if (i && i.family === 'IPv4' && !i.internal && i.address) {
-          const p = i.address.split('.'); t.add(`${p[0]}.${p[1]}.${p[2]}.255`);
+          const b = i.netmask && directedBroadcast(i.address, i.netmask);
+          if (b) t.add(b);
+          const p = i.address.split('.'); t.add(`${p[0]}.${p[1]}.${p[2]}.255`);   // /24 fallback
         }
       }
     }
