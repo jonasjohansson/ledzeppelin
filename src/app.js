@@ -23,7 +23,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
-import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, fixtureTypeChannels, fixtureControlChannels } from './model/dmx.js';
+import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
 import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
@@ -247,6 +247,20 @@ function resolveLayerBindings() {
     }
   }
   return changed;
+}
+// Live-set a DMX channel's manual value while dragging its fader — updates the route
+// (→ daemon) and the show WITHOUT a rebuild/re-render, so the slider isn't replaced
+// mid-drag. Persist is debounced. (Mirrors the clip-param commitLive pattern.)
+let dmxSaveTimer = null;
+function dmxFixedLive(fxId, ci, v) {
+  const f = (show.fixtures || []).find((x) => x.id === fxId);
+  if (!f?.input?.dmx) return;
+  (f.input.dmx.fixed ||= {})[ci] = v;   // transient drag value (saved debounced)
+  if (curRoute) {
+    for (const dev of curRoute) if (dev.dmx) for (const e of dev.dmx) if (e.id === fxId) e.fixed[ci] = v;
+    bridge?.setRoute?.(curRoute);
+  }
+  if (!dmxSaveTimer) dmxSaveTimer = setTimeout(() => { dmxSaveTimer = null; saveShow(show); }, 300);
 }
 function recomputeHiddenSpans() {
   hiddenSpans = (lastSpans || []).filter((s) => {
@@ -946,7 +960,10 @@ function dmxEditor(sel) {
   const hasFixed = channels.some((c) => c.kind === 'fixed');
   const ctl = ptype ? fixtureControlChannels(ptype) : [];
   if (ptype) {
-    if (ctl.length) {
+    // Colour channels (R/G/B/W/A) are driven by the sampled canvas colour, so they
+    // have no manual fader — list them once so every channel is accounted for.
+    const colourNames = channels.filter((c) => DMX_COLOUR_KINDS.has(c.kind)).map((c) => DMX_KIND_LABELS[c.kind] || c.kind);
+    if (ctl.length || colourNames.length) {
       const layers = show.composition?.layers || [];
       const dashLinks = show.composition?.dashboard?.links || [];
       // Source options: manual, any LAYER (its level), or any DASHBOARD link. Refs are
@@ -961,16 +978,18 @@ function dmxEditor(sel) {
         return layers.find((L) => L.id === lid)?.opacity ?? 0;
       };
       out.append(Section('Parameters', 'dmx-params', (body) => {
+        if (colourNames.length) body.append(oel('div', { className: 'fx-devstatus', textContent: `${colourNames.join(' · ')} — from canvas` }));
         ctl.forEach((c) => {
           const ci = c.index;
           const rawRef = cfg.bind?.[ci] || '';
           const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : '';   // normalise legacy
           const live = liveBindValue(rawRef);
           // When bound, the fader shows the source's live level (0..1 → 0..255); the
-          // source drives output each frame. Otherwise it's a manual override.
+          // source drives output each frame. Otherwise it's a manual override that
+          // updates live WITHOUT a re-render (dmxFixedLive) so dragging stays smooth.
           const shown = live != null ? Math.round(Math.max(0, Math.min(1, live)) * 255) : (cfg.fixed?.[ci] ?? c.value ?? 0);
           body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
-            onInput: (v) => setDmx({ fixed: { ...(cfg.fixed || {}), [ci]: Math.round(v) } }) }));
+            onInput: (v) => dmxFixedLive(sel.id, ci, Math.round(v)) }));
           body.append(fld('↳ source', sel2(srcOptions, cur,
             (ref) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (ref) b[ci] = ref; else delete b[ci]; return b; })() }))));
         });
