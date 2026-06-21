@@ -150,7 +150,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   let libSel = 'controller';// which Library list the inspector shows: 'controller' | 'fixture'
   let lastSel = null;       // 'device' | 'type' | 'devtype' — what ⌫ deletes (last row clicked)
   let mounted = false;      // suppress onSelect during the initial construction render (app's panel ref isn't ready yet)
-  let scanState = { running: false, result: null, error: null };   // network device scan
+  let scanState = { running: false, result: null, artnet: null, error: null };   // network device scan (WLED + Art-Net)
   const deviceStatus = new Map();   // id → last { ok, data|error } from the controller
   const pushStatus = new Map();     // id → last config-push result text
   const pinging = new Set();        // ids with an in-flight auto health-check
@@ -307,47 +307,73 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     const online = getConnected();   // false on the hosted demo (no local daemon)
     return el('button', {
       className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan',
-      title: online ? 'find WLED controllers on your network (needs the daemon running)'
+      title: online ? 'find WLED + Art-Net controllers on your network (needs the daemon running)'
         : 'scanning needs the local app (the daemon) — not available on the web demo',
       disabled: scanState.running || !online,
       onclick: async () => {
         if (scanState.running || !getConnected()) return;
-        scanState = { running: true, result: null, error: null }; rerender();
-        const r = await scanDevices();
-        scanState = { running: false, result: r.ok ? r.data : null, error: r.ok ? null : r.error };
-        rerender();
+        scanState = { running: true, result: null, artnet: null, error: null }; rerender();
+        // WLED subnet scan + Art-Net ArtPoll, in parallel but rendered INDEPENDENTLY —
+        // ArtPoll (~1.5s) shows long before the slower WLED subnet sweep (~several s).
+        let pending = 2;
+        const done = () => { if (--pending === 0) { scanState = { ...scanState, running: false }; rerender(); } };
+        scanDevices().then((wled) => {
+          scanState = { ...scanState, result: wled.ok ? wled.data : null, error: wled.ok ? null : wled.error };
+          rerender(); done();
+        });
+        fetch('/api/artnet/scan').then((r) => r.json()).catch(() => []).then((art) => {
+          scanState = { ...scanState, artnet: Array.isArray(art) ? art : [] };
+          rerender(); done();
+        });
       },
     });
   }
   // The scan RESULTS (error / found controllers), rendered separately below the row.
   // Null when there's nothing to show yet.
   function scanResults(show) {
-    if (!scanState.result && !scanState.error) return null;
+    const art = scanState.artnet;   // null = not scanned yet, [] = scanned, none found
+    if (!scanState.result && !scanState.error && !art) return null;
     const wrap = el('div', { className: 'scan-block' });
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
+    const known = new Set((show.devices || []).map((d) => d.ip));
+    // A found controller → one click to add it (with the right protocol/port).
+    const foundRow = (label, ip, badges, makeDevice) => {
+      const added = known.has(ip);
+      const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
+      add.onclick = () => {
+        const next = structuredClone(show);
+        const id = `c${next.devices.length + 1}`;
+        next.devices.push(makeDevice(next, id));
+        selDeviceId = id; lastSel = 'device';
+        commit(next);
+      };
+      return el('div', { className: 'output-row scan-row' }, [
+        el('span', { textContent: label }), el('span', { className: 'fx-badge', textContent: ip }),
+        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b })), add,
+      ]);
+    };
     const res = scanState.result;
     if (res) {
-      const known = new Set((show.devices || []).map((d) => d.ip));
-      wrap.append(el('div', { className: 'fx-pts', textContent: `found ${res.devices.length} on ${res.subnets.join(', ') || '—'}` }));
+      wrap.append(el('div', { className: 'fx-pts', textContent: `WLED · ${res.devices.length} on ${res.subnets.join(', ') || '—'}` }));
       if (!res.devices.length) wrap.append(el('div', { className: 'seg-hint', textContent: 'no WLED controllers responded' }));
       for (const d of res.devices) {
-        const added = known.has(d.ip);
-        const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
-        add.onclick = () => {
-          const next = structuredClone(show);
-          const id = `c${next.devices.length + 1}`;
+        wrap.append(foundRow(d.name, d.ip, d.leds != null ? [`${d.leds} px`] : [], (next, id) => {
           const dts = next.deviceTypes || [];
           const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
-          next.devices.push({ id, name: d.name || id, ip: d.ip, colorOrder: 'GRB', port: 4048, typeId });
-          selDeviceId = id; lastSel = 'device';
-          commit(next);
-        };
-        wrap.append(el('div', { className: 'output-row scan-row' }, [
-          el('span', { textContent: d.name }),
-          el('span', { className: 'fx-badge', textContent: d.ip }),
-          ...(d.leds != null ? [el('span', { className: 'fx-badge', textContent: `${d.leds} px` })] : []),
-          add,
-        ]));
+          return { id, name: d.name || id, ip: d.ip, colorOrder: 'GRB', port: 4048, typeId };
+        }));
+      }
+    }
+    // Art-Net nodes (ArtPoll) — added as Art-Net devices (universe 0, port 6454).
+    if (art) {
+      wrap.append(el('div', { className: 'fx-pts', textContent: `Art-Net · ${art.length} node${art.length === 1 ? '' : 's'}` }));
+      if (!art.length) wrap.append(el('div', { className: 'seg-hint', textContent: 'no Art-Net nodes responded' }));
+      for (const n of art) {
+        wrap.append(foundRow(n.shortName || n.longName || n.ip, n.ip, n.longName && n.longName !== n.shortName ? [n.longName] : [], (next, id) => {
+          const dts = next.deviceTypes || [];
+          const typeId = (dts.find((t) => t.id === 'generic') || dts[0])?.id;
+          return { id, name: n.shortName || n.longName || id, ip: n.ip, colorOrder: 'GRB', port: 6454, protocol: 'artnet', universe: 0, typeId };
+        }));
       }
     }
     return wrap;
