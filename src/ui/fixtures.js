@@ -161,7 +161,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   // (id) — the per-device "check" button refreshes a single controller on demand.
   const autoPing = (devices) => {
     for (const d of devices) {
-      if (!d.ip || deviceStatus.has(d.id) || pinging.has(d.id)) continue;
+      // Art-Net nodes have no WLED JSON API — never poll them (avoids a false "offline").
+      if (!d.ip || d.protocol === 'artnet' || deviceStatus.has(d.id) || pinging.has(d.id)) continue;
       pinging.add(d.id);
       getDeviceState(d.ip).then((st) => { pinging.delete(d.id); deviceStatus.set(d.id, st); scheduleRender(); });
     }
@@ -185,7 +186,34 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     return `${m}m`;
   }
 
+  // Output brightness — a 0–1 cap applied per-frame ON OUR STREAM (daemon-side), so it
+  // works for Art-Net too (WLED's own master-brightness write is ignored in realtime).
+  function brightnessRow(d, enabled) {
+    const pct = Math.round((d.brightness ?? 1) * 100);
+    const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range', disabled: !enabled });
+    const briVal = el('span', { className: 'ctrl-val', textContent: `${pct}%` });
+    slider.addEventListener('input', () => {
+      if (shiftDown) slider.value = String(coarseSnap(Number(slider.value), 0, 100));
+      briVal.textContent = `${slider.value}%`;
+    });
+    slider.addEventListener('change', () => {
+      const show = getShow(); const di = show.devices.indexOf(d);
+      if (di < 0) return;
+      const next = structuredClone(show); next.devices[di].brightness = Number(slider.value) / 100; commit(next);
+    });
+    return el('label', { className: 'ctrl-bri' }, [el('span', { textContent: 'Bright' }), slider, briVal]);
+  }
+
   function controllerBlock(d) {
+    // Art-Net nodes (DiGidot, Madrix Nebula, consoles…) have no WLED JSON API — the
+    // model/pixels/power/signal status and save/reboot are WLED-only, so skip them.
+    // Only the output brightness applies (daemon-side), and it works without a poll.
+    if (d.protocol === 'artnet') {
+      return el('div', { className: 'ctrl-block' }, [
+        el('div', { className: 'fx-pts', textContent: 'controller' }),
+        brightnessRow(d, true),
+      ]);
+    }
     const st = deviceStatus.get(d.id);
     // Live controls (brightness / save / reboot) only make sense when the device is
     // actually reachable — gate them on a confirmed-online status. CHECK stays
@@ -216,25 +244,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         el('span', { className: 'ctrl-stat-k', textContent: k }), el('span', { className: 'ctrl-stat-v', textContent: v }),
       ]));
     }
-    // Brightness — scales the DDP output we send to THIS controller (d.brightness,
-    // a 0–1 cap applied per-frame on the daemon). This works during a live show;
-    // WLED's own master-brightness write is ignored while it's in realtime mode.
-    const pct = Math.round((d.brightness ?? 1) * 100);
-    const slider = el('input', { type: 'range', min: '0', max: '100', value: String(pct), className: 'ctrl-range', disabled: !online });
-    if (!online) slider.title = offTitle;
-    const briVal = el('span', { className: 'ctrl-val', textContent: `${pct}%` });
-    slider.addEventListener('input', () => {
-      if (shiftDown) slider.value = String(coarseSnap(Number(slider.value), 0, 100));   // Shift → 10% steps
-      briVal.textContent = `${slider.value}%`;
-    });
-    slider.addEventListener('change', () => {
-      const show = getShow(); const di = show.devices.indexOf(d);
-      if (di < 0) return;
-      const next = structuredClone(show); next.devices[di].brightness = Number(slider.value) / 100; commit(next);
-    });
     return el('div', { className: 'ctrl-block' }, [
       el('div', { className: 'fx-pts', textContent: 'controller' }),
-      el('label', { className: 'ctrl-bri' }, [el('span', { textContent: 'Bright' }), slider, briVal]),
+      brightnessRow(d, online),
       saveToDeviceRow(d, online, offTitle),
       // Check + its status readout sit at the bottom (the diagnostics, after the
       // everyday controls).
@@ -643,8 +655,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const devList = el('div', { className: 'fx-list' });
       for (const d of show.devices) {
         const st = deviceStatus.get(d.id);
-        const state = !d.ip ? 'noip' : pinging.has(d.id) || !st ? 'check' : st.ok ? 'online' : 'offline';
-        const title = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set' }[state];
+        const state = d.protocol === 'artnet' ? 'artnet' : !d.ip ? 'noip' : pinging.has(d.id) || !st ? 'check' : st.ok ? 'online' : 'offline';
+        const title = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[state];
         const row = listRow(d.name || d.id, [d.ip || 'no ip', modelName(d), `${devicePixels(d.id)} px`],
           d.id === selDeviceId, () => { selDeviceId = d.id; lastSel = 'device'; render(); });
         row.prepend(el('i', { className: `dev-dot dev-${state}`, title }));
