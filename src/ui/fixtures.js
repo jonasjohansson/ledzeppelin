@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { fixtureTypeChannels, dmxKindOptions } from '../model/dmx.js';
+import { fixtureTypeChannels, kindFromName, DMX_KIND_LABELS } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -75,13 +75,14 @@ function distributionPicker(value, onPick) {
   return grid;
 }
 
-// DMX-profile editor: an explicit ordered channel list on the type — each channel a
-// function (kind) + a name. Drag to reorder; channel number = DMX slot offset from
-// the start address. Per-fixture VALUES are set with the sliders in the Devices editor.
+// DMX-profile editor: an explicit ordered channel list on the type. Each channel is
+// just a NAME — its function is inferred (Red/Green/Blue/White/Amber → colour, sampled
+// from the canvas; UV/Dimmer/Strobe → that control; anything else → a manual channel).
+// Drag to reorder; channel number = DMX slot offset from the start address. Per-fixture
+// VALUES are set with the sliders in the Devices editor (or a dashboard/layer link).
 function dmxChannelEditor(t, upd, rows) {
   const channels = t.channels || [];
   const cUpd = (i, patch) => upd((nt) => { nt.channels = (nt.channels || []).slice(); nt.channels[i] = { ...nt.channels[i], ...patch }; });
-  // Reorder: remove the dragged channel and re-insert it at the drop row.
   const moveCh = (from, to) => upd((nt) => {
     const cs = (nt.channels || []).slice();
     if (from < 0 || from >= cs.length || to < 0 || to >= cs.length || from === to) return;
@@ -91,13 +92,12 @@ function dmxChannelEditor(t, upd, rows) {
   channels.forEach((c, i) => {
     const handle = el('span', { className: 'fx-ch-drag', textContent: '⠿', title: 'drag to reorder', draggable: true });
     handle.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch { /* some browsers */ } });
-    const name = textInputCommit(c.name ?? `Ch ${i + 1}`, (x) => cUpd(i, { name: x }));
-    const kind = selectInput(dmxKindOptions(), c.kind, (x) => cUpd(i, { kind: x }));
+    // The name IS the channel; its function is derived (shown on hover).
+    const name = textInputCommit(c.name ?? `Ch ${i + 1}`, (x) => cUpd(i, { name: x, kind: kindFromName(x) }));
+    name.title = `function: ${DMX_KIND_LABELS[c.kind] || c.kind}`;
     const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
-      onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Ch 1', value: 0 }]; }) });
-    // Layout only — order / function / name. A channel's live VALUE is set per
-    // fixture with the sliders in the Devices editor (or via a dashboard/layer link).
-    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, kind, rm];
+      onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Red', value: 0 }]; }) });
+    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, rm];
     const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, cells);
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('drop-hover'); });
     row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
@@ -105,8 +105,12 @@ function dmxChannelEditor(t, upd, rows) {
     rows.push(row);
   });
   rows.push(el('button', { className: 'fx-add', textContent: '+ channel',
-    onclick: () => upd((nt) => { nt.channels = [...(nt.channels || []), { kind: 'red', name: `Ch ${(nt.channels?.length || 0) + 1}`, value: 0 }]; }) }));
+    onclick: () => upd((nt) => { const nm = `Ch ${(nt.channels?.length || 0) + 1}`; nt.channels = [...(nt.channels || []), { kind: kindFromName(nm), name: nm, value: 0 }]; }) }));
 }
+
+// A DMX type's name carries an auto "(Nch)" suffix reflecting its channel count.
+const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '').trim();
+const withChSuffix = (s, n) => `${stripChSuffix(s) || 'Fixture'} (${n}ch)`;
 
 // createFixturePanel({ getShow, setShow, onChange })
 // - getShow(): current show
@@ -479,7 +483,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       nt.rows = Math.max(1, Math.round(Number(nt.rows) || 1));
       nt.distribution = Math.max(0, Math.round(Number(nt.distribution) || 0));
       nt.pixelCount = nt.cols * nt.rows;
-      if (wasAuto) nt.name = uniqueTypeName(next.fixtureTypes, autoTypeName(nt), nt.id);
+      // DMX type → keep a "(Nch)" suffix on the name reflecting the channel count;
+      // a pixel type keeps its auto name (W×H · px) while it's still auto.
+      if (nt.channels && nt.channels.length) nt.name = uniqueTypeName(next.fixtureTypes, withChSuffix(nt.name, nt.channels.length), nt.id);
+      else if (wasAuto) nt.name = uniqueTypeName(next.fixtureTypes, autoTypeName(nt), nt.id);
       commit(next);
     };
     const isGrid = (Number(t.rows) || 1) > 1;
@@ -492,7 +499,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       field('Layout', selectInput([{ value: 'pixels', label: 'Pixels (strip / matrix)' }, { value: 'dmx', label: 'DMX channels' }], isDmx ? 'dmx' : 'pixels',
         (mode) => upd((nt) => {
           if (mode === 'dmx') { if (!(nt.channels && nt.channels.length)) nt.channels = fixtureTypeChannels(nt); nt.cols = 1; nt.rows = 1; }
-          else delete nt.channels;
+          else { delete nt.channels; nt.name = stripChSuffix(nt.name); }   // leaving DMX → drop the (Nch) suffix
         }))),
     ];
     if (isDmx) { dmxChannelEditor(t, upd, rows); return el('div', { className: 'fx-card fx-detail' }, rows); }

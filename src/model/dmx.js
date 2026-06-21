@@ -13,6 +13,11 @@ export const DMX_COLOUR_KINDS = new Set(['red', 'green', 'blue', 'white', 'amber
 // Human labels for the kind dropdowns (lowercase keys are the stored values).
 export const DMX_KIND_LABELS = { dimmer: 'Dimmer', red: 'Red', green: 'Green', blue: 'Blue', white: 'White', amber: 'Amber', uv: 'UV', strobe: 'Strobe', fixed: 'Fixed' };
 export const dmxKindOptions = () => DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: DMX_KIND_LABELS[k] || k }));
+// Infer a channel's function from its name: standard colour / control names map to
+// their kind (Red→red, UV→uv, Dimming→dimmer…); anything else is a manual `fixed`
+// channel. Lets the channel editor be a single name field per channel.
+const NAME_TO_KIND = { red: 'red', green: 'green', blue: 'blue', white: 'white', amber: 'amber', uv: 'uv', dimmer: 'dimmer', dimming: 'dimmer', strobe: 'strobe' };
+export const kindFromName = (name) => NAME_TO_KIND[String(name || '').trim().toLowerCase()] || 'fixed';
 
 // Built-in profiles. `Generic` starts as one fixed channel and is edited in the UI.
 export const DMX_PROFILES = [

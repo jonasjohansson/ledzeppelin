@@ -642,11 +642,11 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-param-row > input { flex: 2 1 0; }
 .fx-param-row > select { flex: 1 1 0; }
 .fx-param-row > .fx-act { flex: 0 0 auto; }
-.fx-param-row > .fx-ch-n { flex: 0 0 16px; text-align: right; color: var(--faint); font: var(--fs-micro) var(--mono); }
-/* DMX channel rows: drag handle + roomy function dropdown so labels aren't clipped. */
-.fx-ch-row > select { flex: 1.2 1 0; min-width: 66px; }
-.fx-ch-row > input[type=text] { flex: 1.4 1 0; min-width: 0; }
-.fx-ch-drag { flex: 0 0 12px; cursor: grab; color: var(--faint); text-align: center; user-select: none; line-height: 1; }
+.fx-param-row > .fx-ch-n { flex: 0 0 14px; text-align: right; color: var(--faint); font: var(--fs-micro) var(--mono); }
+/* DMX channel rows: a slim drag handle, then the channel name fills the row. */
+.fx-ch-row { gap: 6px; }
+.fx-ch-row > input[type=text] { flex: 1 1 0; min-width: 0; }
+.fx-ch-drag { flex: 0 0 9px; width: 9px; cursor: grab; color: var(--faint); text-align: center; user-select: none; line-height: 1; font-size: 9px; }
 .fx-ch-drag:active { cursor: grabbing; }
 .fx-ch-drag:hover { color: var(--accent); }
 .fx-ch-row.drop-hover { outline: 1px dashed var(--accent-line); outline-offset: -1px; }

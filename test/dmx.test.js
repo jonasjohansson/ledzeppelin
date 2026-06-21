@@ -1,7 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels, DMX_CHANNEL_KINDS,
-  colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices, fixtureControlChannels } from '../src/model/dmx.js';
+  colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices, fixtureControlChannels, kindFromName } from '../src/model/dmx.js';
+
+test('kindFromName infers a channel function from its name', () => {
+  assert.equal(kindFromName('Red'), 'red');
+  assert.equal(kindFromName('  green '), 'green');
+  assert.equal(kindFromName('UV'), 'uv');
+  assert.equal(kindFromName('Dimming'), 'dimmer');
+  assert.equal(kindFromName('Strobe'), 'strobe');
+  assert.equal(kindFromName('Pan'), 'fixed');     // unknown → manual
+  assert.equal(kindFromName(''), 'fixed');
+});
 
 const prof = (id) => dmxProfile(id);
 
