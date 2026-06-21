@@ -3,11 +3,13 @@
 // Resolume's Dashboard. Knobs are edited in the Composition tab; values persist in
 // the show and are fed into the per-frame `signals` map as `dash:<id>`.
 
-export const DASHBOARD_DEFAULT_LINKS = 8;
+// A fixed bank of 18 links, shown as a 6×3 grid (not addable/removable).
+export const DASHBOARD_DEFAULT_LINKS = 18;
 
 export const makeDashboardLink = (i) => ({ id: `d${i + 1}`, name: `Link ${i + 1}`, value: 0 });
 
-// Normalise a composition's dashboard: clean links + pad up to the default count.
+// Normalise a composition's dashboard: a FIXED bank of DASHBOARD_DEFAULT_LINKS links
+// (clean any saved values/names, pad up, and cap to the fixed count).
 export function normDashboard(dash) {
   const links = (Array.isArray(dash?.links) ? dash.links : []).map((l, i) => ({
     id: String(l?.id || `d${i + 1}`),
@@ -15,6 +17,7 @@ export function normDashboard(dash) {
     value: Math.max(0, Math.min(1, Number(l?.value) || 0)),
   }));
   while (links.length < DASHBOARD_DEFAULT_LINKS) links.push(makeDashboardLink(links.length));
+  links.length = DASHBOARD_DEFAULT_LINKS;
   return { links };
 }
 

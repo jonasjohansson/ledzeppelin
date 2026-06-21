@@ -777,17 +777,7 @@ export function setDashboardLinkName(show, id, name) {
     return { ...c, dashboard: { ...c.dashboard, links } };
   });
 }
-export function addDashboardLink(show) {
-  return updateComp(show, (c) => {
-    const links = (c.dashboard?.links || []).slice();
-    let n = links.length + 1, id; do { id = `d${n}`; n++; } while (links.some((l) => l.id === id));
-    links.push({ id, name: `Link ${links.length + 1}`, value: 0 });
-    return { ...c, dashboard: { ...c.dashboard, links } };
-  });
-}
-export function removeDashboardLink(show, id) {
-  return updateComp(show, (c) => ({ ...c, dashboard: { ...c.dashboard, links: (c.dashboard?.links || []).filter((l) => l.id !== id) } }));
-}
+// (The dashboard is a fixed bank — links are not added or removed; see normDashboard.)
 export function addCompositionEffect(show, name) {
   return updateComp(show, (c) => ({ ...c, effects: [...(c.effects || []), name], params: { ...c.params, ...prefixedDefaults(name) } }));
 }

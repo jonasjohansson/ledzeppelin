@@ -31,7 +31,7 @@ import {
   setClipAnim, setLayerAnim, patchLayer,
   removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
-  setDashboardLinkValue, setDashboardLinkName, addDashboardLink, removeDashboardLink,
+  setDashboardLinkValue, setDashboardLinkName,
 } from '../model/layers.js';
 import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
@@ -674,12 +674,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Dashboard — global link knobs (0..1) that any parameter or DMX channel can be
   // modulated by. Lives on composition.dashboard.links; values persist + feed the
-  // per-frame signals. Drag a knob to set; rename inline; + link adds more.
+  // per-frame signals. A FIXED 6×3 grid of 18 links — drag a knob to set, rename
+  // inline (not addable/removable).
   function dashboardSection() {
     const links = getShow().composition?.dashboard?.links || [];
     const box = el('div', { className: 'comp-dashboard' });
     box.append(Section('Dashboard', 'dashboard', (b) => {
-      const row = el('div', { className: 'dash-row' });
+      const grid = el('div', { className: 'dash-grid' });
       for (const lnk of links) {
         const cell = el('div', { className: 'dash-cell' });
         cell.append(Knob('', lnk.value, {
@@ -689,13 +690,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         // Editable name = the link's label (click to rename).
         const nm = el('input', { className: 'dash-name', value: lnk.name || lnk.id, title: 'rename link' });
         nm.addEventListener('change', () => commit(setDashboardLinkName(show(), lnk.id, nm.value)));
-        const rm = el('button', { className: 'fx-act dash-rm', textContent: '⌫', title: 'remove link',
-          onclick: () => commit(removeDashboardLink(show(), lnk.id)) });
-        cell.append(nm, rm);
-        row.append(cell);
+        cell.append(nm);
+        grid.append(cell);
       }
-      b.append(row);
-      b.append(el('button', { className: 'fx-add', textContent: '+ link', onclick: () => commit(addDashboardLink(show())) }));
+      b.append(grid);
     }));
     return box;
   }

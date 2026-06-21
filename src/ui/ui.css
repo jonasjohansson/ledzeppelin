@@ -658,8 +658,9 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .fx-ch-drag:hover { color: var(--accent); }
 .fx-ch-row.drop-hover { outline: 1px dashed var(--accent-line); outline-offset: -1px; }
 /* Dashboard: a wrapping row of global link knobs (Resolume-style). */
-.dash-row { display: flex; flex-wrap: wrap; gap: 10px 8px; padding: 4px 0 8px; }
-.dash-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 52px; }
+/* Fixed 6×3 bank of dashboard links. */
+.dash-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px 6px; padding: 4px 0 8px; }
+.dash-cell { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
 .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .knob-dial { cursor: ns-resize; touch-action: none; line-height: 0; }
 .knob-track { stroke: var(--line); stroke-width: 3.5; stroke-linecap: round; }
@@ -668,9 +669,6 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
 .dash-name { width: 100%; text-align: center; background: transparent; border: 0; color: var(--muted);
   font: var(--fs-micro) var(--sans); padding: 1px 0; min-width: 0; }
 .dash-name:hover, .dash-name:focus { color: var(--text); background: var(--panel-2); border-radius: 3px; outline: none; }
-.dash-cell .dash-rm { opacity: 0; height: 14px; }
-.dash-cell:hover .dash-rm { opacity: .6; }
-.dash-cell .dash-rm:hover { opacity: 1; }
 /* The pixel/colour block shown inline among the parameters (params order around it). */
 .fx-param-pixels { min-height: var(--row-h); display: flex; align-items: center; padding: 0 8px;
   color: var(--muted); font: var(--fs-micro) var(--mono); letter-spacing: var(--ls-ui);
