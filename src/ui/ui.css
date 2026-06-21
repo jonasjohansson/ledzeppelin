@@ -185,6 +185,10 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .output-row:hover .ly-rmfx, .output-row:hover .output-eye,
 .output-row.selected .ly-rmfx, .output-row.selected .output-eye,
 .output-row .output-eye.off { opacity: 1; }
+/* Inventory row duplicate (⧉): reveal on hover, like the delete/eye affordances. */
+.lib-dup { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 4px; font-size: 11px; line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
+.output-row:hover .lib-dup { opacity: 0.6; }
+.lib-dup:hover { opacity: 1; color: var(--accent); }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
    text colour. (The output tree's filled-selection pattern, applied here too.) */

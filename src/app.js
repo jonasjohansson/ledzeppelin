@@ -1743,6 +1743,17 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ⌘D / Ctrl-D on the Inventory (Library) tab duplicates the selected controller
+// model or fixture definition as an independent copy. Never while typing in a field.
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'd' || e.altKey || e.shiftKey) return;
+  if (typingIn(e.target)) return;
+  if (!outputPaneEl?.hidden && outputTab === 'library') {
+    e.preventDefault();
+    if (panel.duplicateSelected?.()) { renderOutput(); redrawOverlay(); }
+  }
+});
+
 // ⌘A / Ctrl-A in the Output section selects EVERY fixture (for bulk move /
 // chain / delete). Only fires in Output, and never while typing in a field.
 document.addEventListener('keydown', (e) => {

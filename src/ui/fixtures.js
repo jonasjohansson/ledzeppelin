@@ -577,6 +577,29 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     commit(next);
   }
 
+  const uniqueId = (list, prefix) => { let n = (list?.length || 0) + 1; while ((list || []).some((x) => x.id === `${prefix}${n}`)) n++; return `${prefix}${n}`; };
+
+  // Duplicate an Inventory item as an independent copy ("… copy") and select it. No
+  // placed instances are created — only the definition/model is copied.
+  function duplicateController(show, id) {
+    const t = (show.deviceTypes || []).find((x) => x.id === id);
+    if (!t) return false;
+    const next = structuredClone(show);
+    const nid = uniqueId(next.deviceTypes, 'dt');
+    const taken = new Set((next.deviceTypes || []).map((x) => String(x.name || '').toLowerCase()));
+    let name = `${t.name} copy`; let n = 2; while (taken.has(name.toLowerCase())) name = `${t.name} copy ${n++}`;
+    next.deviceTypes.push({ ...structuredClone(t), id: nid, name });
+    selDevTypeId = nid; lastSel = 'devtype'; libSel = 'controller'; commit(next); return true;
+  }
+  function duplicateType(show, id) {
+    const t = (show.fixtureTypes || []).find((x) => x.id === id);
+    if (!t) return false;
+    const next = structuredClone(show);
+    const nid = uniqueId(next.fixtureTypes, 't');
+    next.fixtureTypes.push({ ...structuredClone(t), id: nid, name: uniqueTypeName(next.fixtureTypes, `${t.name} copy`, nid) });
+    selTypeId = nid; lastSel = 'type'; libSel = 'fixture'; commit(next); return true;
+  }
+
   function render() {
     const show = getShow();
     devicesBox.textContent = '';
@@ -653,7 +676,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
         const count = deviceTypeInstanceCount(show, t.id);
-        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`],
+        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
+        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, dup],
           libSel === 'controller' && t.id === selDevTypeId,
           () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); }));
       }
@@ -669,7 +693,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
-        list.append(listRow(t.name, [`${t.pixelCount} px`, `×${count}`],
+        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
+        list.append(listRow(t.name, [`${t.pixelCount} px`, `×${count}`, dup],
           libSel === 'fixture' && t.id === selTypeId,
           () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); }));
       }
@@ -747,6 +772,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         next.fixtures = (next.fixtures || []).filter((f) => f.typeId !== selTypeId);
         selTypeId = null; commit(next); return true;
       }
+      return false;
+    },
+    // ⌘D duplicates the selected Inventory item — a controller MODEL or a fixture
+    // DEFINITION — as an independent copy ("… copy"), then selects it. The copy is a
+    // new definition only; no placed instances are created. Returns true if it copied.
+    duplicateSelected: () => {
+      const show = getShow();
+      if (libSel === 'controller' && selDevTypeId) return duplicateController(show, selDevTypeId);
+      if (libSel === 'fixture' && selTypeId) return duplicateType(show, selTypeId);
       return false;
     },
     // Selecting a placed fixture pre-selects its DEFINITION (shown if you open
