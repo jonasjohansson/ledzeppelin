@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { fixtureTypeChannels, paramKinds, paramSpan, paramsToChannels, channelsToParams, isColourParam } from '../model/dmx.js';
+import { fixtureTypeChannels, paramSpan, paramsToChannels, channelsToParams } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -75,11 +75,19 @@ function distributionPicker(value, onPick) {
   return grid;
 }
 
-// DMX-profile editor: a list of PARAMETERS, each a NAME + a channel COUNT. The name
-// decides behaviour — a colour name (RGB/RGBW/RGBWA/RGBA) → a canvas-sampled colour
-// block (count fixed by the name); a function name (Dimmer/Strobe/UV/White/Amber) → a
-// 1-ch control; anything else → that many manual channels (count editable). The flat
-// channels are the expansion. Drag to reorder; per-fixture sources/values are in Devices.
+// Preset parameter types for the dropdown (the common cases — colour blocks + single
+// functions). "Custom…" reveals a free-text name + editable channel count.
+const PARAM_PRESETS = [
+  { value: 'RGB', count: 3 }, { value: 'RGBW', count: 4 }, { value: 'RGBWA', count: 5 }, { value: 'RGBA', count: 4 },
+  { value: 'Dimmer', count: 1 }, { value: 'Strobe', count: 1 }, { value: 'UV', count: 1 },
+  { value: 'White', count: 1 }, { value: 'Amber', count: 1 }, { value: 'Fixed', count: 1 },
+];
+const presetOf = (name) => PARAM_PRESETS.find((p) => p.value.toLowerCase() === String(name || '').trim().toLowerCase());
+
+// DMX-profile editor: a list of PARAMETERS. The first field is a TYPE dropdown of
+// presets (RGB/RGBW/RGBWA/RGBA colour blocks + Dimmer/Strobe/UV/White/Amber/Fixed
+// single functions) → the channel count follows the type. Pick "Custom…" to write
+// your own name and set the channel count. The flat channels are the expansion.
 function dmxChannelEditor(t, upd, rows) {
   const params = t.params || [];
   const setParams = (ps) => upd((nt) => { nt.params = ps; nt.channels = paramsToChannels(ps); });   // keep the expansion in step
@@ -87,29 +95,36 @@ function dmxChannelEditor(t, upd, rows) {
   const moveP = (from, to) => { if (to < 0 || to >= params.length || from === to) return; const ps = params.slice(); const [m] = ps.splice(from, 1); ps.splice(to, 0, m); setParams(ps); };
   const total = paramsToChannels(params).length;
   rows.push(el('div', { className: 'fx-pts', textContent: `Parameters · ${total} ch` }));
+  const presetOptions = [...PARAM_PRESETS.map((p) => ({ value: p.value, label: p.value })), { value: '__custom__', label: 'Custom…' }];
   params.forEach((p, i) => {
     const span = paramSpan(p);
-    const generic = paramKinds(p.name, 2).length === 2;   // an unrecognised name → count drives the channel span
+    const preset = presetOf(p.name);
+    const isCustom = !preset;
     const handle = el('span', { className: 'fx-ch-drag', textContent: '⠿', title: 'drag to reorder', draggable: true });
     handle.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch { /* some browsers */ } });
-    const name = textInputCommit(p.name ?? 'Channel', (x) => pUpd(i, { name: x }));
-    name.title = isColourParam(p.name) ? 'colour block — sampled from the canvas' : 'name decides function (RGB / Dimmer / UV / Strobe…)';
-    // Channel count: for a recognised colour/function name the span is fixed by the
-    // name (shown, read-only); a generic name lets you set how many channels it spans.
+    // Type dropdown — a preset, or Custom (keeps a non-preset name so the field shows).
+    const type = selectInput(presetOptions, isCustom ? '__custom__' : preset.value, (v) => {
+      if (v === '__custom__') { if (!isCustom) pUpd(i, { name: 'Channel', count: 1 }); }
+      else { const pr = presetOf(v); pUpd(i, { name: pr.value, count: pr.count }); }
+    });
+    const cells = [handle, type];
+    if (isCustom) cells.push(textInputCommit(p.name ?? 'Channel', (x) => pUpd(i, { name: x })));
+    // Channel count: fixed by a preset (read-only), editable for a custom parameter.
     const count = numInputCommit(span, (x) => pUpd(i, { count: Math.max(1, Math.round(x)) }));
     count.classList.add('fx-ch-count');
-    count.disabled = !generic;
-    count.title = generic ? 'channels' : `${span} ch (set by name)`;
-    const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
-      onclick: () => { const ps = params.slice(); ps.splice(i, 1); setParams(ps.length ? ps : [{ name: 'RGB', count: 3 }]); } });
-    const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, [handle, name, count, rm]);
+    count.disabled = !isCustom;
+    count.title = isCustom ? 'channels' : `${span} ch (set by type)`;
+    cells.push(count);
+    cells.push(el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
+      onclick: () => { const ps = params.slice(); ps.splice(i, 1); setParams(ps.length ? ps : [{ name: 'RGB', count: 3 }]); } }));
+    const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, cells);
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('drop-hover'); });
     row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
     row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('drop-hover'); const from = Number(e.dataTransfer.getData('text/plain')); if (Number.isInteger(from)) moveP(from, i); });
     rows.push(row);
   });
   rows.push(el('button', { className: 'fx-add', textContent: '+ parameter',
-    onclick: () => setParams([...(params || []), { name: 'Channel', count: 1 }]) }));
+    onclick: () => setParams([...(params || []), { name: 'RGB', count: 3 }]) }));
 }
 
 // A DMX type's name carries an auto "(Nch)" suffix reflecting its channel count.
