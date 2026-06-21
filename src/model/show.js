@@ -1,4 +1,4 @@
-import { fixtureTypeChannels, DMX_CHANNEL_KINDS } from './dmx.js';
+import { fixtureTypeChannels, DMX_CHANNEL_KINDS, isDmxFormat, paramsToChannels, channelsToParams, defaultParamName } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -114,24 +114,31 @@ function normFixtureParams(params) {
     before: !!p?.before,
   }));
 }
-// A DMX-profile fixture's explicit channel list (flat, ordered): each channel a kind
-// + optional name + default value. Only kept when non-empty (else the type is a
-// pixel+Color-Format fixture).
-function normFixtureChannels(channels) {
-  if (!Array.isArray(channels) || !channels.length) return undefined;
-  return channels.map((c, i) => ({
-    kind: DMX_CHANNEL_KINDS.includes(c?.kind) ? c.kind : 'fixed',
-    name: String(c?.name ?? `Ch ${i + 1}`),
-    value: clamp8(c?.value),
-  }));
+// A DMX-profile fixture's PARAMETERS: each has a format (a colour block like RGBWA,
+// or a single function). Only colour params have no value; single params keep one.
+function normDmxParams(params) {
+  return (Array.isArray(params) ? params : []).map((p) => {
+    const format = isDmxFormat(p?.format) ? p.format : (DMX_CHANNEL_KINDS.includes(p?.kind) ? p.kind : 'fixed');
+    return { name: String(p?.name ?? defaultParamName(format)), format, value: clamp8(p?.value) };
+  });
 }
 function normFixtureType(t) {
   const rows = Math.max(1, Math.round(Number(t.rows) || 1));
   const cols = Math.max(1, Math.round(Number(t.cols) || t.pixelCount || 1));
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
-  const channels = normFixtureChannels(t.channels);
-  const base = { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows, params: normFixtureParams(t.params) };
-  if (channels) base.channels = channels; else delete base.channels;
+  const base = { ...t, cols, rows, distribution, colorFormat: t.colorFormat || '', pixelCount: cols * rows };
+  // A DMX type is a list of format params; its flat `channels` is the expansion.
+  // Migrate a legacy flat channel list (kind-per-channel) into params on the way in.
+  const hasFmtParams = Array.isArray(t.params) && t.params.some((p) => p && p.format);
+  const dmxParams = hasFmtParams ? t.params
+    : (Array.isArray(t.channels) && t.channels.length ? channelsToParams(t.channels) : null);
+  if (dmxParams) {
+    base.params = normDmxParams(dmxParams);
+    base.channels = paramsToChannels(base.params);
+  } else {
+    base.params = normFixtureParams(t.params);   // pixel / legacy (before-after) params
+    delete base.channels;
+  }
   return base;
 }
 

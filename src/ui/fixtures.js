@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { fixtureTypeChannels, kindFromName, DMX_KIND_LABELS } from '../model/dmx.js';
+import { fixtureTypeChannels, DMX_PARAM_FORMATS, paramFormatKinds, paramsToChannels, channelsToParams, defaultParamName } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -75,37 +75,38 @@ function distributionPicker(value, onPick) {
   return grid;
 }
 
-// DMX-profile editor: an explicit ordered channel list on the type. Each channel is
-// just a NAME — its function is inferred (Red/Green/Blue/White/Amber → colour, sampled
-// from the canvas; UV/Dimmer/Strobe → that control; anything else → a manual channel).
-// Drag to reorder; channel number = DMX slot offset from the start address. Per-fixture
-// VALUES are set with the sliders in the Devices editor (or a dashboard/layer link).
+// DMX-profile editor: a list of PARAMETERS, each with a FORMAT — a colour block
+// (RGB/RGBW/RGBWA/RGBA) that spans several channels, or a single function (Dimmer/
+// Strobe/UV/Fixed). The flat channels are the expansion. Drag to reorder; the channel
+// column shows each param's DMX slot span. Per-fixture VALUES/sources are in Devices.
 function dmxChannelEditor(t, upd, rows) {
-  const channels = t.channels || [];
-  const cUpd = (i, patch) => upd((nt) => { nt.channels = (nt.channels || []).slice(); nt.channels[i] = { ...nt.channels[i], ...patch }; });
-  const moveCh = (from, to) => upd((nt) => {
-    const cs = (nt.channels || []).slice();
-    if (from < 0 || from >= cs.length || to < 0 || to >= cs.length || from === to) return;
-    const [m] = cs.splice(from, 1); cs.splice(to, 0, m); nt.channels = cs;
-  });
-  rows.push(el('div', { className: 'fx-pts', textContent: `Channels · ${channels.length}` }));
-  channels.forEach((c, i) => {
+  const params = t.params || [];
+  const setParams = (ps) => upd((nt) => { nt.params = ps; nt.channels = paramsToChannels(ps); });   // keep the expansion in step
+  const pUpd = (i, patch) => setParams(params.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+  const moveP = (from, to) => { if (to < 0 || to >= params.length || from === to) return; const ps = params.slice(); const [m] = ps.splice(from, 1); ps.splice(to, 0, m); setParams(ps); };
+  const total = paramsToChannels(params).length;
+  rows.push(el('div', { className: 'fx-pts', textContent: `Parameters · ${total} ch` }));
+  let ch = 1;
+  params.forEach((p, i) => {
+    const span = paramFormatKinds(p.format).length;
+    const chLabel = span === 1 ? String(ch) : `${ch}–${ch + span - 1}`;
+    ch += span;
     const handle = el('span', { className: 'fx-ch-drag', textContent: '⠿', title: 'drag to reorder', draggable: true });
     handle.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', String(i)); } catch { /* some browsers */ } });
-    // The name IS the channel; its function is derived (shown on hover).
-    const name = textInputCommit(c.name ?? `Ch ${i + 1}`, (x) => cUpd(i, { name: x, kind: kindFromName(x) }));
-    name.title = `function: ${DMX_KIND_LABELS[c.kind] || c.kind}`;
-    const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove channel',
-      onclick: () => upd((nt) => { const cs = (nt.channels || []).slice(); cs.splice(i, 1); nt.channels = cs.length ? cs : [{ kind: 'red', name: 'Red', value: 0 }]; }) });
-    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: String(i + 1) }), name, rm];
+    const name = textInputCommit(p.name ?? defaultParamName(p.format), (x) => pUpd(i, { name: x }));
+    // Format picker: colour block or single function. Keep an auto name in step.
+    const format = selectInput(DMX_PARAM_FORMATS, p.format, (fmt) => pUpd(i, { format: fmt, name: (p.name === defaultParamName(p.format) ? defaultParamName(fmt) : p.name) }));
+    const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
+      onclick: () => { const ps = params.slice(); ps.splice(i, 1); setParams(ps.length ? ps : [{ name: 'Color', format: 'RGB' }]); } });
+    const cells = [handle, el('span', { className: 'fx-ch-n', textContent: chLabel }), name, format, rm];
     const row = el('div', { className: 'fx-field fx-param-row fx-ch-row' }, cells);
     row.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('drop-hover'); });
     row.addEventListener('dragleave', () => row.classList.remove('drop-hover'));
-    row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('drop-hover'); const from = Number(e.dataTransfer.getData('text/plain')); if (Number.isInteger(from)) moveCh(from, i); });
+    row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('drop-hover'); const from = Number(e.dataTransfer.getData('text/plain')); if (Number.isInteger(from)) moveP(from, i); });
     rows.push(row);
   });
-  rows.push(el('button', { className: 'fx-add', textContent: '+ channel',
-    onclick: () => upd((nt) => { const nm = `Ch ${(nt.channels?.length || 0) + 1}`; nt.channels = [...(nt.channels || []), { kind: kindFromName(nm), name: nm, value: 0 }]; }) }));
+  rows.push(el('button', { className: 'fx-add', textContent: '+ parameter',
+    onclick: () => setParams([...(params || []), { name: defaultParamName('fixed'), format: 'fixed', value: 0 }]) }));
 }
 
 // A DMX type's name carries an auto "(Nch)" suffix reflecting its channel count.
@@ -483,23 +484,24 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       nt.rows = Math.max(1, Math.round(Number(nt.rows) || 1));
       nt.distribution = Math.max(0, Math.round(Number(nt.distribution) || 0));
       nt.pixelCount = nt.cols * nt.rows;
-      // DMX type → keep a "(Nch)" suffix on the name reflecting the channel count;
-      // a pixel type keeps its auto name (W×H · px) while it's still auto.
-      if (nt.channels && nt.channels.length) nt.name = uniqueTypeName(next.fixtureTypes, withChSuffix(nt.name, nt.channels.length), nt.id);
+      // DMX type → keep a "(Nch)" suffix on the name reflecting the channel count
+      // (derived from its format params); a pixel type keeps its auto W×H·px name.
+      const dmxCount = (nt.params && nt.params.some((p) => p && p.format)) ? paramsToChannels(nt.params).length : 0;
+      if (dmxCount) nt.name = uniqueTypeName(next.fixtureTypes, withChSuffix(nt.name, dmxCount), nt.id);
       else if (wasAuto) nt.name = uniqueTypeName(next.fixtureTypes, autoTypeName(nt), nt.id);
       commit(next);
     };
     const isGrid = (Number(t.rows) || 1) > 1;
-    const isDmx = !!(t.channels && t.channels.length);   // DMX-profile mode (flat channel list)
+    const isDmx = !!(t.params && t.params.some((p) => p && p.format));   // DMX-profile mode (format params)
     const rows = [
       field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, x, nt.id); }))),
       // Layout: a pixel strip/matrix (W×H + Color Format) OR a DMX fixture defined by
-      // an explicit channel list. Switching to DMX seeds the list from the current
-      // colour format + parameters; switching back drops it.
+      // a list of format parameters. Switching to DMX seeds the params from the current
+      // colour format; switching back drops them.
       field('Layout', selectInput([{ value: 'pixels', label: 'Pixels (strip / matrix)' }, { value: 'dmx', label: 'DMX channels' }], isDmx ? 'dmx' : 'pixels',
         (mode) => upd((nt) => {
-          if (mode === 'dmx') { if (!(nt.channels && nt.channels.length)) nt.channels = fixtureTypeChannels(nt); nt.cols = 1; nt.rows = 1; }
-          else { delete nt.channels; nt.name = stripChSuffix(nt.name); }   // leaving DMX → drop the (Nch) suffix
+          if (mode === 'dmx') { if (!(nt.params && nt.params.some((p) => p && p.format))) nt.params = channelsToParams(fixtureTypeChannels(nt)); nt.cols = 1; nt.rows = 1; }
+          else { delete nt.channels; nt.params = []; nt.name = stripChSuffix(nt.name); }   // leaving DMX → drop params + the (Nch) suffix
         }))),
     ];
     if (isDmx) { dmxChannelEditor(t, upd, rows); return el('div', { className: 'fx-card fx-detail' }, rows); }

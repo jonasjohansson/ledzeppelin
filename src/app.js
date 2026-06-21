@@ -55,11 +55,10 @@ function defaultShow() {
   // syncFixtureTypes) plus the FOS Luminus PRO (the real DMX light). Build any other
   // definition in the Inventory (+ fixture → set the Layout / channels).
   show.fixtureTypes = [
-    // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode, as an explicit channel
-    // list (DMX-profile model): Red Green Blue White Amber UV.
-    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, channels: [
-      { kind: 'red', name: 'Red' }, { kind: 'green', name: 'Green' }, { kind: 'blue', name: 'Blue' },
-      { kind: 'white', name: 'White' }, { kind: 'amber', name: 'Amber' }, { kind: 'uv', name: 'UV', value: 0 },
+    // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode, as format parameters
+    // (DMX-profile model): a Color (RGBWA = 5 ch) block + a UV channel.
+    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, params: [
+      { name: 'Color', format: 'RGBWA' }, { name: 'UV', format: 'uv', value: 0 },
     ] },
   ];
   // One placed fixture (the Generic Fixture) wired to Controller 1 — a thin upright

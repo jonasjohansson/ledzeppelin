@@ -3,6 +3,18 @@ import assert from 'node:assert/strict';
 import { DMX_PROFILES, dmxProfile, dmxFootprint, resolveDmxChannels, DMX_CHANNEL_KINDS,
   colorFormatChannels, fixtureTypeChannels, fixtureParamChannelIndices, fixtureControlChannels, kindFromName } from '../src/model/dmx.js';
 
+test('params with format expand to channels and group back', async () => {
+  const { paramsToChannels, channelsToParams } = await import('../src/model/dmx.js');
+  const params = [{ name: 'Color', format: 'RGBWA' }, { name: 'UV', format: 'uv', value: 0 }];
+  const ch = paramsToChannels(params);
+  assert.equal(ch.length, 6);
+  assert.deepEqual(ch.map((c) => c.kind), ['red', 'green', 'blue', 'white', 'amber', 'uv']);
+  // Grouping a flat list back collapses the colour run into one colour-format param.
+  assert.deepEqual(channelsToParams(ch).map((p) => p.format), ['RGBWA', 'uv']);
+  // RGB + a single Dimmer.
+  assert.equal(paramsToChannels([{ format: 'RGB' }, { name: 'Dim', format: 'dimmer' }]).length, 4);
+});
+
 test('kindFromName infers a channel function from its name', () => {
   assert.equal(kindFromName('Red'), 'red');
   assert.equal(kindFromName('  green '), 'green');
