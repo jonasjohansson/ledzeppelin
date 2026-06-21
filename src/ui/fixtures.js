@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { colorFormatChannels, fixtureTypeChannels, dmxKindOptions } from '../model/dmx.js';
+import { fixtureTypeChannels, dmxKindOptions } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -505,66 +505,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     // Colour format: '' inherits the controller's order; pick RGBW here for a
     // white-channel strip (mixes freely with RGB fixtures on the same controller).
     rows.push(field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
-    // For a 1×1 par, show the running DMX channel total (colour + parameters) so it's
-    // clear that each parameter you add is another channel. (A strip's count is pixels.)
-    if (!isGrid && (Number(t.cols) || 1) === 1) rows.push(field('Channels', el('span', { className: 'fx-readonly', textContent: String(fixtureTypeChannels(t).length) })));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
       rows.push(el('div', { className: 'fx-pts', textContent: 'Wiring' }));
       rows.push(distributionPicker(t.distribution ?? 0, (x) => upd((nt) => { nt.distribution = x; })));
     }
-    // Parameters — extra DMX channels around the pixel/colour block (Resolume model):
-    // dimmer/strobe/UV/etc. Colour kinds are driven by the canvas; `fixed` carries a
-    // default value. A param sits BEFORE or AFTER the pixels (↑/↓ moves it across the
-    // block); DMX channel ORDER follows this list top-to-bottom exactly.
-    rows.push(el('div', { className: 'fx-pts', textContent: 'Parameters' }));
-    const params = t.params || [];
-    const pUpd = (i, patch) => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params[i] = { ...nt.params[i], ...patch }; });
-    // Display order = before-params, then the PIXELS divider, then after-params.
-    const beforeIdx = [], afterIdx = [];
-    params.forEach((p, i) => (p.before ? beforeIdx : afterIdx).push(i));
-    const tokens = [...beforeIdx, 'PX', ...afterIdx];   // 'PX' = the pixel block slot
-    const lastPos = tokens.length - 1;
-    // Move a param up/down across the display sequence; crossing 'PX' flips before/after.
-    const moveParam = (idx, dir) => upd((nt) => {
-      const ps = (nt.params || []).slice();
-      const bi = [], ai = [];
-      ps.forEach((p, i) => (p.before ? bi : ai).push(i));
-      const tk = [...bi, 'PX', ...ai];
-      const pos = tk.indexOf(idx), tgt = pos + dir;
-      if (pos < 0 || tgt < 0 || tgt >= tk.length) return;
-      [tk[pos], tk[tgt]] = [tk[tgt], tk[pos]];
-      const out = []; let before = true;
-      for (const t2 of tk) { if (t2 === 'PX') { before = false; continue; } out.push({ ...ps[t2], before }); }
-      nt.params = out;
-    });
-    const colourKinds = colorFormatChannels(t.colorFormat);
-    tokens.forEach((tok, pos) => {
-      if (tok === 'PX') {
-        const lbl = colourKinds.length
-          ? `Pixels · ${t.colorFormat || 'RGB'} (${t.cols}×${t.rows}, ${colourKinds.length} ch)`
-          : 'Pixels · none';
-        rows.push(el('div', { className: 'fx-param-pixels', textContent: lbl }));
-        return;
-      }
-      const i = tok, p = params[i];
-      const name = textInputCommit(p.name, (x) => pUpd(i, { name: x }));
-      const kind = selectInput(dmxKindOptions(), p.kind, (x) => pUpd(i, { kind: x }));
-      const up = el('button', { className: 'fx-act', textContent: '↑', title: 'move up', onclick: () => moveParam(i, -1) });
-      const down = el('button', { className: 'fx-act', textContent: '↓', title: 'move down', onclick: () => moveParam(i, +1) });
-      if (pos === 0) up.disabled = true;
-      if (pos === lastPos) down.disabled = true;
-      const rm = el('button', { className: 'fx-act', textContent: '⌫', title: 'remove parameter',
-        onclick: () => upd((nt) => { nt.params = (nt.params || []).slice(); nt.params.splice(i, 1); }) });
-      const cells = [name, kind];
-      // A `fixed` channel has a settable default; colour kinds come from the canvas.
-      if (p.kind === 'fixed') cells.push(numInputCommit(p.value ?? 0, (x) => pUpd(i, { value: Math.max(0, Math.min(255, Math.round(x))) }), 1));
-      cells.push(up, down, rm);
-      rows.push(el('div', { className: 'fx-field fx-param-row' }, cells));
-    });
-    rows.push(el('button', { className: 'fx-add', textContent: '+ parameter',
-      onclick: () => upd((nt) => { nt.params = [...(nt.params || []), { name: `Param ${(nt.params?.length || 0) + 1}`, kind: 'fixed', value: 0 }]; }) }));
+    // A pixel strip/matrix has no extra channels — that's a DMX fixture (switch the
+    // Layout to "DMX channels" to define a channel list). So no Parameters here.
 
     // Physical size (optional) — only drives true-scale strip THICKNESS on the
     // canvas, and offers density×length as a convenience to set a strip's Width.
