@@ -954,44 +954,37 @@ function dmxEditor(sel) {
     }),
   ]);
 
-  // Parameters: a named 0..255 fader per controllable channel (Dimmer/Strobe/UV/
-  // Fixed). Colour channels are driven by the sampled canvas colour. A fader is a
-  // manual override; bind it to a layer to drive it from that layer's level instead.
+  // Parameters: one row PER CHANNEL with a chosen SOURCE — Canvas (sample the visual,
+  // default for colour channels), Manual (a fader), a Layer's level, or a Dashboard
+  // link. So you decide what's driven by the canvas vs by hand/modulation.
   const hasFixed = channels.some((c) => c.kind === 'fixed');
-  const ctl = ptype ? fixtureControlChannels(ptype) : [];
   if (ptype) {
-    // Colour channels (R/G/B/W/A) are driven by the sampled canvas colour, so they
-    // have no manual fader — list them once so every channel is accounted for.
-    const colourNames = channels.filter((c) => DMX_COLOUR_KINDS.has(c.kind)).map((c) => DMX_KIND_LABELS[c.kind] || c.kind);
-    if (ctl.length || colourNames.length) {
+    if (channels.length) {
       const layers = show.composition?.layers || [];
       const dashLinks = show.composition?.dashboard?.links || [];
-      // Source options: manual, any LAYER (its level), or any DASHBOARD link. Refs are
-      // prefixed 'layer:'/'dash:'; a bare id is treated as a legacy layer ref.
-      const srcOptions = [{ value: '', label: '— manual —' },
+      const srcOptions = (isColour) => [
+        ...(isColour ? [{ value: 'canvas', label: 'Canvas' }] : []),
+        { value: 'manual', label: 'Manual' },
         ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
-        ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` }))];
-      const liveBindValue = (ref) => {
-        if (!ref) return null;
-        if (ref.startsWith('dash:')) return dashLinks.find((d) => d.id === ref.slice(5))?.value ?? 0;
-        const lid = ref.startsWith('layer:') ? ref.slice(6) : ref;
-        return layers.find((L) => L.id === lid)?.opacity ?? 0;
-      };
+        ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` })),
+      ];
       out.append(Section('Parameters', 'dmx-params', (body) => {
-        if (colourNames.length) body.append(oel('div', { className: 'fx-devstatus', textContent: `${colourNames.join(' · ')} — from canvas` }));
-        ctl.forEach((c) => {
-          const ci = c.index;
-          const rawRef = cfg.bind?.[ci] || '';
-          const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : '';   // normalise legacy
-          const live = liveBindValue(rawRef);
-          // When bound, the fader shows the source's live level (0..1 → 0..255); the
-          // source drives output each frame. Otherwise it's a manual override that
-          // updates live WITHOUT a re-render (dmxFixedLive) so dragging stays smooth.
-          const shown = live != null ? Math.round(Math.max(0, Math.min(1, live)) * 255) : (cfg.fixed?.[ci] ?? c.value ?? 0);
-          body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
+        channels.forEach((c, ci) => {
+          const isColour = DMX_COLOUR_KINDS.has(c.kind);
+          const rawRef = cfg.bind?.[ci];
+          const hasManual = cfg.fixed && (ci in cfg.fixed);
+          // Current source: a bind ref wins; else an explicit manual value; else the
+          // default (colour → Canvas, everything else → Manual).
+          const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : (hasManual ? 'manual' : (isColour ? 'canvas' : 'manual'));
+          const nameLabel = c.name || DMX_KIND_LABELS[c.kind] || c.kind;
+          // Source picker: switching writes bind/fixed so the resolver/route follow.
+          body.append(fld(nameLabel, sel2(srcOptions(isColour), cur, (src) => setDmx({
+            bind: (() => { const b = { ...(cfg.bind || {}) }; if (src.includes(':')) b[ci] = src; else delete b[ci]; return b; })(),
+            fixed: (() => { const fx = { ...(cfg.fixed || {}) }; if (src === 'manual') { if (!(ci in fx)) fx[ci] = isColour ? 255 : (c.value ?? 0); } else delete fx[ci]; return fx; })(),
+          }))));
+          // Manual → a fader (live, no re-render). Canvas/Layer/Dash drive it instead.
+          if (cur === 'manual') body.append(Slider('', cfg.fixed?.[ci] ?? c.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
             onInput: (v) => dmxFixedLive(sel.id, ci, Math.round(v)) }));
-          body.append(fld('↳ source', sel2(srcOptions, cur,
-            (ref) => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; if (ref) b[ci] = ref; else delete b[ci]; return b; })() }))));
         });
       }));
     }
