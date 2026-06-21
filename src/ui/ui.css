@@ -339,19 +339,6 @@ body.output-mode #deckbar button { pointer-events: auto; }
    sits in front of the viewport UI where they overlap. */
 #side { flex: 0 0 var(--side-w); max-height: 100vh;
   display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
-/* Collapsible inspector. A chevron at the end of the Design|Output|System header
-   collapses #side to a thin EDGE RAIL (part of the panel, not floating); collapsing
-   to ~22px lets updateStageInsets grow the canvas. Click the rail's ‹ to reopen. */
-.side-collapse-btn { flex: 0 0 auto; width: 22px; padding: 0; cursor: pointer;
-  background: transparent; border: 0; color: var(--faint); font: var(--fs-body) var(--sans); }
-.side-collapse-btn:hover { color: var(--accent); }
-body.side-collapsed #side { flex-basis: 22px; }
-.side-rail { display: none; }
-body.side-collapsed #side > :not(.side-rail) { display: none; }
-body.side-collapsed .side-rail { display: flex; align-items: center; justify-content: center;
-  flex: 1 1 auto; width: 100%; cursor: pointer; background: var(--panel-2); border: 0;
-  color: var(--muted); font: var(--fs-body) var(--sans); }
-body.side-collapsed .side-rail:hover { color: var(--accent); }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
@@ -436,9 +423,9 @@ body.side-collapsed .side-rail:hover { color: var(--accent); }
    so the two tab rows read as one nested hierarchy, not two unrelated menus. */
 .section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 4px; margin-bottom: 0; }
 .section-tab {
-  flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output = 50% each */
-  border: none; border-radius: 0; padding: 4px 0; cursor: pointer;
-  font: var(--fw-med) var(--fs-title) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output / System = equal */
+  border: none; border-radius: 0; padding: 6px 0; cursor: pointer;
+  font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);   /* same size as the subtabs */
 }
 .section-tab:hover { color: var(--muted); }
 .section-tab.section-active { color: var(--accent); }
