@@ -85,6 +85,7 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
 
       // Retire the OLDEST in-flight readback if its fence has signaled. SYNC_FLUSH_-
       // COMMANDS_BIT flushes so clientWaitSync can actually observe completion.
+      let justConsumed = -1;
       if (queue.length) {
         const i = queue[0];
         const s = gl.clientWaitSync(fences[i], gl.SYNC_FLUSH_COMMANDS_BIT, 0);
@@ -95,13 +96,16 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
           gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
           lastValid = trim(out);
           gl.deleteSync(fences[i]); fences[i] = null;   // free this pbo for reuse
+          justConsumed = i;
         }
       }
 
-      // Kick a new readback ONLY into a FREE pbo (fence cleared). If all are still in
-      // flight, skip this frame — never overwrite an unread buffer.
+      // Kick a new readback into a FREE pbo — but NOT the one we just consumed THIS
+      // frame: readPixels into it would discard the shadow copy getBufferSubData just
+      // made (ANGLE's "discarded shadow copy" perf warning). With 3 pbos there's
+      // normally another free one; if not, skip this frame (readback is best-effort).
       let w = -1;
-      for (let i = 0; i < NUM; i++) { if (fences[i] === null) { w = i; break; } }
+      for (let i = 0; i < NUM; i++) { if (fences[i] === null && i !== justConsumed) { w = i; break; } }
       if (w >= 0) {
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[w]);
         gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // 0 = offset into bound PBO ⇒ async
