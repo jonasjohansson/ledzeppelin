@@ -139,6 +139,9 @@ function normFixtureType(t) {
   if (dmxParams) {
     base.params = normDmxParams(dmxParams);
     base.channels = paramsToChannels(base.params);
+    // The channel count is a list badge now, NOT part of the name — drop any legacy
+    // auto "(Nch)" suffix so old shows clean up to just the user's name.
+    if (typeof base.name === 'string') base.name = base.name.replace(/\s*\(\d+\s*ch\)\s*$/i, '').trim() || base.name;
   } else {
     base.params = normFixtureParams(t.params);   // pixel / legacy (before-after) params
     delete base.channels;

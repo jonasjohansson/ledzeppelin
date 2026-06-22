@@ -7,7 +7,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
 import { ListRow } from './kit/listrow.js';
-import { fixtureTypeChannels, paramSpan, paramsToChannels, channelsToParams } from '../model/dmx.js';
+import { fixtureTypeChannels, paramSpan, paramsToChannels, channelsToParams, isDmxType } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 
@@ -132,7 +132,6 @@ function dmxChannelEditor(t, upd, rows) {
 
 // A DMX type's name carries an auto "(Nch)" suffix reflecting its channel count.
 const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '').trim();
-const withChSuffix = (s, n) => `${stripChSuffix(s) || 'Fixture'} (${n}ch)`;
 
 // createFixturePanel({ getShow, setShow, onChange })
 // - getShow(): current show
@@ -543,10 +542,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       nt.rows = Math.max(1, Math.round(Number(nt.rows) || 1));
       nt.distribution = Math.max(0, Math.round(Number(nt.distribution) || 0));
       nt.pixelCount = nt.cols * nt.rows;
-      // DMX type → keep a "(Nch)" suffix on the name reflecting the channel count
-      // (derived from its name+count params); a pixel type keeps its auto W×H·px name.
-      const dmxCount = (nt.params && nt.params.some((p) => p && p.count != null)) ? paramsToChannels(nt.params).length : 0;
-      if (dmxCount) nt.name = uniqueTypeName(next.fixtureTypes, withChSuffix(nt.name, dmxCount), nt.id);
+      // Name stays CLEAN (just the user's text) — the channel count shows as a badge
+      // in the Inventory list (like "60 px"), not baked into the name. A pixel type
+      // keeps its auto W×H·px name while it's still auto.
+      const isDmxT = nt.params && nt.params.some((p) => p && p.count != null);
+      if (isDmxT) nt.name = uniqueTypeName(next.fixtureTypes, stripChSuffix(nt.name), nt.id);
       else if (wasAuto) nt.name = uniqueTypeName(next.fixtureTypes, autoTypeName(nt), nt.id);
       commit(next);
     };
@@ -637,13 +637,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     if (!t) return false;
     const next = structuredClone(show);
     const nid = uniqueId(next.fixtureTypes, 't');
-    // Number BEFORE the auto "(Nch)" suffix on a DMX type → "FOS Luminus PRO 2 (6ch)".
-    const isDmx = (t.params || []).some((p) => p && p.count != null);
-    const ch = paramsToChannels(t.params || []).length;
+    // Clean numbered copy name ("FOS Luminus PRO 2") — the channel count is a badge.
     const core = stripNum(stripChSuffix(t.name));
-    const suffix = isDmx && ch ? ` (${ch}ch)` : '';
     const taken = new Set(next.fixtureTypes.map((x) => String(x.name || '').toLowerCase()));
-    let n = 2; let name = `${core}${suffix}`; while (taken.has(name.toLowerCase())) name = `${core} ${n++}${suffix}`;
+    let n = 2; let name = core; while (taken.has(name.toLowerCase())) name = `${core} ${n++}`;
     next.fixtureTypes.push({ ...structuredClone(t), id: nid, name });
     selTypeId = nid; lastSel = 'type'; libSel = 'fixture'; commit(next); return true;
   }
@@ -741,8 +738,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
+        // DMX type → channel-count badge ("6 ch"); pixel type → pixel-count badge.
+        const sizeBadge = isDmxType(t) ? `${t.channels?.length || paramsToChannels(t.params || []).length} ch` : `${t.pixelCount} px`;
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
-        list.append(listRow(t.name, [`${t.pixelCount} px`, `×${count}`, dup],
+        list.append(listRow(t.name, [sizeBadge, `×${count}`, dup],
           libSel === 'fixture' && t.id === selTypeId,
           () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); }));
       }

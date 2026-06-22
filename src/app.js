@@ -57,7 +57,7 @@ function defaultShow() {
   show.fixtureTypes = [
     // FOS Luminus PRO / H6 — RGBWA+UV battery par, 6-CH mode, as name+count params
     // (DMX-profile model): an RGBWA colour block (5 ch) + a UV channel.
-    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO (6ch)', cols: 1, rows: 1, params: [
+    { id: 'fos_luminus_pro', name: 'FOS Luminus PRO', cols: 1, rows: 1, params: [
       { name: 'RGBWA', count: 5 }, { name: 'UV', count: 1, value: 0 },
     ] },
   ];
