@@ -12,3 +12,9 @@ test('handles multi-segment polylines by arc length', () => {
   assert.deepEqual(pts[1], [1,0]);
   assert.deepEqual(pts[2], [1,1]);
 });
+
+test('samplePoints: empty / single-point input does not throw', () => {
+  assert.deepEqual(samplePoints([], 10), []);
+  assert.deepEqual(samplePoints(undefined, 5), []);
+  assert.deepEqual(samplePoints([[0.2, 0.3]], 4), [[0.2, 0.3]]);   // single point → that point
+});

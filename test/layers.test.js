@@ -698,3 +698,13 @@ test('playheadClip clamps to last clip when not looping', () => {
 test('playheadClip returns null for an empty deck', () => {
   assert.equal(playheadClip([], 100), null);
 });
+
+test('playheadClip + normalizeComposition tolerate null holes (no crash)', () => {
+  // A deck with a deleted (null) middle slot must not crash the transport.
+  const clips = [{ id: 'a', durationMs: 1000 }, null, { id: 'b', durationMs: 1000 }];
+  assert.doesNotThrow(() => playheadClip(clips, 1500));
+  const ph = playheadClip(clips, 1200);
+  assert.equal(ph.clip.id, 'b');   // holes skipped: 0..1000 = a, 1000..2000 = b
+  // A null layer in saved data must not crash normalization.
+  assert.doesNotThrow(() => normalizeComposition({ composition: { layers: [null, { clips: [{ generator: 'line' }] }] } }));
+});

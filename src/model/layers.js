@@ -172,7 +172,7 @@ export function normalizeComposition(show) {
   const migrateOpacity = !comp.opacityV2;
   const opacityOf = (layer) => { const o = layer.opacity ?? 1; return migrateOpacity && o === 1 ? 0.5 : o; };
 
-  const layers = inLayers.map((layer, i) => {
+  const layers = inLayers.filter(Boolean).map((layer, i) => {
     if (Array.isArray(layer.clips)) {
       // Already new-shape: fill any missing defaults. `null` entries are HOLES
       // (deleted grid slots) — preserved so positions stay stable across reload.
@@ -596,7 +596,7 @@ export function setClipDuration(show, layerId, clipId, ms) {
 // { clip, index, intoMs } or null if there are no clips. A clip with
 // durationMs ≤ 0 is given a 1ms floor so the playhead can never stall on it.
 export function playheadClip(clips, elapsedMs, loop = true) {
-  const list = Array.isArray(clips) ? clips : [];
+  const list = (Array.isArray(clips) ? clips : []).filter(Boolean);   // skip deleted-slot holes
   if (!list.length) return null;
   const dur = list.map((c) => Math.max(1, Number(c.durationMs) || 0));
   const total = dur.reduce((a, b) => a + b, 0);

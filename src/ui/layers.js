@@ -373,7 +373,7 @@ function animControls(anim, onAnim, oscAddress, onAnimLive) {
     const beatLabel = (d) => (d < 1 ? `1/${Math.round(1 / d)}` : String(d));
     const unit = el('button', {
       className: 'anim-unit' + (beatSync ? ' on' : ''), type: 'button', textContent: beatSync ? '♪' : 's',
-      title: beatSync ? 'beat-synced to tempo — click for free seconds' : 'free seconds — click to sync to tempo',
+      title: beatSync ? 'beat-synced to tempo, click for free seconds' : 'free seconds, click to sync to tempo',
       onclick: (e) => {
         e.stopPropagation();
         if (beatSync) {
@@ -662,7 +662,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     if (!selLayer) selLayer = layers.find((L) => L.id === selectedLayerId) || layers[layers.length - 1];
     const selClip = (selLayer.clips || []).find((c) => c && c.id === selectedClipId);
     if (selClip) clipEl.append(selectedClipEditor(selLayer.id, selClip));
-    else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clips — add one with +' }));
+    else clipEl.append(el('div', { className: 'ly-hint', textContent: 'no clips, add one with +' }));
 
     // --- LAYER inspector: the selected layer's settings ----------------------
     if (!layers.some((L) => L.id === selectedLayerId)) selectedLayerId = selLayer.id;
@@ -889,10 +889,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const thumb = thumbnails[clip.generator];
       if (thumb) thumbWrap.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       // Triggerable source (e.g. Pulse) → a ⚡ badge so you know it fires.
-      if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable — fire from the Clip inspector' }));
+      if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable, fire from the Clip inspector' }));
       // A video clip whose file didn't survive a reload (object URLs are
       // session-only) — flag it instead of showing a silent black clip.
-      if (clip.videoMissing) thumbWrap.append(el('div', { className: 'clip-missing', textContent: '⚠ video', title: 'video file lost on reload — drop a new source onto this clip' }));
+      if (clip.videoMissing) thumbWrap.append(el('div', { className: 'clip-missing', textContent: '⚠ video', title: 'video file lost on reload, drop a new source onto this clip' }));
       cell.append(thumbWrap);
       // Modulation badges on the THUMBNAIL corner (the label bar is too narrow):
       // T = a param runs on the timeline, A = follows the audio input, E = follows

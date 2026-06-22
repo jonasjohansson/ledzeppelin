@@ -35,7 +35,8 @@ export function listMappables(show) {
   const layers = deckLayers(show);
   const B = show?.composition?.bindings || {};
   for (let li = 0; li < layers.length; li++) {
-    const n = li + 1, layer = layers[li], clips = layer.clips || [];
+    const layer = layers[li]; if (!layer) continue;   // skip null layer holes
+    const n = li + 1, clips = layer.clips || [];
     const lgroup = layer.name || 'Layer ' + n;
     rows.push({ id: `lo|${layer.id}`, kind: 'opacity', keyable: false, group: lgroup, label: 'Layer Opacity', osc: `/layer/${n}/opacity`, midi: B[`lo|${layer.id}`]?.midi || null, key: null, mode: 'absolute' });
     rows.push({ id: `lb|${layer.id}`, kind: 'bypass', keyable: true, group: lgroup, label: 'Layer Bypass', osc: `/layer/${n}/bypass`, midi: B[`lb|${layer.id}`]?.midi || null, key: B[`lb|${layer.id}`]?.key || null, mode: B[`lb|${layer.id}`]?.mode || 'toggle' });

@@ -1,6 +1,7 @@
 // Resample a polyline into n points evenly spaced by arc length.
 export function samplePoints(points, n) {
-  if (n === 1) return [points[0].slice()];
+  if (!Array.isArray(points) || !points.length) return [];   // nothing to sample (guards points[-1])
+  if (n === 1 || points.length === 1) return [points[0].slice()];
   const seg = [];
   let total = 0;
   for (let i = 1; i < points.length; i++) {

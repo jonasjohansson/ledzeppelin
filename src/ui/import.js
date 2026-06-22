@@ -105,7 +105,7 @@ export function createImportPanel({ getShow, applyShow, onApplied }) {
 
       root.append(el('div', { className: 'fx-card imp-row' }, [
         el('label', { className: 'fx-field' }, [el('span', { textContent: `${d.name} (${d.id})` }), ipIn]),
-        el('label', { className: 'fx-field' }, [el('span', { textContent: 'colorOrder' }), coSel]),
+        el('label', { className: 'fx-field' }, [el('span', { textContent: 'colour order' }), coSel]),
       ]));
     }
 

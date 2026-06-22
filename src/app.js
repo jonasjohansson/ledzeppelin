@@ -694,13 +694,13 @@ const colorBtn = document.getElementById('color-btn');
 function setControllerTint(on) {
   controllerTint = !!on;
   try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
-  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'color'; }
+  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'colour'; }
   preview?.setColorTint?.(controllerTint);
   renderOutput(); redrawOverlay();
 }
 colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
 // Initial sync (preview exists; the startup renderOutput reads controllerTint).
-if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'color'; }
+if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'colour'; }
 preview?.setColorTint?.(controllerTint);
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
@@ -831,7 +831,7 @@ function positionEditor(sel) {
     devSel.append(o);
   }
   devSel.disabled = !isHead;
-  if (!isHead) devSel.title = 'set by the chain — edit the first fixture in the chain';
+  if (!isHead) devSel.title = 'set by the chain, edit the first fixture in the chain';
   devSel.addEventListener('change', () => moveRun({ deviceId: devSel.value }));
   // Output/port picker — limited to the device's actual outputs. Locked downstream.
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
@@ -1359,7 +1359,7 @@ function addControls() {
   // ONE catalog: every fixture is an Inventory definition (a channel layout). Strips
   // and matrices stream pixels; a 1×1 "par" outputs as a DMX channel-block. Grouped
   // so the two read apart, but they are the same kind of thing (see Inventory).
-  const sel = oel('select', { title: 'what to place — a fixture definition from your Inventory' });
+  const sel = oel('select', { title: 'what to place: a fixture definition from your Inventory' });
   const isPar = (t) => isDmxType(t);   // a DMX type (defined with parameters) — not a pixel strip/matrix
   const addToGroup = (label, list) => {
     if (!list.length) return;
@@ -2186,7 +2186,7 @@ async function buildSettings(mount) {
     snapshotForUndo(show);   // audio-device pick is undoable
     show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
     saveShow(show);
-    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input — check permissions';
+    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input, check permissions';
   });
   mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
   mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
@@ -2359,10 +2359,10 @@ function updateStageInsets() {
 window.addEventListener('resize', updateStageInsets);
 
 function loop(ts) {
-  syncCompAspect();
   if (!t0) t0 = ts;
-  if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS
+  if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS (before any work)
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
+  syncCompAspect();
   lastTs = ts;
   const t = (ts - t0) / 1000;
   // Action bindings (clip triggers, layer opacity/bypass) driven by MIDI/key/OSC
@@ -2504,7 +2504,7 @@ function applyFullShow(next) {
 // Resize the canvas to fit the placed fixtures (fluid composition — the strips
 // decide the dimensions). No-op with a notice if nothing is placed.
 function fitToFixtures() {
-  if (!show.fixtures?.length) { window.alert('No fixtures placed yet — nothing to fit to.'); return; }
+  if (!show.fixtures?.length) { window.alert('No fixtures placed yet, nothing to fit to.'); return; }
   applyFullShow(fitCanvasToFixtures(show));
 }
 
@@ -2673,7 +2673,7 @@ document.getElementById('menu-file')?.addEventListener('click', (e) => {
     { label: 'Load composition…', act: () => openCompInput.click() },
     { sep: true },
     // Feedback / bug reports go to GitHub Issues (prefilled with the app version).
-    { label: 'Report a bug ↗', act: () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION} — `)}`, '_blank', 'noopener') },
+    { label: 'Report a bug ↗', act: () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener') },
   ]));
 });
 // (Audio input + gain and the snap grid/distance config moved to System ›

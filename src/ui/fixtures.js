@@ -94,7 +94,7 @@ function dmxChannelEditor(t, upd, rows) {
   const pUpd = (i, patch) => setParams(params.map((p, j) => (j === i ? { ...p, ...patch } : p)));
   const moveP = (from, to) => { if (to < 0 || to >= params.length || from === to) return; const ps = params.slice(); const [m] = ps.splice(from, 1); ps.splice(to, 0, m); setParams(ps); };
   const total = paramsToChannels(params).length;
-  rows.push(el('div', { className: 'fx-pts', textContent: `Parameters · ${total} ch` }));
+  rows.push(el('div', { className: 'fx-pts', textContent: `parameters · ${total} ch` }));
   const presetOpts = PARAM_PRESETS.map((p) => ({ value: p.value, label: p.value }));
   params.forEach((p, i) => {
     const span = paramSpan(p);
@@ -218,7 +218,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     // actually reachable — gate them on a confirmed-online status. CHECK stays
     // enabled (it's how you bring the status online in the first place).
     const online = !!st?.ok;
-    const offTitle = d.ip ? 'controller offline — press CHECK first' : 'set the controller IP first';
+    const offTitle = d.ip ? 'controller offline, press CHECK first' : 'set the controller IP first';
     const refresh = async () => { deviceStatus.set(d.id, await getDeviceState(d.ip)); render(); };
     // Status — multi-line key/value so it reads clearly (we have the vertical room).
     const statBox = el('div', { className: 'ctrl-stat' });
@@ -407,7 +407,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       .filter((f) => (f.output?.deviceId || '') === d.id)
       .reduce((m, f) => m + (f.pixelCount || 0), 0);
     const base = d.universe ?? 0;
-    if (!px) return el('div', { className: 'seg-hint', textContent: 'no fixtures patched — spans 0 universes' });
+    if (!px) return el('div', { className: 'seg-hint', textContent: 'no fixtures patched, spans 0 universes' });
     const last = base + Math.ceil(px / 170) - 1;
     const span = last === base ? `universe ${base}` : `universes ${base}–${last}`;
     return el('div', { className: 'seg-hint', textContent: `spans ${span} (170 px each)` });
@@ -480,7 +480,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         det.append(el('summary', { textContent: 'Advanced' }));
         // Physical wiring spec — set once at setup, NOT a live-performance control,
         // so it lives here (collapsed) rather than up top.
-        det.append(field('Color Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))));
+        det.append(field('Colour Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))));
         det.append(field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))));
         return det;
       })(),
@@ -579,11 +579,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     rows.push(field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })));
     // Colour format: '' inherits the controller's order; pick RGBW here for a
     // white-channel strip (mixes freely with RGB fixtures on the same controller).
-    rows.push(field('Color Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
+    rows.push(field('Colour Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
-      rows.push(el('div', { className: 'fx-pts', textContent: 'Wiring' }));
+      rows.push(el('div', { className: 'fx-pts', textContent: 'wiring' }));
       rows.push(distributionPicker(t.distribution ?? 0, (x) => upd((nt) => { nt.distribution = x; })));
     }
     // A pixel strip/matrix has no extra channels — that's a DMX fixture (switch the
@@ -694,7 +694,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         devList.append(row);
       }
       autoPing(show.devices);
-      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet — add one, or define models in Inventory' }));
+      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet, add one or define models in Inventory' }));
       b.append(devList);
       b.append(el('button', {
         className: 'fx-add', textContent: '+ device',
@@ -729,7 +729,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
         const count = deviceTypeInstanceCount(show, t.id);
-        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
+        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
         list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, dup],
           libSel === 'controller' && t.id === selDevTypeId,
           () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); }));
@@ -746,7 +746,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
-        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
+        const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
         // Size shows as a greyed suffix on the name ("(6ch)" / "(60px)"); ×N = instances.
         list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, dup],
           selected: libSel === 'fixture' && t.id === selTypeId,
