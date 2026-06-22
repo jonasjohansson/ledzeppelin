@@ -630,6 +630,14 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
   border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;
 }
 .fx-field select { font-family: var(--sans); }   /* selects are chrome, not data → sans */
+/* Name field with a greyed, non-editable size suffix ("(6ch)" / "(60px)") — the wrapper
+   is the field box; the input inside is borderless so it reads as one control. */
+.fx-field > .name-suffixed { flex: 1 1 0; min-width: 0; display: flex; align-items: center; overflow: hidden;
+  background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); height: var(--ctrl-h); box-sizing: border-box; }
+.fx-field .name-suffixed input { flex: 1 1 0; min-width: 0; border: 0; background: transparent; height: auto; }
+.name-suffix { flex: 0 0 auto; color: var(--faint); padding: 0 7px 0 2px; font: var(--fs-ctrl) var(--mono); white-space: nowrap; }
+/* Greyed size tag after a list-row name. */
+.lr-suffix { flex: 0 0 auto; color: var(--faint); margin-left: 5px; }
 /* Derived, non-editable value (e.g. computed pixel count) — reads as data, no field
    chrome, but sits on the SAME control height so mixed rows stay one rhythm. */
 .fx-field > .fx-readonly { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: var(--ctrl-h); color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 0 8px; }

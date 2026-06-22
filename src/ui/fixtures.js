@@ -520,13 +520,17 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   // density, length, pixel count, colour order. Editing it propagates to every
   // placed instance (via syncFixtureTypes on rebuild). Placement + patch live in
   // the Fixtures tab.
-  // The auto-name for a definition: a matrix reads "W×H · Npx"; a strip reads
-  // "Lm · Npx" (or just "Npx" with no physical length).
+  // Auto-name for a definition: CLEAN (the size shows as a greyed suffix, not in the
+  // editable name). A matrix defaults to "Matrix", a strip to "Strip".
   function autoTypeName(nt) {
-    const cols = Math.max(1, Math.round(Number(nt.cols) || 1));
-    const rows = Math.max(1, Math.round(Number(nt.rows) || 1));
-    if (rows > 1) return `${cols}×${rows} · ${cols * rows}px`;
-    return Number(nt.meters) > 0 ? `${round2(nt.meters)}m · ${cols}px` : `${cols}px`;
+    return (Math.max(1, Math.round(Number(nt.rows) || 1)) > 1) ? 'Matrix' : 'Strip';
+  }
+  // The greyed, non-editable size suffix shown after a type's name: "6ch" for a DMX
+  // fixture, "C×R" for a matrix, "Npx" for a strip.
+  function typeSizeSuffix(t) {
+    if (isDmxType(t)) return `${t.channels?.length || paramsToChannels(t.params || []).length}ch`;
+    const cols = Math.max(1, Math.round(Number(t.cols) || 1)), rows = Math.max(1, Math.round(Number(t.rows) || 1));
+    return rows > 1 ? `${cols}×${rows}` : `${cols * rows}px`;
   }
 
   function typeDetail(show, t) {
@@ -552,8 +556,12 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     };
     const isGrid = (Number(t.rows) || 1) > 1;
     const isDmx = !!(t.params && t.params.some((p) => p && p.count != null));   // DMX-profile mode (name+count params)
+    // Name field: an editable clean name + a greyed, non-editable size suffix (e.g.
+    // "(6ch)" / "(60px)") shown inside the same box so the size is apparent but fixed.
+    const nameInput = textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, stripChSuffix(x), nt.id); }));
+    const nameCtrl = el('div', { className: 'name-suffixed' }, [nameInput, el('span', { className: 'name-suffix', textContent: `(${typeSizeSuffix(t)})` })]);
     const rows = [
-      field('Name', textInputCommit(t.name, (x) => upd((nt) => { nt.name = uniqueTypeName(show.fixtureTypes, x, nt.id); }))),
+      field('Name', nameCtrl),
       // Layout: a pixel strip/matrix (W×H + Color Format) OR a DMX fixture defined by
       // a list of name+count parameters. Switching to DMX seeds the params from the
       // current colour format; switching back drops them.
@@ -738,12 +746,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
-        // DMX type → channel-count badge ("6 ch"); pixel type → pixel-count badge.
-        const sizeBadge = isDmxType(t) ? `${t.channels?.length || paramsToChannels(t.params || []).length} ch` : `${t.pixelCount} px`;
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'Duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
-        list.append(listRow(t.name, [sizeBadge, `×${count}`, dup],
-          libSel === 'fixture' && t.id === selTypeId,
-          () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); }));
+        // Size shows as a greyed suffix on the name ("(6ch)" / "(60px)"); ×N = instances.
+        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, dup],
+          selected: libSel === 'fixture' && t.id === selTypeId,
+          onClick: () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); } }));
       }
       if (!types.length) b.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
       b.append(list);

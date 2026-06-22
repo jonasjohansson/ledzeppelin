@@ -82,7 +82,7 @@ export function makeFixtureType(ledsPerMeter, meters, colorOrder = 'GRB', id, na
   // Resolume-style identity: length · pixel count (the two facts you check
   // against the real strip). Density stays an editable field, not in the name.
   // A strip is the rows=1 case of the unified grid model (cols = pixelCount).
-  return { id, name: name || `${round2(m)}m · ${pixelCount}px`, ledsPerMeter: lpm, meters: m, pixelCount, colorOrder, cols: pixelCount, rows: 1, distribution: 0 };
+  return { id, name: name || 'Strip', ledsPerMeter: lpm, meters: m, pixelCount, colorOrder, cols: pixelCount, rows: 1, distribution: 0 };
 }
 
 // A 2-D matrix/panel definition: cols×rows pixels wired in `distribution` order.
@@ -91,7 +91,7 @@ export function makeGridType(cols, rows, colorOrder = 'GRB', id, name, distribut
   const c = Math.max(1, Math.round(Number(cols) || 1));
   const r = Math.max(1, Math.round(Number(rows) || 1));
   const pixelCount = c * r;
-  return { id, name: name || `${c}×${r} · ${pixelCount}px`, ledsPerMeter: 0, meters: 0, pixelCount, colorOrder, cols: c, rows: r, distribution: Math.max(0, Math.round(Number(distribution) || 0)) };
+  return { id, name: name || 'Matrix', ledsPerMeter: 0, meters: 0, pixelCount, colorOrder, cols: c, rows: r, distribution: Math.max(0, Math.round(Number(distribution) || 0)) };
 }
 
 // Normalize a type's grid fields: legacy strip types (no cols/rows) become
