@@ -1326,6 +1326,12 @@ function addInstance(typeId) {
 // The "+ fixture" / "+ controller" / "scan" toolbar above the placement list — the
 // three actions sit side by side; the fixture-type picker (what "+ fixture" places)
 // is a full-width row below them, then any scan results. Definitions live in Inventory.
+// The size tag for a fixture TYPE: "6ch" for a DMX fixture, "C×R" for a matrix, "Npx"
+// for a strip — shown as a greyed suffix wherever a type/fixture name appears.
+const typeSizeSuffix = (t) => isDmxType(t)
+  ? `${t.channels?.length || paramsToChannels(t.params || []).length}ch`
+  : ((Number(t?.rows) || 1) > 1 ? `${t.cols}×${t.rows}` : `${t?.pixelCount ?? 1}px`);
+
 function addControls() {
   const wrap = oel('div', { className: 'output-tools' });
   const types = show.fixtureTypes || [];
@@ -1338,9 +1344,7 @@ function addControls() {
     if (!list.length) return;
     const g = oel('optgroup', { label });
     for (const t of list) {
-      // Don't re-append the px count when the type's NAME already states it.
-      const lbl = isPar(t) ? t.name : (/\d+\s*px/i.test(t.name || '') ? t.name : `${t.name} · ${t.pixelCount}px`);
-      g.append(oel('option', { value: t.id, textContent: lbl }));
+      g.append(oel('option', { value: t.id, textContent: `${t.name} (${typeSizeSuffix(t)})` }));
     }
     sel.append(g);
   };
@@ -1456,9 +1460,10 @@ function renderOutput() {
       e.dataTransfer.effectAllowed = 'move';
       try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
     });
-    const typeName = (show.fixtureTypes || []).find((t) => t.id === f.typeId)?.name;
-    const label = typeName ? `${fixtureLabel(f, i)} ${typeName}` : fixtureLabel(f, i);
-    row.append(oel('span', { textContent: label }));                            // flex-grow name
+    const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
+    const label = ftype?.name ? `${fixtureLabel(f, i)} ${ftype.name}` : fixtureLabel(f, i);
+    row.append(oel('span', { className: 'lr-name', textContent: label }));        // flex-grow name
+    if (ftype) row.append(oel('span', { className: 'lr-suffix', textContent: `(${typeSizeSuffix(ftype)})` }));   // greyed size
     if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
     // DMX fixtures badge their Art-Net patch (U{universe}.{address}); pixel strips
     // badge their pixel range.
