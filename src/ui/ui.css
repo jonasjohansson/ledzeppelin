@@ -340,6 +340,12 @@ body.output-mode #deckbar button { pointer-events: auto; }
    output fills the screen; Editor = a roomier inspector, canvas shrinks to fit. */
 body.view-canvas #side { display: none; }
 body.view-edit #side { flex-basis: min(46vw, 560px); }
+/* Drag handle on the inspector's left edge (Split view) — a hairline that lights on
+   hover; resizing sets --side-w. Hidden where the width isn't user-set. */
+.side-resize { position: absolute; left: 0; top: 0; width: 5px; height: 100%; cursor: ew-resize; z-index: 5; }
+.side-resize:hover { background: var(--accent-line); }
+body.resizing-col, body.resizing-col * { cursor: ew-resize !important; user-select: none; }
+body.view-canvas .side-resize, body.view-edit .side-resize { display: none; }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */

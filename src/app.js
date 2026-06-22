@@ -1741,6 +1741,31 @@ document.getElementById('g-hide')?.addEventListener('click', toggleGui);
   apply();
 })();
 
+// Drag-resizable inspector — grab the inspector's left edge to set its width (Split
+// view). Width persists; the canvas re-fits live. (Canvas view hides it; Editor is a
+// fixed preset.)
+(function setupSideResize() {
+  const side = document.getElementById('side'); if (!side) return;
+  const KEY = 'lz.side-w', MIN = 240, MAX = 680;
+  try { const w = parseInt(localStorage.getItem(KEY), 10); if (w >= MIN && w <= MAX) document.documentElement.style.setProperty('--side-w', w + 'px'); } catch { /* private */ }
+  const handle = document.createElement('div'); handle.className = 'side-resize'; handle.title = 'drag to resize the inspector';
+  side.appendChild(handle);
+  let dragging = false;
+  handle.addEventListener('pointerdown', (e) => { dragging = true; handle.setPointerCapture(e.pointerId); document.body.classList.add('resizing-col'); e.preventDefault(); });
+  handle.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const w = Math.max(MIN, Math.min(MAX, Math.round(window.innerWidth - e.clientX)));
+    document.documentElement.style.setProperty('--side-w', w + 'px'); updateStageInsets();
+  });
+  const end = (e) => {
+    if (!dragging) return; dragging = false; document.body.classList.remove('resizing-col');
+    try { handle.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--side-w'), 10);
+    if (w) { try { localStorage.setItem(KEY, String(w)); } catch { /* private */ } }
+  };
+  handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+})();
+
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
 document.addEventListener('keydown', (e) => {
