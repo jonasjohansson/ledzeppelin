@@ -422,7 +422,7 @@ body.output-mode #deckbar button { pointer-events: auto; }
    left-aligned row reads as a quiet OCR menu rather than a segmented control. */
 /* The PARENT row carries the divider (the subtabs underneath sit inside it),
    so the two tab rows read as one nested hierarchy, not two unrelated menus. */
-.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 0; margin-bottom: 0; }
+.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 0; margin-bottom: 0; }
 .section-tab {
   flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output / System = equal */
   border: none; border-radius: 0; padding: 6px 0; cursor: pointer;
