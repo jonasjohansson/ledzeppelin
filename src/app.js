@@ -231,8 +231,17 @@ function resolveLayerBindings() {
   const levelOf = (ref) => {
     if (!ref) return 0;
     if (ref.startsWith('dash:')) return links.find((d) => d.id === ref.slice(5))?.value ?? 0;
-    const lid = ref.startsWith('layer:') ? ref.slice(6) : ref;
-    return layers.find((L) => L.id === lid)?.opacity ?? 0;
+    // A layer binding reads the layer's opacity. By default a BLOCKED (bypassed/B)
+    // layer reads 0 (it's off); a "layerkeep:" ref ignores the block and reads its
+    // opacity regardless (hide the layer visually, keep the DMX connection working).
+    let lid, ignoreBlock = false;
+    if (ref.startsWith('layerkeep:')) { lid = ref.slice(10); ignoreBlock = true; }
+    else if (ref.startsWith('layer:')) lid = ref.slice(6);
+    else lid = ref;   // legacy bare id
+    const L = layers.find((x) => x.id === lid);
+    if (!L) return 0;
+    if (L.bypass && !ignoreBlock) return 0;
+    return L.opacity ?? 0;
   };
   let changed = false;
   for (const dev of curRoute) {
@@ -979,10 +988,14 @@ function dmxEditor(sel) {
         const idxs = Array.from({ length: span }, (_, k) => ci + k);   // this param's channels
         const start = ci; ci += span;
         const isColour = paramKinds(p.name, p.count).some((k) => DMX_COLOUR_KINDS.has(k));
-        // The block moves as one — read/show the source from its first channel.
+        // The block moves as one — read/show the source from its first channel. A
+        // "layerkeep:" ref (layer binding that ignores the layer's Block) shows in the
+        // picker as the plain layer (the checkbox below carries the ignore-block state).
         const rawRef = cfg.bind?.[start];
+        const isLayerKeep = typeof rawRef === 'string' && rawRef.startsWith('layerkeep:');
+        const normRef = isLayerKeep ? `layer:${rawRef.slice(10)}` : (rawRef && !rawRef.includes(':') ? `layer:${rawRef}` : rawRef);
         const hasManual = cfg.fixed && (start in cfg.fixed);
-        const cur = rawRef ? (rawRef.includes(':') ? rawRef : `layer:${rawRef}`) : (hasManual ? 'manual' : (isColour ? 'canvas' : 'manual'));
+        const cur = normRef ? normRef : (hasManual ? 'manual' : (isColour ? 'canvas' : 'manual'));
         // Source picker: switching writes bind/fixed for EVERY channel in the block.
         body.append(fld(p.name, sel2(srcOptions(isColour), cur, (src) => setDmx({
           bind: (() => { const b = { ...(cfg.bind || {}) }; idxs.forEach((i) => { if (src.includes(':')) b[i] = src; else delete b[i]; }); return b; })(),
@@ -991,6 +1004,14 @@ function dmxEditor(sel) {
         // Manual → one fader (live, no re-render) driving the whole block together.
         if (cur === 'manual') body.append(Slider('', cfg.fixed?.[start] ?? p.value ?? 0, { min: 0, max: 255, step: 1, commit: 'live',
           onInput: (v) => idxs.forEach((i) => dmxFixedLive(sel.id, i, Math.round(v))) }));
+        // Layer source → "ignore block (B)": read the layer's opacity even when the
+        // layer is muted/blocked (so hiding the layer keeps this DMX connection live).
+        if (cur.startsWith('layer:')) {
+          const lid = cur.slice(6);
+          const cb = oel('input', { type: 'checkbox' }); cb.checked = isLayerKeep;
+          cb.addEventListener('change', () => setDmx({ bind: (() => { const b = { ...(cfg.bind || {}) }; const ref = cb.checked ? `layerkeep:${lid}` : `layer:${lid}`; idxs.forEach((i) => { b[i] = ref; }); return b; })() }));
+          body.append(fld('ignore block (B)', cb));
+        }
       });
     }));
   } else if (legacyGeneric || hasFixed) {
