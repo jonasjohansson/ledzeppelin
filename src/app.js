@@ -1720,6 +1720,27 @@ document.addEventListener('keydown', (e) => {
 //     tab; the timer-reset button was removed.) ---
 document.getElementById('g-hide')?.addEventListener('click', toggleGui);
 
+// Layout VIEWS — swap the canvas/inspector balance (MadMapper-style). Canvas = hide
+// the inspector so the output fills the screen; Split = the default working layout;
+// Editor = a roomier inspector with the canvas shrunk. Persisted; canvas re-fits.
+(function setupViews() {
+  const KEY = 'lz.view'; const VIEWS = ['canvas', 'split', 'edit'];
+  const seg = document.getElementById('view-seg');
+  if (!seg) return;
+  let cur = 'split'; try { const v = localStorage.getItem(KEY); if (VIEWS.includes(v)) cur = v; } catch { /* private */ }
+  const apply = () => {
+    document.body.classList.remove('view-canvas', 'view-split', 'view-edit');
+    document.body.classList.add('view-' + cur);
+    for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === cur);
+    updateStageInsets();
+  };
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]'); if (!b) return;
+    cur = b.dataset.view; try { localStorage.setItem(KEY, cur); } catch { /* private */ } apply();
+  });
+  apply();
+})();
+
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
 document.addEventListener('keydown', (e) => {
@@ -2348,8 +2369,9 @@ function updateStageInsets() {
       // Only the MAIN inspector (#side) carves out canvas space. The #side-2 fixture
       // rail floats OVER the canvas (like the deck), so opening/closing it never
       // re-fits the composition.
-      const side = document.getElementById('side')?.getBoundingClientRect();
-      if (side) right = Math.max(0, vw - side.left);
+      const sideEl = document.getElementById('side');
+      // offsetParent is null when #side is display:none (Canvas view) → no carve.
+      if (sideEl && sideEl.offsetParent !== null) { const s = sideEl.getBoundingClientRect(); right = Math.max(0, vw - s.left); }
     }
     root.style.setProperty('--inset-left', '0px');
     root.style.setProperty('--inset-right', right + 'px');

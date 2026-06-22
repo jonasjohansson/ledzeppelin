@@ -28,6 +28,12 @@ canvas{display:block}</style>
 <div id="corner-controls">
   <!-- View toggles on TOP; the menus (incl. Hide/Show UI) on the bottom row. -->
   <div class="corner-row" id="corner-toggles">
+    <!-- Layout views: swap the canvas/inspector balance instantly. -->
+    <span class="view-seg" id="view-seg">
+      <button data-view="canvas" title="Canvas view: maximise the output">▭</button>
+      <button data-view="split" title="Split view: canvas + inspector">◫</button>
+      <button data-view="edit" title="Editor view: roomy panels">▤</button>
+    </span>
     <button id="overlay-toggle" title="show/hide fixtures on the canvas">fixtures</button>
     <button id="snap-btn" title="snap fixtures to each other & the grid">snap</button>
     <button id="grid-btn" title="show/hide the alignment grid">grid</button>

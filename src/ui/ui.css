@@ -336,6 +336,10 @@ body.output-mode #deckbar button { pointer-events: auto; }
    sits in front of the viewport UI where they overlap. */
 #side { flex: 0 0 var(--side-w); max-height: 100vh;
   display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
+/* Layout views (set by the corner switcher). Canvas = hide the inspector so the
+   output fills the screen; Editor = a roomier inspector, canvas shrinks to fit. */
+body.view-canvas #side { display: none; }
+body.view-edit #side { flex-basis: min(46vw, 560px); }
 #design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The pane shares the active tab's fill — together they read as one folder-tab
    surface (the tab is the handle, this is the page). */
@@ -471,6 +475,11 @@ body.gui-hidden #layout { display: none; }
 /* Capitalise the view toggles (fixtures/snap/grid/color/live) so they read like
    the title-cased menu row beneath them. */
 #corner-toggles button { text-transform: capitalize; }
+/* Layout-view switcher — 3 connected glyph buttons (Canvas / Split / Editor). */
+#corner-controls .view-seg { display: inline-flex; }
+#corner-controls .view-seg button { padding: 0; width: 26px; text-align: center; font-size: 12px; text-transform: none; }
+#corner-controls .view-seg button + button { border-left: 0; }
+#corner-controls .view-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
 /* Active toggle / open menu = a clearly FILLED pill (not just an accent-tinted
    word): the fill IS the on/off signal, so the buttons read as toggles at a
    glance without any glyph or label cue. */
