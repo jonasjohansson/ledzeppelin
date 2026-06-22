@@ -1415,12 +1415,26 @@ function updateInspector() {
       detail = panel.deviceDetailEl?.();
     }
   }
+  // Preserve focus + caret across the rebuild: a spinner click / keystroke commits →
+  // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
+  // a re-click). Re-focus the same field's input by its label after re-appending.
+  const ae = document.activeElement;
+  let focusKey = null, selStart = null, selEnd = null;
+  if (ae && ae.tagName === 'INPUT' && fxBodyEl.contains(ae)) {
+    focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
+    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
+  }
   fxBodyEl.textContent = '';
   if (detail) {
     fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
     side2El.hidden = false;
   } else {
     side2El.hidden = true;
+  }
+  if (focusKey) {
+    const fld = [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
+    const inp = fld?.querySelector('input');
+    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number input */ } }
   }
   updateStageInsets();
   updateAlignBtn();
