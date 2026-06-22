@@ -2058,13 +2058,26 @@ const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!
 const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
 // --accent cascades (green/amber/cyan + every color-mix(--accent …) follow); the
-// soft/line/text variants are fixed values in CSS, so derive + override them here.
+// soft/line/text variants AND the warm surface ramp are derived from it here, so
+// changing the accent re-tints the whole sidebar (its gray surfaces carry a small
+// % of the accent → a desaturated tint that follows whatever accent you pick).
 function applyAccent(hex) {
   const s = document.documentElement.style;
   s.setProperty('--accent', hex);
   s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
   s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
   s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
+  // Surface ramp = a neutral dark gray with a touch of the accent mixed in.
+  const bg = accMix(hex, '#0c0c0d', 0.07);
+  s.setProperty('--bg', bg);
+  s.setProperty('--field-bg', accMix(hex, '#101012', 0.07));
+  const panel = accMix(hex, '#1a1a1b', 0.09);
+  s.setProperty('--panel', panel);
+  s.setProperty('--panel-solid', panel);
+  s.setProperty('--panel-2', accMix(hex, '#242427', 0.10));
+  s.setProperty('--hover', accMix(hex, '#313135', 0.11));
+  s.setProperty('--line', accMix(hex, '#323236', 0.11));
+  s.setProperty('--line-2', accMix(hex, '#46464d', 0.11));
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
