@@ -1462,8 +1462,9 @@ function renderOutput() {
     });
     const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
     const label = ftype?.name ? `${fixtureLabel(f, i)} ${ftype.name}` : fixtureLabel(f, i);
-    row.append(oel('span', { className: 'lr-name', textContent: label }));        // flex-grow name
-    if (ftype) row.append(oel('span', { className: 'lr-suffix', textContent: `(${typeSizeSuffix(ftype)})` }));   // greyed size
+    const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
+    if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
+    row.append(nameEl);
     if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
     // DMX fixtures badge their Art-Net patch (U{universe}.{address}); pixel strips
     // badge their pixel range.

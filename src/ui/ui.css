@@ -636,8 +636,8 @@ body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none;
   background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); height: var(--ctrl-h); box-sizing: border-box; }
 .fx-field .name-suffixed input { flex: 1 1 0; min-width: 0; border: 0; background: transparent; height: auto; }
 .name-suffix { flex: 0 0 auto; color: var(--faint); padding: 0 7px 0 2px; font: var(--fs-ctrl) var(--mono); white-space: nowrap; }
-/* Greyed size tag after a list-row name. */
-.lr-suffix { flex: 0 0 auto; color: var(--faint); margin-left: 5px; }
+/* Greyed size tag appended INSIDE a list-row name, so it reads as one name. */
+.lr-suffix { color: var(--faint); }
 /* Derived, non-editable value (e.g. computed pixel count) — reads as data, no field
    chrome, but sits on the SAME control height so mixed rows stay one rhythm. */
 .fx-field > .fx-readonly { flex: 1 1 0; min-width: 0; display: flex; align-items: center; min-height: var(--ctrl-h); color: var(--text); font: var(--fs-ctrl) var(--mono); padding: 0 8px; }
