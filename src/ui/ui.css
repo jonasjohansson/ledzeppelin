@@ -16,9 +16,11 @@
      step brighter than the old near-black, so chrome reads as solid tooling that
      the canvas sits INSIDE of, not a ghost floating over it. One gray ramp,
      hairlines one step stronger. */
-  --bg:#101114; --panel:#1c1e22; --panel-2:#26282d; --hover:#33363c;
-  --panel-solid:#1c1e22;       /* menus/popovers share the panel surface */
-  --line:#33363e; --line-2:#474c55;       /* hairline borders */
+  /* WARM gray ramp — the surfaces carry a desaturated accent tint (brown-gray, not
+     the old blue-gray) so the warm accent has presence across the whole sidebar. */
+  --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
+  --panel-solid:#201d19;       /* menus/popovers share the panel surface */
+  --line:#3a342d; --line-2:#4c4538;       /* hairline borders (warm) */
   --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84;
   /* WARM MONOCHROME (Jonas): ONE warm accent everywhere — the old blue/green/cyan
      all collapse to it, so the UI reads as near-black + one warm orange + red for
@@ -38,7 +40,7 @@
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
      row and input shares ONE blue-tinted palette (was a second neutral-gray set
      that made identical controls look mismatched). */
-  --field-bg:#121317;                 /* recessed input fill (one step under --panel) */
+  --field-bg:#161310;                 /* recessed input fill (one step under --panel, warm) */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -126,19 +128,18 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    targets), but a step SMALLER than the parent and with no border of its own
    (the parent row above carries the divider) — scale + position say "these
    live inside the section", keeping the text-only OCR language. */
-.subtabs { display: flex; gap: 0; margin-bottom: 0; padding: 3px 0 0; }
+/* The sub-tab row continues the active master's DARK accent tint, so it reads as
+   "these belong to the selected master" (no gap above — flush to the master row). */
+.subtabs { display: flex; gap: 0; margin-bottom: 0; padding: 0; background: var(--accent-soft); }
 .subtab {
   flex: 1 1 0; text-align: center;            /* Clip · Layer · Composition = equal thirds */
-  background: transparent; color: var(--faint); border: none;
+  background: transparent; color: var(--faint); border: none;          /* unselected = gray */
   border-radius: 0; padding: 6px 0; font: var(--fw-med) var(--fs-body) var(--sans); cursor: pointer;
   text-transform: uppercase; letter-spacing: var(--ls-caps);
 }
 .subtab:hover { color: var(--muted); }
-/* FOLDER TAB: the active tab is a filled block that MERGES into the (equally
-   filled) pane below — you can see you're "in Clip" because the Clip tab and
-   its options are physically one connected surface. Works for all three on the
-   Design side and the Fixtures/Devices/Inventory trio on Output. */
-.subtab-active { color: var(--accent); background: var(--panel-2); }
+/* The active SUBTAB pops in the BRIGHT accent with dark on-accent text. */
+.subtab-active, .subtab-active:hover { color: var(--accent-dark); background: var(--accent); }
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -421,14 +422,17 @@ body.output-mode #deckbar button { pointer-events: auto; }
    left-aligned row reads as a quiet OCR menu rather than a segmented control. */
 /* The PARENT row carries the divider (the subtabs underneath sit inside it),
    so the two tab rows read as one nested hierarchy, not two unrelated menus. */
-.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 4px; margin-bottom: 0; }
+.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 5px 0 0; margin-bottom: 0; }
 .section-tab {
   flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output / System = equal */
   border: none; border-radius: 0; padding: 6px 0; cursor: pointer;
   font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);   /* same size as the subtabs */
 }
 .section-tab:hover { color: var(--muted); }
-.section-tab.section-active { color: var(--accent); }
+/* TWO-LEVEL HIERARCHY: the active MASTER tab wears the DARK accent tint (and its
+   sub-tab row continues that same tint, so they read as one block); the active
+   SUBTAB then pops in the BRIGHT accent. */
+.section-tab.section-active { color: var(--accent); background: var(--accent-soft); }
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
 /* 'h' / Tab hides all GUI to view the canvas full-screen. */
