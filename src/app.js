@@ -2084,6 +2084,27 @@ const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACC
 function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
 applyAccent(savedAccent());   // apply the saved accent on boot
 
+// --- Hover tooltips (native `title`) — OFF by default. When off, every `title` is
+// moved to `data-tip` (and kept moved as the UI re-renders) so no tooltip appears on
+// long hover. Toggle in System › Settings restores them. ---
+const TIPS_KEY = 'lz.tips';
+const tipsOn = () => { try { return localStorage.getItem(TIPS_KEY) === '1'; } catch { return false; } };
+const stashTip = (el) => { const t = el.getAttribute('title'); if (t != null) { el.dataset.tip = t; el.removeAttribute('title'); } };
+const stripTips = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) stashTip(root); root.querySelectorAll?.('[title]').forEach(stashTip); };
+const restoreTips = (root) => root.querySelectorAll?.('[data-tip]').forEach((el) => { el.setAttribute('title', el.dataset.tip); delete el.dataset.tip; });
+const tipObserver = new MutationObserver((muts) => {
+  for (const m of muts) {
+    if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.hasAttribute('title')) stashTip(m.target);
+    for (const n of m.addedNodes) stripTips(n);
+  }
+});
+function applyTips() {
+  if (tipsOn()) { tipObserver.disconnect(); restoreTips(document.body); }
+  else { stripTips(document.body); tipObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] }); }
+}
+function setTips(on) { try { localStorage.setItem(TIPS_KEY, on ? '1' : '0'); } catch { /* private */ } applyTips(); }
+applyTips();   // on boot — strip titles unless the user has opted in
+
 // --- System pane: Settings / Control / Mapping subtabs -----------------------
 const VALID_SYSTABS = ['settings', 'control'];
 // The mapping surface lives in its own window (a named target → one reused
@@ -2171,6 +2192,14 @@ async function buildSettings(mount) {
   delBtn.onclick = () => { setConfirmDeletes(!confirmDeletesOn()); paintDel(); };
   paintDel();
   mount.append(delBtn);
+
+  // --- Hover tooltips: the native title popups on long hover. Default OFF. ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'tooltips' }));
+  const tipBtn = oel('button', { className: 'fx-add' });
+  const paintTip = () => { tipBtn.textContent = (tipsOn() ? '▣' : '▢') + ' show tooltips on hover'; tipBtn.classList.toggle('on', tipsOn()); };
+  tipBtn.onclick = () => { setTips(!tipsOn()); paintTip(); };
+  paintTip();
+  mount.append(tipBtn);
 
   // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
