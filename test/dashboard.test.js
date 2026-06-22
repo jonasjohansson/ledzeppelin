@@ -38,6 +38,8 @@ test('dashboardLinkLabels: a link is labelled by what it drives', () => {
   assert.equal(labels.d2, 'Layer 1 › Opacity'); // layer name › param
   assert.equal(labels.d3, 'FOS');               // DMX bind → fixture name
   assert.equal(labels.d4, undefined);           // unused link → no label
+  // Null layers / clips (empty slots) must not throw.
+  assert.doesNotThrow(() => dashboardLinkLabels({ composition: { layers: [null, { clips: [null] }] }, fixtures: [null] }));
 });
 
 test('setDashboardLinkValue clamps to 0..1', () => {

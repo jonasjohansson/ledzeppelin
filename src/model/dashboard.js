@@ -53,11 +53,12 @@ export function dashboardLinkLabels(show) {
   const comp = show?.composition || {};
   scan(comp.anim, 'Comp');
   for (const layer of comp.layers || []) {
+    if (!layer) continue;
     scan(layer.anim, layer.name || 'Layer');
-    for (const clip of layer.clips || []) scan(clip.anim, clip.name || layer.name || 'Clip');
+    for (const clip of layer.clips || []) { if (clip) scan(clip.anim, clip.name || layer.name || 'Clip'); }
   }
   for (const f of show?.fixtures || []) {
-    for (const ref of Object.values(f.input?.dmx?.bind || {})) {
+    for (const ref of Object.values(f?.input?.dmx?.bind || {})) {
       if (typeof ref === 'string' && ref.startsWith('dash:')) note(ref.slice(5), f.name || f.id || 'DMX');
     }
   }
