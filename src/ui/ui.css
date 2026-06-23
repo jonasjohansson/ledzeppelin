@@ -4,13 +4,14 @@
    active one via --ui-font below. Paths are relative to this file (src/ui/). */
 @font-face { font-family: "Spline Sans Mono"; font-style: normal; font-weight: 300 700; font-display: swap; src: url("../../fonts/SplineSansMono.woff2") format("woff2"); }
 @font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 300 700; font-display: swap; src: url("../../fonts/MartianMono.woff2") format("woff2"); }
+@font-face { font-family: "Commit Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/CommitMono.woff2") format("woff2"); }
 
 /* ── Design tokens (matte-inspired: monospace, lifted panels, vibrant hues) ── */
 :root{
   /* Active UI typeface — MONO-FORWARD: one family for chrome AND data.
      Swap the look by switching the active line: Spline ⇄ Martian. */
-  --ui-font: "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  /* --ui-font: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace; */
+  /* Active UI face. Swappable: Spline / Martian / Commit are all self-hosted below. */
+  --ui-font: "Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --mono: var(--ui-font);
   /* SOLID SOFTWARE (Resolume-calibrated): panels are opaque dark-gray surfaces a
      step brighter than the old near-black, so chrome reads as solid tooling that
@@ -58,14 +59,15 @@
   --side2-w:300px;   /* second sidebar (selected fixture/device editor) width */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
-  --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) */
+  --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) — squareish */
   --row-h:26px;      /* ONE row height — every label·control row (input, select, slider, bool) */
   --ctrl-h:22px;     /* ONE control height — fields/selects/buttons inside rows (row-h minus breath) */
   --col-label:84px;  /* param label column (fixed-width fields) */
   --col-val:44px;    /* param value / readout column */
   --slider-w:120px;  /* fixed slider width — matte-style: label fills left, value far right */
 }
-html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui); }
+html,body{ background:var(--bg); color:var(--text); font-family:var(--sans); line-height:var(--lh-ui);
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 /* ═══════════ SHARED APP-SURFACE BACKBONE (keep in sync with LEDger
    src/style.css) ═══════════ Rock-solid-app hardening both tools share: no OS
    highlights/tap flashes/ghost drags/overscroll; themed caret + selection. */
@@ -143,8 +145,8 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* --- Output mapping: fixture list --- */
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
-.output-addrow { display: flex; gap: 4px; }
-.output-addrow .fx-add { flex: 1 1 0; min-width: 0; }
+.output-addrow { display: flex; flex-wrap: wrap; gap: 4px; }
+.output-addrow .fx-add { flex: 1 1 auto; min-width: max-content; white-space: nowrap; }
 .output-tools select {
   width: 100%; box-sizing: border-box; background: var(--field-bg); color: var(--text);
   border: 1px solid var(--field-border); border-radius: var(--radius);
@@ -235,14 +237,13 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 #menu-pop .menu-pad { padding: 8px 14px; }   /* control popover body (e.g. Audio gain) */
 #menu-pop .menu-title { font: var(--fw-med) var(--fs-micro) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--faint); padding: 4px 14px 6px; }
 
-/* Matte-style PASTEBOARD: a subtle transparency checker fills the area OUTSIDE
-   the canvas (behind every panel). The canvas sits on top as a clean rectangle. */
+/* Matte-style PASTEBOARD: a subtle transparency checker fills the Stage island body
+   AROUND the letterboxed composite. The canvas sits on top as a clean rectangle. */
 #stagewrap {
-  position: fixed; top: 0; bottom: 0;
-  /* In Output › Fixtures the desk is inset to the gap BETWEEN the two sidebars
-     (insets published from JS) so the whole rig fits, unoccluded, between them;
-     elsewhere both insets are 0 and it spans the full viewport. */
-  left: var(--inset-left, 0px); right: var(--inset-right, 0px);
+  /* The canvas is the BODY of the Stage island — it fills the island below the header
+     and clips its own zoom/pan, so it can't bleed over the neighbouring islands. A
+     size container so the composite can fit-contain against BOTH dimensions (cqw/cqh). */
+  flex: 1 1 auto; min-height: 0; position: relative; container-type: size;
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
   background-color: var(--bg);
@@ -263,16 +264,18 @@ body.output-mode #stagewrap { pointer-events: auto; }
   position: relative; line-height: 0; pointer-events: auto;
   background: #000;
   box-shadow: 0 0 0 1px var(--line);
+  /* Fit-contain the composite to its comp aspect against BOTH the cell width and
+     height (never stretched): width = min(full width, height × aspect). */
+  aspect-ratio: var(--comp-aspect, 1.778);
+  width: min(100cqw, calc(100cqh * var(--comp-aspect, 1.778)));
+  height: auto; max-width: 100%; max-height: 100%;
 }
 /* Canvas BASE size: the WHOLE composite always fits the window (letterboxed to its
    aspect, never cropped) — width = min(window width, the width that makes height ==
    the viewport), scaling up or down (--comp-aspect is published from the render loop
    since CSS can't read canvas attrs). Zoom/pan (a transform on #stageinner) roams
    freely on top; the ⤢ pill resets to this fitted view. */
-#stageinner canvas#stage {
-  display: block; height: auto;
-  width: min(calc(100vw - var(--inset-left, 0px) - var(--inset-right, 0px)), calc(100vh * var(--comp-aspect, 1.778)));
-}
+#stageinner canvas#stage { display: block; width: 100%; height: 100%; }
 /* Live view (corner ▣ live): the composite is NOT dimmed (dimming made the lights
    hard to read) — instead every fixture's LED cells go full strength (see
    preview.js liveView) so the lights pop on top of the visuals. */
@@ -283,97 +286,167 @@ body.output-mode #stagewrap { pointer-events: auto; }
    #preview canvas keeps the pointer hit-testing. */
 #ovl { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
-/* The panels overlay the canvas: the container passes clicks through to the
-   canvas, the panels themselves capture them. */
-#layout {
-  /* Above the bottom toolbar (#corner-controls, z 5) so the right panel sits in
-     FRONT of the viewport UI. #layout is pointer-events:none and its left region
-     (#left) is transparent, so the toolbar still shows through + stays clickable in
-     the canvas area; only the opaque #side covers the toolbar where they overlap
-     (and the toolbar is capped so it never reaches under the panel — see below). */
-  position: relative; z-index: 6; display: flex; gap: 0;
-  align-items: stretch; padding: 0; box-sizing: border-box;
-  height: 100vh; pointer-events: none;
+/* ===================== DOCK WORKSPACE =====================
+   A full-width top bar over three columns of stacked "island" panels (Photoshop /
+   MadMapper style). Everything is visible at once — no section switching. Splitters
+   between islands (and on the column edges) resize neighbours. */
+:root { --dock-gap: 4px; --topbar-h: 38px; }
+
+/* TOP BAR: an island-styled control strip (window menus + view presets + canvas
+   toggles + the runtime zoom pill) — framed + inset by a dock gutter like the other
+   islands. Highest dock layer so its buttons are never clipped. */
+#topbar {
+  position: fixed; top: var(--dock-gap); left: var(--dock-gap); right: var(--dock-gap);
+  height: var(--topbar-h); z-index: 8;
+  display: flex; align-items: center; gap: 10px; padding: 0 8px;
+  box-sizing: border-box; background: var(--panel); border: 1px solid var(--line);
 }
-#left { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0; pointer-events: none; }
-#deckbar { flex: 0 0 auto; }
-/* The deck is edge-to-edge — no outer card (its rows ARE the structure). */
-#deckbar { border: none; border-radius: 0; padding: 0; background: transparent;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0; }   /* stack the group + "+ layer" below it (not inline) */
-#deckbar, #side { pointer-events: auto; }
-/* In OUTPUT the deck floats over the canvas. Keep the CONTAINER click-through so its
-   empty cells / padding never block selecting a fixture on the canvas behind it, but
-   re-enable its REAL controls (clips, layer heads, faders, buttons) so you can still
-   trigger clips + mix layers while patching. Empty clip slots stay pass-through. */
+#topbar .corner-row { display: inline-flex; align-items: center; gap: 6px; }
+#corner-right { margin-left: auto; }   /* bug + install pushed to the far right */
+/* Icon buttons (Save / Open / Import / Settings / Mapping / Control / Bug / Install):
+   borderless, larger glyphs — the icon IS the affordance. */
+.g-icon {
+  background: transparent !important; border: none !important;
+  min-width: 28px; padding: 0 6px !important; position: relative; color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.g-icon:hover { color: var(--accent-text); }
+.g-icon.open, .g-icon.on, .g-icon:active { color: var(--accent); }   /* active toggle = accent glyph (no box) */
+.g-icon:disabled { opacity: .35; }
+/* Pixelarticon SVGs render crispest at integer (16px) sizes; fill follows currentColor. */
+.g-icon .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
+/* Inline icon used inside small buttons (rotation / reverse). */
+.ic-sm { width: 14px; height: 14px; fill: currentColor; display: inline-block; vertical-align: middle; }
+/* Companion/daemon status dot tucked into the remote button's corner (no layout shift). */
+#menu-remote .tab-dot { position: absolute; top: 4px; right: 2px; margin: 0; }
+
+/* DOCK: three columns under the top bar, on the dark dock background. Gutters pass
+   pointer events through; the islands re-enable them. */
+#dock {
+  /* Top offset = topbar height + ONE gutter; the dock's own padding supplies that
+     gutter, so the gap above the islands matches the side/inter-island gaps (6px). */
+  position: fixed; top: calc(var(--topbar-h) + var(--dock-gap)); left: 0; right: 0; bottom: 0; z-index: 6;
+  display: flex; gap: var(--dock-gap); align-items: stretch;
+  padding: var(--dock-gap); box-sizing: border-box; background: var(--bg); pointer-events: none;
+}
+.island { pointer-events: auto; }
+
+/* COLUMNS: fixed-width side columns (sized for legible, non-wrapping fields) + a
+   flexible centre. The view presets (Canvas / Split / Editor) adjust the balance. */
+.dock-col { display: flex; flex-direction: column; gap: var(--dock-gap); min-height: 0; position: relative; }
+#dock-left  { flex: 0 0 var(--left-w, 310px); min-width: 270px; }
+#dock-center{ flex: 1 1 auto; min-width: 0; }
+/* RIGHT sidebar is split in two equal side-by-side panes (Device editor | Devices/Inventory). */
+#dock-right { flex: 0 0 var(--side-w, 620px); min-width: 520px; flex-direction: row; gap: var(--dock-gap); }
+#grp-fxedit, #grp-patch { flex: 1 1 0; }
+
+/* ISLAND: a framed dock window — header bar + scrolling body. */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 0; padding: var(--s3); box-sizing: border-box; }
+.island {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 0;
+  box-sizing: border-box; position: relative; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.island-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; background: var(--panel-2); border-bottom: 1px solid var(--line);
+  user-select: none;
+}
+.island-title { font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase;
+  letter-spacing: var(--ls-caps); color: var(--muted); }
+.island-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
+
+/* Per column sizing: the flex-fill islands (left props · centre stage) absorb space;
+   the centre timeline gets a fixed (curtain-resizable) height. */
+.dock-col > .island { flex: 0 0 auto; }
+#grp-props, #stage-island { flex: 1 1 0; min-height: 60px; }
+
+/* Small icon-only tab (the Settings cog in the left column's tab row). */
+.island-tab.island-tab-icon { flex: 0 0 auto; min-width: 0; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; }
+.island-tab-icon .ic { width: 14px; height: 14px; fill: currentColor; display: block; }
+#timeline-island { height: 240px; }
+/* Canvas-island tab panes (Settings / Mapping / Control) fill below the tab row and
+   scroll on their own; the Canvas tab body is #stagewrap. */
+#system-settings, #mapping-pane, #control-pane { flex: 1 1 0; min-height: 0; }
+#mapping-pane { display: flex; }
+#mapping-frame { flex: 1 1 auto; width: 100%; height: 100%; border: 0; background: var(--panel-2); }
+#control-pane { overflow-y: auto; background: var(--panel-2); }
+
+/* Island header used as a TAB ROW (e.g. Fixtures | Inventory). Text-style tabs:
+   active = bright accent, others muted — no boxes (OCR aesthetic). */
+.island-tabs { gap: 0; padding: 0; }
+.island-tab { flex: 1 1 0; background: transparent; border: none; border-radius: 0; cursor: pointer;
+  padding: 5px 0; color: var(--faint); font: var(--fw-med) var(--fs-body) var(--sans);
+  text-transform: uppercase; letter-spacing: var(--ls-caps); }
+.island-tab:hover { color: var(--muted); }
+.island-tab.is-on { color: var(--accent); background: var(--accent-soft); }
+/* The Stage + Timeline bodies hold the canvas / deck flush (no inset). */
+#stage-island > #stagewrap, #timeline-island > .island-body { padding: 0; }
+
+/* The deck fills the Timeline island body; its clip grid scrolls inside. */
+#deckbar {
+  flex: 1 1 auto; min-height: 0; padding: 0; background: transparent; border: none;
+  display: flex; flex-direction: column; align-items: stretch; overflow: hidden;
+}
+/* When editing fixtures (fixtures overlay on) keep the deck's REAL controls live but
+   let empty cells pass clicks to the canvas behind. */
 body.output-mode #deckbar { pointer-events: none; }
 body.output-mode #deckbar .lh-clickable,
 body.output-mode #deckbar .clip-cell,
 body.output-mode #deckbar .lh-op,
 body.output-mode #deckbar button { pointer-events: auto; }
-/* The right panel docks flush; -1px overlaps the deck's border into one shared
-   hairline (no doubled 2px seam) — the packed-grid look. The deck (#left, flex
-   1 1 auto) fills the left and pushes #side to the far right in every section. */
-#side { align-self: stretch; margin-left: -1px; }
 
-/* Solid, docked panel chrome — flush cells (no radius), distinct from the
-   checker pasteboard via solid fill + hairline. */
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 0;
-  padding: var(--s3);
-  box-sizing: border-box;
-}
-/* The single right panel: a DESIGN|OUTPUT switch on top, then whichever section
-   is active. Each pane is a flex column with its own scrolling body. */
-/* Positioned + raised above the deck (z 1): at narrow widths the clip deck
-   overflows #left, and without this it painted OVER the panel — the deck now
-   slides UNDER the sidebar instead. */
-/* No outer panel padding — the tab rows span edge to edge and content keeps
-   only its OWN inset (#insp-panes), so the side margin isn't doubled and the
-   DESIGN/OUTPUT divider reads as a full-width seam (packed-grid look). */
-/* Full-height. #layout (its ancestor) rides above the bottom toolbar, so the panel
-   sits in front of the viewport UI where they overlap. */
-#side { flex: 0 0 var(--side-w); max-height: 100vh;
-  display: flex; flex-direction: column; overflow: hidden; position: relative; z-index: 2; padding: 0; }
-/* Layout views (set by the corner switcher). Canvas = hide the inspector so the
-   output fills the screen; Editor = a roomier inspector, canvas shrinks to fit. */
-body.view-canvas #side { display: none; }
-body.view-edit #side { flex-basis: min(46vw, 560px); }
-/* Drag handle on the inspector's left edge (Split view) — a hairline that lights on
-   hover; resizing sets --side-w. Hidden where the width isn't user-set. */
-.side-resize { position: absolute; left: 0; top: 0; width: 5px; height: 100%; cursor: ew-resize; z-index: 5; }
-.side-resize:hover { background: var(--accent-line); }
-body.resizing-col, body.resizing-col * { cursor: ew-resize !important; user-select: none; }
-body.view-canvas .side-resize, body.view-edit .side-resize { display: none; }
-#design-pane, #output-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-/* The pane shares the active tab's fill — together they read as one folder-tab
-   surface (the tab is the handle, this is the page). */
-#insp-panes, #io-body {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius);
-  padding: var(--s3);
-}
-/* SECOND SIDEBAR (#side-2): the selected fixture/device/model editor as its own
-   rail, docked left of the main inspector. Tiles flush against #side via the -1px
-   seam; collapses (display:none) when nothing is selected so the canvas grows. */
-#side-2 { flex: 0 0 var(--side2-w, 300px); max-height: 100vh; align-self: stretch;
-  margin-left: -1px; display: flex; flex-direction: column; overflow: hidden;
-  position: relative; z-index: 2; padding: 0; pointer-events: auto; }
-#side-2[hidden] { display: none; }
-/* No title bar — the selected fixture is already obvious on the canvas/list. The
-   rail is slightly TRANSLUCENT (it floats over the canvas) so it reads as a
-   transient "selected context" layer rather than part of the inspector. */
-#side-2 { background: color-mix(in srgb, var(--hover) 85%, transparent); backdrop-filter: blur(10px); }
-#fxinsp-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s3); background: transparent; }
+/* Group flash — a brief accent ring when a selection surfaces a group. */
+.island.grp-flash { box-shadow: inset 0 0 0 2px var(--accent-line); }
 
-/* --- SYSTEM pane: Control (companion surface) + Settings, with their own inset
-   so content keeps the same side margin as the Design/Output panes. --- */
-#system-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-#system-control, #system-settings {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  background: var(--panel-2); border-radius: 0 0 var(--radius) var(--radius); padding: var(--s3);
-}
+/* VIEW presets (top-bar Canvas / Split / Editor / Overlay). Canvas hides both side
+   columns; Editor widens them; Split is the default. */
+body.view-canvas #dock-left, body.view-canvas #dock-right { display: none; }
+/* Per-panel show/hide toggles (top bar) — the centre canvas reclaims the freed space. */
+body.hide-left #dock-left { display: none; }
+body.hide-right #dock-right { display: none; }
+body.hide-timeline #timeline-island { display: none; }
+body.view-edit #dock-left  { flex-basis: 360px; }
+body.view-edit #dock-right { flex-basis: 680px; }
+
+/* OVERLAY view: the canvas fills the whole dock as a full-bleed backdrop and the
+   panels float TRANSLUCENT over it (frosted), so you see the output through the UI. */
+body.view-overlay #stage-island { position: absolute; inset: var(--dock-gap); z-index: 0; border: none; }
+body.view-overlay #dock-left, body.view-overlay #dock-right { position: relative; z-index: 1; }
+body.view-overlay #dock-center { justify-content: flex-end; }   /* timeline rides the bottom over the canvas */
+body.view-overlay #timeline-island { position: relative; z-index: 1; }
+body.view-overlay .island:not(#stage-island) { background: color-mix(in srgb, var(--panel) 60%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+body.view-overlay .island:not(#stage-island) .island-head { background: color-mix(in srgb, var(--panel-2) 62%, transparent); }
+body.view-overlay .island:not(#stage-island) .island-body { background: color-mix(in srgb, var(--panel-2) 42%, transparent); }
+
+#fxinsp-body { display: contents; }
+
+/* CURTAIN: a drag strip on the Timeline's top edge to resize it against the Canvas.
+   No visible bar — the ns-resize cursor is the only affordance. */
+.curtain { position: absolute; top: 0; left: 0; width: 100%; height: 7px; cursor: ns-resize; z-index: 5; }
+body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-select: none; }
+
+/* Settings preference rows: checkbox on the LEFT, then the full-width label. */
+.set-toggle { justify-content: flex-start; gap: 9px; cursor: pointer; }
+.set-toggle input[type=checkbox] { flex: 0 0 auto; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.set-toggle span { flex: 1 1 auto; }
+
+/* Dashboard knob disabled until something links to it. */
+.dash-cell.is-unlinked { opacity: .35; pointer-events: none; }
+
+/* #system-settings is now a tab-pane inside the props island body (which already pads
+   + scrolls), so it just flows. (#system-control is a hidden manifest mount.) */
+
+/* OVERLAY (the Control surface popup). */
+.dock-overlay { position: fixed; inset: 0; z-index: 40; display: flex; align-items: flex-start; justify-content: center;
+  background: rgba(0,0,0,.5); padding: 56px 16px 16px; }
+.dock-overlay[hidden] { display: none; }
+.dock-overlay-card { width: min(420px, 96vw); max-height: calc(100vh - 96px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-2); }
+.dock-overlay-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.dock-overlay-close { background: transparent; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; }
+.dock-overlay-close:hover { color: var(--accent-text); }
 /* Companion/daemon status dot on the CONTROL tab — red offline, accent live. */
 /* Daemon/companion status dot — red offline, green when running (a fixed status
    green, independent of the theme accent). */
@@ -422,83 +495,54 @@ body.view-canvas .side-resize, body.view-edit .side-resize { display: none; }
 /* Sources/Effects moved to on-demand pickers — the docked shelf is gone, so the
    container collapses entirely when empty (no stray top hairline / padding). */
 #library:empty { display: none; }
-/* Top-level section switch (Design · Output · Settings) — text-only, like the
-   sub-tabs: the active one is just BRIGHT, the others dim. No fills, no borders,
-   no underline (Jonas: don't use boxes/borders to mark the active thing). The
-   left-aligned row reads as a quiet OCR menu rather than a segmented control. */
-/* The PARENT row carries the divider (the subtabs underneath sit inside it),
-   so the two tab rows read as one nested hierarchy, not two unrelated menus. */
-.section-switch { display: flex; flex: 0 0 auto; gap: 0; padding: 0; margin-bottom: 0; }
-.section-tab {
-  flex: 1 1 0; text-align: center; background: transparent; color: var(--faint);   /* Design / Output / System = equal */
-  border: none; border-radius: 0; padding: 6px 0; cursor: pointer;
-  font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);   /* same size as the subtabs */
-}
-.section-tab:hover { color: var(--muted); }
-/* TWO-LEVEL HIERARCHY: the active MASTER tab wears the DARK accent tint (and its
-   sub-tab row continues that same tint, so they read as one block); the active
-   SUBTAB then pops in the BRIGHT accent. */
-.section-tab.section-active { color: var(--accent); background: var(--accent-soft); }
+/* (The old top-level Design/Output/System section switch + sub-tabs were removed —
+   every panel is now an always-visible docked group; see the DOCK WORKSPACE block.) */
 #comp-settings { margin-bottom: 6px; }
 [hidden] { display: none !important; }
-/* 'h' / Tab hides all GUI to view the canvas full-screen. */
-body.gui-hidden #layout { display: none; }
+/* 'h' / Tab hides all GUI to view the canvas full-screen: drop the side columns + the
+   timeline, strip the Stage chrome, and pull the dock up under the (collapsed) top
+   bar so the canvas reclaims the whole window. */
+body.gui-hidden #dock-left,
+body.gui-hidden #dock-right,
+body.gui-hidden #timeline-island { display: none; }
+body.gui-hidden #dock { top: 0; padding: 0; gap: 0; }
+body.gui-hidden #stage-island { border: none; }
+body.gui-hidden #stage-island .island-head { display: none; }
+/* Full-bleed shows the CANVAS regardless of which canvas-tab was active. */
+body.gui-hidden #stagewrap { display: flex !important; }
+body.gui-hidden #system-settings, body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !important; }
 
-/* No top bar — chrome lives in the bottom-left corner cluster. */
+/* Menu-style button (window menus in the top bar). */
 .g-btn {
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
   height: var(--ctrl-h); padding: 0 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
-/* Bottom-left cluster floating over the canvas (above the HUD): the fixtures
-   overlay toggle + hide UI. Decoupled from any tab. */
-/* OSC-address readout: the canonical address of the hovered/selected parameter,
-   parked just above the corner telemetry. Empty = hidden. */
-#corner-controls {
-  /* z 7 → the bottom toolbar sits IN FRONT of the right panel (#layout z6), so its
-     buttons are never clipped by the sidebar. The sidebar reserves --corner-h of
-     bottom space (see #side) so panel content never hides beneath the toolbar. */
-  position: fixed; z-index: 7; pointer-events: auto;
-  /* Offset by the device safe-area (notch / home indicator) when installed as a
-     standalone PWA with viewport-fit=cover; falls back to 10px on normal screens. */
-  left: calc(10px + env(safe-area-inset-left)); bottom: calc(10px + env(safe-area-inset-bottom));
-  max-width: calc(100vw - 22px);
-  /* Stacked: telemetry on top, view toggles, then the menus row at the bottom. */
-  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-}
-.corner-row { display: inline-flex; align-items: center; gap: 6px; }
-/* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't resize
-   the button / shift the cluster. */
+/* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't shift
+   the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
-/* Thin rules splitting the cluster into groups: menus | view-toggles —
-   so the row reads as related sets, not one long undifferentiated strip. */
+/* Thin rule splitting the top bar into groups (menus | view-toggles). */
 .corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
-#corner-controls button {
+#topbar button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto; white-space: nowrap;   /* never shrink/wrap a glyph+label onto two lines */
 }
-/* Capitalise the view toggles (fixtures/snap/grid/color/live) so they read like
-   the title-cased menu row beneath them. */
+/* Capitalise the canvas toggles (fixtures/snap/grid/color/live). */
 #corner-toggles button { text-transform: capitalize; }
 /* Layout-view switcher — 3 connected glyph buttons (Canvas / Split / Editor). */
-#corner-controls .view-seg { display: inline-flex; }
-#corner-controls .view-seg button { padding: 0; width: 26px; text-align: center; font-size: 12px; text-transform: none; }
-#corner-controls .view-seg button + button { border-left: 0; }
-#corner-controls .view-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
-/* Active toggle / open menu = a clearly FILLED pill (not just an accent-tinted
-   word): the fill IS the on/off signal, so the buttons read as toggles at a
-   glance without any glyph or label cue. */
-#corner-controls button.on, #corner-controls button.open {
+#topbar .view-seg { display: inline-flex; }
+#topbar .view-seg button { padding: 0; width: 26px; text-align: center; font-size: 12px; text-transform: none; }
+#topbar .view-seg button + button { border-left: 0; }
+#topbar .view-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
+/* Active toggle / open menu = a clearly FILLED pill (the fill IS the on/off signal). */
+#topbar button.on, #topbar button.open {
   color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
 }
-#corner-controls button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
-/* While the UI is hidden, keep the cluster mounted but show ONLY the hide/show
-   toggle (in its usual spot) — everything else hides so the canvas is clear. */
-/* When UI is hidden, leave ONLY "Show UI" (in the bottom menus row): hide the
-   telemetry, the toggles row, and every menu button except #g-hide. */
-body.gui-hidden #corner-controls #corner-toggles,
-body.gui-hidden #corner-controls #corner-menus > *:not(#g-hide) { display: none; }
+#topbar button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
+/* While the UI is hidden, collapse the top bar to just "Show UI" floating top-left. */
+/* UI hidden = full-bleed canvas; the top bar goes too ('H' brings everything back). */
+body.gui-hidden #topbar { display: none; }
 
 
 /* Layer header: B/S toggles + click-to-select. */
@@ -839,6 +883,9 @@ input[type=checkbox]:checked::after {
   margin: 2px 0; letter-spacing: 0;
 }
 .cmp-apply { color: var(--accent); border-color: var(--line); }
+/* Apply + Fit to fixtures, side by side. */
+.cmp-actions { display: flex; gap: 6px; margin-top: 8px; }
+.cmp-actions .fx-add { flex: 1 1 0; width: auto; margin: 0; }
 
 /* --- Kagora import / assign-IP panel --- */
 .imp-panel { margin-bottom: var(--s4); }
@@ -875,7 +922,7 @@ input[type=checkbox]:checked::after {
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
 .anim-cog {
-  flex: 0 0 auto; padding: 0 5px; min-width: 20px; line-height: var(--lh-ctrl); font-size: var(--fs-body);
+  flex: 0 0 auto; padding: 0 6px; min-width: 26px; line-height: var(--lh-ctrl); font-size: 15px;
   color: var(--faint); border-color: var(--line);
 }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
@@ -1030,6 +1077,10 @@ input[type=checkbox]:checked::after {
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
 .ly-row .anim-cog-wrap { order: 5; margin-left: 8px; }
+/* A param moved off its default reads in a soft accent tint (vs the muted default),
+   so changed values stand out at a glance. Focus still wins with the bright accent. */
+.ly-param.is-modified .ly-plabel { color: var(--accent-text); }
+.ly-param.is-modified .ly-readout { color: var(--accent-text); }
 /* Selected param: clicking the label/row focuses it → arrow keys nudge. */
 .ly-row:focus { outline: none; }
 .ly-row:focus .ly-plabel { color: var(--accent); }
@@ -1147,21 +1198,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    Inherits the bar's text colour (dimmed) so it stays legible on the accent
    highlight of a selected row too. */
 .deck-fx { margin-left: 6px; font-size: var(--fs-micro); text-transform: uppercase; letter-spacing: .05em; opacity: .6; }
-/* Composition group — a hairline box that ENCAPSULATES the layer stack: a titled
-   header caps the rows so the layers read as children of the composition. */
-.deck-comp-group { display: inline-block; border: 1px solid var(--line); }
-.deck-comp-head {
-  display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px;
-  background: var(--panel-2); border-bottom: 1px solid var(--line); cursor: pointer;
-}
-.deck-comp-head:hover .deck-comp-title { color: var(--accent-text); }   /* whole bar reacts */
-.deck-comp-titlewrap { display: flex; align-items: center; flex: 0 0 auto; min-width: 0; }
-.deck-comp-title {
-  font: var(--fw-med) var(--fs-body) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--accent);
-}
-.deck-comp-titlewrap:hover .deck-comp-title { color: var(--accent-text); }
-.deck-comp-head.is-sel { background: var(--accent); }
-.deck-comp-head.is-sel .deck-comp-title { color: var(--accent-dark); }
+/* (The in-deck composition group/header was removed — the deck renders the layer
+   rows directly into the Timeline island, which supplies the frame + title.) */
 /* No horizontal row separators — there are no clip grids that need them. */
 .deck-layer.is-min .layer-head-box { flex-direction: column; gap: 0; padding: 0; justify-content: space-between; align-items: stretch; }
 .deck-layer.is-min .lh-body { padding: 4px 6px; }
@@ -1176,7 +1214,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Unlimited layers: the stack scrolls once it would exceed the viewport (the
    "+ layer" button sits below, always reachable). */
 .deck-layers { display: flex; flex-direction: column; gap: 0; border: none;
-  max-height: calc(100vh - 86px); overflow-y: auto; }
+  flex: 1 1 auto; min-height: 0; overflow: auto; }
 .deck-addlayer { margin-top: 4px; align-self: flex-start; width: auto; padding: 5px 12px; color: var(--accent); }
 .lh-blend {
   width: 100%; margin-top: 3px; box-sizing: border-box;
@@ -1291,7 +1329,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .clip-selected .clip-label-bar { background: var(--accent); color: var(--accent-dark); }
 .clip-active::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-  box-shadow: inset 0 0 0 2px var(--accent); z-index: 2;
+  box-shadow: inset 0 0 0 1px var(--accent); z-index: 2;
 }
 
 /* Library item: thumbnail + label (sources), label-only (effects). */

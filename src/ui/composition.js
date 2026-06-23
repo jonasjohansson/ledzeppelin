@@ -83,24 +83,20 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     ]);
     root.append(grid);
 
-    // --- Apply ---
-    root.append(el('button', {
+    // --- Apply + Fit to fixtures, side by side ---
+    const applyBtn = el('button', {
       className: 'fx-add cmp-apply', textContent: 'apply',
-      onclick: () => {
-        const c = clampCanvasSize(draft.w, draft.h);
-        setSize(c.w, c.h);
-        render();
-      },
-    }));
-
-    // --- Fit to fixtures (fluid canvas — let the strips decide the size) ---
+      onclick: () => { const c = clampCanvasSize(draft.w, draft.h); setSize(c.w, c.h); render(); },
+    });
+    const actions = el('div', { className: 'cmp-actions' }, [applyBtn]);
     if (fitToFixtures) {
-      root.append(el('button', {
+      actions.append(el('button', {
         className: 'fx-add cmp-fit', textContent: 'fit to fixtures',
         title: 'resize the canvas to exactly contain the placed fixtures',
         onclick: () => { fitToFixtures(); render(); },
       }));
     }
+    root.append(actions);
     // (Crossfade is now a PER-LAYER setting in the Layer inspector — default 500.)
   }
 

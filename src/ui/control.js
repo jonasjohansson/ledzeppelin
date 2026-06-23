@@ -10,7 +10,7 @@ import { Slider } from './controls.js';
 import { buildRemoteManifest } from '../model/remote.js';
 import { qrSvg } from './qr.js';
 
-export function createControlPanel({ mount, getShow, send, status }) {
+export function createControlPanel({ mount, getShow, send, status, showQr = true }) {
   const head = el('div', { className: 'ctrlpane-head' });
   const body = el('div', { className: 'ctrlpane-body' });
   mount.append(head, body);
@@ -26,10 +26,8 @@ export function createControlPanel({ mount, getShow, send, status }) {
     head.textContent = '';
     const s = status?.() || {};
     if (!s.url) return;
-    // QR (fills the sidebar so it's easy to scan; the whole thing is a link →
-    // click to open the Control surface), then the URL. (Daemon status lives on the
-    // System › CONTROL tab dot — no need to repeat it here.)
-    head.append(el('a', { className: 'ctrl-qr', href: s.url, target: '_blank', rel: 'noopener', title: 'open / scan the Control surface', innerHTML: qrSvg(s.url, 240) }));
+    // Optional QR (a scannable link to the Control surface), then the URL.
+    if (showQr) head.append(el('a', { className: 'ctrl-qr', href: s.url, target: '_blank', rel: 'noopener', title: 'open / scan the Control surface', innerHTML: qrSvg(s.url, 240) }));
     const a = el('a', { className: 'ctrl-url', href: s.url, target: '_blank', rel: 'noopener', textContent: s.url.replace(/^https?:\/\//, ''), title: 'open the Control surface in a new tab' });
     head.append(el('div', { className: 'ctrl-urlrow' }, [a]));
   }

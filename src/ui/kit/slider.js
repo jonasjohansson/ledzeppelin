@@ -86,6 +86,13 @@ export function Slider(label, value, opts = {}) {
   const row = el('div', { className: 'fx-field ly-param ly-row' + (def != null ? ' resettable' : ''), tabIndex: 0 }, [
     label0, out, minus, plus, range,
   ]);
+  // Highlight a param that's been moved off its default (a subtle accent tint on the
+  // label) so changed values stand out from untouched ones. Kept live as it changes.
+  const updateDirty = () => { if (def != null) row.classList.toggle('is-modified', Number(range.value) !== Number(def)); };
+  range.addEventListener('input', updateDirty);
+  out.addEventListener('change', updateDirty);
+  row.addEventListener('contextmenu', updateDirty);
+  updateDirty();
   // SELECT a parameter by clicking its label/empty area (focuses the row); then
   // ← / ↓ nudge down and → / ↑ nudge up by the tick. Clicks on the readout or the
   // slider keep their own native arrow behaviour (caret / drag), so only handle
@@ -99,6 +106,7 @@ export function Slider(label, value, opts = {}) {
   // Right-click ANYWHERE on the row resets to the default (when one exists) and
   // always suppresses the OS menu, so a slider feels like a control, not text.
   row.addEventListener('contextmenu', (e) => {
+    if (document.body.classList.contains('native-ctx')) return;   // user wants the browser menu
     e.preventDefault();
     if (def == null) return;
     range.value = String(def); out.value = fmt(def); paint(); onInput(def);

@@ -470,20 +470,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
           return el('div', { className: 'scan-block' }, [btn, list]);
         })(),
       ] : []),
-      // Output delay (ms) — hold this controller's packets back to time-align it
-      // with the rest of the rig (e.g. against projection). 0 = immediate. Niche, so
-      // it lives under an Advanced disclosure (collapsed unless already non-zero)
-      // to keep the common per-device editor short.
-      (() => {
-        const det = el('details', { className: 'fx-advanced' });
-        if ((d.syncDelayMs ?? 0) > 0) det.open = true;
-        det.append(el('summary', { textContent: 'Advanced' }));
-        // Physical wiring spec — set once at setup, NOT a live-performance control,
-        // so it lives here (collapsed) rather than up top.
-        det.append(field('Colour Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))));
-        det.append(field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))));
-        return det;
-      })(),
+      // Colour order (physical wiring spec) + output delay (ms, time-align this
+      // controller against the rest of the rig; 0 = immediate). Shown inline.
+      field('Colour Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))),
       patchRuler(show, d),
       controllerBlock(d),
     ]);
@@ -763,6 +753,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   mounted = true;
   return {
     devicesEl: devicesBox, libraryEl: libraryBox, refresh: render,
+    // What was last clicked: 'device' | 'devtype' | 'type' (lets the app point the
+    // Fixture editor group at a device vs. an Inventory model without tabs).
+    lastSel: () => lastSel,
     // The selected item's EDITOR — app mounts these into the left sidebar.
     deviceDetailEl: () => {
       const show = getShow();

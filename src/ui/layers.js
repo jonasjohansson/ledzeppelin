@@ -623,28 +623,11 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         'data-layer': layer.id,
       }, [layerHead(layer, layer.id, i, layers.length > 1), clipDeck(layer, layer.id, maxClips)]));
     }
-    // The whole stack reads as one COMPOSITION GROUP that ENCAPSULATES its layers:
-    // a titled header (click → Composition inspector) caps a bordered box holding
-    // the layer rows. The header carries an "fx" marker (composition effect chain),
-    // (No B/✕ master controls here — use the per-layer B/✕.)
-    const comp = getShow().composition || {};
-    const compHead = el('div', { className: 'deck-comp-head lh-clickable' + (deckSel === 'comp' ? ' is-sel' : '') });
-    const titleWrap = el('div', { className: 'deck-comp-titlewrap' }, [
-      el('span', { className: 'deck-comp-title', textContent: (comp.title || '').trim() || 'Composition' }),
-    ]);
-    if ((comp.effects || []).length) titleWrap.append(el('span', { className: 'deck-fx', textContent: 'fx', title: 'composition has effects' }));
-    // The WHOLE header bar selects the composition (like a layer head), not just
-    // the title text. Double-click COLLAPSES the deck to just this bar (and back).
-    compHead.addEventListener('click', () => { deckSel = 'comp'; onCompositionSelect?.(); render(); });
-    compHead.addEventListener('dblclick', () => {
-      deckCollapsed = !deckCollapsed;
-      try { localStorage.setItem('lz.deck.collapsed', deckCollapsed ? '1' : '0'); } catch { /* private */ }
-      render();
-    });
-    if (deckCollapsed) compHead.classList.add('is-collapsed');
-    compHead.append(titleWrap);
-    const group = el('div', { className: 'deck-comp-group' }, deckCollapsed ? [compHead] : [compHead, deckBox]);
-    deckEl.append(group);
+    // The deck IS the layer/clip grid now; its framing + title come from the docked
+    // Timeline island (the old in-deck "COMPOSITION" header + collapse were dropped —
+    // the Composition group lives in the left column). Composition properties are
+    // always visible there, so no in-deck selection step is needed.
+    deckEl.append(deckBox);
 
     // --- CLIP inspector: the SELECTED clip, found across ALL layers ----------
     // There is ALWAYS a clip selected when any clip exists: if the current
@@ -693,7 +676,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     box.append(Section('Dashboard', 'dashboard', (b) => {
       const grid = el('div', { className: 'dash-grid' });
       for (const lnk of links) {
-        const cell = el('div', { className: 'dash-cell' });
+        // A link is "live" only once something drives it (labels[id] is set); idle
+        // links are shown disabled (not draggable / editable) until linked.
+        const linked = !!labels[lnk.id];
+        const cell = el('div', { className: 'dash-cell' + (linked ? '' : ' is-unlinked') });
         cell.append(Knob('', lnk.value, {
           onInput: (v) => commitLive(setDashboardLinkValue(show(), lnk.id, v)),
           onCommit: (v) => commit(setDashboardLinkValue(show(), lnk.id, v)),
@@ -1062,6 +1048,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     // Right-click → reset opacity to the default (0.5). A committed change (not a
     // live drag), so it's a single undo step.
     opCol.addEventListener('contextmenu', (e) => {
+      if (document.body.classList.contains('native-ctx')) return;
       e.preventDefault(); e.stopPropagation();
       paintOp(0.5); commit(patchLayer(show(), id, { opacity: 0.5 })); syncLayerOpacity(id, 0.5);
     });

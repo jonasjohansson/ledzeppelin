@@ -888,7 +888,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   // Right-click a vertex → remove it.
   evEl.addEventListener('contextmenu', (ev) => {
-    if (!enabled) return;
+    if (!enabled || document.body.classList.contains('native-ctx')) return;
     const hit = hitTest(ev);
     if (hit && hit.vertex != null) {
       ev.preventDefault();

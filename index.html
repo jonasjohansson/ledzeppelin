@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Led Zeppelin</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Led Zeppelin — a browser-based LED show composer and pixel-mapping control surface for WLED / DDP / Art-Net rigs.">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#131110">
+<meta name="theme-color" content="#0a0a0a">
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <!-- PWA: installable + offline app shell (see service-worker.js, registered in app.js). -->
 <link rel="manifest" href="./manifest.webmanifest">
@@ -16,125 +17,160 @@
 <!-- Type: MONO-FORWARD — one monospace face (Spline Sans Mono by default,
      Martian Mono swappable) drives chrome + data, self-hosted via @font-face in
      ui.css (offline-safe). Preload the active face. -->
-<link rel="preload" href="./fonts/SplineSansMono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="./fonts/CommitMono.woff2" as="font" type="font/woff2">
 <style>html,body{margin:0;background:#131110;color:#f4f5f7;font-size:11px}
 canvas{display:block}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
 <!-- Hidden file input for Settings › Open show. -->
 <input id="open-show-file" type="file" accept=".json,application/json" style="display:none">
-<!-- Bottom-left cluster: File/Audio menus, the overlay/snap/blackout/hide-UI
-     toggles, the zoom pill (appended at runtime), then the live telemetry inline. -->
-<div id="corner-controls">
-  <!-- View toggles on TOP; the menus (incl. Hide/Show UI) on the bottom row. -->
+<!-- Icon sprite — Pixelarticons (MIT), sharp variants. Referenced via <use href="#ic-…">;
+     icons inherit the button colour via currentColor. -->
+<svg id="icon-sprite" width="0" height="0" aria-hidden="true" style="position:absolute">
+  <symbol id="ic-save" viewBox="0 0 24 24"><path d="M16 20V14H8V20H16ZM12 10H6V6H12V10ZM20 6H18V4H20V6ZM20 20V6H22V22H2V2H18V4H4V20H6V12H18V20H20Z"/></symbol>
+  <symbol id="ic-open" viewBox="0 0 24 24"><path d="M2 4h10v2H2zm0 14h20v2H2zM20 6h2v12h-2zM2 6h2v12H2zm8 0h10v2H10z"/></symbol>
+  <symbol id="ic-import" viewBox="0 0 24 24"><path d="M21 15v4h-2v-4zm0 4v2H3v-2zM5 15v4H3v-4zm8-12v14h-2V3z"/><path d="M7 11v2h10v-2zm2 2v2h2v-2zm4 0v2h2v-2z"/><path d="M15 11v2h2v-2z"/></symbol>
+  <symbol id="ic-settings" viewBox="0 0 24 24"><path d="M9 0h6v2H9zm6 24H9v-2h6zM0 15V9h2v6zm24-6v6h-2V9zM9 2h2v4H9zm6 20h-2v-4h2zM2 15v-2h4v2zm20-6v2h-4V9zm-9-7h2v4h-2zm-2 20H9v-4h2zM2 11V9h4v2zm20 2v2h-4v-2zM7 4h2v2H7zm10 0h-2v2h2zm0 16h-2v-2h2zM7 20h2v-2H7zM2 2h5v2H2zm20 0h-5v2h5zm0 20h-5v-2h5zM2 22h5v-2H2z"/><path d="M2 2h2v5H2zm20 0h-2v5h2zm0 20h-2v-5h2zM2 22h2v-5H2zM4 7h2v2H4zm16 0h-2v2h2zm0 10h-2v-2h2zM4 17h2v-2H4zm6-9h4v2h-4zm0 6h4v2h-4zm-2-4h2v4H8zm6 0h2v4h-2z"/></symbol>
+  <symbol id="ic-mapping" viewBox="0 0 24 24"><path d="M1 3h22v2H1zm0 16h22v2H1zM1 5h2v14H1zm20 0h2v14h-2zM3 11h18v2H3zm2-4h6v2H5zm8 0h2v2h-2zm4 0h2v2h-2zM5 13h2v4H5zm4 0h2v4H9zm4 0h2v4h-2zm4 0h2v4h-2z"/></symbol>
+  <symbol id="ic-remote" viewBox="0 0 24 24"><path d="M6 2h12v2H6zm0 18h12v2H6zM4 2h2v20H4zm14 0h2v20h-2zm-7 15h2v2h-2z"/></symbol>
+  <symbol id="ic-bug" viewBox="0 0 24 24"><path d="M2 5h2v4H2zm20 0h-2v4h2zM2 9h4v2H2zm20 0h-4v2h4zM2 13h4v2H2zm20 0h-4v2h4zM2 17h4v2H2zm20 0h-4v2h4zM2 19h2v2H2zm20 0h-2v2h2zM6 11h12v2H6z"/><path d="M6 5h2v14H6zm10 0h2v14h-2zM6 19h12v2H6zM8 5h8v2H8z"/><path d="M11 15h2v6h-2zM8 1h2v6H8zm6 0h2v6h-2z"/></symbol>
+  <symbol id="ic-install" viewBox="0 0 24 24"><path d="M11 5H3v2h8V5ZM5 7H3v12h2V7Zm14 12H3v2h16v-2Zm0-6h-2v6h2v-6Zm-8 0H9v2h2v-2Zm2-2h-2v2h2v-2Zm2-2h-2v2h2V9Zm2-2h-2v2h2V7Zm2-2h-2v2h2V5Zm2-2h-2v8h2V3Z"/><path d="M21 3h-8v2h8V3Z"/></symbol>
+  <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M16 20H8v-2h8v2Zm-8-2H4v-2h4v2Zm12 0h-4v-2h4v2ZM4 16H2v-2h2v2Zm10-6h-2v2h2v-2h2v4h-2v2h-4v-2H8v-4h2V8h4v2Zm8 6h-2v-2h2v2ZM2 14H0v-4h2v4Zm22 0h-2v-4h2v4ZM4 10H2V8h2v2Zm18 0h-2V8h2v2ZM8 8H4V6h4v2Zm12 0h-4V6h4v2Zm-4-2H8V4h8v2Z"/></symbol>
+  <symbol id="ic-eye-off" viewBox="0 0 24 24"><path d="M0 10h2v4H0zm24 0h-2v4h2zm-8 0h-2v2h2zm-6 0H8v4h2zM2 8h2v2H2zm0 8h2v-2H2zm20-8h-2v2h2zm0 8h-2v-2h2zM4 6h4v2H4zm0 12h4v-2H4zM20 6h-4v2h4zM10 4h6v2h-6zM8 20h8v-2H8zm4-12h2v2h-2zm-2 6h4v2h-4zM8 8h2v2H8zm2 2h2v4h-2zm2 2h2v2h-2z"/><path d="M6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm12 12h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2z"/></symbol>
+  <symbol id="ic-snap" viewBox="0 0 24 24"><path d="M5 4h14v4H5zM5 8h5v11H5zm9 0h5v11h-5z"/></symbol>
+  <symbol id="ic-grid" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm0 18h20v2H2zM2 4h2v16H2zm18 0h2v16h-2zM4 8h16v2H4zm0 6h16v2H4z"/><path d="M8 4h2v16H8zm6 0h2v16h-2z"/></symbol>
+  <symbol id="ic-colour" viewBox="0 0 24 24"><path d="M12 2h10v2H12zm2 18h8v2h-8zM4 20h10v2H4zm8-16h2v16h-2zm8 0h2v16h-2zM2 14h2v8H2zm2 0h8v2H4zm12 2h2v2h-2zM6 12h2v2H6zm-2-2h2v2H4zm2-2h2v2H6zm2-2h2v2H8zm2 2h2v2h-2z"/></symbol>
+  <symbol id="ic-live" viewBox="0 0 24 24"><path d="M21 2H3v2h18V2Zm0 18H3v2h18v-2ZM5 4H3v16h2V4Zm16 0h-2v16h2V4Zm-8 2H7v2h6V6Zm-4 4H7v8h2v-8Zm8 0h-2v8h2v-8Zm-8 0h6v2H9zm0 6h6v2H9z"/></symbol>
+  <symbol id="ic-align" viewBox="0 0 24 24"><path d="M5 8h4V6H5zm10 2h4V8h-4zm-6 8h2V6H9zm10-2h2V8h-2zM5 18h4v-2H5zm10-2h4v-2h-4zM3 18h2V6H3zm10-2h2V8h-2zM6 2h2v4H6zm0 16h2v4H6zm10-2h2v6h-2zm0-14h2v6h-2z"/></symbol>
+  <symbol id="ic-rot-ccw" viewBox="0 0 24 24"><path d="M10 14H8v-2H6v-2H4V8h2V6h2V4h2v4h10v12h-8v-2h6v-8h-8v4Z"/></symbol>
+  <symbol id="ic-rot-cw" viewBox="0 0 24 24"><path d="M20 8H6v2h14zM4 8h2v12H4zm2 10h6v2H6z"/><path d="M18 6h-2v6h2zm-2-2h-2v8h2zm0 8h-2v2h2z"/></symbol>
+  <symbol id="ic-reverse" viewBox="0 0 24 24"><path d="M20 16v2H4v-2zm-10-2v2H6v-2zm0-2v2H8v-2zm0 6v2H6v-2zm0 2v2H8v-2zM4 6v2h16V6zm10-2v2h4V4zm0-2v2h2V2zm0 6v2h4V8zm0 2v2h2v-2z"/></symbol>
+  <symbol id="ic-new" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm0 18h20v2H2zM2 4h2v16H2zm18 0h2v16h-2zM7 11h10v2H7z"/><path d="M11 17V7h2v10z"/></symbol>
+  <symbol id="ic-ledger" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm4 5h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-8 5h20v2H2zM2 4h2v16H2zm18 0h2v16h-2z"/></symbol>
+  <symbol id="ic-panel-left" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 7h4v10H6z"/></symbol>
+  <symbol id="ic-panel-right" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM14 7h4v10h-4z"/></symbol>
+  <symbol id="ic-panel-bottom" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 14h12v3H6z"/></symbol>
+</svg>
+<!-- TOP BAR: a full-width strip of window/settings controls. Button ids are kept
+     identical to the old corner cluster so every handler (wired by id in app.js)
+     keeps working; the zoom pill is still appended at runtime to #corner-toggles. -->
+<div id="topbar">
+  <!-- Window menus as icon buttons. (Hide UI lives on the 'H' key now;
+       Control/Settings/Mapping are tabs of the Canvas island.) -->
+  <div class="corner-row" id="corner-menus">
+    <button id="menu-save" class="g-icon" title="Save project  (⌘S)"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg></button>
+    <button id="menu-open" class="g-icon" title="Open project  (⌘O)"><svg class="ic" aria-hidden="true"><use href="#ic-open"/></svg></button>
+    <button id="menu-new" class="g-icon" title="New project"><svg class="ic" aria-hidden="true"><use href="#ic-new"/></svg></button>
+    <button id="menu-ledger" class="g-icon" title="Import from LEDger…"><svg class="ic" aria-hidden="true"><use href="#ic-ledger"/></svg></button>
+    <button id="menu-import" class="g-icon" title="Import shader / save & load composition…"><svg class="ic" aria-hidden="true"><use href="#ic-import"/></svg></button>
+    <button id="menu-mapping" class="g-icon" title="MIDI / keyboard / OSC mapping (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-mapping"/></svg></button>
+    <button id="menu-remote" class="g-icon" title="Control surface (phone remote)"><svg class="ic" aria-hidden="true"><use href="#ic-remote"/></svg><span class="tab-dot" id="control-subdot" title="companion / daemon status"></span></button>
+    <button id="menu-align" class="g-icon" title="align / distribute the selected fixtures" disabled><svg class="ic" aria-hidden="true"><use href="#ic-align"/></svg></button>
+  </div>
+  <span class="corner-sep"></span>
   <div class="corner-row" id="corner-toggles">
-    <!-- Layout views: swap the canvas/inspector balance instantly. -->
     <span class="view-seg" id="view-seg">
       <button data-view="canvas" title="Canvas view: maximise the output">▭</button>
-      <button data-view="split" title="Split view: canvas + inspector">◫</button>
+      <button data-view="split" title="Split view: canvas + panels">◫</button>
       <button data-view="edit" title="Editor view: roomy panels">▤</button>
+      <button data-view="overlay" title="Overlay view: panels float translucent over a full-bleed canvas">⧉</button>
     </span>
-    <button id="overlay-toggle" title="show/hide fixtures on the canvas">fixtures</button>
-    <button id="snap-btn" title="snap fixtures to each other & the grid">snap</button>
-    <button id="grid-btn" title="show/hide the alignment grid">grid</button>
-    <button id="color-btn" title="tint fixtures by controller colour">colour</button>
-    <button id="wall-btn" title="live view: dim the composite; the fixtures' pixels light up with what they sample">live</button>
+    <button id="panel-left" class="g-icon on" title="show/hide the left panel (gives the canvas more space)"><svg class="ic" aria-hidden="true"><use href="#ic-panel-left"/></svg></button>
+    <button id="panel-bottom" class="g-icon on" title="show/hide the timeline"><svg class="ic" aria-hidden="true"><use href="#ic-panel-bottom"/></svg></button>
+    <button id="panel-right" class="g-icon on" title="show/hide the right panel"><svg class="ic" aria-hidden="true"><use href="#ic-panel-right"/></svg></button>
+    <span class="corner-sep"></span>
+    <button id="overlay-toggle" class="g-icon" title="edit fixtures: show + select them on the canvas"><svg class="ic" aria-hidden="true"><use href="#ic-eye"/></svg></button>
+    <button id="snap-btn" class="g-icon" title="snap fixtures to each other & the grid"><svg class="ic" aria-hidden="true"><use href="#ic-snap"/></svg></button>
+    <button id="grid-btn" class="g-icon" title="show/hide the alignment grid"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
+    <button id="color-btn" class="g-icon" title="tint fixtures by controller colour"><svg class="ic" aria-hidden="true"><use href="#ic-colour"/></svg></button>
+    <button id="wall-btn" class="g-icon" title="live view: dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
   </div>
-  <div class="corner-row" id="corner-menus">
-    <!-- Hide/show UI is FIRST so it keeps the same far-left spot whether or not the
-         rest of the cluster is visible (it's the only control shown while hidden). -->
-    <button id="g-hide" class="g-btn" title="hide all UI (H)">Hide UI</button>
-    <button id="menu-file" class="g-btn" title="project file actions">File</button>
-    <button id="menu-mapping" class="g-btn" title="MIDI / keyboard / OSC mapping (opens a window)">Mapping</button>
-    <button id="menu-install" class="g-btn" title="download / update the app on GitHub">Install</button>
-    <button id="menu-align" class="g-btn" title="align / distribute the selected fixtures" disabled>Align</button>
-  </div>
-</div>
-<!-- Full-bleed canvas background (matte-style): the composite is centred and
-     letterboxed to the composition aspect; the UI panels float over it. -->
-<div id="stagewrap">
-  <div id="stageinner">
-    <canvas id="stage"></canvas>
-    <canvas id="preview" width="1280" height="720"></canvas>
-    <!-- Vector chrome (fixture outlines, arrows, handles, labels). Crisp at any
-         zoom (rides the same transform); pointer-events off so the canvas keeps
-         hit-testing. -->
-    <svg id="ovl" viewBox="0 0 1280 720" preserveAspectRatio="none"></svg>
+  <!-- Far-right cluster: bug report + install/update. -->
+  <div class="corner-row" id="corner-right">
+    <button id="menu-bug" class="g-icon" title="Report a bug"><svg class="ic" aria-hidden="true"><use href="#ic-bug"/></svg></button>
+    <button id="menu-install" class="g-icon" title="Install / update the app"><svg class="ic" aria-hidden="true"><use href="#ic-install"/></svg></button>
   </div>
 </div>
-<div id="layout">
-  <!-- LEFT: clip-slot deck (Composition only); spacer otherwise -->
-  <div id="left">
-    <section id="deckbar" class="panel"></section>
-  </div>
-
-  <!-- SECOND SIDEBAR: the selected fixture/device/model editor, shown left of the
-       main inspector whenever something is selected — in ANY section — and collapsed
-       (canvas reclaims the width) when nothing is. -->
-  <aside id="side-2" class="panel" hidden>
-    <div id="fxinsp-body"></div>
-  </aside>
-
-  <!-- RIGHT: one panel with a top-level DESIGN | OUTPUT switch. Design = the
-       Clip/Layer/Composition inspector + library; Output = the Fixtures/Chains/
-       Devices routing. Only one section shows at a time (more canvas room). -->
-  <aside id="side" class="panel">
-    <div id="section-switch" class="section-switch">
-      <button class="section-tab section-active" data-section="design">Design</button>
-      <button class="section-tab" data-section="output">Output</button>
-      <button class="section-tab" data-section="system">System</button>
-    </div>
-
-    <!-- DESIGN -->
-    <div id="design-pane">
-      <div id="insp-tabs" class="subtabs">
-        <button class="subtab subtab-active" data-itab="clip">Clip</button>
-        <button class="subtab" data-itab="layer">Layer</button>
-        <button class="subtab" data-itab="composition">Composition</button>
-      </div>
-      <div id="insp-panes">
+<!-- DOCK: a top bar over three columns of stacked "island" panels (Photoshop /
+     MadMapper style). LEFT = the selected item's properties (Clip · Layer ·
+     Composition) · CENTRE = Stage over the Timeline · RIGHT = Fixture editor ·
+     Fixtures · Inventory. Splitters between islands and columns resize neighbours;
+     everything is visible at once (no section switching). -->
+<div id="dock">
+  <!-- LEFT COLUMN: the selected item's properties as TABS (Composition · Layer · Clip)
+       plus a small icon-only Settings tab. -->
+  <div id="dock-left" class="dock-col">
+    <section class="island" id="grp-props">
+      <header class="island-head island-tabs" id="props-tabs">
+        <button class="island-tab island-tab-icon" data-itab="settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
+        <button class="island-tab is-on" data-itab="composition">Composition</button>
+        <button class="island-tab" data-itab="layer">Layer</button>
+        <button class="island-tab" data-itab="clip">Clip</button>
+      </header>
+      <div class="island-body">
         <div id="insp-clip"></div>
         <div id="insp-layer" hidden></div>
         <div id="insp-composition" hidden>
           <div id="comp-settings"></div>
           <div id="insp-compfx"></div>
         </div>
+        <div id="system-settings" hidden></div>
       </div>
-      <!-- Sources / Effects library docked at the bottom of the inspector. -->
-      <div id="library"></div>
-    </div>
+    </section>
+    <!-- legacy sources/effects shelf — kept mounted (createLayerPanel contract) but hidden. -->
+    <div id="library" hidden></div>
+  </div>
 
-    <!-- OUTPUT -->
-    <div id="output-pane" hidden>
-      <div class="subtabs" id="io-tabs">
-        <!-- data-otab keys are internal (kept stable); labels are user-facing.
-             Fixtures = the merged patch view (place fixtures + create/edit devices +
-             drag fixtures onto devices). Inventory = the catalog of models. -->
-        <button class="subtab subtab-active" data-otab="fixtures">Devices</button>
-        <button class="subtab" data-otab="library">Inventory</button>
+  <!-- CENTRE COLUMN: the Canvas (output) island over the Timeline. Settings + Mapping
+       are top-bar links now (an overlay + a breakout window). -->
+  <div id="dock-center" class="dock-col">
+    <section id="stage-island" class="island">
+      <div id="stagewrap">
+        <div id="stageinner">
+          <canvas id="stage"></canvas>
+          <canvas id="preview" width="1280" height="720"></canvas>
+          <!-- Vector chrome (fixture outlines, arrows, handles, labels). Crisp at any
+               zoom (rides the same transform); pointer-events off so the canvas keeps
+               hit-testing. -->
+          <svg id="ovl" viewBox="0 0 1280 720" preserveAspectRatio="none"></svg>
+        </div>
       </div>
-      <div id="io-body">
-        <!-- Fixtures tab: the placement / wiring list. -->
-        <div id="output-list"></div>
-        <!-- Devices tab: the actual controller instances (name / ip / model). -->
-        <div id="devices-design"></div>
-        <!-- Library tab: the catalog of models — controller types + fixture types. -->
-        <div id="library-design"></div>
-      </div>
-    </div>
+    </section>
+    <!-- The clip/layer deck. No title — the curtain on its top edge resizes it
+         against the Canvas above. -->
+    <section id="timeline-island" class="island">
+      <div class="island-body"><section id="deckbar"></section></div>
+    </section>
+  </div>
 
-    <!-- SYSTEM: Control (the companion surface — master controls + ticked params +
-         the phone URL/QR/status) and Settings (accent colour + app preferences). -->
-    <div id="system-pane" hidden>
-      <div class="subtabs" id="system-tabs">
-        <button class="subtab subtab-active" data-systab="settings">Settings</button>
-        <button class="subtab" data-systab="control">Control<span class="tab-dot" id="control-subdot" title="companion / daemon status"></span></button>
+  <!-- RIGHT COLUMN: selected fixture's editor · the Fixtures patch · the Inventory. -->
+  <div id="dock-right" class="dock-col">
+    <section class="island" id="grp-fxedit">
+      <header class="island-head"><span class="island-title" id="fxedit-title">Device</span></header>
+      <div class="island-body"><div id="fxinsp-body"></div></div>
+    </section>
+    <!-- Patch island: Fixtures (the placement/wiring list + controller instances)
+         and Inventory (the model catalog) as TABS in one island. -->
+    <section class="island" id="grp-patch">
+      <header class="island-head island-tabs" id="patch-tabs">
+        <button class="island-tab is-on" data-ptab="fixtures">Devices</button>
+        <button class="island-tab" data-ptab="inventory">Inventory</button>
+      </header>
+      <div class="island-body">
+        <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the
+             controllers with their fixtures (click a controller to edit it). -->
+        <div id="patch-fixtures"><div id="output-list"></div></div>
+        <div id="patch-inventory" hidden>
+          <div id="library-design"></div>
+        </div>
       </div>
-      <div id="system-control"></div>
-      <div id="system-settings" hidden></div>
-    </div>
-  </aside>
-
+    </section>
+  </div>
 </div>
+
+<!-- The companion control surface opens in its own window (the top-bar remote icon).
+     #system-control is a hidden mount that keeps the manifest/bridge wiring intact. -->
+<div id="system-control" hidden></div>
+
 <script type="module" src="./src/app.js"></script></body>
 </html>

@@ -307,8 +307,7 @@ function broadcastManifest(now = false) {
     const data = buildRemoteManifest(show, thumbnails);
     const sig = manifestSig(data);
     if (now || sig !== lastManifestSig) { lastManifestSig = sig; bridge?.sendJson?.({ type: 'manifest', data }); }
-    const cp = document.getElementById('system-control');
-    if (controlPanel && cp && !cp.hidden && !cp.closest('#system-pane')?.hidden) controlPanel.refresh();   // structural-gated → cheap
+    // (The companion surface lives in its own window now; nothing in-editor to refresh.)
   };
   if (now) { manifestTimer && clearTimeout(manifestTimer); manifestTimer = null; run(); return; }
   if (manifestTimer) return;
@@ -379,8 +378,14 @@ const preview = previewCanvas ? createPreview(previewCanvas, { svg: document.get
 const panel = createFixturePanel({
   getShow: () => show,
   setShow: (next) => rebuild(next),
-  // A device/model row was clicked or edited → refresh the left inspector.
-  onSelect: () => updateInspector(),
+  // A device/model row was clicked or edited → point the Fixture editor group at the
+  // right kind (a device vs. an Inventory model) and refresh it.
+  onSelect: () => {
+    const k = panel.lastSel?.();
+    if (k === 'devtype' || k === 'type') outputTab = 'library';
+    else if (k === 'device') outputTab = 'fixtures';
+    updateInspector();
+  },
   // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
   // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
   getConnected: () => bridge?.connected?.() ?? false,
@@ -417,9 +422,9 @@ const layerPanel = createLayerPanel({
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
   thumbnails,
-  onClipSelect: () => { setSection('design'); setInspectorTab('clip'); }, // jump to Design › Clip to tweak it
-  onLayerSelect: () => { setSection('design'); setInspectorTab('layer'); }, // jump to Design › Layer
-  onCompositionSelect: () => { setSection('design'); setInspectorTab('composition'); }, // jump to Design › Composition
+  onClipSelect: () => setInspectorTab('clip'), // switch the left column to the Clip tab
+  onLayerSelect: () => setInspectorTab('layer'), // switch to the Layer tab
+  onCompositionSelect: () => setInspectorTab('composition'), // switch to the Composition tab
   getISFExamples: () => isfExamples,
   onAddISF: (file) => importISFExample(file),
   mounts: {
@@ -525,7 +530,7 @@ function applyComposition(comp) {
 //                 drag fixtures to position them.
 //   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
-compSettings?.append(compositionPanel.el);     // canvas-resolution panel atop the inspector
+compSettings?.append(compositionPanel.el);     // Title/BPM/canvas-size panel atop the Composition tab
 // Fixtures tab = the design editor + Kagora import (placement list is the
 // output-list above). Devices tab = the device editor.
 const devicesDesignEl = document.getElementById('devices-design');
@@ -610,11 +615,11 @@ function selectFixture(fxId, ev, opts = {}) {
     // fixture keeps the group so it can be dragged together.)
     selectedFixtureIds = new Set([fxId]);
   }
-  // Picking a single fixture (not a shift multi-select / empty click) jumps to Output
-  // › Fixtures, where its editor shows in the #side-2 rail (the rail is Output-only).
+  // Picking a single fixture (not a shift multi-select / empty click) points the
+  // right column at the Fixtures patch; its editor shows in the Fixture group.
   if (fxId != null && !(ev && ev.shiftKey)) {
-    setSection('output');
-    setOutputTab('fixtures');
+    outputTab = 'fixtures';
+    focusGroup('grp-fxedit');
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
     if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
     panel.selectFixture?.(fxId);
@@ -666,15 +671,13 @@ if (previewCanvas) {
 
 // --- Output mapping panel: add / select / position fixtures ------------------
 const outputListEl = document.getElementById('output-list');
-// Editor dock at the BOTTOM of the Output pane: a bar (title + minimise) and a body
-// that holds the selected fixture/device editor. Collapsible.
-// Second sidebar (#side-2): the selected fixture/device/model editor rail.
-const side2El = document.getElementById('side-2');
+// The Fixture editor group (right column): #fxinsp-body holds the selected
+// fixture/device/model editor; updateInspector() (re)mounts it on selection.
 const fxBodyEl = document.getElementById('fxinsp-body');
-let outputTab = 'fixtures';   // Output sub-tab: fixtures (merged patch) | library
+let outputTab = 'fixtures';   // which the Fixture editor reflects: 'fixtures' (fixture/device) | 'library' (Inventory model)
 let selectedDeviceId = null;  // a device picked for editing in the left sidebar (merged Fixtures tab)
 let collapsedDevices = new Set();   // controller groups collapsed in the Devices list (empty = all open)
-let insetRaf = 0;             // rAF handle for deferred canvas-inset measurement (see updateStageInsets)
+let insetRaf = 0;             // rAF handle for the deferred camera re-clamp after a layout change (see updateStageInsets)
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
 let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
@@ -694,20 +697,20 @@ const colorBtn = document.getElementById('color-btn');
 function setControllerTint(on) {
   controllerTint = !!on;
   try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
-  if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'colour'; }
+  if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
   preview?.setColorTint?.(controllerTint);
   renderOutput(); redrawOverlay();
 }
 colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
 // Initial sync (preview exists; the startup renderOutput reads controllerTint).
-if (colorBtn) { colorBtn.classList.toggle('on', controllerTint); colorBtn.textContent = 'colour'; }
+if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
 preview?.setColorTint?.(controllerTint);
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');
 function setSnapEnabled(v) {
   snapEnabled = !!v;
-  if (snapBtn) { snapBtn.classList.toggle('on', snapEnabled); snapBtn.textContent = 'snap'; }
+  if (snapBtn) snapBtn.classList.toggle('on', snapEnabled);
   redrawOverlay();
 }
 // Snap prefs persist (corner toggle on/off + the grid/distance config in Settings).
@@ -720,7 +723,7 @@ setSnapEnabled(snapEnabled);   // reflect the loaded state on the corner button
 const gridBtn = document.getElementById('grid-btn');
 function setShowGrid(v) {
   showGrid = !!v;
-  if (gridBtn) { gridBtn.classList.toggle('on', showGrid); gridBtn.textContent = 'grid'; }
+  if (gridBtn) gridBtn.classList.toggle('on', showGrid);
   try { localStorage.setItem('lz.grid', showGrid ? '1' : '0'); } catch { /* private */ }
   redrawOverlay();
 }
@@ -869,24 +872,27 @@ function positionEditor(sel) {
               : `auto — physical scale (10 mm strip ≈ ${eff}px on this fixture); type a value to override`;
             return fld;
           })(),
-          // Rotation field with its ±90° steppers inline on the same row.
+          // Rotation field with its ±90° steppers (icons) inline on the same row.
           (() => {
             const fld = txField('Rotation°', tf.rotation, (v) => setT({ rotation: v }));
-            fld.append(
-              oel('button', { className: 'dir-btn rot-step', textContent: '−90°', title: 'rotate −90°',
-                onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) }),
-              oel('button', { className: 'dir-btn rot-step', textContent: '+90°', title: 'rotate +90°',
-                onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) }),
-            );
+            const ccw = oel('button', { className: 'dir-btn rot-step', title: 'rotate −90°', onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) });
+            ccw.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-rot-ccw"/></svg>';
+            const cw = oel('button', { className: 'dir-btn rot-step', title: 'rotate +90°', onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) });
+            cw.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-rot-cw"/></svg>';
+            fld.append(ccw, cw);
             return fld;
           })(),
         ]),
         // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
         // (the canvas arrow points at pixel 0).
         oel('div', { className: 'dir-btns out-transform' }, [
-          oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''), textContent: '⇄ Reverse direction',
-            title: 'reverse the LED strip direction (which end is pixel 0)',
-            onclick: () => apply(flipFixture(show, sel.id)) }),
+          (() => {
+            const b = oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''),
+              title: 'reverse the LED strip direction (which end is pixel 0)',
+              onclick: () => apply(flipFixture(show, sel.id)) });
+            b.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-reverse"/></svg> Reverse direction';
+            return b;
+          })(),
         ]),
       );
     }),
@@ -1411,31 +1417,38 @@ function confirmDeleteFixtures(ids) {
   return confirmDelete(msg);
 }
 
-// The #side-2 rail: shows the selected item's properties — a fixture's position
-// (Fixtures), a device's settings, or a model (Inventory). Output-mode only; hides
-// entirely when nothing's selected or when not in the Output section.
+// The Fixture editor group: shows the selected item's properties — a fixture's
+// position/DMX, a device's settings, or (when working in Inventory) the selected
+// model. Always docked in the right column; shows a hint when nothing's selected.
 function updateInspector() {
-  if (!side2El) return;
-  let detail = null;
-  // The #side-2 rail is an OUTPUT-mode feature — it only appears while patching, not
-  // while compositing in Design/System.
-  const inOutput = outputPaneEl && !outputPaneEl.hidden;
-  if (inOutput) {
-    // Inventory MODEL editor when the Inventory tab is up; otherwise the selected
-    // fixture(s)/device editor.
-    if (outputTab === 'library') {
-      detail = panel.libraryDetailEl?.();
-    } else if (selectedFixtureIds.size === 1) {
-      const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
-      if (f) detail = isDmxFixture(f) ? dmxEditor(f) : positionEditor(f);
-    } else if (selectedFixtureIds.size > 1) {
-      // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
-      const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
-      if (ids.length > 1) detail = multiPositionEditor(ids);
-    } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
-      detail = panel.deviceDetailEl?.();
-    }
+  if (!fxBodyEl) return;
+  let detail = null, title = 'Device';
+  const fxName = (f) => (show.fixtureTypes || []).find((t) => t.id === f?.typeId)?.name || 'Fixture';
+  // Inventory MODEL editor when the last interaction was in Inventory; otherwise the
+  // selected fixture(s)/device editor.
+  if (outputTab === 'library') {
+    detail = panel.libraryDetailEl?.();
+    title = panel.librarySelection?.()?.name || 'Inventory';
+  } else if (selectedFixtureIds.size === 1) {
+    const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
+    if (f) { detail = isDmxFixture(f) ? dmxEditor(f) : positionEditor(f); title = fxName(f); }
+  } else if (selectedFixtureIds.size > 1) {
+    // Several fixtures selected → the multi editor (batch X/Y/W/H/rotation/reverse).
+    const ids = [...selectedFixtureIds].filter((id) => (show.fixtures || []).some((f) => f.id === id));
+    if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures`; }
+  } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
+    detail = panel.deviceDetailEl?.();
+    title = (show.devices || []).find((d) => d.id === selectedDeviceId)?.name || 'Device';
   }
+  // Never leave the Device group empty: with nothing selected, fall back to the first
+  // fixture's editor (else the first device) so there's always something to edit.
+  if (!detail && outputTab !== 'library') {
+    const f0 = (show.fixtures || [])[0];
+    if (f0) { detail = isDmxFixture(f0) ? dmxEditor(f0) : positionEditor(f0); title = fxName(f0); }
+    else { const d0 = (show.devices || [])[0]; if (d0) { panel.setDevice?.(d0.id); detail = panel.deviceDetailEl?.(); title = d0.name || 'Device'; } }
+  }
+  const titleEl = document.getElementById('fxedit-title');
+  if (titleEl) titleEl.textContent = title;
   // Preserve focus + caret across the rebuild: a spinner click / keystroke commits →
   // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
   // a re-click). Re-focus the same field's input by its label after re-appending.
@@ -1446,12 +1459,8 @@ function updateInspector() {
     try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
   }
   fxBodyEl.textContent = '';
-  if (detail) {
-    fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
-    side2El.hidden = false;
-  } else {
-    side2El.hidden = true;
-  }
+  if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
+  else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
   if (focusKey) {
     const fld = [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
     const inp = fld?.querySelector('input');
@@ -1469,9 +1478,10 @@ function renderOutput() {
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
   if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
 
-  if (outputTab === 'library') return;   // Library uses the device + fixture editors, not the placement list
+  // The Fixtures group always shows the placement list (the Inventory model editor
+  // is a separate group), so there's no longer a library-tab early-out.
 
-  // 'fixtures' sub-tab: selectable rows + inline position editor under the row.
+  // selectable rows + inline position editor under the row.
   // (No early-out for an empty rig — the device containers still render below so
   // they're visible + droppable even before any fixture is placed.)
   // A header/row becomes a drop target: dropping the dragged fixture(s) assigns
@@ -1585,10 +1595,20 @@ function renderOutput() {
 
 const renderOutputList = renderOutput; // back-compat alias
 
-// This is an app surface, not a document — suppress the OS right-click menu
-// everywhere EXCEPT editable text fields (where copy/paste is wanted). Sliders
-// keep their own right-click-to-reset (that handler still runs).
+// This is an app surface, not a document — by default suppress the OS right-click menu
+// everywhere EXCEPT editable text fields (where copy/paste is wanted), and sliders keep
+// their right-click-to-reset. A Settings toggle ("native right-click") disables all of
+// that so a normal browser context menu is available — modules read body.native-ctx.
+let nativeCtxMenu = (() => { try { return localStorage.getItem('lz.ctxmenu') === '1'; } catch { return false; } })();
+const nativeCtxOn = () => nativeCtxMenu;
+const setNativeCtxMenu = (on) => {
+  nativeCtxMenu = !!on;
+  document.body.classList.toggle('native-ctx', nativeCtxMenu);
+  try { localStorage.setItem('lz.ctxmenu', nativeCtxMenu ? '1' : '0'); } catch { /* private */ }
+};
+setNativeCtxMenu(nativeCtxMenu);   // reflect on boot
 document.addEventListener('contextmenu', (e) => {
+  if (nativeCtxMenu) return;   // user opted into the browser's native menu everywhere
   if (e.target.closest?.('input:not([type=range]), textarea, [contenteditable]')) return;
   e.preventDefault();
 });
@@ -1598,21 +1618,20 @@ document.addEventListener('contextmenu', (e) => {
 //     once. The fixture overlay (draggable rectangles on the canvas) is a
 //     separate toggle, decoupled from any tab. ---
 let overlayVisible = false;   // are the fixture rectangles shown over the composite?
-// Section-switch elements live here (not at their wiring below) because the
-// live-view init a few lines down runs updateInspector(), which reads them —
-// declaring them later would put that first call in the TDZ.
-const sectionSwitchEl = document.getElementById('section-switch');
-const designPaneEl = document.getElementById('design-pane');
-const outputPaneEl = document.getElementById('output-pane');
 const overlayToggleBtn = document.getElementById('overlay-toggle');
 const ovlSvg = document.getElementById('ovl');
+// The "fixtures" toggle IS the fixture-editing mode now (no Output section): showing
+// the overlay puts the dock in body.output-mode so the canvas catches fixture clicks
+// and the deck passes empty cells through.
 function setOverlay(v) {
   overlayVisible = !!v;
+  document.body.classList.toggle('output-mode', overlayVisible);
   if (previewCanvas) previewCanvas.style.display = overlayVisible ? '' : 'none';
   if (ovlSvg) ovlSvg.style.display = overlayVisible ? '' : 'none';   // hide the SVG chrome too
   dragHandle?.setEnabled(overlayVisible);
   overlayToggleBtn?.classList.toggle('on', overlayVisible);
-  if (overlayToggleBtn) overlayToggleBtn.textContent = 'fixtures';
+  // Eye open when fixtures are shown, eye-off when hidden.
+  overlayToggleBtn?.querySelector('use')?.setAttribute('href', overlayVisible ? '#ic-eye' : '#ic-eye-off');
   if (snapBtn) snapBtn.disabled = !overlayVisible;   // snap only matters while dragging fixtures (overlay on)
   if (overlayVisible) renderOutput();
   redrawOverlay();
@@ -1641,7 +1660,7 @@ function setWallView(v) {
   document.body.classList.toggle('wall-view', wallView);
   syncWallDim();
   preview?.setLiveView?.(wallView);   // all fixture cells full strength in live
-  if (wallBtn) { wallBtn.classList.toggle('on', wallView); wallBtn.textContent = 'live'; }
+  if (wallBtn) wallBtn.classList.toggle('on', wallView);
   redrawOverlay();
 }
 wallBtn?.addEventListener('click', () => setWallView(!wallView));
@@ -1701,7 +1720,7 @@ document.addEventListener('keydown', (e) => {
 // top-bar "hide UI" button (a "show UI" pill appears while hidden, so there's
 // always a way back). Tab is intentionally NOT bound (too easy to hit).
 let resetView = null;   // set by the zoom IIFE; used by the top menu's View › Reset zoom
-let reflowView = null;  // set by the zoom IIFE; re-clamps the view when the viewport (insets) changes
+let reflowView = null;  // set by the zoom IIFE; re-clamps the view when the canvas cell resizes
 // One button in the corner toggles the whole UI; it stays put (the cluster keeps
 // this button visible while hidden) and just relabels hide ⇄ show.
 const toggleGui = () => {
@@ -1720,16 +1739,25 @@ document.addEventListener('keydown', (e) => {
 //     tab; the timer-reset button was removed.) ---
 document.getElementById('g-hide')?.addEventListener('click', toggleGui);
 
-// Layout VIEWS — swap the canvas/inspector balance (MadMapper-style). Canvas = hide
-// the inspector so the output fills the screen; Split = the default working layout;
-// Editor = a roomier inspector with the canvas shrunk. Persisted; canvas re-fits.
+// Surface a dock group: scroll it into view + a brief accent flash on it (used when a
+// clip/layer/fixture is selected so the relevant group draws the eye). Replaces the
+// old "jump to that tab" behaviour now that every group is always visible.
+function focusGroup(id) {
+  const g = document.getElementById(id); if (!g) return;
+  g.scrollIntoView({ block: 'nearest' });
+  g.classList.add('grp-flash');
+  setTimeout(() => g.classList.remove('grp-flash'), 500);
+}
+
+// Layout VIEWS — quick presets for the side columns. Canvas = hide both side columns
+// (output fills the screen); Split = the default; Editor = roomier side columns.
 (function setupViews() {
-  const KEY = 'lz.view'; const VIEWS = ['canvas', 'split', 'edit'];
+  const KEY = 'lz.view'; const VIEWS = ['canvas', 'split', 'edit', 'overlay'];
   const seg = document.getElementById('view-seg');
   if (!seg) return;
   let cur = 'split'; try { const v = localStorage.getItem(KEY); if (VIEWS.includes(v)) cur = v; } catch { /* private */ }
   const apply = () => {
-    document.body.classList.remove('view-canvas', 'view-split', 'view-edit');
+    document.body.classList.remove(...VIEWS.map((v) => 'view-' + v));
     document.body.classList.add('view-' + cur);
     for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === cur);
     updateStageInsets();
@@ -1741,29 +1769,52 @@ document.getElementById('g-hide')?.addEventListener('click', toggleGui);
   apply();
 })();
 
-// Drag-resizable inspector — grab the inspector's left edge to set its width (Split
-// view). Width persists; the canvas re-fits live. (Canvas view hides it; Editor is a
-// fixed preset.)
-(function setupSideResize() {
-  const side = document.getElementById('side'); if (!side) return;
-  const KEY = 'lz.side-w', MIN = 240, MAX = 680;
-  try { const w = parseInt(localStorage.getItem(KEY), 10); if (w >= MIN && w <= MAX) document.documentElement.style.setProperty('--side-w', w + 'px'); } catch { /* private */ }
-  const handle = document.createElement('div'); handle.className = 'side-resize'; handle.title = 'drag to resize the inspector';
-  side.appendChild(handle);
-  let dragging = false;
-  handle.addEventListener('pointerdown', (e) => { dragging = true; handle.setPointerCapture(e.pointerId); document.body.classList.add('resizing-col'); e.preventDefault(); });
-  handle.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const w = Math.max(MIN, Math.min(MAX, Math.round(window.innerWidth - e.clientX)));
-    document.documentElement.style.setProperty('--side-w', w + 'px'); updateStageInsets();
-  });
+// Per-panel show/hide toggles — hide the left column, the right column, or the
+// timeline; the centre canvas reclaims the freed space. State persists; `.on` = shown.
+(function setupPanelToggles() {
+  for (const [btnId, cls] of [['panel-left', 'hide-left'], ['panel-right', 'hide-right'], ['panel-bottom', 'hide-timeline']]) {
+    const btn = document.getElementById(btnId); if (!btn) continue;
+    const key = 'lz.' + cls;
+    let hidden = false; try { hidden = localStorage.getItem(key) === '1'; } catch { /* private */ }
+    const apply = () => { document.body.classList.toggle(cls, hidden); btn.classList.toggle('on', !hidden); updateStageInsets(); };
+    btn.addEventListener('click', () => { hidden = !hidden; try { localStorage.setItem(key, hidden ? '1' : '0'); } catch { /* private */ } apply(); });
+    apply();
+  }
+})();
+
+// The one resize affordance: a "curtain" on the Timeline's top edge to trade height
+// with the Canvas above it. Persisted; the canvas re-fits live. (Everything else
+// relies on default sizes + the view presets.)
+(function setupTimelineCurtain() {
+  const tl = document.getElementById('timeline-island'); if (!tl) return;
+  const KEY = 'lz.h.timeline', MIN = 70;
+  // The timeline never grows TALLER than its layers: the cap = the deck's natural
+  // content height (so there's never empty space below the last layer).
+  const contentMax = () => { const dl = tl.querySelector('.deck-layers'); return dl ? Math.ceil(dl.scrollHeight) + 4 : 700; };
+  const setH = (h) => { tl.style.height = Math.max(MIN, Math.min(Math.round(h), contentMax())) + 'px'; };
+  // Initial: stored height (re-clamped), else fit exactly to the layers.
+  requestAnimationFrame(() => { let s = null; try { s = parseInt(localStorage.getItem(KEY), 10) || null; } catch { /* private */ } setH(s || contentMax()); });
+  // Re-clamp whenever the deck re-renders (layers added/removed) so it stays ≤ layers.
+  const deck = document.getElementById('deckbar');
+  if (deck && 'MutationObserver' in window) new MutationObserver(() => setH(parseInt(tl.style.height, 10) || contentMax())).observe(deck, { childList: true, subtree: true });
+  const handle = document.createElement('div'); handle.className = 'curtain'; handle.title = 'drag to resize the timeline';
+  tl.appendChild(handle);
+  let dragging = false, startY = 0, startH = 0;
+  handle.addEventListener('pointerdown', (e) => { dragging = true; handle.setPointerCapture(e.pointerId); document.body.classList.add('resizing-row'); startY = e.clientY; startH = tl.getBoundingClientRect().height; e.preventDefault(); });
+  handle.addEventListener('pointermove', (e) => { if (!dragging) return; setH(startH + (startY - e.clientY)); updateStageInsets(); });   // drag up = taller (capped at the layers' height)
   const end = (e) => {
-    if (!dragging) return; dragging = false; document.body.classList.remove('resizing-col');
-    try { handle.releasePointerCapture(e.pointerId); } catch { /* already released */ }
-    const w = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--side-w'), 10);
-    if (w) { try { localStorage.setItem(KEY, String(w)); } catch { /* private */ } }
+    if (!dragging) return; dragging = false; document.body.classList.remove('resizing-row');
+    try { handle.releasePointerCapture(e.pointerId); } catch { /* released */ }
+    try { localStorage.setItem(KEY, String(Math.round(tl.getBoundingClientRect().height))); } catch { /* private */ }
   };
   handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
+})();
+
+// Patch island tabs (Devices | Inventory) → setOutputTab owns the tab UI + bodies.
+(function setupPatchTabs() {
+  const tabs = document.getElementById('patch-tabs'); if (!tabs) return;
+  tabs.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setOutputTab(b.dataset.ptab === 'inventory' ? 'library' : 'fixtures'); });
+  setOutputTab(outputTab);   // restore the persisted tab on load
 })();
 
 // Delete key removes the current selection: the active clip on Composition, or
@@ -1772,18 +1823,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Delete' && e.key !== 'Backspace') return;
   const t = e.target;
   if (typingIn(t)) return;
-  // On the Inventory (library) tab, ⌫ deletes the selected model / definition.
-  if (!outputPaneEl?.hidden && outputTab === 'library') {
-    if (panel.deleteSelected?.()) { renderOutput(); redrawOverlay(); }
-    e.preventDefault();
-    return;
-  }
-  // Merged Fixtures tab: a selected DEVICE (no fixture selected) → delete it
-  // (deleteSelected confirms + unroutes its fixtures).
-  if (!outputPaneEl?.hidden && !selectedFixtureIds.size && selectedDeviceId) {
-    e.preventDefault();
-    if (panel.deleteSelected?.()) { selectedDeviceId = null; renderOutput(); redrawOverlay(); }
-    return;
+  // No fixture selected: an Inventory model or a device may be the delete target —
+  // let the fixtures panel decide (it checks its own last-clicked selection and
+  // returns false if nothing deletable, so we fall through to the composition).
+  if (!selectedFixtureIds.size && (outputTab === 'library' || selectedDeviceId)) {
+    if (panel.deleteSelected?.()) { selectedDeviceId = null; renderOutput(); redrawOverlay(); e.preventDefault(); return; }
   }
   // A SELECTED FIXTURE is the signal to delete fixtures (regardless of the overlay
   // toggle — gating on it caused a silent no-op / accidental clip-delete). With no
@@ -1807,7 +1851,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'd' || e.altKey || e.shiftKey) return;
   if (typingIn(e.target)) return;
-  if (!outputPaneEl?.hidden && outputTab === 'library') {
+  if (outputTab === 'library') {
     e.preventDefault();
     if (panel.duplicateSelected?.()) { renderOutput(); redrawOverlay(); }
   }
@@ -1817,7 +1861,7 @@ document.addEventListener('keydown', (e) => {
 // chain / delete). Only fires in Output, and never while typing in a field.
 document.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'a') return;
-  if (typingIn(e.target) || outputPaneEl?.hidden) return;
+  if (typingIn(e.target) || !overlayVisible) return;   // only while editing fixtures
   e.preventDefault();
   selectedFixtureIds = new Set((show.fixtures || []).map((f) => f.id));
   renderOutput(); redrawOverlay();
@@ -1927,8 +1971,9 @@ document.addEventListener('keydown', (e) => {
 // because preview.js maps pointer coords via getBoundingClientRect(), dragging
 // and hit-testing stay correct at any zoom with no extra math.
 //
-// The camera references the VIEWPORT (#stagewrap — the inset-aware region between
-// the sidebars), NOT the whole window, so the clamp agrees with what you see. The
+// The camera references the VIEWPORT (#stagewrap — the bounded flex cell between
+// the deck and the inspector), NOT the whole window, so the clamp agrees with what
+// you see. The
 // transformOrigin is the layout top-left (0 0), so the untransformed top-left maps
 // to (bx+panX, by+panY) and the scaled box is W·z × H·z. ---
 (() => {
@@ -1942,7 +1987,7 @@ document.addEventListener('keydown', (e) => {
   const clampNum = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   // The untransformed layout box of the canvas, in screen coords: offsetWidth/Height
   // ignore the transform (true layout size), and #stageinner is flex-centred in the
-  // (inset-aware) #stagewrap, so its top-left is the wrap centre minus half the box.
+  // bounded #stagewrap cell, so its top-left is the wrap centre minus half the box.
   const frame = () => {
     const W = inner.offsetWidth, H = inner.offsetHeight;
     const wr = wrap.getBoundingClientRect();
@@ -2044,103 +2089,71 @@ document.addEventListener('keydown', (e) => {
   window.addEventListener('pointercancel', endPan);
 })();
 
-// Inspector sub-tabs (Clip | Composition) — toggle which inspector pane shows.
-const inspTabsEl = document.getElementById('insp-tabs');
-const inspPanes = {
-  clip: document.getElementById('insp-clip'),
-  layer: document.getElementById('insp-layer'),
-  composition: document.getElementById('insp-composition'),
-};
+// Left-column tabs: Composition | Layer | Clip | Settings (one pane shown at a time).
+// The Settings tab builds its pane on activation (the audio device list needs a fresh
+// enumerate each time).
 function setInspectorTab(which) {
-  try { localStorage.setItem('lz.itab', which); } catch { /* private mode */ }   // restore on reload
-  activateTabs(inspTabsEl, 'itab', which);
-  for (const [k, pane] of Object.entries(inspPanes)) if (pane) pane.hidden = k !== which;
+  const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip', settings: 'system-settings' };
+  if (!panes[which]) which = 'composition';
+  for (const [k, id] of Object.entries(panes)) { const el = document.getElementById(id); if (el) el.hidden = k !== which; }
+  const tabs = document.getElementById('props-tabs');
+  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.itab === which);
+  if (which === 'settings') buildSettings(systemSettingsEl);
+  try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
 }
-inspTabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.subtab');
-  if (b) setInspectorTab(b.dataset.itab);
-});
+document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
 
-// IO column tabs — a single flat row: Fixtures · Chains · Library.
-//   Fixtures = PLACE them: snap tools + canvas placement list (output-list).
-//   Chains   = chains list (output-list).
-//   Library  = your inventory: Devices (controllers) + Fixtures (definitions).
-const outputTabsEl = document.getElementById('io-tabs');
+// Patch tabs: 'fixtures' (Devices = placement list + controllers) vs 'library'
+// (Inventory = model catalog). Toggles the tab bodies + active tab, and drives which
+// editor the Device group shows.
 function setOutputTab(which) {
-  outputTab = which;
-  try { localStorage.setItem('lz.otab', which); } catch { /* private mode */ }   // restore on reload
-  activateTabs(outputTabsEl, 'otab', which);
-  // Three tabs: Fixtures = placement list · Devices = instances · Library = models.
-  if (outputListEl) outputListEl.hidden = which !== 'fixtures';
-  if (devicesDesignEl) devicesDesignEl.hidden = which !== 'devices';
-  if (libraryDesignEl) libraryDesignEl.hidden = which !== 'library';
+  outputTab = which === 'library' ? 'library' : 'fixtures';
+  try { localStorage.setItem('lz.otab', outputTab); } catch { /* private */ }
+  const inv = outputTab === 'library';
+  const fb = document.getElementById('patch-fixtures'); if (fb) fb.hidden = inv;
+  const ib = document.getElementById('patch-inventory'); if (ib) ib.hidden = !inv;
+  const tabs = document.getElementById('patch-tabs');
+  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', (b.dataset.ptab === 'inventory') === inv);
   renderOutput();
-  updateStageInsets();
 }
-outputTabsEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.subtab');
-  if (b) setOutputTab(b.dataset.otab);
-});
 
-// --- Top-level section switch: Design (Clip/Layer/Composition + library) vs
-//     Output (Fixtures/Chains/Devices). Only one shows at a time.
-//     (Element lookups are hoisted to the overlay section — see note there.) ---
-const systemPaneEl = document.getElementById('system-pane');
+// Compat shim: there are no top-level sections anymore (everything is docked).
+function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }
+
 const systemControlEl = document.getElementById('system-control');
 const systemSettingsEl = document.getElementById('system-settings');
-// The Control surface URL the QR/link point at. Prefer the daemon's LAN IP (a
-// phone can't use localhost); fall back to this page's origin (works if the editor
-// was itself opened via the LAN IP).
+// The Control surface URL. Prefer the daemon's LAN IP (a phone can't use localhost);
+// fall back to this page's origin.
 let companionUrl = `${location.origin}/control/`;
 fetch('/api/info').then((r) => r.json()).then((info) => {
-  if (info?.lan) { companionUrl = `http://${info.lan}:${info.port}/control/`; if (!systemPaneEl?.hidden) controlPanel.rebuild(); }
+  if (info?.lan) companionUrl = `http://${info.lan}:${info.port}/control/`;
 }).catch(() => { /* no daemon — keep the origin-based URL */ });
 
 controlPanel = createControlPanel({
   mount: systemControlEl,
   getShow: () => show,
+  showQr: false,   // the editor's Control overlay skips the QR (it lives on the phone surface)
   // Apply a companion command locally (same canonical addresses the phone uses),
   // then reflect it in the panel + on the canvas.
   send: (address, value) => { handleExt(address, value); controlPanel.refresh(); redrawOverlay(); },
   status: () => ({ connected: !!bridge?.connected?.(), url: companionUrl }),
 });
 
-function setSection(which) {
-  try { localStorage.setItem('lz.section', which); } catch { /* private mode */ }   // restore on reload
-  activateTabs(sectionSwitchEl, 'section', which, 'section-active');
-  if (designPaneEl) designPaneEl.hidden = which !== 'design';
-  if (outputPaneEl) outputPaneEl.hidden = which !== 'output';
-  if (systemPaneEl) systemPaneEl.hidden = which !== 'system';
-  // The clip deck (layers) stays visible in EVERY section — including Output — so
-  // you keep the composition in view while patching fixtures. It floats over the
-  // canvas's top-left (it's pointer-transparent except the deck itself), same as in
-  // Design. body.output-mode lets the layout dock the editor at the right.
-  document.body.classList.toggle('output-mode', which === 'output');
-  const leftEl = document.getElementById('left');
-  if (leftEl) leftEl.hidden = false;
-  updateInspector();   // recompute the #side-2 rail (drops the Inventory editor when leaving Output)
-  if (which === 'system' && systemTab === 'control') controlPanel.rebuild();
-}
-sectionSwitchEl?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.section-tab');
-  if (b) setSection(b.dataset.section);
-});
+// Mapping opens its breakout window; the Control (remote) icon jumps straight to the
+// companion control surface in its own window — enabled only while the daemon is up
+// (otherwise the button is disabled). No in-app popup.
+function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
+document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
+const remoteBtn = document.getElementById('menu-remote');
+remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { window.open(companionUrl, 'lz-control'); } catch { /* blocked */ } } });
 
-// System subtab (declared BEFORE the initial setSection() below, which reads it).
-let systemTab = (() => { try { return localStorage.getItem('lz.systab'); } catch { return null; } })();
-systemTab = systemTab === 'control' ? 'control' : 'settings';   // default to Settings
-
-// Initial layout: restore the last section (Design/Output/System) across
-// reloads, defaulting to Design; IO column on its Fixtures tab; overlay SHOWN by
-// default (you see your fixture layout on load; the canvas toggle hides it).
-const savedSectionRaw = (() => { try { return localStorage.getItem('lz.section'); } catch { return null; } })();
-const savedSection = savedSectionRaw === 'control' ? 'system' : savedSectionRaw;   // migrate old name
-setSection(['design', 'output', 'system'].includes(savedSection) ? savedSection : 'design');
+// Restore the last-used right-column focus (fixtures/inventory) for the editor logic.
+outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { return null; } })() === 'library') ? 'library' : 'fixtures';
 
 // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
 const ACCENT_KEY = 'lz.accent';
 const ACCENT_DEFAULT = '#e8a35c';
-const ACCENT_PRESETS = ['#e8a35c', '#5cb8e8', '#6ee07d', '#5ce8c8', '#b98cff', '#e85c9e', '#e8d65c', '#ff6b6b'];
+const ACCENT_PRESETS = ['#eceef2', '#e8a35c', '#5cb8e8', '#6ee07d', '#5ce8c8', '#b98cff', '#e85c9e', '#e8d65c', '#ff6b6b'];   // first = near-white / monochrome
 const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
@@ -2154,17 +2167,18 @@ function applyAccent(hex) {
   s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
   s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
   s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
-  // Surface ramp = a neutral dark gray with a touch of the accent mixed in.
-  const bg = accMix(hex, '#0c0c0d', 0.07);
+  // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent (toned down +
+  // darker anchors so the chrome reads near-black, not warm-tinted).
+  const bg = accMix(hex, '#050506', 0.03);
   s.setProperty('--bg', bg);
-  s.setProperty('--field-bg', accMix(hex, '#101012', 0.07));
-  const panel = accMix(hex, '#1a1a1b', 0.09);
+  s.setProperty('--field-bg', accMix(hex, '#0a0a0b', 0.03));
+  const panel = accMix(hex, '#0e0e10', 0.04);
   s.setProperty('--panel', panel);
   s.setProperty('--panel-solid', panel);
-  s.setProperty('--panel-2', accMix(hex, '#242427', 0.10));
-  s.setProperty('--hover', accMix(hex, '#313135', 0.11));
-  s.setProperty('--line', accMix(hex, '#323236', 0.11));
-  s.setProperty('--line-2', accMix(hex, '#46464d', 0.11));
+  s.setProperty('--panel-2', accMix(hex, '#151517', 0.05));
+  s.setProperty('--hover', accMix(hex, '#242427', 0.06));
+  s.setProperty('--line', accMix(hex, '#262629', 0.06));
+  s.setProperty('--line-2', accMix(hex, '#3a3a42', 0.07));
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
@@ -2176,7 +2190,23 @@ applyAccent(savedAccent());   // apply the saved accent on boot
 // long hover. Toggle in System › Settings restores them. ---
 const TIPS_KEY = 'lz.tips';
 const tipsOn = () => { try { return localStorage.getItem(TIPS_KEY) === '1'; } catch { return false; } };
-const stashTip = (el) => { const t = el.getAttribute('title'); if (t != null) { el.dataset.tip = t; el.removeAttribute('title'); } };
+// Stash the title (so no native tooltip shows) BUT keep it as an aria-label so
+// icon-ONLY interactive controls still have an accessible name (a11y) when tooltips
+// are off. Only icon-only interactive elements get the label — adding aria-label to
+// plain spans (prohibited) or to controls that already show their text (name
+// mismatch) fails Lighthouse, so we skip those.
+// Tooltips read as normal sentence case (capitalise the first letter; acronyms like
+// MIDI/OSC are already upper-case mid-string and are left alone).
+const sentenceCase = (s) => (s && /^[a-z]/.test(s) ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+const stashTip = (el) => {
+  const t = sentenceCase(el.getAttribute('title'));
+  if (t == null) return;
+  el.dataset.tip = t;
+  const interactive = el.matches('button, a[href], input, select, textarea, [role], [tabindex]');
+  const iconOnly = !el.textContent.trim();
+  if (interactive && iconOnly && !el.getAttribute('aria-label')) el.setAttribute('aria-label', t);
+  el.removeAttribute('title');
+};
 const stripTips = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) stashTip(root); root.querySelectorAll?.('[title]').forEach(stashTip); };
 const restoreTips = (root) => root.querySelectorAll?.('[data-tip]').forEach((el) => { el.setAttribute('title', el.dataset.tip); delete el.dataset.tip; });
 const tipObserver = new MutationObserver((muts) => {
@@ -2192,27 +2222,12 @@ function applyTips() {
 function setTips(on) { try { localStorage.setItem(TIPS_KEY, on ? '1' : '0'); } catch { /* private */ } applyTips(); }
 applyTips();   // on boot — strip titles unless the user has opted in
 
-// --- System pane: Settings / Control / Mapping subtabs -----------------------
-const VALID_SYSTABS = ['settings', 'control'];
 // The mapping surface lives in its own window (a named target → one reused
 // window; the click is the user gesture that satisfies the popup blocker).
-function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
-document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
-function setSystemTab(which) {
-  systemTab = VALID_SYSTABS.includes(which) ? which : 'settings';
-  try { localStorage.setItem('lz.systab', systemTab); } catch { /* private */ }
-  activateTabs(document.getElementById('system-tabs'), 'systab', systemTab);
-  if (systemControlEl) systemControlEl.hidden = systemTab !== 'control';
-  if (systemSettingsEl) systemSettingsEl.hidden = systemTab !== 'settings';
-  if (systemTab === 'control' && !systemPaneEl?.hidden) controlPanel.rebuild();
-  if (systemTab === 'settings') buildSettings(systemSettingsEl);   // refresh device list / accent state
-}
-document.getElementById('system-tabs')?.addEventListener('click', (ev) => {
-  const b = ev.target.closest('.subtab');
-  if (b) setSystemTab(b.dataset.systab);
-});
+// (Mapping is now a tab of the Canvas island — embedded via iframe — so there's no
+//  separate-window opener anymore.)
 
-// Settings pane: accent colour + audio input (more preferences can join later).
+// Settings tab: accent colour + audio input (more preferences can join later).
 // Async because the audio device list needs enumerateDevices(); re-run whenever
 // the Settings subtab is opened so the device list (and any granted labels) refresh.
 async function buildSettings(mount) {
@@ -2262,31 +2277,19 @@ async function buildSettings(mount) {
   // (OSC / socket control lives in the Mapping window now — it shows the canonical
   // addresses, the socket JSON example, and the OSC :9000 endpoint there.)
 
-  // --- Startup sound: the riff greets you on the first visit; opt in to hear it
-  // on every reload. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'startup sound' }));
+  // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
+  const toggleRow = (label, get, set) => {
+    const cb = oel('input', { type: 'checkbox' }); cb.checked = !!get();
+    cb.addEventListener('change', () => set(cb.checked));
+    // Checkbox FIRST so the label has the full remaining width (no truncation).
+    return oel('label', { className: 'fx-field set-toggle' }, [cb, oel('span', { textContent: label })]);
+  };
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'preferences' }));
   const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
-  const riffBtn = oel('button', { className: 'fx-add' });
-  const paintRiff = () => { riffBtn.textContent = (riffAlways() ? '▣' : '▢') + ' play riff on every reload'; riffBtn.classList.toggle('on', riffAlways()); };
-  riffBtn.onclick = () => { try { localStorage.setItem('lz.riff.always', riffAlways() ? '0' : '1'); } catch { /* private */ } paintRiff(); };
-  paintRiff();
-  mount.append(riffBtn);
-
-  // --- Confirm before deleting fixtures / devices / clips / layers. Default ON. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'deleting' }));
-  const delBtn = oel('button', { className: 'fx-add' });
-  const paintDel = () => { delBtn.textContent = (confirmDeletesOn() ? '▣' : '▢') + ' confirm before deleting'; delBtn.classList.toggle('on', confirmDeletesOn()); };
-  delBtn.onclick = () => { setConfirmDeletes(!confirmDeletesOn()); paintDel(); };
-  paintDel();
-  mount.append(delBtn);
-
-  // --- Hover tooltips: the native title popups on long hover. Default OFF. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'tooltips' }));
-  const tipBtn = oel('button', { className: 'fx-add' });
-  const paintTip = () => { tipBtn.textContent = (tipsOn() ? '▣' : '▢') + ' show tooltips on hover'; tipBtn.classList.toggle('on', tipsOn()); };
-  tipBtn.onclick = () => { setTips(!tipsOn()); paintTip(); };
-  paintTip();
-  mount.append(tipBtn);
+  mount.append(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } }));
+  mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
+  mount.append(toggleRow('Show tooltips on hover', tipsOn, (v) => setTips(v)));
+  mount.append(toggleRow('Right-click shows the browser menu', nativeCtxOn, (v) => setNativeCtxMenu(v)));
 
   // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
@@ -2307,12 +2310,11 @@ async function buildSettings(mount) {
   mount.append(row);
   mark(cur);
 }
-setSystemTab(systemTab);
-// Restore the last-used subtabs across reloads (section + systemTab already persist).
-const savedOutputTab = (() => { try { return localStorage.getItem('lz.otab'); } catch { return null; } })();
-setOutputTab(['fixtures', 'library'].includes(savedOutputTab) ? savedOutputTab : 'fixtures');
-const savedInspTab = (() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })();
-setInspectorTab(['clip', 'layer', 'composition'].includes(savedInspTab) ? savedInspTab : 'clip');
+// Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
+setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');
+
+// Show the fixture overlay by default (you see your rig on load) — this also puts
+// the dock in fixture-editing (output) mode via setOverlay.
 setOverlay(true);
 
 // --- Video clips: a <video> element + GL texture per video clip (runtime only;
@@ -2379,29 +2381,14 @@ function syncCompAspect() {
 }
 syncCompAspect();
 
-// Fit the canvas to the left of the right panel (#side) in EVERY section — the
-// composite always takes all the space minus the right sidebar (the deck floats
-// over its top-left, like a HUD). Measured after layout (rAF) and published as CSS
-// insets; only dropped to full-window when the whole UI is hidden.
+// The canvas is a bounded flex CELL (#stagewrap, centre of #layout) — flexbox sizes
+// it automatically between the deck, the fixture rail and the inspector, so there's
+// no inset maths to do. We only re-clamp the camera once the new layout has settled
+// (deferred a frame so the flex cell has its final size) whenever a panel toggles,
+// the inspector resizes, the UI hides, or the window changes.
 function updateStageInsets() {
   cancelAnimationFrame(insetRaf);
-  insetRaf = requestAnimationFrame(() => {
-    const root = document.documentElement;
-    const active = !document.body.classList.contains('gui-hidden');
-    let right = 0;
-    if (active) {
-      const vw = window.innerWidth;
-      // Only the MAIN inspector (#side) carves out canvas space. The #side-2 fixture
-      // rail floats OVER the canvas (like the deck), so opening/closing it never
-      // re-fits the composition.
-      const sideEl = document.getElementById('side');
-      // offsetParent is null when #side is display:none (Canvas view) → no carve.
-      if (sideEl && sideEl.offsetParent !== null) { const s = sideEl.getBoundingClientRect(); right = Math.max(0, vw - s.left); }
-    }
-    root.style.setProperty('--inset-left', '0px');
-    root.style.setProperty('--inset-right', right + 'px');
-    reflowView?.();   // the viewport moved — re-clamp the camera against the new frame
-  });
+  insetRaf = requestAnimationFrame(() => { reflowView?.(); });
 }
 window.addEventListener('resize', updateStageInsets);
 
@@ -2525,8 +2512,10 @@ function loop(ts) {
     const live = bridge?.connected?.();
     // Companion/daemon status (red offline / green live) on the Control subtab.
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
+    // The remote icon jumps to the control surface only while the daemon is up.
+    if (remoteBtn) { remoteBtn.disabled = !live; remoteBtn.title = live ? 'Open the control surface (phone remote)' : 'Control surface — start the daemon to enable'; }
     // Daemon came up / went down → refresh the Output list so "scan" enables/disables.
-    if (!!live !== lastLive) { lastLive = !!live; if (outputPaneEl && !outputPaneEl.hidden && outputTab === 'fixtures') renderOutput(); }
+    if (!!live !== lastLive) { lastLive = !!live; if (outputTab === 'fixtures') renderOutput(); }
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);
@@ -2705,22 +2694,23 @@ const menuList = (items) => {
 // "Install" — open the GitHub releases page (where the notarized app downloads
 // live) in a new tab, so users can grab or update the standalone build.
 const REPO_URL = 'https://github.com/jonasjohansson/ledzeppelin';
+// Project I/O as top-bar icon buttons (no File dropdown). Save / Open are direct;
+// Import opens a small menu for the less-common project options.
 document.getElementById('menu-install')?.addEventListener('click', () => window.open(`${REPO_URL}/releases`, '_blank', 'noopener'));
-document.getElementById('menu-file')?.addEventListener('click', (e) => {
+document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
+document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
+document.getElementById('menu-bug')?.addEventListener('click', () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener'));
+// New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
+// (ISF shader import — drag-drop isn't wired yet — and composition save/load).
+document.getElementById('menu-new')?.addEventListener('click', newProject);
+document.getElementById('menu-ledger')?.addEventListener('click', () => { setOutputTab('library'); importPanel.trigger?.(); });
+document.getElementById('menu-import')?.addEventListener('click', (e) => {
   e.stopPropagation();
   openMenu(e.currentTarget, menuList([
-    { label: 'New project', act: newProject },
-    { label: 'Save…', key: '⌘S', act: saveShowToFile },
-    { label: 'Load…', key: '⌘O', act: () => openShowInput?.click() },
-    { sep: true },
-    { label: 'Import from LEDger…', act: () => { setSection('output'); setOutputTab('library'); importPanel.trigger?.(); } },
     { label: 'Import ISF shader…', act: () => openISFInput.click() },
     { sep: true },
     { label: 'Save composition…', act: saveCompositionToFile },
     { label: 'Load composition…', act: () => openCompInput.click() },
-    { sep: true },
-    // Feedback / bug reports go to GitHub Issues (prefilled with the app version).
-    { label: 'Report a bug ↗', act: () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener') },
   ]));
 });
 // (Audio input + gain and the snap grid/distance config moved to System ›
