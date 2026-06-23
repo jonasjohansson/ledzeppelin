@@ -21,9 +21,12 @@ export function normDashboard(dash) {
   return { links };
 }
 
-// Live signal map for the render loop: { 'dash:d1': 0.5, … } (each 0..1).
+// Live signal map for the render loop: { 'dash:d1': 0.5, … } (each 0..1). Reused
+// across frames (consumed immediately by the loop) so it allocates nothing per frame;
+// keys of removed links linger harmlessly (anim reads only the keys it references).
+const _dashOut = {};
 export function dashboardSignals(composition) {
-  const out = {};
+  const out = _dashOut;
   for (const l of composition?.dashboard?.links || []) out[`dash:${l.id}`] = l.value || 0;
   return out;
 }

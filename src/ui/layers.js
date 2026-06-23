@@ -1280,7 +1280,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     head.addEventListener('click', () => { selectedEffect = { scope: 'clip', layerId: id, clipId: clip.id, index: fx }; render(); });
     head.addEventListener('dragstart', (e) => { drag = { kind: 'fx-clip', index: fx }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', 'fx'); });
     head.addEventListener('dragend', () => { drag = null; });
-    head.append(fxMenu({ presetName: item.isf.name || 'ISF', onRemove: () => commit(removeClipEffect(show(), id, clip.id, fx)) }));
+    head.append(fxMenu({ presetName: item.isf.name || 'ISF', onRemove: () => { if (confirmDelete('Remove this effect?')) commit(removeClipEffect(show(), id, clip.id, fx)); } }));
     block.append(head);
     for (const p of item.isf.params || []) {
       if (!(p.type === 'float' || p.type === 'long' || p.type === 'bool' || p.type === 'color')) continue;
@@ -1318,7 +1318,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       getParams: () => paramsForPrefix(liveClip(clip.id)?.params, name),
       applyParams: (p) => commit(mergeClipParams(show(), id, clip.id, p)),
       onReset: () => commit(mergeClipParams(show(), id, clip.id, prefixedDefaults(name), true)),
-      onRemove: () => commit(removeClipEffect(show(), id, clip.id, fx)),
+      onRemove: () => { if (confirmDelete('Remove this effect?')) commit(removeClipEffect(show(), id, clip.id, fx)); },
     }));
     block.append(head);
 

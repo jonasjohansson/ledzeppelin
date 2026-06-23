@@ -50,6 +50,7 @@ canvas{display:block}</style>
   <symbol id="ic-panel-left" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 7h4v10H6z"/></symbol>
   <symbol id="ic-panel-right" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM14 7h4v10h-4z"/></symbol>
   <symbol id="ic-panel-bottom" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 14h12v3H6z"/></symbol>
+  <symbol id="ic-rotate" viewBox="0 0 24 24"><path d="M16 4h2v6h-2zm-2-2h2v2h-2zm0 2h2v8h-2zM4 8H2v5h2z"/><path d="M2 6h18v2H2zm6 14H6v-6h2zm2 2H8v-2h2zm0-2H8v-8h2zm10-4h2v-5h-2z"/><path d="M22 18H4v-2h18z"/></symbol>
 </svg>
 <!-- TOP BAR: a full-width strip of window/settings controls. Button ids are kept
      identical to the old corner cluster so every handler (wired by id in app.js)
@@ -73,24 +74,28 @@ canvas{display:block}</style>
       <button data-view="canvas" title="Canvas view: maximise the output">▭</button>
       <button data-view="split" title="Split view: canvas + panels">◫</button>
       <button data-view="edit" title="Editor view: roomy panels">▤</button>
-      <button data-view="overlay" title="Overlay view: panels float translucent over a full-bleed canvas">⧉</button>
+      <button data-view="overlay" title="Float view: panels float translucent over a full-bleed canvas">⧉</button>
     </span>
     <button id="panel-left" class="g-icon on" title="show/hide the left panel (gives the canvas more space)"><svg class="ic" aria-hidden="true"><use href="#ic-panel-left"/></svg></button>
     <button id="panel-bottom" class="g-icon on" title="show/hide the timeline"><svg class="ic" aria-hidden="true"><use href="#ic-panel-bottom"/></svg></button>
     <button id="panel-right" class="g-icon on" title="show/hide the right panel"><svg class="ic" aria-hidden="true"><use href="#ic-panel-right"/></svg></button>
     <span class="corner-sep"></span>
-    <button id="overlay-toggle" class="g-icon" title="edit fixtures: show + select them on the canvas"><svg class="ic" aria-hidden="true"><use href="#ic-eye"/></svg></button>
+    <button id="overlay-toggle" class="g-icon" title="edit fixtures — show + select them on the canvas"><svg class="ic" aria-hidden="true"><use href="#ic-eye"/></svg></button>
     <button id="snap-btn" class="g-icon" title="snap fixtures to each other & the grid"><svg class="ic" aria-hidden="true"><use href="#ic-snap"/></svg></button>
     <button id="grid-btn" class="g-icon" title="show/hide the alignment grid"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
     <button id="color-btn" class="g-icon" title="tint fixtures by controller colour"><svg class="ic" aria-hidden="true"><use href="#ic-colour"/></svg></button>
-    <button id="wall-btn" class="g-icon" title="live view: dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
+    <button id="wall-btn" class="g-icon" title="output preview — dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
   </div>
-  <!-- Far-right cluster: bug report + install/update. -->
+  <!-- Far-right cluster: help + bug report + install/update. -->
   <div class="corner-row" id="corner-right">
+    <button id="menu-help" class="g-icon topbar-help" title="Keyboard shortcuts  (?)">?</button>
     <button id="menu-bug" class="g-icon" title="Report a bug"><svg class="ic" aria-hidden="true"><use href="#ic-bug"/></svg></button>
     <button id="menu-install" class="g-icon" title="Install / update the app"><svg class="ic" aria-hidden="true"><use href="#ic-install"/></svg></button>
   </div>
 </div>
+<!-- Always-visible escape hatch while the UI is hidden (H). Outside #topbar so it
+     survives the top-bar hide; CSS shows it only in body.gui-hidden. -->
+<button id="show-ui-pill" title="Show the interface  (H)">Show UI</button>
 <!-- DOCK: a top bar over three columns of stacked "island" panels (Photoshop /
      MadMapper style). LEFT = the selected item's properties (Clip · Layer ·
      Composition) · CENTRE = Stage over the Timeline · RIGHT = Fixture editor ·
@@ -146,7 +151,7 @@ canvas{display:block}</style>
   <!-- RIGHT COLUMN: selected fixture's editor · the Fixtures patch · the Inventory. -->
   <div id="dock-right" class="dock-col">
     <section class="island" id="grp-fxedit">
-      <header class="island-head"><span class="island-title" id="fxedit-title">Device</span></header>
+      <header class="island-head"><span class="island-title" id="fxedit-title">Properties</span></header>
       <div class="island-body"><div id="fxinsp-body"></div></div>
     </section>
     <!-- Patch island: Fixtures (the placement/wiring list + controller instances)

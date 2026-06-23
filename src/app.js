@@ -876,9 +876,9 @@ function positionEditor(sel) {
           (() => {
             const fld = txField('Rotation°', tf.rotation, (v) => setT({ rotation: v }));
             const ccw = oel('button', { className: 'dir-btn rot-step', title: 'rotate −90°', onclick: () => setT({ rotation: (snap90(tf.rotation) + 270) % 360 }) });
-            ccw.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-rot-ccw"/></svg>';
+            ccw.innerHTML = '<svg class="ic-sm ic-flip" aria-hidden="true"><use href="#ic-rotate"/></svg>';
             const cw = oel('button', { className: 'dir-btn rot-step', title: 'rotate +90°', onclick: () => setT({ rotation: (snap90(tf.rotation) + 90) % 360 }) });
-            cw.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-rot-cw"/></svg>';
+            cw.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-rotate"/></svg>';
             fld.append(ccw, cw);
             return fld;
           })(),
@@ -1422,7 +1422,7 @@ function confirmDeleteFixtures(ids) {
 // model. Always docked in the right column; shows a hint when nothing's selected.
 function updateInspector() {
   if (!fxBodyEl) return;
-  let detail = null, title = 'Device';
+  let detail = null, title = 'Properties';
   const fxName = (f) => (show.fixtureTypes || []).find((t) => t.id === f?.typeId)?.name || 'Fixture';
   // Inventory MODEL editor when the last interaction was in Inventory; otherwise the
   // selected fixture(s)/device editor.
@@ -1724,9 +1724,7 @@ let reflowView = null;  // set by the zoom IIFE; re-clamps the view when the can
 // One button in the corner toggles the whole UI; it stays put (the cluster keeps
 // this button visible while hidden) and just relabels hide ⇄ show.
 const toggleGui = () => {
-  const hidden = document.body.classList.toggle('gui-hidden');
-  const b = document.getElementById('g-hide');
-  if (b) b.textContent = hidden ? 'Show UI' : 'Hide UI';
+  document.body.classList.toggle('gui-hidden');
   updateStageInsets();   // hiding the UI frees the canvas to span the full window
 };
 document.addEventListener('keydown', (e) => {
@@ -1734,10 +1732,38 @@ document.addEventListener('keydown', (e) => {
   if (typingIn(e.target)) return;
   toggleGui();
 });
+// The only chrome left while hidden: a small "Show UI" pill (always visible in
+// gui-hidden via CSS) so H is never a one-way trapdoor.
+document.getElementById('show-ui-pill')?.addEventListener('click', toggleGui);
 
-// --- Chrome: hide / show UI. (Master opacity lives in the Composition inspector
-//     tab; the timer-reset button was removed.) ---
-document.getElementById('g-hide')?.addEventListener('click', toggleGui);
+// --- Keyboard cheat-sheet (the '?' key or the top-bar '?' button). Built once,
+//     lazily, into the pre-styled #shortcuts-overlay shell. ---
+const SHORTCUTS = [
+  ['⌘S', 'Save project'], ['⌘O', 'Open project'],
+  ['⌘Z', 'Undo'], ['⌘⇧Z', 'Redo'], ['⌘D', 'Duplicate'], ['⌘A', 'Select all'],
+  ['⌘C / ⌘V', 'Copy / paste'], ['⌫', 'Delete selected'], ['Esc', 'Deselect'],
+  ['← ↑ → ↓', 'Nudge (Shift = ×10)'], ['Space', 'Pan canvas (hold)'],
+  ['0', 'Reset zoom'], ['H', 'Hide / show UI'], ['?', 'This help'],
+];
+let shortcutsEl = null;
+function toggleShortcuts(force) {
+  if (!shortcutsEl) {
+    const grid = oel('div', { className: 'shortcuts-grid' });
+    for (const [k, a] of SHORTCUTS) grid.append(oel('kbd', { className: 'shortcuts-key', textContent: k }), oel('div', { className: 'shortcuts-act', textContent: a }));
+    const card = oel('div', { className: 'shortcuts-card' }, [oel('div', { className: 'shortcuts-title', textContent: 'Keyboard shortcuts' }), grid]);
+    shortcutsEl = oel('div', { id: 'shortcuts-overlay', hidden: true }, [card]);
+    shortcutsEl.addEventListener('click', (e) => { if (e.target === shortcutsEl) toggleShortcuts(false); });
+    document.body.append(shortcutsEl);
+  }
+  const show = force == null ? shortcutsEl.hidden : force;
+  shortcutsEl.hidden = !show;
+}
+document.addEventListener('keydown', (e) => {
+  if (typingIn(e.target)) return;
+  if (e.key === '?') { toggleShortcuts(true); }
+  else if (e.key === 'Escape' && shortcutsEl && !shortcutsEl.hidden) { toggleShortcuts(false); }
+});
+document.getElementById('menu-help')?.addEventListener('click', () => toggleShortcuts());
 
 // Surface a dock group: scroll it into view + a brief accent flash on it (used when a
 // clip/layer/fixture is selected so the relevant group draws the eye). Replaces the
@@ -1749,37 +1775,58 @@ function focusGroup(id) {
   setTimeout(() => g.classList.remove('grp-flash'), 500);
 }
 
-// Layout VIEWS — quick presets for the side columns. Canvas = hide both side columns
-// (output fills the screen); Split = the default; Editor = roomier side columns.
-(function setupViews() {
-  const KEY = 'lz.view'; const VIEWS = ['canvas', 'split', 'edit', 'overlay'];
+// LAYOUT — ONE system for the view presets (seg) AND the per-panel hide toggles, so
+// they never disagree. Panel VISIBILITY is the single source of truth (a Set of
+// hide-* flags); presets just set that Set (+ an optional style class). The panel
+// toggles' `.on` glyphs and the active preset highlight are always derived from it,
+// so a toggle can never lie about whether a panel is shown.
+(function setupLayout() {
+  const KEY = 'lz.view', HKEY = 'lz.hide';
   const seg = document.getElementById('view-seg');
-  if (!seg) return;
-  let cur = 'split'; try { const v = localStorage.getItem(KEY); if (VIEWS.includes(v)) cur = v; } catch { /* private */ }
-  const apply = () => {
-    document.body.classList.remove(...VIEWS.map((v) => 'view-' + v));
-    document.body.classList.add('view-' + cur);
-    for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === cur);
+  // [button id, body class] for the three hideable panels.
+  const PANELS = [['panel-left', 'hide-left'], ['panel-right', 'hide-right'], ['panel-bottom', 'hide-timeline']];
+  // Presets: which panels they hide + an optional style class. canvas/split are pure
+  // visibility (so a matching toggle state re-highlights them); edit/overlay add style.
+  const PRESETS = {
+    canvas: { hide: ['hide-left', 'hide-right'], style: null },
+    split: { hide: [], style: null },
+    edit: { hide: [], style: 'view-edit' },
+    overlay: { hide: [], style: 'view-overlay' },
+  };
+  let hidden, cur;
+  try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); hidden = new Set(Array.isArray(h) ? h : []); } catch { hidden = new Set(); }
+  try { const v = localStorage.getItem(KEY); cur = (v && PRESETS[v]) ? v : ''; } catch { cur = ''; }
+  if (!localStorage.getItem(HKEY) && !cur) cur = 'split';   // first run
+
+  const persist = () => { try { localStorage.setItem(KEY, cur); localStorage.setItem(HKEY, JSON.stringify([...hidden])); } catch { /* private */ } };
+  // If the current visibility matches a pure-visibility preset, highlight it; else custom.
+  const matchPreset = () => {
+    for (const [id, p] of Object.entries(PRESETS)) {
+      if (p.style) continue;
+      if (p.hide.length === hidden.size && p.hide.every((c) => hidden.has(c))) return id;
+    }
+    return '';
+  };
+  const sync = () => {
+    for (const [, cls] of PANELS) document.body.classList.toggle(cls, hidden.has(cls));
+    document.body.classList.remove('view-edit', 'view-overlay');
+    if (cur && PRESETS[cur]?.style) document.body.classList.add(PRESETS[cur].style);
+    for (const [btnId, cls] of PANELS) document.getElementById(btnId)?.classList.toggle('on', !hidden.has(cls));
+    if (seg) for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.view === cur);
     updateStageInsets();
   };
-  seg.addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-view]'); if (!b) return;
-    cur = b.dataset.view; try { localStorage.setItem(KEY, cur); } catch { /* private */ } apply();
+  seg?.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]'); const p = b && PRESETS[b.dataset.view];
+    if (!p) return;
+    cur = b.dataset.view; hidden = new Set(p.hide); persist(); sync();
   });
-  apply();
-})();
-
-// Per-panel show/hide toggles — hide the left column, the right column, or the
-// timeline; the centre canvas reclaims the freed space. State persists; `.on` = shown.
-(function setupPanelToggles() {
-  for (const [btnId, cls] of [['panel-left', 'hide-left'], ['panel-right', 'hide-right'], ['panel-bottom', 'hide-timeline']]) {
-    const btn = document.getElementById(btnId); if (!btn) continue;
-    const key = 'lz.' + cls;
-    let hidden = false; try { hidden = localStorage.getItem(key) === '1'; } catch { /* private */ }
-    const apply = () => { document.body.classList.toggle(cls, hidden); btn.classList.toggle('on', !hidden); updateStageInsets(); };
-    btn.addEventListener('click', () => { hidden = !hidden; try { localStorage.setItem(key, hidden ? '1' : '0'); } catch { /* private */ } apply(); });
-    apply();
+  for (const [btnId, cls] of PANELS) {
+    document.getElementById(btnId)?.addEventListener('click', () => {
+      if (hidden.has(cls)) hidden.delete(cls); else hidden.add(cls);
+      cur = matchPreset(); persist(); sync();   // toggling drops style presets to "custom"
+    });
   }
+  sync();
 })();
 
 // The one resize affordance: a "curtain" on the Timeline's top edge to trade height
@@ -2167,29 +2214,41 @@ function applyAccent(hex) {
   s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
   s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
   s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
-  // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent (toned down +
-  // darker anchors so the chrome reads near-black, not warm-tinted).
-  const bg = accMix(hex, '#050506', 0.03);
-  s.setProperty('--bg', bg);
-  s.setProperty('--field-bg', accMix(hex, '#0a0a0b', 0.03));
-  const panel = accMix(hex, '#0e0e10', 0.04);
+  // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
+  // anchor is first lifted toward white by `lift` (the Settings › Appearance
+  // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
+  const lift = savedBright() / 100;
+  const L = (anchor) => accMix('#ffffff', anchor, lift);   // mix `lift` of white into the anchor
+  s.setProperty('--bg', accMix(hex, L('#0b0b0d'), 0.03));
+  s.setProperty('--field-bg', accMix(hex, L('#121214'), 0.03));
+  const panel = accMix(hex, L('#17171a'), 0.04);
   s.setProperty('--panel', panel);
   s.setProperty('--panel-solid', panel);
-  s.setProperty('--panel-2', accMix(hex, '#151517', 0.05));
-  s.setProperty('--hover', accMix(hex, '#242427', 0.06));
-  s.setProperty('--line', accMix(hex, '#262629', 0.06));
-  s.setProperty('--line-2', accMix(hex, '#3a3a42', 0.07));
+  s.setProperty('--panel-2', accMix(hex, L('#1e1e22'), 0.05));
+  s.setProperty('--hover', accMix(hex, L('#2c2c31'), 0.06));
+  s.setProperty('--line', accMix(hex, L('#303034'), 0.06));
+  s.setProperty('--line-2', accMix(hex, L('#45454e'), 0.07));
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
 function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
-applyAccent(savedAccent());   // apply the saved accent on boot
+// --- Appearance: UI brightness (how far the surface ramp is lifted off black) and
+// text size (multiplies every --fs-* token). Persisted; applied live. ---
+const BRIGHT_KEY = 'lz.brightness';
+const savedBright = () => { try { const raw = localStorage.getItem(BRIGHT_KEY); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(0, Math.min(20, v)) : 7; } catch { return 7; } };
+function setBrightness(v) { try { localStorage.setItem(BRIGHT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
+const SCALE_KEY = 'lz.uiscale';
+const savedScale = () => { try { const raw = localStorage.getItem(SCALE_KEY); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(0.8, Math.min(1.4, v)) : 1; } catch { return 1; } };
+function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.documentElement.style.setProperty('--ui-scale', String(c)); try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* private */ } }
+setUiScale(savedScale());      // apply text scale on boot
+applyAccent(savedAccent());   // apply the saved accent (+ brightness) on boot
 
-// --- Hover tooltips (native `title`) — OFF by default. When off, every `title` is
-// moved to `data-tip` (and kept moved as the UI re-renders) so no tooltip appears on
-// long hover. Toggle in System › Settings restores them. ---
+// --- Hover tooltips (native `title`) — ON by default (the icon-heavy chrome needs
+// them for discoverability). When toggled OFF in Settings, every `title` is moved to
+// `data-tip` (kept moved as the UI re-renders) so no tooltip appears on hover. Either
+// way titles read as sentence case. ---
 const TIPS_KEY = 'lz.tips';
-const tipsOn = () => { try { return localStorage.getItem(TIPS_KEY) === '1'; } catch { return false; } };
+const tipsOn = () => { try { return localStorage.getItem(TIPS_KEY) !== '0'; } catch { return true; } };
 // Stash the title (so no native tooltip shows) BUT keep it as an aria-label so
 // icon-ONLY interactive controls still have an accessible name (a11y) when tooltips
 // are off. Only icon-only interactive elements get the label — adding aria-label to
@@ -2209,18 +2268,25 @@ const stashTip = (el) => {
 };
 const stripTips = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) stashTip(root); root.querySelectorAll?.('[title]').forEach(stashTip); };
 const restoreTips = (root) => root.querySelectorAll?.('[data-tip]').forEach((el) => { el.setAttribute('title', el.dataset.tip); delete el.dataset.tip; });
+// Tips ON: keep native titles but sentence-case them (idempotent — only writes on change).
+const normTitle = (el) => { const t = el.getAttribute('title'); const n = sentenceCase(t); if (n && n !== t) el.setAttribute('title', n); };
+const normalizeTitles = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) normTitle(root); root.querySelectorAll?.('[title]').forEach(normTitle); };
 const tipObserver = new MutationObserver((muts) => {
+  const on = tipsOn();
   for (const m of muts) {
-    if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.hasAttribute('title')) stashTip(m.target);
-    for (const n of m.addedNodes) stripTips(n);
+    if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.hasAttribute('title')) { on ? normTitle(m.target) : stashTip(m.target); }
+    for (const n of m.addedNodes) { on ? normalizeTitles(n) : stripTips(n); }
   }
 });
 function applyTips() {
-  if (tipsOn()) { tipObserver.disconnect(); restoreTips(document.body); }
-  else { stripTips(document.body); tipObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] }); }
+  if (tipsOn()) { restoreTips(document.body); normalizeTitles(document.body); }
+  else { stripTips(document.body); }
+  // One observer, mode-aware: normalises (on) or stashes (off) titles as the UI rebuilds.
+  tipObserver.disconnect();
+  tipObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
 }
 function setTips(on) { try { localStorage.setItem(TIPS_KEY, on ? '1' : '0'); } catch { /* private */ } applyTips(); }
-applyTips();   // on boot — strip titles unless the user has opted in
+applyTips();   // on boot
 
 // The mapping surface lives in its own window (a named target → one reused
 // window; the click is the user gesture that satisfies the popup blocker).
@@ -2295,7 +2361,18 @@ async function buildSettings(mount) {
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
   // input lives in the Mapping window.)
 
-  // --- Accent colour (least priority → last): 8 preset swatches. ---
+  // --- Appearance: UI brightness + text size (both live). ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'appearance' }));
+  mount.append(Slider('Brightness', savedBright(), {
+    min: 0, max: 20, step: 1, default: 7, commit: 'live',
+    onInput: (v) => setBrightness(Math.round(v)),
+  }));
+  mount.append(Slider('Text size %', Math.round(savedScale() * 100), {
+    min: 80, max: 140, step: 5, default: 100, commit: 'live',
+    onInput: (v) => setUiScale(v / 100),
+  }));
+
+  // --- Accent colour (least priority → last): preset swatches. ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
   const cur = savedAccent();
   const swatches = [];
@@ -2371,6 +2448,9 @@ let lastLive = null;   // daemon-connected state last seen by the loop (to refre
 // so it never drops frames we could otherwise have made.
 const OUTPUT_FPS = 42, FRAME_INTERVAL = 1000 / OUTPUT_FPS;
 let frameDue = 0;
+// Reused each frame for the merged audio+external+dashboard signal map (avoids a
+// fresh object + spread every frame). Filled via Object.assign in loop().
+const frameSignals = {};
 // Publish the composition aspect (w/h) as a CSS var so the "fit" canvas mode can
 // scale the composite to fill its area (CSS can't read canvas attributes). Updated
 // only when it changes — no per-frame style churn.
@@ -2402,8 +2482,8 @@ function loop(ts) {
   // Action bindings (clip triggers, layer opacity/bypass) driven by MIDI/key/OSC
   // channels — applied each frame, rising-edge for triggers/toggles. Non-undoable,
   // debounced save (like external input).
+  const chNow = extChannels();   // external channels — read ONCE per frame (reused below)
   {
-    const chNow = extChannels();
     const ab = applyBindings(show, chNow, prevBindCh);
     if (ab.show !== show) { show = ab.show; if (!bindSaveTimer) bindSaveTimer = setTimeout(() => { bindSaveTimer = null; saveShow(show); }, 400); if (ab.fired) layerPanel?.refresh?.(); }
     prevBindCh = { ...chNow };
@@ -2444,7 +2524,9 @@ function loop(ts) {
     // compositing. No-op (same ref) when nothing is animated. The signals map
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
-    const signals = { ...updateAudio(), ...extChannels(), ...dashboardSignals(show.composition), __bpm: show.composition?.bpm ?? 120 };
+    Object.assign(frameSignals, updateAudio(), chNow, dashboardSignals(show.composition));
+    frameSignals.__bpm = show.composition?.bpm ?? 120;
+    const signals = frameSignals;
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, signals, L.id);
       let clips = L.clips;

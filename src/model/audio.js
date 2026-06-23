@@ -96,9 +96,15 @@ function computeBands(s) {
 
 // Signals map for anim.js: namespaced per source ("external:bass") + plain band
 // names (back-compat for old source-less audio anims → external). Call once/frame.
+// The output object + its key strings are reused across frames (it's consumed
+// immediately by the render loop), so this allocates nothing per frame.
+const _audioOut = {};
+const _audioKeys = AUDIO_BANDS.map((b) => ['external:' + b, 'composition:' + b, b]);
 export function updateAudio() {
   const ext = computeBands(SRC.external), comp = computeBands(SRC.composition);
-  const out = {};
-  for (const b of AUDIO_BANDS) { out['external:' + b] = ext[b]; out['composition:' + b] = comp[b]; out[b] = ext[b]; }
-  return out;
+  for (let i = 0; i < AUDIO_BANDS.length; i++) {
+    const b = AUDIO_BANDS[i], k = _audioKeys[i];
+    _audioOut[k[0]] = ext[b]; _audioOut[k[1]] = comp[b]; _audioOut[k[2]] = ext[b];
+  }
+  return _audioOut;
 }

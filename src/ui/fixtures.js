@@ -10,6 +10,7 @@ import { ListRow } from './kit/listrow.js';
 import { fixtureTypeChannels, paramSpan, paramsToChannels, channelsToParams, isDmxType } from '../model/dmx.js';
 import { confirmDelete } from './confirm.js';
 import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
+import { isValidIPv4 } from '../model/ip.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
 // Controller colour ORDER: the RGB wiring order (the per-fixture Color Format below
@@ -428,7 +429,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     if (!d.ip) { ipLink.style.pointerEvents = 'none'; ipLink.style.opacity = '.35'; }
     return el('div', { className: 'fx-card fx-detail' }, [
       field('Name', textInputCommit(d.name, (x) => upd({ name: x }))),
-      el('label', { className: 'fx-field' }, [el('span', { textContent: 'IP' }), textInputCommit(d.ip, (x) => upd({ ip: x })), ipLink]),
+      (() => {
+        // IP with live validity (red border when non-empty + malformed) — mirrors the
+        // LEDger import flow so the manual editor isn't the lone unvalidated field.
+        const ipInput = textInputCommit(d.ip, (x) => upd({ ip: x }));
+        const mark = () => { ipInput.style.borderColor = (!ipInput.value || isValidIPv4(ipInput.value)) ? '' : '#a33'; };
+        ipInput.addEventListener('input', mark); mark();
+        return el('label', { className: 'fx-field' }, [el('span', { textContent: 'IP' }), ipInput, ipLink]);
+      })(),
       // Controller MODEL — drives the output count (a live template from Library).
       field('Model', selectInput(models.map((m) => ({ value: m.id, label: m.name })), d.typeId ?? models[0]?.id, (x) => upd({ typeId: x }))),
       field('Outputs', el('span', { className: 'fx-readonly', textContent: `${model?.outputs ?? d.outputs ?? '?'} (from model)` })),
@@ -684,7 +692,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         devList.append(row);
       }
       autoPing(show.devices);
-      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet, add one or define models in Inventory' }));
+      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet — add one or scan, or define models in the Inventory tab' }));
       b.append(devList);
       b.append(el('button', {
         className: 'fx-add', textContent: '+ device',
@@ -804,7 +812,12 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         next.devices = next.devices.filter((d) => d.id !== selDeviceId);
         selDeviceId = null; commit(next); return true;
       }
-      if (lastSel === 'devtype' && selDevTypeId && selDevTypeId !== 'generic' && deviceTypeInstanceCount(show, selDevTypeId) === 0) {
+      if (lastSel === 'devtype' && selDevTypeId && selDevTypeId !== 'generic') {
+        const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
+        const used = deviceTypeInstanceCount(show, selDevTypeId);
+        // In use → explain rather than silently doing nothing.
+        if (used) { window.alert(`“${t?.name || selDevTypeId}” is in use by ${used} device${used === 1 ? '' : 's'} — remove those first.`); return false; }
+        if (!confirmDelete(`Delete controller model “${t?.name || selDevTypeId}”?`)) return false;
         const next = structuredClone(show);
         next.deviceTypes = (next.deviceTypes || []).filter((t) => t.id !== selDevTypeId);
         selDevTypeId = null; commit(next); return true;
@@ -812,8 +825,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       if (lastSel === 'type' && selTypeId && selTypeId !== 'generic') {
         const used = typeInstanceCount(show, selTypeId);
         const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
-        // In use → confirm, then delete the definition AND its placed fixtures.
-        if (used && !confirmDelete(`Delete “${t?.name || selTypeId}”?\n\n${used} placed fixture${used === 1 ? '' : 's'} will also be removed.`)) return false;
+        // Always confirm; if in use, warn that placed fixtures go too.
+        const msg = used
+          ? `Delete “${t?.name || selTypeId}”?\n\n${used} placed fixture${used === 1 ? '' : 's'} will also be removed.`
+          : `Delete fixture type “${t?.name || selTypeId}”?`;
+        if (!confirmDelete(msg)) return false;
         const next = structuredClone(show);
         next.fixtureTypes = (next.fixtureTypes || []).filter((x) => x.id !== selTypeId);
         next.fixtures = (next.fixtures || []).filter((f) => f.typeId !== selTypeId);

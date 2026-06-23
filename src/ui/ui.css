@@ -48,7 +48,9 @@
   /* Typography system — mono-forward: --sans aliases the one --ui-font face so
      the semantic chrome/data split survives if we ever re-introduce a true sans. */
   --sans: var(--ui-font);
-  --fs-micro:10px; --fs-body:11px; --fs-ctrl:12px; --fs-title:13px; --fs-glyph:15px;
+  /* --ui-scale (set from Settings › Appearance) multiplies every text token. */
+  --ui-scale: 1;
+  --fs-micro:calc(10px * var(--ui-scale)); --fs-body:calc(11px * var(--ui-scale)); --fs-ctrl:calc(12px * var(--ui-scale)); --fs-title:calc(13px * var(--ui-scale)); --fs-glyph:calc(15px * var(--ui-scale));
   --fw-reg:400; --fw-med:400;   /* single weight — no bold in the UI text */
   --lh-tight:1.2; --lh-ctrl:1.4; --lh-ui:1.45;
   --ls-caps:.1em; --ls-ui:.04em;
@@ -317,6 +319,7 @@ body.output-mode #stagewrap { pointer-events: auto; }
 .g-icon .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
 /* Inline icon used inside small buttons (rotation / reverse). */
 .ic-sm { width: 14px; height: 14px; fill: currentColor; display: inline-block; vertical-align: middle; }
+.ic-flip { transform: scaleX(-1); }   /* mirror for the opposite rotation direction */
 /* Companion/daemon status dot tucked into the remote button's corner (no layout shift). */
 #menu-remote .tab-dot { position: absolute; top: 4px; right: 2px; margin: 0; }
 
@@ -399,10 +402,9 @@ body.output-mode #deckbar button { pointer-events: auto; }
 /* Group flash — a brief accent ring when a selection surfaces a group. */
 .island.grp-flash { box-shadow: inset 0 0 0 2px var(--accent-line); }
 
-/* VIEW presets (top-bar Canvas / Split / Editor / Overlay). Canvas hides both side
-   columns; Editor widens them; Split is the default. */
-body.view-canvas #dock-left, body.view-canvas #dock-right { display: none; }
-/* Per-panel show/hide toggles (top bar) — the centre canvas reclaims the freed space. */
+/* Panel visibility is the single source of truth (see setupLayout). The Canvas preset
+   sets hide-left+hide-right; Editor widens; Split clears all; Overlay floats the panels.
+   These hide-* rules are driven by BOTH the panel toggles and the presets. */
 body.hide-left #dock-left { display: none; }
 body.hide-right #dock-right { display: none; }
 body.hide-timeline #timeline-island { display: none; }
@@ -540,9 +542,21 @@ body.gui-hidden #system-settings, body.gui-hidden #mapping-pane, body.gui-hidden
   color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
 }
 #topbar button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
-/* While the UI is hidden, collapse the top bar to just "Show UI" floating top-left. */
 /* UI hidden = full-bleed canvas; the top bar goes too ('H' brings everything back). */
 body.gui-hidden #topbar { display: none; }
+/* The "Show UI" pill: hidden normally, floats top-left only while the UI is hidden,
+   so H is never a one-way trapdoor. */
+#show-ui-pill {
+  position: fixed; top: 8px; left: 8px; z-index: 40; display: none;
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--muted); cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 5px 9px;
+}
+#show-ui-pill:hover { color: var(--accent-text); border-color: var(--line-2); }
+body.gui-hidden #show-ui-pill { display: block; }
+/* The '?' help button reads as a glyph, not an icon — size it like the sprite icons. */
+.topbar-help { font: var(--fw-med) 15px var(--mono); }
 
 
 /* Layer header: B/S toggles + click-to-select. */

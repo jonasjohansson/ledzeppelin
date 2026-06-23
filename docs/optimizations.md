@@ -21,13 +21,17 @@ After the applied fixes below:
 - **Bug**: Overlay view never cleared its body class (the `VIEWS` list omitted `overlay`) — fixed.
 - Tooltips sentence-cased centrally; native-right-click setting added.
 
-## TODO — runtime perf (per-frame GC in the rAF `loop`, `src/app.js`)
-Highest leverage; all run 42×/s. Keep one persistent object, mutate in place:
-1. `signals` rebuilt via 3-way spread every frame (`app.js` ~2407) — biggest allocator.
-2. `extChannels()` called twice + cloned twice/frame.
-3. `dashboardSignals` (`model/dashboard.js`) allocates object + `dash:<id>` strings/frame — memoize on links identity.
-4. `updateAudio` (`model/audio.js`) rebuilds object + 12 key-strings/frame; hoist `avg`/`clamp`.
-5. `applyBindings` (`model/mappings.js`) allocates per binding + linear `layerById` find — precompute a parsed list + `id→layer` Map.
+## Applied — runtime perf (per-frame GC in the rAF `loop`, `src/app.js`)
+The loop is throttled to 42fps with async PBO readback; the remaining cost was per-frame
+allocation. Done:
+1. ✅ `signals` no longer rebuilt via spread each frame — a persistent `frameSignals` filled with `Object.assign`.
+2. ✅ `extChannels()` called once per frame (was twice) and reused in the signal merge.
+3. ✅ `dashboardSignals` reuses a persistent output object (no per-frame `{}`).
+4. ✅ `updateAudio` reuses a persistent object + precomputed key strings (no 12 strings/frame).
+
+### Still TODO (riskier — left for a profiled pass)
+5. `applyBindings` (`model/mappings.js`) allocates per binding + linear `layerById` find — precompute a parsed list + `id→layer` Map (stateful; wants careful before/after profiling).
+- `computeBands` (`model/audio.js`) still allocates `ext`/`comp` + `avg`/`clamp` closures twice/frame — hoist.
 - Preview overlay (`ui/preview.js`): build the `rgb(...)` string only when the packed-int colour changes (per-pixel allocation today); cache `chainOffset`/AABB into `pipelineFor()`.
 - Compositor (`engine/compositor.js`): avoid per-layer `filter()` + double `getEntry`; note `TIMEDELTA` hardcoded `1/60` while loop runs 42fps (ISF time runs ~1.4× slow — correctness).
 
