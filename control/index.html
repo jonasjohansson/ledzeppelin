@@ -43,54 +43,67 @@
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
   html,body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:15px;
     -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
-  body{ padding:12px 12px calc(24px + env(safe-area-inset-bottom)); }
-  header{ display:flex; align-items:center; gap:var(--s6); padding:4px 2px 12px; }
+  body{ padding:var(--s6) var(--s6) calc(var(--s5) + env(safe-area-inset-bottom)); }
+  header{ display:flex; align-items:center; gap:var(--s6); padding:var(--s1) var(--s1) var(--s6); }
   header .dot{ width:8px; height:8px; border-radius:var(--radius-sm); background:var(--danger); flex:0 0 auto; }
   header .dot.on{ background:var(--accent); }
   header h1{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--muted); font-weight:400; margin:0; }
+  /* A muted "disconnected" tag sits after the title; only shown while offline. */
+  header .state{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--danger); font-weight:400; margin-left:auto; display:none; }
+  body.is-disconnected header .state{ display:inline; }
+  body.is-disconnected header .dot{ background:var(--faint); }
   .empty{ color:var(--muted); text-align:center; padding:24px 16px; line-height:1.5; }
-  /* Touch surface: keep comfortable padding/tap targets, but trim the inter-card gap. */
-  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:var(--s6); }
-  .layer-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  /* Disconnected = the surface is dead chrome: dim the controls and swallow taps
+     so the operator can't fiddle controls that aren't talking to the editor. */
+  body.is-disconnected .layer{ opacity:.45; }
+  body.is-disconnected .blk,
+  body.is-disconnected .clip,
+  body.is-disconnected input[type=range]{ pointer-events:none; }
+  /* Denser pro control surface: trim card padding + the inter-card gap while
+     keeping tap targets comfortable. */
+  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:var(--s6); margin-bottom:var(--s3); }
+  .layer-head{ display:flex; align-items:center; gap:var(--s6); margin-bottom:var(--s6); }
   .layer-name{ flex:1 1 auto; font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* Block button: hairline tool button, not a candy fill. Active = danger outline + text. */
-  .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:var(--radius-sm); border:1px solid var(--line-2); background:var(--field-bg);
+  .blk{ flex:0 0 auto; width:40px; height:32px; border-radius:var(--radius-sm); border:1px solid var(--line-2); background:var(--field-bg);
         color:var(--muted); font-family:var(--mono); font-size:13px; }
   .blk.on{ background:var(--panel-2); border-color:var(--danger); color:var(--danger); }
   /* Deck-style clip cells: a thumbnail with a name bar underneath, like the
      editor's Composition deck. Tap to trigger; the active clip gets an accent ring. */
-  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:var(--s6); }
+  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:var(--s3); }
   .clip{ border:1px solid var(--line-2); border-radius:var(--radius-sm); overflow:hidden; background:var(--panel-2);
          padding:0; cursor:pointer; }
   .clip-thumb{ display:block; width:100%; aspect-ratio:16/9; background:#000 center/cover no-repeat; }
-  .clip-name{ font-family:var(--mono); font-size:11px; color:var(--text); padding:5px 6px; text-align:left;
+  .clip-name{ font-family:var(--mono); font-size:11px; color:var(--text); padding:var(--s2) var(--s3); text-align:left;
               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .clip:active{ border-color:var(--accent); }
   .clip:active .clip-name{ background:var(--accent); color:var(--accent-dark); }
   .clip.active{ border-color:var(--accent-line); }
   .clip.active .clip-name{ background:var(--accent-soft); color:var(--accent); }
-  .ctrl{ margin-top:12px; }
-  .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--s2); }
+  .ctrl{ margin-top:var(--s6); }
+  .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--s1); }
   .ctrl-row .lab{ color:var(--muted); font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase;
                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ctrl-row .val{ color:var(--readout); font-size:13px; font-variant-numeric:tabular-nums; }
-  /* Big touch sliders. touch-action:none ⇒ a finger drag drives the slider directly
+  /* Touch sliders. touch-action:none ⇒ a finger drag drives the slider directly
      instead of the browser first waiting to see if it's a page scroll (that wait is
      both the input lag AND the accidental page-swipe when sliding). Square-ish track
-     + thumb to match the editor's restrained, non-glassy chrome. */
-  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; margin:0; touch-action:none; }
-  input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
-  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:26px; height:26px; margin-top:-9px;
+     + thumb to match the editor's restrained, non-glassy chrome. Thumb stays large
+     enough to tap comfortably on a phone. */
+  input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:28px; background:transparent; margin:0; touch-action:none; }
+  input[type=range]::-webkit-slider-runnable-track{ height:8px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:24px; height:24px; margin-top:-9px;
         border-radius:var(--radius); background:var(--accent); border:1px solid var(--accent-line); }
-  input[type=range]::-moz-range-track{ height:10px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
-  input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:var(--radius); background:var(--accent); border:1px solid var(--accent-line); }
-  .section-label{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--faint); margin:14px 2px 8px; }
+  input[type=range]::-moz-range-track{ height:8px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
+  input[type=range]::-moz-range-thumb{ width:22px; height:22px; border-radius:var(--radius); background:var(--accent); border:1px solid var(--accent-line); }
+  .section-label{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--faint); margin:var(--s5) var(--s1) var(--s6); }
 </style>
 </head>
-<body>
+<body class="is-disconnected">
   <header>
     <span class="dot" id="dot"></span>
-    <h1 id="title">Control — connecting…</h1>
+    <h1 id="title">Control</h1>
+    <span class="state" id="state">disconnected</span>
   </header>
   <main id="app">
     <div class="empty" id="empty">Waiting for the show…<br><small>Open the editor on this network.</small></div>

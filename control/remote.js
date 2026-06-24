@@ -9,7 +9,6 @@
 
 const app = document.getElementById('app');
 const dot = document.getElementById('dot');
-const title = document.getElementById('title');
 
 let ws = null, reqTimer = null, gotManifest = false, backoff = 500, lastSig = '';
 
@@ -20,9 +19,12 @@ const structSig = (m) => JSON.stringify([
   (m.controls || []).map((c) => [c.address, c.label]),
 ]);
 
-function setStatus(on, text) {
+// Connection state is shown by BEHAVIOUR, not a label: when offline the body gets
+// `is-disconnected` (CSS dims + disables every control and reveals the "disconnected"
+// tag); the dot goes muted. When live, the surface just works and the dot lights up.
+function setConnected(on) {
   dot.classList.toggle('on', on);
-  title.textContent = text;
+  document.body.classList.toggle('is-disconnected', !on);
 }
 
 function connect() {
@@ -30,7 +32,7 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/frames`);
   ws.addEventListener('open', () => {
     backoff = 500;
-    setStatus(true, 'Control — connected');
+    setConnected(true);
     // Ask for the manifest, and keep asking until one arrives (the editor may
     // connect after us).
     askManifest();
@@ -41,6 +43,12 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'manifest' && m.data) {
       gotManifest = true;
+      // Follow the editor's CURRENT accent (the phone is a separate device and
+      // can't read the editor's localStorage). These override the CSS :root
+      // defaults at runtime so every accent-using element (slider thumb, active
+      // clip ring/label, connected dot, active source label) recolors. Applied
+      // every manifest (cheap), so accent changes land even without a re-render.
+      applyTheme(m.data.theme);
       // Re-render only when the STRUCTURE changes (layers/clips/bypass/exposed
       // params) — not on every value tick, which would rebuild the DOM and
       // interrupt a finger on a slider. The phone owns its own slider positions.
@@ -50,11 +58,20 @@ function connect() {
   });
   ws.addEventListener('close', () => {
     clearInterval(reqTimer); reqTimer = null;
-    setStatus(false, 'Control — reconnecting…');
+    gotManifest = false;
+    setConnected(false);
     setTimeout(connect, backoff);
     backoff = Math.min(backoff * 2, 5000);
   });
   ws.addEventListener('error', () => { try { ws.close(); } catch { /* */ } });
+}
+
+// Override the CSS :root accent vars with the editor's computed values.
+function applyTheme(theme) {
+  if (!theme) return;
+  const s = document.documentElement.style;
+  const map = { accent: '--accent', accentSoft: '--accent-soft', accentLine: '--accent-line', accentText: '--accent-text' };
+  for (const k in map) { const v = theme[k]; if (v) s.setProperty(map[k], v); }
 }
 
 const send = (channel, value) => { try { ws?.send(JSON.stringify({ type: 'ext', channel, value })); } catch { /* */ } };

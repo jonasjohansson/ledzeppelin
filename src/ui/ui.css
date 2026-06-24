@@ -319,6 +319,33 @@ body.output-mode #stagewrap { pointer-events: auto; }
 #corner-toggles { justify-self: center; }
 #corner-right { justify-self: end; }   /* bug + install at the far right */
 
+/* INSTALLED PWA — window-controls-overlay: the OS folds its title bar into the window,
+   so the top bar must live only inside the SAFE titlebar area (env(titlebar-area-*)),
+   never under the traffic-lights (left) or the browser/window controls (right). The
+   env() fallbacks resolve to a full-width bar, so NORMAL/browser mode is unchanged. */
+@media (display-mode: window-controls-overlay) {
+  #topbar {
+    left: env(titlebar-area-x, var(--dock-gap));
+    top: env(titlebar-area-y, var(--dock-gap));
+    width: env(titlebar-area-width, auto);
+    height: env(titlebar-area-height, var(--topbar-h));
+    right: auto;
+    /* Empty bar = draggable window-move region; interactive children opt out below. */
+    -webkit-app-region: drag;
+  }
+  /* Keep every control clickable (and let users move the window from the gaps). */
+  #topbar button,
+  #topbar input,
+  #topbar select,
+  #topbar .corner-row { -webkit-app-region: no-drag; }
+  /* Dock starts under the REAL top bar, which now sits at the OS titlebar height. */
+  #dock {
+    top: calc(env(titlebar-area-y, var(--dock-gap))
+              + env(titlebar-area-height, var(--topbar-h))
+              + var(--dock-gap));
+  }
+}
+
 /* LOCK / performance mode — the show keeps running + outputting, but EVERYTHING is inert
    except the unlock button. The !important on descendants is required to beat the rules
    that set pointer-events:auto (`.island`, slider thumbs, #stagewrap). */

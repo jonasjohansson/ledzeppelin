@@ -323,6 +323,16 @@ const manifestSig = (d) => JSON.stringify([
 function broadcastManifest(now = false) {
   const run = () => {
     const data = buildRemoteManifest(show, thumbnails);
+    // Carry the editor's CURRENT computed accent vars so the separate phone
+    // CONTROL surface (which can't read the editor's localStorage) follows the
+    // active accent instead of its own hardcoded :root default.
+    const cs = getComputedStyle(document.documentElement);
+    data.theme = {
+      accent: cs.getPropertyValue('--accent').trim(),
+      accentSoft: cs.getPropertyValue('--accent-soft').trim(),
+      accentLine: cs.getPropertyValue('--accent-line').trim(),
+      accentText: cs.getPropertyValue('--accent-text').trim(),
+    };
     const sig = manifestSig(data);
     if (now || sig !== lastManifestSig) { lastManifestSig = sig; bridge?.sendJson?.({ type: 'manifest', data }); }
     // (The companion surface lives in its own window now; nothing in-editor to refresh.)
@@ -2284,7 +2294,7 @@ function applyAccent(hex) {
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
-function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
+function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); broadcastManifest(true); }
 // --- Appearance (Settings › Appearance): UI brightness (surface lift, can go negative
 // = darker than base), accent tint, text contrast, text size. Persisted; live. ---
 const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
