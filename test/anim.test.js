@@ -40,6 +40,18 @@ test('animatedValue lerps from..to by phase', () => {
   assert.ok(Math.abs(animatedValue(spec, 2) - 15) < 1e-9);  // phase 0.5
 });
 
+test('noise shape: deterministic, smooth, in-range coherent drift', () => {
+  const mk = (o) => ({ mode: 'timeline', from: 0, to: 1, durationMs: 1000, shape: 'noise', seed: 42, octaves: 1, ...o });
+  const a = mk();
+  for (let t = 0; t < 20; t += 0.37) { const v = animatedValue(a, t, {}); assert.ok(v >= 0 && v <= 1, `in range @${t}: ${v}`); }
+  assert.equal(animatedValue(a, 3.3, {}), animatedValue(a, 3.3, {}));            // deterministic
+  const v1 = animatedValue(a, 5.0, {}), v2 = animatedValue(a, 5.02, {});
+  assert.ok(Math.abs(v1 - v2) < 0.1, `smooth (no kinks): ${v1} vs ${v2}`);       // coherent, not steppy
+  assert.notEqual(animatedValue(mk({ seed: 1 }), 4, {}), animatedValue(mk({ seed: 2 }), 4, {})); // seeds drift independently
+  const fwd = animatedValue(mk(), 6.1, {}), revd = animatedValue(mk({ reverse: true }), 6.1, {});
+  assert.ok(Math.abs((fwd + revd) - 1) < 1e-9, `reverse flips: ${fwd}+${revd}`);
+});
+
 test('resolveParams overrides only animated keys, passes the rest through', () => {
   const params = { 'line.pos': 0.5, 'line.width': 0.08 };
   const anim = { 'line.pos': makeAnim(0, 1, 4000, 'forward') };

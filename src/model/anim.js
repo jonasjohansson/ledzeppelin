@@ -20,10 +20,26 @@ export const DIRECTIONS = ['forward', 'backward', 'mirror'];
 // are separate modifiers (spec.reverse / spec.bounce), so e.g. saw+reverse = ramp-down,
 // saw+bounce = triangle. Legacy specs (no shape) derive reverse/bounce from `direction`
 // (backward→reverse, mirror→bounce), so they're unchanged.
-export const LFO_SHAPES = ['saw', 'sine', 'square', 'random'];
+export const LFO_SHAPES = ['saw', 'sine', 'square', 'random', 'noise'];
 // Deterministic 0..1 pseudo-random per integer cycle (sample & hold — no Math.random so
 // playback is reproducible frame-to-frame).
 const rand01 = (n) => { const x = Math.sin((n + 1) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+
+// COHERENT NOISE (the "alive" modulator): smooth 1-D value noise over the clock — organic
+// drift instead of the steppy sample-&-hold `random`. Deterministic (seed-based, no
+// Math.random) so a 24/7 install replays identically. fbm sums octaves for detail.
+const hashN = (n, seed) => { const x = Math.sin(n * 127.1 + seed * 311.7) * 43758.5453; return x - Math.floor(x); };
+const valueNoise1 = (x, seed) => {
+  const i = Math.floor(x), f = x - i;
+  const u = f * f * (3 - 2 * f);   // smoothstep so the wander has no kinks
+  return hashN(i, seed) * (1 - u) + hashN(i + 1, seed) * u;
+};
+function fbm1(x, seed, octaves) {
+  const n = Math.max(1, Math.min(5, octaves | 0));
+  let amp = 0.5, sum = 0, norm = 0;
+  for (let o = 0; o < n; o++) { sum += amp * valueNoise1(x, seed + o * 17.3); norm += amp; x *= 2; amp *= 0.5; }
+  return norm > 0 ? sum / norm : 0.5;
+}
 // Map a raw forward phase t∈[0,1) → 0..1 for the given waveform.
 function lfoCurve(shape, t) {
   switch (shape) {
@@ -144,6 +160,13 @@ export function animatedValue(spec, timeSec, signals) {
       const dsec = (Number(dur) || 0) / 1000;
       const cyc = dsec > 0 ? Math.floor((Number(timeSec) || 0) / dsec + (Number(spec.phase) || 0)) : 0;
       p = rand01(cyc);
+    } else if (shape === 'noise') {
+      // Smooth coherent drift: one noise "feature" per loop length (dur). Slow dur = slow
+      // wander. `seed` makes each param/instance drift independently; `octaves` adds detail.
+      const dsec = (Number(dur) || 0) / 1000;
+      const x = dsec > 0 ? (Number(timeSec) || 0) / dsec + (Number(spec.phase) || 0) : 0;
+      p = fbm1(x, Number(spec.seed) || 0, spec.octaves || 1);
+      if (rev) p = 1 - p;
     } else {
       let t = animPhase(timeSec, dur, 'forward', spec.phase);   // raw 0..1 saw
       if (bnc) t = 1 - Math.abs(2 * t - 1);                      // bounce → ping-pong 0→1→0

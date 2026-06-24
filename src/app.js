@@ -154,8 +154,8 @@ uniform sampler2D uTex;
 // Pass the composite's alpha through so empty regions are transparent and the
 // CSS checkerboard "canvas paper" shows behind them (opaque content covers it).
 void main(){ frag = texture(uTex, uv); }`;
-const screenProg = program(gl, SCREEN_FS);
-const uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
+let screenProg = program(gl, SCREEN_FS);          // `let` so it can be rebuilt after GL context loss
+let uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
 
 // --- Undo / redo history (Cmd+Z · Cmd+Shift+Z) -----------------------------
 // The show is immutable (commits produce new objects), so a snapshot is just the
@@ -2569,9 +2569,10 @@ function updateStageInsets() {
 }
 window.addEventListener('resize', updateStageInsets);
 
-function loop(ts) {
+function loopBody(ts) {
   if (!t0) t0 = ts;
-  if (ts < frameDue) { requestAnimationFrame(loop); return; }   // throttle to OUTPUT_FPS (before any work)
+  if (ts < frameDue) return;   // throttle to OUTPUT_FPS (before any work)
+  if (glLost) return;          // GPU context gone — skip all gl work until it's restored
   frameDue += FRAME_INTERVAL; if (frameDue < ts) frameDue = ts;  // don't bank a backlog
   syncCompAspect();
   lastTs = ts;
@@ -2699,9 +2700,43 @@ function loop(ts) {
     if (!!live !== lastLive) { lastLive = !!live; if (outputTab === 'fixtures') renderOutput(); }   // daemon up/down → refresh scan button state
     frames = 0; last = ts;
   }
+}
+// Render-loop ERROR BOUNDARY: one bad shader / clip / effect must NEVER kill the rAF loop
+// — a dead loop freezes the wall on a stale frame forever (the worst unattended failure).
+// Wrap every frame, ALWAYS re-schedule; a successful frame clears the error state.
+let loopErrs = 0, lastLoopErrLog = 0;
+function loop(ts) {
+  try { loopBody(ts); loopErrs = 0; }
+  catch (e) {
+    loopErrs++;
+    if (loopErrs === 1) { try { snapshotForUndo(show); } catch { /* preserve a pre-error state to undo back to */ } }
+    if (ts - lastLoopErrLog > 2000) { console.error(`[loop] frame error (${loopErrs}×) — loop kept alive:`, e); lastLoopErrLog = ts; }
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// Global safety net: surface (don't swallow) any unhandled error / promise rejection so a
+// background failure can't silently leave the app in a bad state.
+window.addEventListener('error', (e) => console.error('[uncaught]', e.error || e.message));
+window.addEventListener('unhandledrejection', (e) => console.error('[unhandledrejection]', e.reason));
+
+// WebGL CONTEXT-LOSS recovery: on a long-running Pi/kiosk the GPU process resets (driver
+// timeout, sleep/wake) and silently kills every GL resource. Pause rendering while lost,
+// then rebuild the whole GL stack on restore — turns a permanently dead wall into a blip.
+let glLost = false;
+function rebuildGL() {
+  try {
+    const w = canvas.width, h = canvas.height;
+    screenProg = program(gl, SCREEN_FS);
+    uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
+    compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
+    videoMap.clear();                        // video textures are gone → recreated on next upload
+    refreshSampler();                        // rebuild the output sampler against the new context
+  } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
+}
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glLost = true; console.warn('[gl] context lost — pausing render'); }, false);
+canvas.addEventListener('webglcontextrestored', () => { rebuildGL(); glLost = false; console.warn('[gl] context restored — rebuilt'); }, false);
 
 // --- Project file I/O (New / Save / Load / Import) — bound to the File menu ---
 // Apply a whole show (open/import): resize the stage to its canvas if it changed,

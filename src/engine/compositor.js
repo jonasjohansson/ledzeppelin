@@ -111,6 +111,17 @@ export function makeCompositor(gl, w, h) {
   // the animation to a new point (which looked like a "restart"). See runEntry.
   const phaseClocks = new Map();
 
+  // FEEDBACK BUS: a PERSISTENT previous-frame texture per effect instance, keyed by
+  // `<instanceKey>` (e.g. "l1:fx0"). A shader that declares `uFeedback` reads last frame's
+  // output of itself; runEntry copies the new result back after drawing. Runtime-only state
+  // (like phaseClocks) — culled when its owner layer/clip dies, freed in dispose().
+  const feedbackTargets = new Map();
+  function feedbackTexFor(key) {
+    let t = feedbackTargets.get(key);
+    if (!t) { t = makeTarget(gl, w, h); feedbackTargets.set(key, t); }
+    return t;
+  }
+
   // Lazily-compiled programs, keyed by registry name (+ reserved blit/xfade keys).
   // Each cached entry: { prog, uniforms: Map<string, WebGLUniformLocation|null> }.
   const cache = new Map();
@@ -200,7 +211,19 @@ export function makeCompositor(gl, w, h) {
         gl.uniform1i(uTex, 0);
       }
     }
+    // FEEDBACK BUS: if the shader declares uFeedback, bind this instance's persistent
+    // previous-frame texture on unit 1, draw, then copy the new result back for next frame.
+    const uFb = loc(c, 'uFeedback');
+    let fbTarget = null;
+    if (uFb !== null) {
+      fbTarget = feedbackTexFor(instanceKey || entry.name);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, fbTarget.tex);
+      gl.uniform1i(uFb, 1);
+      gl.activeTexture(gl.TEXTURE0);
+    }
     drawFullscreen(gl);
+    if (fbTarget) blitInto(dst.tex, fbTarget, 1);   // persist this frame's output as next frame's feedback
   }
 
   // Image (data-URL) → WebGLTexture, cached by URL. Loads async behind a 1×1 black
@@ -431,16 +454,16 @@ export function makeCompositor(gl, w, h) {
       const live = new Set(list.map((l) => l && l.id));
       for (const id of [...layerState.keys()]) if (!live.has(id)) layerState.delete(id);
     }
-    if (phaseClocks.size) {
-      const liveIds = new Set();
+    if (phaseClocks.size || feedbackTargets.size) {
+      const liveIds = new Set(['comp']);   // composition-level effects use "comp:fxN"
       for (const l of list) {
         if (!l) continue;
         liveIds.add(l.id);
         for (const cl of (l.clips || [])) if (cl) liveIds.add(cl.id);
       }
-      for (const k of [...phaseClocks.keys()]) {
-        if (!liveIds.has(k.slice(0, k.indexOf(':')))) phaseClocks.delete(k);
-      }
+      const ownerOf = (k) => { const i = k.indexOf(':'); return i >= 0 ? k.slice(0, i) : k; };
+      for (const k of [...phaseClocks.keys()]) if (!liveIds.has(ownerOf(k))) phaseClocks.delete(k);
+      for (const [k, t] of [...feedbackTargets]) if (!liveIds.has(ownerOf(k))) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); feedbackTargets.delete(k); }
     }
 
     // 1. Clear accumulator to TRANSPARENT black, no blending. Empty/transparent
@@ -579,6 +602,8 @@ export function makeCompositor(gl, w, h) {
       gl.deleteTexture(t.tex);
       gl.deleteFramebuffer(t.fbo);
     }
+    for (const t of feedbackTargets.values()) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); }
+    feedbackTargets.clear();
     layerState.clear();
     phaseClocks.clear();
   }

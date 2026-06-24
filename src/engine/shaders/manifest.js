@@ -187,6 +187,30 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float rate; uniform float uT;
 void main(){ float g=step(0.5, fract(uT*rate)); frag=texture(uTex, uv)*g; }`;
 
+// FEEDBACK-BUS effects — these declare `uFeedback`, the compositor's persistent
+// previous-frame texture for this effect instance (the engine binds it + copies the
+// result back each frame; see compositor.js). They are what makes content feel ALIVE.
+//
+// Trails: bright pixels leave decaying streaks (max-blend with the faded last frame).
+const TRAILS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform sampler2D uFeedback; uniform float decay;
+void main(){ vec4 cur = texture(uTex, uv); vec4 prev = texture(uFeedback, uv) * decay; frag = max(cur, prev); }`;
+
+// Feedback tunnel: the faded last frame is zoomed/rotated about centre before max-blend —
+// gives infinite-tunnel / droste motion. aspect (auto-injected) keeps it square.
+const FEEDBACK = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform sampler2D uFeedback; uniform float decay; uniform float zoom; uniform float rotate; uniform float aspect;
+void main(){
+  vec2 c = uv - 0.5; c.x *= aspect;
+  float s = sin(rotate), co = cos(rotate);
+  c = mat2(co, -s, s, co) * c / max(0.01, zoom);
+  c.x /= aspect; c += 0.5;
+  vec4 prev = texture(uFeedback, c) * decay;
+  frag = max(texture(uTex, uv), prev);
+}`;
+
 // Segmenter (after Resolume's Extra Effect): split the perpendicular axis into N
 // equal segments and pass only a chosen range; the rest is transparent. Stack
 // several (different sources per clip) to assemble per-segment content — and for
@@ -466,6 +490,20 @@ export const REGISTRY = {
     name: 'strobe', type: 'effect', src: STROBE,
     params: [
       { key: 'rate', type: 'float', min: 0, max: 20, default: 4 },
+    ],
+  },
+  trails: {
+    name: 'trails', type: 'effect', src: TRAILS,
+    params: [
+      { key: 'decay', type: 'float', min: 0, max: 0.99, default: 0.9 },   // how much of the past persists
+    ],
+  },
+  feedback: {
+    name: 'feedback', type: 'effect', src: FEEDBACK,
+    params: [
+      { key: 'decay', type: 'float', min: 0, max: 0.99, default: 0.92 },
+      { key: 'zoom', type: 'float', min: 0.9, max: 1.1, default: 1.02 },
+      { key: 'rotate', type: 'float', min: -0.1, max: 0.1, default: 0 },
     ],
   },
   segmenter: {

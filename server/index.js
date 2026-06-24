@@ -90,6 +90,8 @@ const http = createServer(async (req, res) => {
       fpsOut,
       clients: wss.clients.size,
       lastFrameMsAgo: lastFrameAt ? Date.now() - lastFrameAt : null,
+      lastFreshMsAgo: lastFreshAt ? Date.now() - lastFreshAt : null,
+      outputStale,
       osc: OSC_PORT,
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
     }));
@@ -135,10 +137,17 @@ const http = createServer(async (req, res) => {
 // so deflate would burn CPU both ends for ~zero gain. maxPayload caps a malformed
 // frame. The daemon, not the browser, paces output (below).
 const OUTPUT_FPS = 42, KEEPALIVE_MS = 1000;   // default cap; the editor can override per route (m.fps)
+// Stale-frame watchdog: if the editor stops sending FRESH frames (a frozen/crashed tab with
+// the socket still open) for STALE_MS, don't keep-alive the frozen frame forever — fade it to
+// black over FADE_MS so the wall fails to a deliberate dark state, not stale garbage.
+const STALE_MS = 3000, FADE_MS = 1500;
 const wss = new WebSocketServer({ server: http, path: '/frames', perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
 let frames = 0;
 let fpsOut = 0;            // frames sent in the last 1s window (for /health)
 let lastFrameAt = 0;      // ms epoch of the last frame actually sent
+let lastFreshAt = 0;      // ms epoch of the last FRESH frame received from a client
+let outputStale = false;  // watchdog tripped (faded to safe state) — surfaced in /health
+let safeBuf = null;       // reused buffer for the faded/black safe state
 let lastManifest = null;   // cache the editor's latest companion manifest, so a phone gets the show the moment it connects
 wss.on('connection', (ws) => {
   console.log('[ws] client connected');
@@ -156,13 +165,27 @@ wss.on('connection', (ws) => {
     timer = setInterval(() => {
       if (!route || !latest) return;
       const now = Date.now();
+      // WATCHDOG: client stopped sending fresh frames (frozen/crashed tab) → fade the held
+      // frame to black over FADE_MS instead of keep-aliving stale garbage indefinitely.
+      const staleFor = lastFreshAt ? now - lastFreshAt : 0;
+      if (staleFor > STALE_MS) {
+        if (!outputStale) { outputStale = true; console.warn('[ws] no fresh frames — fading to safe state'); }
+        const k = staleFor >= STALE_MS + FADE_MS ? 0 : 1 - (staleFor - STALE_MS) / FADE_MS;   // 1→0
+        if (k <= 0 && now - lastSent < KEEPALIVE_MS) return;   // fully dark → keep-alive black at ~1Hz
+        if (!safeBuf || safeBuf.length !== latest.length) safeBuf = Buffer.alloc(latest.length);
+        if (k <= 0) safeBuf.fill(0); else for (let i = 0; i < latest.length; i++) safeBuf[i] = Math.round(latest[i] * k);
+        lastSent = now; lastFrameAt = now;
+        try { sendFrame(safeBuf, route); } catch (e) { console.error('[ws] safe send failed', e.message); }
+        return;
+      }
+      if (outputStale) { outputStale = false; console.log('[ws] fresh frames resumed'); }
       if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at outFps; else ~1Hz keep-alive
       dirty = false; lastSent = now; frames++; lastFrameAt = now;
       try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
     }, frameMs);
   };
   ws.on('message', (data, isBinary) => {
-    if (isBinary) { if (route) { latest = data; dirty = true; } return; }   // ws gives a fresh Buffer per msg → no copy
+    if (isBinary) { if (route) { latest = data; dirty = true; lastFreshAt = Date.now(); } return; }   // ws gives a fresh Buffer per msg → no copy
     try {
       const m = JSON.parse(data.toString());
       if (m.type === 'route') {

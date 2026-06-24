@@ -302,6 +302,7 @@ const WAVE_DEFS = [
   { value: 'sine', glyph: '∿', title: 'sine' },
   { value: 'square', glyph: '⊓', title: 'square' },
   { value: 'random', glyph: '⋮', title: 'random (sample & hold)' },
+  { value: 'noise', glyph: '≈', title: 'noise — smooth organic drift (slow rate = drift)' },
 ];
 // Re-phase `next` so its post-modifier sweep position equals where `prev` is right now —
 // flipping reverse/bounce continues from the current value instead of jumping.
@@ -325,7 +326,12 @@ function lfoControls(anim, onAnim, clock, bpm) {
   const bnc = anim.bounce != null ? !!anim.bounce : anim.direction === 'mirror';
   const set = (patch) => {
     const next = { ...anim, shape, reverse: rev, bounce: bnc, direction: undefined, ...patch };
-    onAnim(retimeLfo(anim, next, clock ? clock() : 0, bpm ? bpm() : 120));   // continue from current position
+    if (next.shape === 'noise') {
+      if (next.seed == null) next.seed = Math.floor(Math.random() * 1000);   // independent drift per param (persisted, deterministic at playback)
+      onAnim(next);   // noise isn't periodic — no phase retime
+    } else {
+      onAnim(retimeLfo(anim, next, clock ? clock() : 0, bpm ? bpm() : 120));   // continue from current position
+    }
   };
   const btn = (on, glyph, title, patch) => el('button', {
     className: 'dir-btn' + (on ? ' on' : ''), textContent: glyph, title,
