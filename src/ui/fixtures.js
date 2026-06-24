@@ -138,7 +138,7 @@ const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '')
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow, onSelect, getConnected = () => true }) {
+export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, getConnected = () => true }) {
   // The Devices + Library tabs render LISTS only; the selected item's editor goes
   // into the left sidebar (app wires that via deviceDetailEl / libraryDetailEl and
   // re-renders it on onSelect).
@@ -205,57 +205,22 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   }
 
   function controllerBlock(d) {
-    // Art-Net nodes (DiGidot, Madrix Nebula, consoles…) have no WLED JSON API — the
-    // model/pixels/power/signal status and save/reboot are WLED-only, so skip them.
-    // Only the output brightness applies (daemon-side), and it works without a poll.
-    if (d.protocol === 'artnet') {
-      return el('div', { className: 'ctrl-block' }, [
-        el('div', { className: 'fx-pts', textContent: 'controller' }),
-        brightnessRow(d, true),
-      ]);
-    }
+    // CHECK + REBOOT are WLED-only and only meaningful once a real WLED is actually
+    // detected at this controller's IP (auto-pinged on render). Art-Net nodes and
+    // undetected / offline controllers show nothing here.
+    if (d.protocol === 'artnet') return el('div');
     const st = deviceStatus.get(d.id);
-    // Live controls (brightness / save / reboot) only make sense when the device is
-    // actually reachable — gate them on a confirmed-online status. CHECK stays
-    // enabled (it's how you bring the status online in the first place).
-    const online = !!st?.ok;
-    const offTitle = d.ip ? 'controller offline, press CHECK first' : 'set the controller IP first';
+    if (!st?.ok) return el('div');
     const refresh = async () => { deviceStatus.set(d.id, await getDeviceState(d.ip)); render(); };
-    // Status — multi-line key/value so it reads clearly (we have the vertical room).
-    const statBox = el('div', { className: 'ctrl-stat' });
-    if (!st) statBox.append(el('div', { className: 'fx-devstatus', textContent: '— not checked' }));
-    else if (!st.ok) statBox.append(el('div', { className: 'fx-devstatus is-off', textContent: `⚠ offline · ${st.error}` }));
-    else {
-      const info = st.data.info || {}, s = st.data.state || {}, leds = info.leds || {}, wifi = info.wifi || {};
-      // "stream" confirms our DDP is actually landing: WLED reports realtime mode +
-      // the live source IP while it's receiving frames.
-      const stream = info.live ? `live · ${info.lm || info.lip || 'realtime'}` : 'idle';
-      const pwr = leds.pwr != null ? `${leds.pwr}${leds.maxpwr ? '/' + leds.maxpwr : ''} mA` : '—';
-      const rows = [
-        ['model', `${info.name || 'wled'} · v${info.ver || '?'}`],
-        ['pixels', `${leds.count ?? '?'} px${leds.fps != null ? ' · ' + leds.fps + ' fps' : ''}`],
-        ['stream', stream],
-        ['power', s.on ? `on · master ${s.bri ?? '?'}` : 'off'],
-        ['draw', pwr],
-        ['signal', `${wifi.rssi ?? '?'} dBm`],
-        ['uptime', fmtUptime(info.uptime)],
-      ];
-      for (const [k, v] of rows) statBox.append(el('div', { className: 'ctrl-stat-row' }, [
-        el('span', { className: 'ctrl-stat-k', textContent: k }), el('span', { className: 'ctrl-stat-v', textContent: v }),
-      ]));
-    }
     return el('div', { className: 'ctrl-block' }, [
-      el('div', { className: 'fx-pts', textContent: 'controller' }),
-      brightnessRow(d, online),
-      saveToDeviceRow(d, online, offTitle),
-      // Check + its status readout sit at the bottom (the diagnostics, after the
-      // everyday controls).
       el('div', { className: 'ctrl-row' }, [
         el('button', { className: 'ctrl-btn', textContent: 'check', title: 'read status from the controller', onclick: refresh }),
+        // Flash the physical controller red so you can locate it on the rig (works best
+        // with output paused/blackout — live DDP overrides WLED's own segments).
+        el('button', { className: 'ctrl-btn', textContent: 'identify', title: 'flash this controller red to locate it (pause output / blackout to see it)', onclick: () => identify(d.ip) }),
         el('button', {
-          className: 'ctrl-btn', textContent: 'reboot', disabled: !online, title: online ? 'reboot the controller (output to it drops for ~10s)' : offTitle,
+          className: 'ctrl-btn', textContent: 'reboot', title: 'reboot the controller (output to it drops for ~10s)',
           onclick: async () => {
-            if (!d.ip) { window.alert('Set the controller IP first.'); return; }
             if (!window.confirm(`Reboot “${d.name || d.id}”?\n\nIt drops off the network for ~10s while it restarts.`)) return;
             deviceStatus.delete(d.id); render();                 // status goes unknown while it cycles
             const r = await setDeviceState(d.ip, { rb: true });   // WLED JSON API: reboot
@@ -263,7 +228,6 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
           },
         }),
       ]),
-      statBox,
     ]);
   }
 
@@ -303,29 +267,20 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
   // with one click. Results persist across renders so adding one re-renders the
   // list with it marked "added".
   // Just the scan toggle button (so it can sit beside + fixture / + device).
-  function scanButton(rerender = render) {
-    const online = getConnected();   // false on the hosted demo (no local daemon)
-    return el('button', {
-      className: 'fx-add', textContent: scanState.running ? 'scanning…' : '⌖ scan',
-      title: online ? 'find WLED + Art-Net controllers on your network (needs the daemon running)'
-        : 'scanning needs the local app (the daemon) — not available on the web demo',
-      disabled: scanState.running || !online,
-      onclick: async () => {
-        if (scanState.running || !getConnected()) return;
-        scanState = { running: true, result: null, artnet: null, error: null }; rerender();
-        // WLED subnet scan + Art-Net ArtPoll, in parallel but rendered INDEPENDENTLY —
-        // ArtPoll (~1.5s) shows long before the slower WLED subnet sweep (~several s).
-        let pending = 2;
-        const done = () => { if (--pending === 0) { scanState = { ...scanState, running: false }; rerender(); } };
-        scanDevices().then((wled) => {
-          scanState = { ...scanState, result: wled.ok ? wled.data : null, error: wled.ok ? null : wled.error };
-          rerender(); done();
-        });
-        fetch('/api/artnet/scan').then((r) => r.json()).catch(() => []).then((art) => {
-          scanState = { ...scanState, artnet: Array.isArray(art) ? art : [] };
-          rerender(); done();
-        });
-      },
+  // The scan action (WLED subnet sweep + Art-Net ArtPoll, in parallel, rendered
+  // independently). Triggered by the scan icon in the Devices tab header.
+  function runScan(rerender = render) {
+    if (scanState.running || !getConnected()) return;
+    scanState = { running: true, result: null, artnet: null, error: null }; rerender();
+    let pending = 2;
+    const done = () => { if (--pending === 0) { scanState = { ...scanState, running: false }; rerender(); } };
+    scanDevices().then((wled) => {
+      scanState = { ...scanState, result: wled.ok ? wled.data : null, error: wled.ok ? null : wled.error };
+      rerender(); done();
+    });
+    fetch('/api/artnet/scan').then((r) => r.json()).catch(() => []).then((art) => {
+      scanState = { ...scanState, artnet: Array.isArray(art) ? art : [] };
+      rerender(); done();
     });
   }
   // The scan RESULTS (error / found controllers), rendered separately below the row.
@@ -387,8 +342,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       .filter((f) => (f.output?.deviceId || '') === d.id)
       .sort((a, b) => (a.output?.pixelOffset || 0) - (b.output?.pixelOffset || 0));
     const total = fxs.reduce((m, f) => m + (f.pixelCount || 0), 0);
+    if (!total) return el('div');   // nothing patched yet → show nothing
     const wrap = el('div', {}, [el('div', { className: 'fx-pts', textContent: `patch · ${total} px` })]);
-    if (!total) { wrap.append(el('div', { className: 'seg-hint', textContent: 'no fixtures on this device' })); return wrap; }
     const bar = el('div', { className: 'patch-bar' });
     for (const f of fxs) {
       const seg = el('div', { className: 'patch-seg' });
@@ -408,7 +363,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       .filter((f) => (f.output?.deviceId || '') === d.id)
       .reduce((m, f) => m + (f.pixelCount || 0), 0);
     const base = d.universe ?? 0;
-    if (!px) return el('div', { className: 'seg-hint', textContent: 'no fixtures patched, spans 0 universes' });
+    if (!px) return el('div');   // nothing patched yet → show nothing
     const last = base + Math.ceil(px / 170) - 1;
     const span = last === base ? `universe ${base}` : `universes ${base}–${last}`;
     return el('div', { className: 'seg-hint', textContent: `spans ${span} (170 px each)` });
@@ -449,39 +404,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
         (x) => upd({ protocol: x, port: x === 'artnet' ? 6454 : 4048 }))),
       ...(d.protocol === 'artnet' ? [
         // Base universe — the device's pixels occupy consecutive universes from it.
+        // (Art-Net SYNC is a model-level setting now — see the Inventory controller editor.
+        // Discovery lives in the Devices SCAN, which already ArtPolls — no per-device scan.)
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
-        // ArtSync: latch all of this device's universes together each frame, so a
-        // multi-universe rig doesn't tear. Off by default (some nodes ignore it).
-        field('Art-Net sync', (() => {
-          const c = el('input', { type: 'checkbox' }); c.checked = !!d.artnetSync;
-          c.addEventListener('change', () => upd({ artnetSync: c.checked }));
-          return c;
-        })()),
-        // Discover Art-Net nodes on the network (ArtPoll) → click one to bind this
-        // device's IP to it without re-mapping pixels.
-        (() => {
-          const btn = el('button', { className: 'fx-add', textContent: 'scan Art-Net' });
-          const list = el('div', { className: 'scan-block' });
-          btn.addEventListener('click', async () => {
-            btn.disabled = true; btn.textContent = 'scanning…'; list.textContent = '';
-            let nodes = [];
-            try { nodes = await fetch('/api/artnet/scan').then((r) => r.json()); } catch { /* daemon offline */ }
-            btn.disabled = false; btn.textContent = 'scan Art-Net';
-            if (!Array.isArray(nodes) || !nodes.length) { list.append(el('span', { className: 'seg-hint', textContent: 'no Art-Net nodes found' })); return; }
-            for (const n of nodes) {
-              const row = el('button', { className: 'fx-add', textContent: `${n.ip}${n.shortName ? ' · ' + n.shortName : ''}`, title: n.longName || n.ip });
-              row.addEventListener('click', () => upd({ ip: n.ip }));   // bind → re-renders the editor
-              list.append(row);
-            }
-          });
-          return el('div', { className: 'scan-block' }, [btn, list]);
-        })(),
       ] : []),
-      // Colour order (physical wiring spec) + output delay (ms, time-align this
-      // controller against the rest of the rig; 0 = immediate). Shown inline.
-      field('Colour Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
-      field('Sync delay (ms)', numInputCommit(d.syncDelayMs ?? 0, (x) => upd({ syncDelayMs: Math.max(0, Math.min(1000, Math.round(x))) }))),
+      // Format = the colour byte order (physical wiring spec — the only one most rigs need).
+      field('Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Output gamma calibration (daemon-side LUT) — straightens LED fades. 1 = linear.
+      sliderRow('Gamma', d.gamma ?? 1, (x) => upd({ gamma: Math.round(x * 10) / 10 }), 0.5, 3, 0.1),
       patchRuler(show, d),
       controllerBlock(d),
     ]);
@@ -502,6 +433,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
       // Max pixels a single output can drive (0 = unlimited). A full output greys
       // out extending its chain.
       sliderRow('Max px/output', t.maxPerOutput ?? 0, (x) => upd((nt) => { nt.maxPerOutput = Math.max(0, Math.round(x)); }), 0, 2048, 1),
+      // Art-Net sync (ArtSync): latch all of a device's universes together each frame
+      // so a multi-universe rig doesn't tear. A model-level capability (applies to every
+      // device of this model that outputs Art-Net). Off by default; some nodes ignore it.
+      field('Art-Net sync', (() => {
+        const c = el('input', { type: 'checkbox' }); c.checked = !!t.artnetSync;
+        c.addEventListener('change', () => upd((nt) => { nt.artnetSync = c.checked; }));
+        return c;
+      })()),
     ]);
   }
 
@@ -706,53 +645,54 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
           commit(next);
         },
       }));
-      b.append(scanButton());
       const sr = scanResults(show); if (sr) b.append(sr);
     }
 
-    // === LIBRARY tab = the catalog of MODELS you build with ===================
+    // === INVENTORY tab = the catalog of MODELS you build with =================
+    // Each item has a "+" to INSTANTIATE it into the scene (a fixture type → a placed
+    // fixture; a controller model → a device), a "⧉" to duplicate it (author a
+    // variant), and clicking the row opens its editor popover. Authoring a brand-new
+    // blank model lives at the END of each section ("+ new …").
 
-    // Add controls at the TOP, inline (matches the Fixtures tab) — one row, two
-    // buttons: a new fixture definition and a new controller model.
-    libraryBox.append(el('div', { className: 'output-addrow' }, [
-      el('button', { className: 'fx-add', textContent: '+ fixture', onclick: () => addType(show) }),
-      el('button', { className: 'fx-add', textContent: '+ controller', onclick: () => addController(show) }),
-    ]));
-
-    // --- Controller MODELS (device types) — DigUno/Quad/Octa + generic. Editing
-    //     a model fans out to every device that uses it. ---
+    // --- Controller MODELS (flat — not foldable; just a label + the full list). ---
     const devTypes = show.deviceTypes || [];
     if (!devTypes.some((t) => t.id === selDevTypeId)) selDevTypeId = devTypes[0]?.id ?? null;
-    libraryBox.append(Section('Controllers', 'controllers', (b) => {
+    libraryBox.append(el('div', { className: 'fx-pts', textContent: 'controllers' }));
+    {
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
         const count = deviceTypeInstanceCount(show, t.id);
+        const add = el('button', { className: 'lib-add', textContent: '+', title: 'add a controller of this model to the scene', onclick: (e) => { e.stopPropagation(); onInstantiateController?.(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
-        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, dup],
+        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, add, dup],
           libSel === 'controller' && t.id === selDevTypeId,
-          () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); }));
+          () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); onPick?.(); }));
       }
-      if (!devTypes.length) b.append(el('div', { className: 'seg-hint', textContent: 'no controller models yet' }));
-      b.append(list);
-    }));
+      if (!devTypes.length) libraryBox.append(el('div', { className: 'seg-hint', textContent: 'no controller models yet' }));
+      libraryBox.append(list);
+      // Create + open the new model directly.
+      libraryBox.append(el('button', { className: 'fx-add', textContent: '+ new controller model', onclick: () => { addController(show); onPick?.(); } }));
+    }
 
-    // --- Fixture DEFINITIONS (types) — define once, place many in the Fixtures
-    //     tab. Editing a definition updates all its placed instances. ---
+    // --- Fixture DEFINITIONS (flat — define once, place many). ---
     const types = show.fixtureTypes || [];
     if (!types.some((t) => t.id === selTypeId)) selTypeId = types[0]?.id ?? null;
-    libraryBox.append(Section('Fixtures', 'fixtures', (b) => {
+    libraryBox.append(el('div', { className: 'fx-pts', textContent: 'fixtures' }));
+    {
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
+        const add = el('button', { className: 'lib-add', textContent: '+', title: 'place a fixture of this type on the canvas', onclick: (e) => { e.stopPropagation(); onInstantiateFixture?.(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
         // Size shows as a greyed suffix on the name ("(6ch)" / "(60px)"); ×N = instances.
-        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, dup],
+        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, add, dup],
           selected: libSel === 'fixture' && t.id === selTypeId,
-          onClick: () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); } }));
+          onClick: () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); onPick?.(); } }));
       }
-      if (!types.length) b.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
-      b.append(list);
-    }));
+      if (!types.length) libraryBox.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
+      libraryBox.append(list);
+      libraryBox.append(el('button', { className: 'fx-add', textContent: '+ new fixture type', onclick: () => { addType(show); onPick?.(); } }));
+    }
     // Project file I/O lives in the Settings tab.
     if (mounted) onSelect?.();   // lists rebuilt → refresh the left sidebar editor too (covers status pings, edits)
   }
@@ -775,7 +715,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, getConnected = 
     setDevice: (id) => { selDeviceId = id; lastSel = 'device'; },
     // The WLED network-discovery block, for the app to mount in the merged tab.
     // Pass a rerender callback so its results refresh wherever it's mounted.
-    scanButtonEl: (rerender) => scanButton(rerender),
+    runScan: (rerender) => runScan(rerender),
+    scanning: () => scanState.running,
     scanResultsEl: () => scanResults(getShow()),
     libraryDetailEl: () => {
       const show = getShow();

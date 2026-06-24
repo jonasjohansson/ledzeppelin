@@ -50,6 +50,9 @@
   --sans: var(--ui-font);
   /* --ui-scale (set from Settings › Appearance) multiplies every text token. */
   --ui-scale: 1;
+  /* Fill opacity of the floating panels (device editor + timeline). Settings › Appearance
+     "Translucency" drives this; lower = more see-through. */
+  --pop-opacity: 62%;
   --fs-micro:calc(10px * var(--ui-scale)); --fs-body:calc(11px * var(--ui-scale)); --fs-ctrl:calc(12px * var(--ui-scale)); --fs-title:calc(13px * var(--ui-scale)); --fs-glyph:calc(15px * var(--ui-scale));
   --fw-reg:400; --fw-med:400;   /* single weight — no bold in the UI text */
   --lh-tight:1.2; --lh-ctrl:1.4; --lh-ui:1.45;
@@ -57,7 +60,7 @@
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
   --radius:3px; --radius-sm:2px;
-  --side-w:332px;    /* right panel (Design/Output/Control) width — shared so the HUD can dodge it */
+  --side-w:268px;    /* right panel (Devices/Inventory) width — single pane (editor is the left Device tab) */
   --side2-w:300px;   /* second sidebar (selected fixture/device editor) width */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
   --clip-w:96px;     /* clip-cell width */
@@ -191,6 +194,10 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .lib-dup { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 4px; font-size: 11px; line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
 .output-row:hover .lib-dup { opacity: 0.6; }
 .lib-dup:hover { opacity: 1; color: var(--accent); }
+/* "+" = instantiate into the scene. Always visible (the primary Inventory action),
+   accent on hover. */
+.lib-add { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 var(--s3); font-size: var(--fs-glyph); line-height: var(--lh-ctrl); opacity: .8; transition: opacity .1s; }
+.lib-add:hover { opacity: 1; }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
    text colour. (The output tree's filled-selection pattern, applied here too.) */
@@ -301,7 +308,8 @@ body.output-mode #stagewrap { pointer-events: auto; }
   position: fixed; top: var(--dock-gap); left: var(--dock-gap); right: var(--dock-gap);
   height: var(--topbar-h); z-index: 8;
   display: flex; align-items: center; gap: 10px; padding: 0 8px;
-  box-sizing: border-box; background: var(--panel); border: 1px solid var(--line);
+  box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line);
+  overflow-x: auto; overflow-y: hidden;   /* a fixed bar can't body-scroll → scroll its own content if it overflows */
 }
 #topbar .corner-row { display: inline-flex; align-items: center; gap: 6px; }
 #corner-right { margin-left: auto; }   /* bug + install pushed to the far right */
@@ -337,11 +345,11 @@ body.output-mode #stagewrap { pointer-events: auto; }
 /* COLUMNS: fixed-width side columns (sized for legible, non-wrapping fields) + a
    flexible centre. The view presets (Canvas / Split / Editor) adjust the balance. */
 .dock-col { display: flex; flex-direction: column; gap: var(--dock-gap); min-height: 0; position: relative; }
-#dock-left  { flex: 0 0 var(--left-w, 310px); min-width: 270px; }
+#dock-left  { flex: 0 0 var(--left-w, 282px); min-width: 244px; }
 #dock-center{ flex: 1 1 auto; min-width: 0; }
 /* RIGHT sidebar is split in two equal side-by-side panes (Device editor | Devices/Inventory). */
-#dock-right { flex: 0 0 var(--side-w, 620px); min-width: 520px; flex-direction: row; gap: var(--dock-gap); }
-#grp-fxedit, #grp-patch { flex: 1 1 0; }
+#dock-right { flex: 0 0 var(--side-w, 268px); min-width: 220px; gap: var(--dock-gap); }
+#grp-patch { flex: 1 1 0; }
 
 /* ISLAND: a framed dock window — header bar + scrolling body. */
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 0; padding: var(--s3); box-sizing: border-box; }
@@ -367,7 +375,18 @@ body.output-mode #stagewrap { pointer-events: auto; }
 /* Small icon-only tab (the Settings cog in the left column's tab row). */
 .island-tab.island-tab-icon { flex: 0 0 auto; min-width: 0; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; }
 .island-tab-icon .ic { width: 14px; height: 14px; fill: currentColor; display: block; }
-#timeline-island { height: 240px; }
+/* Timeline floats BOTTOM-LEFT over the canvas, sized to its content (mirrors the device
+   group top-right). Translucent so the output shows through. */
+#timeline-island {
+  position: absolute; left: var(--dock-gap); bottom: var(--dock-gap); z-index: 50;
+  width: auto; max-width: calc(100% - 2 * var(--dock-gap)); max-height: 60%;
+  background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+#timeline-island .island-body { flex: 0 0 auto; overflow: auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
+#timeline-island #deckbar { flex: 0 0 auto; width: auto; }
 /* Canvas-island tab panes (Settings / Mapping / Control) fill below the tab row and
    scroll on their own; the Canvas tab body is #stagewrap. */
 #system-settings, #mapping-pane, #control-pane { flex: 1 1 0; min-height: 0; }
@@ -382,7 +401,8 @@ body.output-mode #stagewrap { pointer-events: auto; }
   padding: 5px 0; color: var(--faint); font: var(--fw-med) var(--fs-body) var(--sans);
   text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .island-tab:hover { color: var(--muted); }
-.island-tab.is-on { color: var(--accent); background: var(--accent-soft); }
+/* Active tab = accent text/icon only (no background fill) — restrained, per the OCR look. */
+.island-tab.is-on { color: var(--accent); }
 /* The Stage + Timeline bodies hold the canvas / deck flush (no inset). */
 #stage-island > #stagewrap, #timeline-island > .island-body { padding: 0; }
 
@@ -409,23 +429,62 @@ body.hide-left #dock-left { display: none; }
 body.hide-right #dock-right { display: none; }
 body.hide-timeline #timeline-island { display: none; }
 body.view-edit #dock-left  { flex-basis: 360px; }
-body.view-edit #dock-right { flex-basis: 680px; }
+body.view-edit #dock-right { flex-basis: 360px; }
 
 /* OVERLAY view: the canvas fills the whole dock as a full-bleed backdrop and the
    panels float TRANSLUCENT over it (frosted), so you see the output through the UI. */
 body.view-overlay #stage-island { position: absolute; inset: var(--dock-gap); z-index: 0; border: none; }
 body.view-overlay #dock-left, body.view-overlay #dock-right { position: relative; z-index: 1; }
-body.view-overlay #dock-center { justify-content: flex-end; }   /* timeline rides the bottom over the canvas */
-body.view-overlay #timeline-island { position: relative; z-index: 1; }
+/* (Timeline already floats bottom-left at all times — see #timeline-island.) */
 body.view-overlay .island:not(#stage-island) { background: color-mix(in srgb, var(--panel) 60%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 body.view-overlay .island:not(#stage-island) .island-head { background: color-mix(in srgb, var(--panel-2) 62%, transparent); }
 body.view-overlay .island:not(#stage-island) .island-body { background: color-mix(in srgb, var(--panel-2) 42%, transparent); }
 
+/* RESPONSIVE — #dock/#topbar are position:fixed (can't body-scroll), so instead of a
+   hard min-width we PROGRESSIVELY COLLAPSE panels, keeping the canvas usable down to
+   phone width (where the /control/ surface is the real phone tool). */
+@media (max-width: 1280px) { :root { --left-w: 252px; --side-w: 240px; } }   /* shrink the columns first */
+@media (max-width: 1100px) { #dock-right { display: none; } }                  /* then drop the right column */
+@media (max-width: 860px)  { #dock-left { display: none; } #timeline-island { max-height: 45%; } }  /* then the left */
+@media (max-width: 760px)  { #corner-right { display: none; } #topbar { gap: 6px; } }   /* drop the far-right top-bar cluster */
+@media (max-width: 680px)  { #timeline-island { display: none; } }            /* finally the floating timeline → canvas only */
+/* Touch: bump tap targets on coarse pointers. */
+@media (pointer: coarse) {
+  .g-icon { min-width: 38px; min-height: 38px; }
+  .tab-scan { padding: var(--s3) var(--s6); font-size: var(--fs-body); }
+  .island-tab { padding: 9px 0; }
+}
+
 #fxinsp-body { display: contents; }
+
+/* Selected-device editor as a floating GROUP — sits TOP-RIGHT over the canvas (placed
+   in JS), height follows content (capped by max-height), slightly translucent. */
+#device-pop {
+  position: fixed; z-index: 60; width: min(290px, calc(100vw - 16px)); max-height: 88vh; overflow: auto;
+  background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+#device-pop[hidden] { display: none; }
+/* The Devices tab carries a small "scan" action inside it (a button within the tab). */
+.island-tab.has-scan { display: flex; align-items: center; justify-content: center; gap: var(--s6); }
+.tab-scan {
+  background: none; border: none; cursor: pointer; padding: 0 var(--s1);
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
+  text-transform: uppercase; color: var(--muted);
+}
+.tab-scan:hover, .tab-scan.on { color: var(--accent); }
+.tab-scan:disabled { opacity: .4; cursor: not-allowed; color: var(--faint); }
+/* Override the docked-island body flex (1 1 0) so the group sizes to its CONTENT, and
+   keep it translucent over the canvas. */
+#device-pop .island-body { flex: 0 0 auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
+#device-pop .island-head { background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 7%), transparent); }
 
 /* CURTAIN: a drag strip on the Timeline's top edge to resize it against the Canvas.
    No visible bar — the ns-resize cursor is the only affordance. */
-.curtain { position: absolute; top: 0; left: 0; width: 100%; height: 7px; cursor: ns-resize; z-index: 5; }
+/* The Canvas/Timeline curtain is obsolete now the timeline floats (no shared height). */
+.curtain { display: none; }
 body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-select: none; }
 
 /* Settings preference rows: checkbox on the LEFT, then the full-width label. */
@@ -547,11 +606,11 @@ body.gui-hidden #topbar { display: none; }
 /* The "Show UI" pill: hidden normally, floats top-left only while the UI is hidden,
    so H is never a one-way trapdoor. */
 #show-ui-pill {
-  position: fixed; top: 8px; left: 8px; z-index: 40; display: none;
+  position: fixed; top: var(--s6); left: var(--s6); z-index: 40; display: none;
   font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
   text-transform: uppercase; color: var(--muted); cursor: pointer;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm);
-  padding: 5px 9px;
+  padding: var(--s3) var(--s4);
 }
 #show-ui-pill:hover { color: var(--accent-text); border-color: var(--line-2); }
 body.gui-hidden #show-ui-pill { display: block; }
@@ -623,6 +682,9 @@ body.gui-hidden #show-ui-pill { display: block; }
   transition: transform .12s;
 }
 .insp-sec.is-open .insp-tri { transform: rotate(90deg); }
+/* Unassigned: a plain heading (no triangle) — indent the title to line up with the
+   foldable controller headers, and no pointer (it's not collapsible). */
+.insp-sec-head.out-unassigned { padding-left: 12px; cursor: default; }
 /* Locked-open section (e.g. an empty Effects group): no collapse affordance. */
 .insp-sec.is-locked .insp-sec-head { cursor: default; }
 .insp-sec.is-locked .insp-sec-head:hover { background: none; }
@@ -879,6 +941,8 @@ input[type=checkbox]:checked::after {
   background: var(--field-bg); border: 1px solid var(--line-2); border-radius: var(--radius); cursor: pointer; }
 .fx-add:hover { border-color: var(--accent); color: var(--accent); }
 .fx-add:active { background: var(--panel-2); }
+.fx-add:disabled { opacity: .4; cursor: not-allowed; color: var(--muted); border-color: var(--line); }
+.fx-add:disabled:hover { border-color: var(--line); color: var(--muted); }
 .fx-io { display: flex; gap: 6px; margin-top: 12px; }
 /* Action rows: buttons SHARE the row width equally (never intrinsic-width chips). */
 .fx-io > button { flex: 1 1 0; min-width: 0; height: var(--ctrl-h); }

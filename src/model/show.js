@@ -53,8 +53,9 @@ export function syncDeviceTypes(show) {
     const protocol = d.protocol === 'artnet' ? 'artnet' : 'ddp';
     const universe = Math.max(0, Math.round(Number(d.universe) || 0));
     // ArtSync: send an OpSync after each frame's ArtDmx so the node latches all its
-    // universes together (tear-free multi-universe). Art-Net only; off by default.
-    const artnetSync = !!d.artnetSync;
+    // universes together (tear-free multi-universe). Now a MODEL-level capability
+    // (set in the Inventory controller editor); legacy per-device value still honoured.
+    const artnetSync = !!(t.artnetSync ?? d.artnetSync);
     // Per-device output delay (ms) — time-aligns this controller against the rig.
     const syncDelayMs = Math.max(0, Math.min(1000, Math.round(Number(d.syncDelayMs) || 0)));
     return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe, artnetSync, syncDelayMs };

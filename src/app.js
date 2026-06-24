@@ -384,8 +384,14 @@ const panel = createFixturePanel({
     const k = panel.lastSel?.();
     if (k === 'devtype' || k === 'type') outputTab = 'library';
     else if (k === 'device') outputTab = 'fixtures';
-    updateInspector();
+    if (devicePopOpen()) updateInspector();   // keep an OPEN group live as lists refresh
   },
+  // An Inventory/model row was clicked → pop its editor group up beside the row.
+  onPick: () => popAtSelectedRow(),
+  // Inventory "+" instantiates into the scene: a fixture type → a placed fixture;
+  // a controller model → a device. Both then pop up the new item's editor group.
+  onInstantiateFixture: (typeId) => { addInstance(typeId); setOutputTab('fixtures'); popAtSelectedRow(); },
+  onInstantiateController: (typeId) => addDeviceOfModel(typeId),
   // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
   // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
   getConnected: () => bridge?.connected?.() ?? false,
@@ -593,13 +599,15 @@ const redrawOverlay = () => preview?.draw(show, lastRGBA, selectedFixtureIds, sh
 // Select a device for editing — the left sidebar shows its settings (IP / model /
 // colour order / scan). Mutually exclusive with a fixture selection: one editor at
 // a time. Unassigned ('') has no device to edit, so it's ignored here.
-function selectDevice(id) {
+function selectDevice(id, ev) {
   if (!id) return;
   selectedDeviceId = id;
   selectedFixtureIds.clear();
   expandedDevices.add(id);
   panel.setDevice?.(id);
   renderOutput(); redrawOverlay();
+  // Pop the controller editor up at the click (or beside its freshly-rendered header).
+  openDevicePop((ev && (ev.clientX || ev.clientY)) ? ev : (outputListEl?.querySelector('.insp-sec-head.is-sel') || null));
 }
 
 function selectFixture(fxId, ev, opts = {}) {
@@ -619,12 +627,14 @@ function selectFixture(fxId, ev, opts = {}) {
   // right column at the Fixtures patch; its editor shows in the Fixture group.
   if (fxId != null && !(ev && ev.shiftKey)) {
     outputTab = 'fixtures';
-    focusGroup('grp-fxedit');
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
     if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
     panel.selectFixture?.(fxId);
   }
   renderOutput(); redrawOverlay();
+  // Pop the editor group up at the click; an empty click clears + dismisses it.
+  if (fxId == null) closeDevicePop();
+  else if (!(ev && ev.shiftKey)) openDevicePop(ev);
   // Scroll the picked fixture's row into view in the placement list.
   if (fxId != null) outputListEl?.querySelector(`[data-fxid="${fxId}"]`)?.scrollIntoView({ block: 'nearest' });
 }
@@ -1359,46 +1369,6 @@ const typeSizeSuffix = (t) => isDmxType(t)
   ? `${t.channels?.length || paramsToChannels(t.params || []).length}ch`
   : ((Number(t?.rows) || 1) > 1 ? `${t.cols}×${t.rows}` : `${t?.pixelCount ?? 1}px`);
 
-function addControls() {
-  const wrap = oel('div', { className: 'output-tools' });
-  const types = show.fixtureTypes || [];
-  // ONE catalog: every fixture is an Inventory definition (a channel layout). Strips
-  // and matrices stream pixels; a 1×1 "par" outputs as a DMX channel-block. Grouped
-  // so the two read apart, but they are the same kind of thing (see Inventory).
-  const sel = oel('select', { title: 'what to place: a fixture definition from your Inventory' });
-  const isPar = (t) => isDmxType(t);   // a DMX type (defined with parameters) — not a pixel strip/matrix
-  const addToGroup = (label, list) => {
-    if (!list.length) return;
-    const g = oel('optgroup', { label });
-    for (const t of list) {
-      g.append(oel('option', { value: t.id, textContent: `${t.name} (${typeSizeSuffix(t)})` }));
-    }
-    sel.append(g);
-  };
-  addToGroup('Strips & matrices', types.filter((t) => !isPar(t)));
-  addToGroup('Pars (DMX)', types.filter(isPar));
-  const addFx = oel('button', { className: 'fx-add', textContent: '+ fixture', title: 'place the selected fixture',
-    onclick: () => addInstance(sel.value) });
-  // "+ controller" — create a controller right here (a generic one; edit its IP /
-  // model / colour order below). New controllers appear as empty containers you drop onto.
-  const addDev = oel('button', { className: 'fx-add', textContent: '+ controller', onclick: () => {
-    let n = structuredClone(show);
-    let k = (n.devices?.length || 0) + 1, id; do { id = `c${k}`; k++; } while (n.devices.some((d) => d.id === id));
-    n = addDevice(n, { id, name: `Controller ${n.devices.length + 1}`, typeId: 'generic', ip: '', colorOrder: 'RGB', port: 4048 });
-    expandedDevices.add(id); selectDevice(id);
-    rebuild(n); panel.refresh(); renderOutput();
-  } });
-  // "scan" — WLED network discovery, beside the add buttons; its results render
-  // below. Only possible when the daemon (node) is running — it serves the scan API.
-  const daemonUp = !!bridge?.connected?.();
-  const scanBtn = panel.scanButtonEl?.(renderOutput);
-  if (scanBtn && !daemonUp) { scanBtn.disabled = true; scanBtn.title = 'start the daemon (npm start) to scan the network'; }
-  wrap.append(oel('div', { className: 'output-addrow' }, [addFx, addDev, ...(scanBtn ? [scanBtn] : [])]));
-  wrap.append(sel);   // the picker (LED + DMX) — always shown; DMX profiles are always available
-  const scanRes = panel.scanResultsEl?.();
-  if (scanRes) wrap.append(scanRes);
-  return wrap;
-}
 
 // Confirm before deleting fixture(s) — it re-packs pixel ranges, and removing a
 // chained fixture changes that whole output's wiring/addressing.
@@ -1468,6 +1438,63 @@ function updateInspector() {
   }
   updateStageInsets();
   updateAlignBtn();
+}
+
+// --- Device editor: a floating GROUP that pops up where you click a controller /
+//     fixture / model. Its height follows the editor content. ---
+const devicePop = document.getElementById('device-pop');
+const devicePopOpen = () => devicePop && !devicePop.hidden;
+function closeDevicePop() { if (devicePop) devicePop.hidden = true; }
+// Park it in the CANVAS top-right corner (floats translucent over the output).
+function positionDevicePop() {
+  if (!devicePopOpen()) return;
+  const pw = devicePop.offsetWidth || 290;
+  const stage = document.getElementById('stage-island');
+  const sr = stage?.getBoundingClientRect();
+  const pad = 4;   // snug into the canvas corner
+  const top = sr ? sr.top + pad : 84;
+  const left = (sr ? sr.right : window.innerWidth) - pw - pad;
+  devicePop.style.top = Math.max(8, top) + 'px';
+  devicePop.style.left = Math.max(8, left) + 'px';
+}
+function openDevicePop() {
+  if (!devicePop) return;
+  updateInspector();          // fill #fxinsp-body (inside the group)
+  devicePop.hidden = false;
+  positionDevicePop();
+}
+function popAtSelectedRow() { openDevicePop(); }
+// Reposition on resize, but coalesce to ONE update per frame (raw resize fires many
+// times/sec while the canvas is also relaying out → the group stutters otherwise).
+let popResizeRaf = 0;
+window.addEventListener('resize', () => {
+  if (!devicePopOpen() || popResizeRaf) return;
+  popResizeRaf = requestAnimationFrame(() => { popResizeRaf = 0; positionDevicePop(); });
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && devicePopOpen() && !typingIn(e.target)) closeDevicePop(); });
+document.addEventListener('pointerdown', (e) => {
+  if (!devicePopOpen()) return;
+  if (devicePop.contains(e.target)) return;
+  if (e.target.closest?.('.output-row, .insp-sec-head, [data-fxid], [data-devid], [data-ptab], #stagewrap')) return;   // device/canvas clicks reopen or move it
+  closeDevicePop();
+}, true);
+// Instantiate from Inventory: a fixture type → a placed fixture; a controller model → a device.
+function addDeviceOfModel(typeId) {
+  const next = structuredClone(show);
+  let n = next.devices.length + 1, id;
+  do { id = `c${n}`; n++; } while (next.devices.some((d) => d.id === id));
+  // Name after the controller MODEL + a per-model sequence ("DigQuad 2"), so devices
+  // of the same model read as 1, 2, 3 …. Bump the number until it's unique among ALL
+  // device names (renames/deletes can otherwise leave a gap that collides).
+  const baseName = (next.deviceTypes || []).find((t) => t.id === typeId)?.name || 'Controller';
+  const taken = new Set((next.devices || []).map((d) => d.name));
+  let seq = (next.devices || []).filter((d) => d.typeId === typeId).length + 1;
+  while (taken.has(`${baseName} ${seq}`)) seq++;
+  next.devices.push({ id, name: `${baseName} ${seq}`, ip: '', colorOrder: 'GRB', port: 4048, typeId });
+  saveShow(next); rebuild(next);
+  setOutputTab('fixtures');            // reveal the Devices tab so the new controller shows
+  panel.setDevice?.(id); panel.refresh(); renderOutput();
+  popAtSelectedRow();
 }
 
 function renderOutput() {
@@ -1560,17 +1587,18 @@ function renderOutput() {
   // out to, below the real rig).
   devOrder.sort((a, b) => (a.deviceId === '' ? 1 : 0) - (b.deviceId === '' ? 1 : 0));
 
-  // Add buttons sit ABOVE the list (+ fixture / + device side by side).
-  outputListEl.append(addControls());
-
   for (const dg of devOrder) {
-    // UNASSIGNED — a section that's also a drop target: drop here to unassign.
+    // UNASSIGNED — a plain heading (not a foldable group), still a drop target: drop
+    // a fixture here to unassign it. Its rows sit directly below the heading.
     if (!dg.deviceId) {
       const items = dg.groups.flatMap((g) => g.items);
-      const { sec, head, body } = devSection('', 'Unassigned', [`${items.length} fx`]);
+      const head = oel('div', { className: 'insp-sec-head out-unassigned' }, [
+        oel('span', { className: 'insp-sec-title', textContent: 'Unassigned' }),
+        oel('span', { className: 'fx-badge', textContent: `${items.length} fx` }),
+      ]);
       dropZone(head, '', null);   // drop a fixture here → unassign it
-      for (const { f, i } of items) body.append(fixtureRow(f, i));
-      outputListEl.append(sec);
+      outputListEl.append(head);
+      for (const { f, i } of items) outputListEl.append(fixtureRow(f, i));
       continue;
     }
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
@@ -1579,7 +1607,7 @@ function renderOutput() {
     const gcap = Number(gdev?.maxPerOutput) || 0;
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
     const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
-      () => selectDevice(dg.deviceId));   // click the header → edit the controller
+      (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
     if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
     if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
     dropZone(head, dg.deviceId, null);   // drop a fixture on a controller → assign it there
@@ -1590,7 +1618,9 @@ function renderOutput() {
   }
 
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
-  // (Scan + its results live in the add-controls row at the top.)
+  // Scan RESULTS render here; the scan TRIGGER is the icon in the Devices tab header.
+  const scanRes = panel.scanResultsEl?.(); if (scanRes) outputListEl.append(scanRes);
+  document.getElementById('patch-scan')?.classList.toggle('on', !!panel.scanning?.());   // reflect scanning
 }
 
 const renderOutputList = renderOutput; // back-compat alias
@@ -1832,30 +1862,8 @@ function focusGroup(id) {
 // The one resize affordance: a "curtain" on the Timeline's top edge to trade height
 // with the Canvas above it. Persisted; the canvas re-fits live. (Everything else
 // relies on default sizes + the view presets.)
-(function setupTimelineCurtain() {
-  const tl = document.getElementById('timeline-island'); if (!tl) return;
-  const KEY = 'lz.h.timeline', MIN = 70;
-  // The timeline never grows TALLER than its layers: the cap = the deck's natural
-  // content height (so there's never empty space below the last layer).
-  const contentMax = () => { const dl = tl.querySelector('.deck-layers'); return dl ? Math.ceil(dl.scrollHeight) + 4 : 700; };
-  const setH = (h) => { tl.style.height = Math.max(MIN, Math.min(Math.round(h), contentMax())) + 'px'; };
-  // Initial: stored height (re-clamped), else fit exactly to the layers.
-  requestAnimationFrame(() => { let s = null; try { s = parseInt(localStorage.getItem(KEY), 10) || null; } catch { /* private */ } setH(s || contentMax()); });
-  // Re-clamp whenever the deck re-renders (layers added/removed) so it stays ≤ layers.
-  const deck = document.getElementById('deckbar');
-  if (deck && 'MutationObserver' in window) new MutationObserver(() => setH(parseInt(tl.style.height, 10) || contentMax())).observe(deck, { childList: true, subtree: true });
-  const handle = document.createElement('div'); handle.className = 'curtain'; handle.title = 'drag to resize the timeline';
-  tl.appendChild(handle);
-  let dragging = false, startY = 0, startH = 0;
-  handle.addEventListener('pointerdown', (e) => { dragging = true; handle.setPointerCapture(e.pointerId); document.body.classList.add('resizing-row'); startY = e.clientY; startH = tl.getBoundingClientRect().height; e.preventDefault(); });
-  handle.addEventListener('pointermove', (e) => { if (!dragging) return; setH(startH + (startY - e.clientY)); updateStageInsets(); });   // drag up = taller (capped at the layers' height)
-  const end = (e) => {
-    if (!dragging) return; dragging = false; document.body.classList.remove('resizing-row');
-    try { handle.releasePointerCapture(e.pointerId); } catch { /* released */ }
-    try { localStorage.setItem(KEY, String(Math.round(tl.getBoundingClientRect().height))); } catch { /* private */ }
-  };
-  handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end);
-})();
+// (The Canvas/Timeline curtain is retired — the timeline now floats bottom-left over
+//  the canvas and sizes to its content via CSS, so there's no shared height to drag.)
 
 // Patch island tabs (Devices | Inventory) → setOutputTab owns the tab UI + bodies.
 (function setupPatchTabs() {
@@ -2150,6 +2158,13 @@ function setInspectorTab(which) {
 }
 document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
 
+// Scan icon in the Devices/Inventory tab header → trigger a network scan. Gated on the
+// daemon socket (kept in sync by the status loop); results render in the Devices list.
+const patchScanBtn = document.getElementById('patch-scan');
+patchScanBtn?.addEventListener('click', () => { if (!patchScanBtn.disabled) panel.runScan?.(renderOutput); });
+const syncScanBtn = (live) => { if (patchScanBtn) { patchScanBtn.disabled = !live; patchScanBtn.title = live ? 'Scan the network for controllers' : 'Start the daemon (npm start) to scan'; } };
+syncScanBtn(!!bridge?.connected?.());
+
 // Patch tabs: 'fixtures' (Devices = placement list + controllers) vs 'library'
 // (Inventory = model catalog). Toggles the tab bodies + active tab, and drives which
 // editor the Device group shows.
@@ -2217,31 +2232,55 @@ function applyAccent(hex) {
   // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
   // anchor is first lifted toward white by `lift` (the Settings › Appearance
   // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
-  const lift = savedBright() / 100;
-  const L = (anchor) => accMix('#ffffff', anchor, lift);   // mix `lift` of white into the anchor
-  s.setProperty('--bg', accMix(hex, L('#0b0b0d'), 0.03));
-  s.setProperty('--field-bg', accMix(hex, L('#121214'), 0.03));
-  const panel = accMix(hex, L('#17171a'), 0.04);
+  const lift = savedBright() / 100;     // negative = darker than the base anchors
+  const tm = savedTint() / 100;         // accent-tint multiplier (Settings › Appearance)
+  const L = (anchor) => accMix('#ffffff', anchor, lift);          // lift the gray anchor
+  const S = (anchor, w) => accMix(hex, L(anchor), w * tm);        // + tint it by the accent
+  s.setProperty('--bg', S('#0b0b0d', 0.03));
+  s.setProperty('--field-bg', S('#121214', 0.03));
+  const panel = S('#17171a', 0.04);
   s.setProperty('--panel', panel);
   s.setProperty('--panel-solid', panel);
-  s.setProperty('--panel-2', accMix(hex, L('#1e1e22'), 0.05));
-  s.setProperty('--hover', accMix(hex, L('#2c2c31'), 0.06));
-  s.setProperty('--line', accMix(hex, L('#303034'), 0.06));
-  s.setProperty('--line-2', accMix(hex, L('#45454e'), 0.07));
+  s.setProperty('--panel-2', S('#1e1e22', 0.05));
+  s.setProperty('--hover', S('#2c2c31', 0.06));
+  s.setProperty('--line', S('#303034', 0.06));
+  s.setProperty('--line-2', S('#45454e', 0.07));
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
 function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); }
-// --- Appearance: UI brightness (how far the surface ramp is lifted off black) and
-// text size (multiplies every --fs-* token). Persisted; applied live. ---
+// --- Appearance (Settings › Appearance): UI brightness (surface lift, can go negative
+// = darker than base), accent tint, text contrast, text size. Persisted; live. ---
+const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
 const BRIGHT_KEY = 'lz.brightness';
-const savedBright = () => { try { const raw = localStorage.getItem(BRIGHT_KEY); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(0, Math.min(20, v)) : 7; } catch { return 7; } };
+const savedBright = () => num(BRIGHT_KEY, 7, -12, 20);
 function setBrightness(v) { try { localStorage.setItem(BRIGHT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
+const TINT_KEY = 'lz.tint.amt';
+const savedTint = () => num(TINT_KEY, 100, 0, 220);
+function setTint(v) { try { localStorage.setItem(TINT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
+const CONTRAST_KEY = 'lz.contrast';
+const savedContrast = () => num(CONTRAST_KEY, 100, 60, 130);
+function applyContrast() {
+  const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
+  const s = document.documentElement.style;
+  s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
+  s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
+  s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
+  s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
+}
+function setContrast(v) { try { localStorage.setItem(CONTRAST_KEY, String(v)); } catch { /* private */ } applyContrast(); }
 const SCALE_KEY = 'lz.uiscale';
-const savedScale = () => { try { const raw = localStorage.getItem(SCALE_KEY); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(0.8, Math.min(1.4, v)) : 1; } catch { return 1; } };
+const savedScale = () => num(SCALE_KEY, 1, 0.8, 1.4);
 function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.documentElement.style.setProperty('--ui-scale', String(c)); try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* private */ } }
-setUiScale(savedScale());      // apply text scale on boot
-applyAccent(savedAccent());   // apply the saved accent (+ brightness) on boot
+// Translucency of the floating panels (device editor + timeline): 0 = opaque … higher =
+// more see-through. Drives --pop-opacity = (100 − translucency)%.
+const TRANSLU_KEY = 'lz.translucency';
+const savedTranslucency = () => num(TRANSLU_KEY, 38, 0, 90);
+function setTranslucency(v) { const c = Math.max(0, Math.min(90, Math.round(v))); document.documentElement.style.setProperty('--pop-opacity', (100 - c) + '%'); try { localStorage.setItem(TRANSLU_KEY, String(c)); } catch { /* private */ } }
+setUiScale(savedScale());        // apply text scale on boot
+setTranslucency(savedTranslucency());   // apply panel translucency on boot
+applyContrast();                // apply text contrast on boot
+applyAccent(savedAccent());   // apply the saved accent (+ brightness + tint) on boot
 
 // --- Hover tooltips (native `title`) — ON by default (the icon-heavy chrome needs
 // them for discoverability). When toggled OFF in Settings, every `title` is moved to
@@ -2361,11 +2400,23 @@ async function buildSettings(mount) {
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
   // input lives in the Mapping window.)
 
-  // --- Appearance: UI brightness + text size (both live). ---
+  // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'appearance' }));
   mount.append(Slider('Brightness', savedBright(), {
-    min: 0, max: 20, step: 1, default: 7, commit: 'live',
+    min: -12, max: 20, step: 1, default: 7, commit: 'live',
     onInput: (v) => setBrightness(Math.round(v)),
+  }));
+  mount.append(Slider('Accent tint %', savedTint(), {
+    min: 0, max: 220, step: 5, default: 100, commit: 'live',
+    onInput: (v) => setTint(Math.round(v)),
+  }));
+  mount.append(Slider('Contrast %', savedContrast(), {
+    min: 60, max: 130, step: 2, default: 100, commit: 'live',
+    onInput: (v) => setContrast(Math.round(v)),
+  }));
+  mount.append(Slider('Translucency %', savedTranslucency(), {
+    min: 0, max: 90, step: 2, default: 38, commit: 'live',
+    onInput: (v) => setTranslucency(v),
   }));
   mount.append(Slider('Text size %', Math.round(savedScale() * 100), {
     min: 80, max: 140, step: 5, default: 100, commit: 'live',
@@ -2596,8 +2647,8 @@ function loop(ts) {
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
     // The remote icon jumps to the control surface only while the daemon is up.
     if (remoteBtn) { remoteBtn.disabled = !live; remoteBtn.title = live ? 'Open the control surface (phone remote)' : 'Control surface — start the daemon to enable'; }
-    // Daemon came up / went down → refresh the Output list so "scan" enables/disables.
-    if (!!live !== lastLive) { lastLive = !!live; if (outputTab === 'fixtures') renderOutput(); }
+    // Daemon came up / went down → refresh the Output list + the scan icon's gate.
+    if (!!live !== lastLive) { lastLive = !!live; syncScanBtn(!!live); if (outputTab === 'fixtures') renderOutput(); }
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);
@@ -2629,11 +2680,25 @@ function fitToFixtures() {
 // New project: confirm, then reset to a sensible STARTER — one controller with a
 // single fixture wired to it, lit by a Lines clip. (Not blank, so there's
 // something on screen and a patch to build from.)
+// A fresh project gets a random Led Zeppelin track as its title (beats "untitled").
+const LZ_TRACKS = [
+  'Stairway to Heaven', 'Kashmir', 'Whole Lotta Love', 'Black Dog', 'Immigrant Song',
+  'Rock and Roll', 'Ramble On', 'Going to California', 'Dazed and Confused', 'Heartbreaker',
+  "Since I've Been Loving You", 'When the Levee Breaks', 'The Rain Song', 'Over the Hills and Far Away',
+  'No Quarter', 'Trampled Under Foot', 'Achilles Last Stand', 'In My Time of Dying', 'Ten Years Gone',
+  'The Ocean', 'Fool in the Rain', 'Gallows Pole', 'Tangerine', 'Thank You', 'Misty Mountain Hop',
+  'The Battle of Evermore', 'Good Times Bad Times', 'Communication Breakdown', 'In the Light',
+  "Nobody's Fault but Mine", 'All My Love', 'Houses of the Holy', 'The Song Remains the Same',
+];
+const randomTrackTitle = () => LZ_TRACKS[Math.floor(Math.random() * LZ_TRACKS.length)];
+
 function newProject() {
   if (!window.confirm('Start a new project? This clears the current one (save first if you want to keep it).')) return;
   // Reset to the standard default (Lines + Checkered, Generic Controller, 1280²) —
-  // the same show a fresh install loads.
-  applyFullShow(normalizeComposition(defaultShow()));
+  // the same show a fresh install loads — with a random Led Zeppelin track as its title.
+  const next = normalizeComposition(defaultShow());
+  if (next.composition) next.composition.title = randomTrackTitle();
+  applyFullShow(next);
 }
 
 function saveShowToFile() {

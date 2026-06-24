@@ -4,7 +4,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Led Zeppelin — a browser-based LED show composer and pixel-mapping control surface for WLED / DDP / Art-Net rigs.">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#0a0a0a">
+<!-- theme-color matches the app's actual background so the installed PWA chrome has no seam. -->
+<meta name="theme-color" content="#131110">
+<link rel="canonical" href="https://ledzeppelin.jonasjohansson.se/">
+<!-- Social unfurl (the live demo domain). -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Led Zeppelin">
+<meta property="og:description" content="Browser-based LED show composer and pixel-mapping control surface for WLED / DDP / Art-Net rigs.">
+<meta property="og:url" content="https://ledzeppelin.jonasjohansson.se/">
+<meta property="og:image" content="https://ledzeppelin.jonasjohansson.se/icons/icon-512.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Led Zeppelin">
+<meta name="twitter:description" content="Browser-based LED show composer & pixel-mapper for WLED / DDP / Art-Net.">
+<meta name="twitter:image" content="https://ledzeppelin.jonasjohansson.se/icons/icon-512.png">
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <!-- PWA: installable + offline app shell (see service-worker.js, registered in app.js). -->
 <link rel="manifest" href="./manifest.webmanifest">
@@ -14,9 +26,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<!-- Type: MONO-FORWARD — one monospace face (Spline Sans Mono by default,
-     Martian Mono swappable) drives chrome + data, self-hosted via @font-face in
-     ui.css (offline-safe). Preload the active face. -->
+<!-- Type: MONO-FORWARD — one monospace face (Commit Mono) drives chrome + data,
+     self-hosted via @font-face in ui.css (offline-safe). Preload the active face. -->
 <link rel="preload" href="./fonts/CommitMono.woff2" as="font" type="font/woff2">
 <style>html,body{margin:0;background:#131110;color:#f4f5f7;font-size:11px}
 canvas{display:block}</style>
@@ -51,6 +62,7 @@ canvas{display:block}</style>
   <symbol id="ic-panel-right" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM14 7h4v10h-4z"/></symbol>
   <symbol id="ic-panel-bottom" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 14h12v3H6z"/></symbol>
   <symbol id="ic-rotate" viewBox="0 0 24 24"><path d="M16 4h2v6h-2zm-2-2h2v2h-2zm0 2h2v8h-2zM4 8H2v5h2z"/><path d="M2 6h18v2H2zm6 14H6v-6h2zm2 2H8v-2h2zm0-2H8v-8h2zm10-4h2v-5h-2z"/><path d="M22 18H4v-2h18z"/></symbol>
+  <symbol id="ic-scan" viewBox="0 0 24 24"><path d="M22 22h-2v-2h2v2Zm-2-2h-2v-2h2v2Zm-6-2H6v-2h8v2Zm4 0h-2v-2h2v2ZM6 16H4v-2h2v2Zm10 0h-2v-2h2v2ZM4 14H2V6h2v8Zm14 0h-2V6h2v8ZM6 6H4V4h2v2Zm10 0h-2V4h2v2Zm-2-2H6V2h8v2Z"/></symbol>
 </svg>
 <!-- TOP BAR: a full-width strip of window/settings controls. Button ids are kept
      identical to the old corner cluster so every handler (wired by id in app.js)
@@ -108,7 +120,7 @@ canvas{display:block}</style>
     <section class="island" id="grp-props">
       <header class="island-head island-tabs" id="props-tabs">
         <button class="island-tab island-tab-icon" data-itab="settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
-        <button class="island-tab is-on" data-itab="composition">Composition</button>
+        <button class="island-tab is-on" data-itab="composition">Canvas</button>
         <button class="island-tab" data-itab="layer">Layer</button>
         <button class="island-tab" data-itab="clip">Clip</button>
       </header>
@@ -148,17 +160,14 @@ canvas{display:block}</style>
     </section>
   </div>
 
-  <!-- RIGHT COLUMN: selected fixture's editor · the Fixtures patch · the Inventory. -->
+  <!-- RIGHT COLUMN: the Devices patch + the Inventory catalog. The selected item's
+       editor shows in the left sidebar's "Device" tab. -->
   <div id="dock-right" class="dock-col">
-    <section class="island" id="grp-fxedit">
-      <header class="island-head"><span class="island-title" id="fxedit-title">Properties</span></header>
-      <div class="island-body"><div id="fxinsp-body"></div></div>
-    </section>
     <!-- Patch island: Fixtures (the placement/wiring list + controller instances)
          and Inventory (the model catalog) as TABS in one island. -->
     <section class="island" id="grp-patch">
       <header class="island-head island-tabs" id="patch-tabs">
-        <button class="island-tab is-on" data-ptab="fixtures">Devices</button>
+        <span class="island-tab is-on has-scan" data-ptab="fixtures" role="button" tabindex="0">Devices<button id="patch-scan" class="tab-scan" title="Scan the network for controllers">(scan)</button></span>
         <button class="island-tab" data-ptab="inventory">Inventory</button>
       </header>
       <div class="island-body">
@@ -172,6 +181,13 @@ canvas{display:block}</style>
     </section>
   </div>
 </div>
+
+<!-- Selected-device editor: a floating GROUP (island) that pops up where you click a
+     controller/fixture/model. Its height follows its content; positioned in JS. -->
+<!-- No heading — the editor's own Name field identifies the selection. -->
+<section id="device-pop" class="island" hidden>
+  <div class="island-body"><div id="fxinsp-body"></div></div>
+</section>
 
 <!-- The companion control surface opens in its own window (the top-bar remote icon).
      #system-control is a hidden mount that keeps the manifest/bridge wiring intact. -->

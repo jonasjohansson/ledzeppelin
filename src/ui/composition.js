@@ -30,6 +30,14 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
   let draft = currentCanvas();
 
   function render() {
+    // Preserve focus + caret across the rebuild — arrow-stepping a number field fires
+    // 'change' → setSize → refresh, which would otherwise drop the field's focus.
+    const ae = document.activeElement;
+    let focusKey = null, selStart = null, selEnd = null;
+    if (ae && ae.tagName === 'INPUT' && root.contains(ae)) {
+      focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
+      try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs */ }
+    }
     root.textContent = '';
     draft = currentCanvas();
 
@@ -68,7 +76,7 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
       ]));
     }
 
-    // --- Width / height fields (reflect the draft) ---
+    // --- Width / height edit a DRAFT; the canvas only changes when Apply is clicked. ---
     const mkNum = (value, onInput) => {
       const i = el('input', { type: 'number', value: String(value), step: '1', min: '16', max: '4096' });
       i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
@@ -76,28 +84,18 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     };
     const wInput = mkNum(draft.w, (x) => { draft = { ...draft, w: x }; });
     const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; });
-
-    const grid = el('div', { className: 'fx-card cmp-grid' }, [
-      field('Width', wInput),
-      field('Height', hInput),
-    ]);
-    root.append(grid);
-
-    // --- Apply + Fit to fixtures, side by side ---
-    const applyBtn = el('button', {
+    root.append(el('div', { className: 'fx-card cmp-grid' }, [field('Width', wInput), field('Height', hInput)]));
+    root.append(el('button', {
       className: 'fx-add cmp-apply', textContent: 'apply',
       onclick: () => { const c = clampCanvasSize(draft.w, draft.h); setSize(c.w, c.h); render(); },
-    });
-    const actions = el('div', { className: 'cmp-actions' }, [applyBtn]);
-    if (fitToFixtures) {
-      actions.append(el('button', {
-        className: 'fx-add cmp-fit', textContent: 'fit to fixtures',
-        title: 'resize the canvas to exactly contain the placed fixtures',
-        onclick: () => { fitToFixtures(); render(); },
-      }));
+    }));
+    // (Fit-to-fixtures stays removed; crossfade is a PER-LAYER setting in the Layer inspector.)
+
+    // Restore focus to the same field (keeps arrow-stepping / typing alive across rebuilds).
+    if (focusKey) {
+      const inp = [...root.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey)?.querySelector('input');
+      if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number inputs */ } }
     }
-    root.append(actions);
-    // (Crossfade is now a PER-LAYER setting in the Layer inspector — default 500.)
   }
 
   render();
