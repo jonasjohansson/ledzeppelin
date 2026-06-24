@@ -37,6 +37,14 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float opacity;
 void main(){ vec4 c=texture(uTex, uv); frag=vec4(c.rgb*opacity, c.a*opacity); }`;
 
+// MASTER fade-to-black: scale RGB by master, keep alpha — a black layer on top of the
+// FINAL composite. Applied after compositing so it dims the result without distorting
+// per-layer blends (rgb≤alpha stays premultiplied-valid; empty texels stay empty).
+const MASTER_FS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex; uniform float master;
+void main(){ vec4 c=texture(uTex, uv); frag=vec4(c.rgb*master, c.a); }`;
+
 // Per-clip transform + opacity. Maps each output texel back through the inverse
 // transform (translate uOffset, uniform uScale, rotate uRot around centre) to
 // find the source texel; texels outside [0,1] are transparent. uAspect (w/h)
@@ -522,7 +530,7 @@ export function makeCompositor(gl, w, h) {
       const uTex = loc(blit, 'uTex');
       if (uTex !== null) gl.uniform1i(uTex, 0);
       const uOp = loc(blit, 'opacity');
-      if (uOp !== null) gl.uniform1f(uOp, (layer.opacity == null ? 1 : Number(layer.opacity)) * master);
+      if (uOp !== null) gl.uniform1f(uOp, layer.opacity == null ? 1 : Number(layer.opacity));   // master is applied to the FINAL composite, not per-layer
       drawFullscreen(gl);
       gl.disable(gl.BLEND);
     }
@@ -542,6 +550,23 @@ export function makeCompositor(gl, w, h) {
         const tmp = cur; cur = other; other = tmp;
       });
       blitInto(cur.tex, accum, 1);
+    }
+
+    // MASTER (composition opacity): a final fade-to-black over the whole composite —
+    // a black layer on top. Applied LAST so it dims the output uniformly instead of
+    // multiplying into each layer's opacity (which would distort overlapping blends).
+    if (master < 1) {
+      const mp = getProgram('__master', MASTER_FS);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, layerA.fbo);
+      gl.viewport(0, 0, w, h);
+      gl.disable(gl.BLEND);
+      gl.useProgram(mp.prog);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, accum.tex);
+      const uT = loc(mp, 'uTex'); if (uT !== null) gl.uniform1i(uT, 0);
+      const uM = loc(mp, 'master'); if (uM !== null) gl.uniform1f(uM, master);
+      drawFullscreen(gl);
+      blitInto(layerA.tex, accum, 1);   // copy the dimmed result back into the output tex
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);

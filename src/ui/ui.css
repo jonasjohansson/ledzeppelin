@@ -318,6 +318,16 @@ body.output-mode #stagewrap { pointer-events: auto; }
 #corner-menus { justify-self: start; }
 #corner-toggles { justify-self: center; }
 #corner-right { justify-self: end; }   /* bug + install at the far right */
+
+/* LOCK / performance mode — the show keeps running + outputting, but EVERYTHING is inert
+   except the unlock button. The !important on descendants is required to beat the rules
+   that set pointer-events:auto (`.island`, slider thumbs, #stagewrap). */
+body.is-locked #dock, body.is-locked #dock *,
+body.is-locked #device-pop, body.is-locked #device-pop *,
+body.is-locked #topbar * { pointer-events: none !important; }
+body.is-locked #menu-lock, body.is-locked #menu-lock * { pointer-events: auto !important; }
+body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-island { opacity: .6; }
+#menu-lock.is-on { color: var(--accent); }
 /* Icon buttons (Save / Open / Import / Settings / Mapping / Control / Bug / Install):
    borderless, larger glyphs — the icon IS the affordance. */
 .g-icon {

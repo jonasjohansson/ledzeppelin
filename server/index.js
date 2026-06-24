@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput } from './output.js';
+import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
 
@@ -76,6 +77,23 @@ const http = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   // Control discovery: the editor asks for the daemon's LAN address so it can
   // show a phone-reachable /control/ URL + QR (localhost wouldn't work on a phone).
+  // Liveness/health probe — for an external uptime check or `curl` cron on the Pi.
+  // 200 + JSON snapshot: version, uptime, output fps, connected clients, ms since the
+  // last frame was sent (null if never). No auth (LAN-local daemon).
+  if (url.pathname === '/health' || url.pathname === '/api/health') {
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('cache-control', 'no-store');
+    return res.end(JSON.stringify({
+      ok: true,
+      version: VERSION,
+      uptimeSec: Math.round(process.uptime()),
+      fpsOut,
+      clients: wss.clients.size,
+      lastFrameMsAgo: lastFrameAt ? Date.now() - lastFrameAt : null,
+      osc: OSC_PORT,
+      rssMb: Math.round(process.memoryUsage().rss / 1048576),
+    }));
+  }
   if (url.pathname === '/api/info') {
     const lan = Object.values(networkInterfaces()).flat()
       .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
@@ -119,6 +137,8 @@ const http = createServer(async (req, res) => {
 const OUTPUT_FPS = 42, KEEPALIVE_MS = 1000;   // default cap; the editor can override per route (m.fps)
 const wss = new WebSocketServer({ server: http, path: '/frames', perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
 let frames = 0;
+let fpsOut = 0;            // frames sent in the last 1s window (for /health)
+let lastFrameAt = 0;      // ms epoch of the last frame actually sent
 let lastManifest = null;   // cache the editor's latest companion manifest, so a phone gets the show the moment it connects
 wss.on('connection', (ws) => {
   console.log('[ws] client connected');
@@ -137,7 +157,7 @@ wss.on('connection', (ws) => {
       if (!route || !latest) return;
       const now = Date.now();
       if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at outFps; else ~1Hz keep-alive
-      dirty = false; lastSent = now; frames++;
+      dirty = false; lastSent = now; frames++; lastFrameAt = now;
       try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
     }, frameMs);
   };
@@ -169,7 +189,7 @@ wss.on('connection', (ws) => {
   startTimer();
   ws.on('close', () => { if (timer) clearInterval(timer); console.log('[ws] client disconnected'); });
 });
-setInterval(() => { if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
+setInterval(() => { fpsOut = frames; if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
 
 // --- External modulation ingest ---------------------------------------------
 // Push an external channel value to every connected ws client (except the

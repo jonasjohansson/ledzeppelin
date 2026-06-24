@@ -57,6 +57,11 @@ canvas{display:block}</style>
   <symbol id="ic-rot-cw" viewBox="0 0 24 24"><path d="M20 8H6v2h14zM4 8h2v12H4zm2 10h6v2H6z"/><path d="M18 6h-2v6h2zm-2-2h-2v8h2zm0 8h-2v2h2z"/></symbol>
   <symbol id="ic-reverse" viewBox="0 0 24 24"><path d="M20 16v2H4v-2zm-10-2v2H6v-2zm0-2v2H8v-2zm0 6v2H6v-2zm0 2v2H8v-2zM4 6v2h16V6zm10-2v2h4V4zm0-2v2h2V2zm0 6v2h4V8zm0 2v2h2v-2z"/></symbol>
   <symbol id="ic-new" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm0 18h20v2H2zM2 4h2v16H2zm18 0h2v16h-2zM7 11h10v2H7z"/><path d="M11 17V7h2v10z"/></symbol>
+  <symbol id="ic-lock" viewBox="0 0 24 24"><path d="M7 4h10v2H7zM7 6h2v4H7zm8 0h2v4h-2z"/><path d="M5 10h14v2H5zm0 9h14v2H5zM5 10h2v11H5zm12 0h2v11h-2zM11 13h2v5h-2z"/></symbol>
+  <symbol id="ic-lock-open" viewBox="0 0 24 24"><path d="M7 4h10v2H7zM7 6h2v4H7z"/><path d="M5 10h14v2H5zm0 9h14v2H5zM5 10h2v11H5zm12 0h2v11h-2zM11 13h2v5h-2z"/></symbol>
+  <symbol id="ic-undo" viewBox="0 0 24 24"><path d="M10 5v2H8v2H6v2H4V9h2V7h2V5zM4 11h2v2H4zm2 2h2v2H6zm2 2h2v2H8z"/><path d="M9 10h7v2H9zm7 0h2v8h-2zm-2 8v2H9v-2z"/></symbol>
+  <symbol id="ic-redo" viewBox="0 0 24 24"><path d="M14 5v2h2v2h2v2h2V9h-2V7h-2V5zm6 6h-2v2h2zm-2 2h-2v2h2zm-2 2h-2v2h2z"/><path d="M8 10h7v2H8zm0 0H6v8h2zm2 8v2h5v-2z"/></symbol>
+  <symbol id="ic-health" viewBox="0 0 24 24"><path d="M4 4h5v2H4zM13 4h5v2h-5zM3 6h16v4H3zM5 10h12v2H5zM7 12h8v2H7zM9 14h4v2H9zM10 16h2v2h-2z"/></symbol>
   <symbol id="ic-ledger" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm4 5h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-4 4h2v2H6zm4 0h8v2h-8zm-8 5h20v2H2zM2 4h2v16H2zm18 0h2v16h-2z"/></symbol>
   <symbol id="ic-panel-left" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 7h4v10H6z"/></symbol>
   <symbol id="ic-panel-right" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM14 7h4v10h-4z"/></symbol>
@@ -71,9 +76,12 @@ canvas{display:block}</style>
   <!-- Window menus as icon buttons. (Hide UI lives on the 'H' key now;
        Control/Settings/Mapping are tabs of the Canvas island.) -->
   <div class="corner-row" id="corner-menus">
+    <button id="menu-lock" class="g-icon" title="Lock editing (performance mode)  (L)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-lock-open"/></svg></button>
     <button id="menu-save" class="g-icon" title="Save project  (⌘S)"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg></button>
     <button id="menu-open" class="g-icon" title="Open project  (⌘O)"><svg class="ic" aria-hidden="true"><use href="#ic-open"/></svg></button>
     <button id="menu-new" class="g-icon" title="New project"><svg class="ic" aria-hidden="true"><use href="#ic-new"/></svg></button>
+    <button id="menu-undo" class="g-icon" title="Undo  (⌘Z)"><svg class="ic" aria-hidden="true"><use href="#ic-undo"/></svg></button>
+    <button id="menu-redo" class="g-icon" title="Redo  (⌘⇧Z)"><svg class="ic" aria-hidden="true"><use href="#ic-redo"/></svg></button>
     <button id="menu-ledger" class="g-icon" title="Import from LEDger…"><svg class="ic" aria-hidden="true"><use href="#ic-ledger"/></svg></button>
     <button id="menu-import" class="g-icon" title="Import shader / save & load composition…"><svg class="ic" aria-hidden="true"><use href="#ic-import"/></svg></button>
     <button id="menu-mapping" class="g-icon" title="MIDI / keyboard / OSC mapping (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-mapping"/></svg></button>
@@ -99,7 +107,7 @@ canvas{display:block}</style>
   </div>
   <!-- Far-right cluster: help + bug report + install/update. -->
   <div class="corner-row" id="corner-right">
-    <button id="menu-help" class="g-icon topbar-help" title="Keyboard shortcuts  (?)">?</button>
+    <button id="menu-health" class="g-icon" title="Daemon health (offline)" disabled><svg class="ic" aria-hidden="true"><use href="#ic-health"/></svg></button>
     <button id="menu-bug" class="g-icon" title="Report a bug"><svg class="ic" aria-hidden="true"><use href="#ic-bug"/></svg></button>
     <button id="menu-install" class="g-icon" title="Install / update the app"><svg class="ic" aria-hidden="true"><use href="#ic-install"/></svg></button>
   </div>

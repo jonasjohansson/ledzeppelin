@@ -132,7 +132,7 @@ let samplerDirty = false;   // set during a live fixture drag → rebuild the sa
 // --- Output live controls: Freeze (hold the last frame) + Panic (force all output dark).
 //     The master DIMMER is the composition opacity (a fader in the deck's master row),
 //     applied in the compositor — not duplicated here. ---
-let frozen = false, panicOn = false, sendBuf = null;
+let panicOn = false, sendBuf = null;
 // Force the sent frame dark (panic) via a reused buffer; identity otherwise.
 function scaleOutput(rgba, m) {
   if (m >= 1) return rgba;
@@ -165,6 +165,11 @@ const undoStack = [];
 const redoStack = [];
 let undoLastAt = 0;
 let undoSuppress = false;
+// Grey the top-bar undo/redo icons when their stack is empty.
+function updateUndoButtons() {
+  document.getElementById('menu-undo')?.toggleAttribute('disabled', !undoStack.length);
+  document.getElementById('menu-redo')?.toggleAttribute('disabled', !redoStack.length);
+}
 function snapshotForUndo(prev) {
   if (undoSuppress || !prev) return;
   const now = performance.now();
@@ -173,6 +178,7 @@ function snapshotForUndo(prev) {
   if (undoStack.length > 120) undoStack.shift();
   redoStack.length = 0;          // a fresh edit invalidates redo
   undoLastAt = now;
+  updateUndoButtons();
 }
 function restoreShow(s) {
   undoSuppress = true;
@@ -190,6 +196,7 @@ function restoreShow(s) {
   panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
   undoSuppress = false;
   undoLastAt = 0;
+  updateUndoButtons();
 }
 function undo() { if (undoStack.length) { redoStack.push(show); restoreShow(undoStack.pop()); } }
 function redo() { if (redoStack.length) { undoStack.push(show); restoreShow(redoStack.pop()); } }
@@ -207,7 +214,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: () => panel?.refresh?.(), fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: (live) => { panel?.refresh?.(); updateHealthBtn?.(live); }, fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan + health icon
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -665,7 +672,7 @@ if (previewCanvas) {
     onEdit: (next) => { if (!dragOrig) dragOrig = show; show = next; samplerDirty = true; redrawOverlay(); },
     onCommit: (next) => {
       snapGuides = [];
-      if (dragOrig) { undoStack.push(dragOrig); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; dragOrig = null; }
+      if (dragOrig) { undoStack.push(dragOrig); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; dragOrig = null; updateUndoButtons(); }
       undoSuppress = true; saveShow(next); rebuild(next); undoSuppress = false;   // rebuild must NOT snapshot the post-drag show
       panel.refresh(); renderOutput();
     },
@@ -1787,51 +1794,51 @@ document.addEventListener('keydown', (e) => {
 // gui-hidden via CSS) so H is never a one-way trapdoor.
 document.getElementById('show-ui-pill')?.addEventListener('click', toggleGui);
 
-// --- Keyboard cheat-sheet (the '?' key or the top-bar '?' button). Built once,
-//     lazily, into the pre-styled #shortcuts-overlay shell. ---
-const SHORTCUTS = [
-  ['⌘S', 'Save project'], ['⌘O', 'Open project'],
-  ['⌘Z', 'Undo'], ['⌘⇧Z', 'Redo'], ['⌘D', 'Duplicate'], ['⌘A', 'Select all'],
-  ['⌘C / ⌘V', 'Copy / paste'], ['⌫', 'Delete selected'], ['Esc', 'Deselect'],
-  ['← ↑ → ↓', 'Nudge (Shift = ×10)'], ['Space', 'Pan canvas (hold)'],
-  ['0', 'Reset zoom'], ['F', 'Freeze output'], ['K', 'Panic (kill output)'],
-  ['H', 'Hide / show UI'], ['?', 'This help'],
-];
-let shortcutsEl = null;
-function toggleShortcuts(force) {
-  if (!shortcutsEl) {
-    const grid = oel('div', { className: 'shortcuts-grid' });
-    for (const [k, a] of SHORTCUTS) grid.append(oel('kbd', { className: 'shortcuts-key', textContent: k }), oel('div', { className: 'shortcuts-act', textContent: a }));
-    const card = oel('div', { className: 'shortcuts-card' }, [oel('div', { className: 'shortcuts-title', textContent: 'Keyboard shortcuts' }), grid]);
-    shortcutsEl = oel('div', { id: 'shortcuts-overlay', hidden: true }, [card]);
-    shortcutsEl.addEventListener('click', (e) => { if (e.target === shortcutsEl) toggleShortcuts(false); });
-    document.body.append(shortcutsEl);
-  }
-  const show = force == null ? shortcutsEl.hidden : force;
-  shortcutsEl.hidden = !show;
-}
-document.addEventListener('keydown', (e) => {
-  if (typingIn(e.target)) return;
-  if (e.key === '?') { toggleShortcuts(true); }
-  else if (e.key === 'Escape' && shortcutsEl && !shortcutsEl.hidden) { toggleShortcuts(false); }
-});
-document.getElementById('menu-help')?.addEventListener('click', () => toggleShortcuts());
-
-// --- Freeze (F) / Panic (K) hotkeys, with a corner HUD so the operator always knows
-//     the live state. (The master dimmer is the deck's master-row opacity fader.) ---
+// --- Panic (K) hotkey, with a corner HUD so the operator always knows the live state.
+//     (The master dimmer is the deck's master-row opacity fader.) ---
 const outHud = (() => { const d = document.createElement('div'); d.id = 'out-hud'; d.hidden = true; document.body.appendChild(d); return d; })();
 function updateOutHud() {
-  const parts = []; if (panicOn) parts.push('PANIC'); if (frozen) parts.push('FROZEN');
-  outHud.textContent = parts.join(' · '); outHud.hidden = !parts.length;
+  outHud.textContent = panicOn ? 'PANIC' : ''; outHud.hidden = !panicOn;
   outHud.classList.toggle('is-panic', panicOn);
 }
-function setFrozen(v) { frozen = !!v; updateOutHud(); }
 function setPanic(v) { panicOn = !!v; updateOutHud(); }
 document.addEventListener('keydown', (e) => {
   if (typingIn(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (e.key === 'f' || e.key === 'F') setFrozen(!frozen);
-  else if (e.key === 'k' || e.key === 'K') setPanic(!panicOn);
+  if (e.key === 'k' || e.key === 'K') setPanic(!panicOn);
 });
+
+// --- LOCK / performance mode: the show keeps running + outputting, but ALL editing is
+//     inert until you unlock. The render/output loop is independent of the UI, so locking
+//     only blocks interaction (pointer-events via body.is-locked + a keyboard gate). ---
+let locked = false;
+try { locked = localStorage.getItem('lz.locked') === '1'; } catch { /* private mode */ }
+function setLocked(on) {
+  locked = !!on;
+  document.body.classList.toggle('is-locked', locked);
+  if (locked) document.activeElement?.blur?.();   // drop focus from any field being edited
+  try { localStorage.setItem('lz.locked', locked ? '1' : '0'); } catch { /* private */ }
+  const btn = document.getElementById('menu-lock');
+  if (btn) {
+    btn.classList.toggle('is-on', locked);
+    btn.setAttribute('aria-pressed', String(locked));
+    btn.title = locked ? 'Locked — click to unlock editing  (L)' : 'Lock editing (performance mode)  (L)';
+    btn.querySelector('use')?.setAttribute('href', locked ? '#ic-lock' : '#ic-lock-open');
+  }
+}
+document.getElementById('menu-lock')?.addEventListener('click', () => setLocked(!locked));
+// Capture-phase gate: while locked, swallow every key EXCEPT the safelist (freeze/panic,
+// the L toggle to unlock, Escape, ?) before the app's own keydown handlers can act on it.
+document.addEventListener('keydown', (e) => {
+  if (!locked) return;   // block even a field that's somehow focused — fully locked
+  const k = e.key.toLowerCase();
+  const allow = k === 'k' || k === 'l' || e.key === 'Escape';
+  if (!allow) { e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
+// L toggles the lock (allowed through the gate so it can unlock).
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'l' || e.key === 'L') && !typingIn(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey) setLocked(!locked);
+});
+setLocked(locked);   // apply persisted state on boot
 
 // Surface a dock group: scroll it into view + a brief accent flash on it (used when a
 // clip/layer/fixture is selected so the relevant group draws the eye). Replaces the
@@ -2148,9 +2155,6 @@ document.addEventListener('keydown', (e) => {
     panY = (e.clientY - ly * z2) - (rect.top - panY);
     z = z2; apply();
   }, { passive: false });
-  document.addEventListener('keydown', (e) => {
-    if ((e.key === '0' || e.key === ')') && !typingIn(e.target)) { reset(); e.preventDefault(); }
-  });
 
   // --- HAND pan: MIDDLE-mouse drag, OR hold SPACE and left-drag (the universal
   //     convention — works on a trackpad with no middle button). Anywhere over the
@@ -2649,10 +2653,9 @@ function loop(ts) {
     if (samplerDirty) { refreshSampler(); samplerDirty = false; }
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
-    // FREEZE holds the last sampled frame (don't re-sample); else sample fresh.
-    if (!frozen || !lastRGBA) lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
+    lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
     if (lastRGBA) {
-      if (!frozen) for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
+      for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
       if (resolveLayerBindings()) bridge?.setRoute?.(curRoute);   // live layer-bound DMX params
       // PANIC forces dark; the master DIMMER is the composition opacity (compositor stage).
       bridge?.send(panicOn ? scaleOutput(lastRGBA, 0) : lastRGBA);
@@ -2881,6 +2884,13 @@ const REPO_URL = 'https://github.com/jonasjohansson/ledzeppelin';
 document.getElementById('menu-install')?.addEventListener('click', () => window.open(`${REPO_URL}/releases`, '_blank', 'noopener'));
 document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
 document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
+document.getElementById('menu-undo')?.addEventListener('click', () => undo());
+document.getElementById('menu-redo')?.addEventListener('click', () => redo());
+updateUndoButtons();   // initial greyed state (both stacks empty at boot)
+// Health icon → opens the daemon's /health JSON; enabled only while the daemon is live.
+const healthBtn = document.getElementById('menu-health');
+healthBtn?.addEventListener('click', () => { if (!healthBtn.disabled) window.open('/health', '_blank', 'noopener'); });
+function updateHealthBtn(live) { if (healthBtn) { healthBtn.disabled = !live; healthBtn.title = live ? 'Daemon health — open /health ↗' : 'Daemon health (offline)'; } }
 document.getElementById('menu-bug')?.addEventListener('click', () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener'));
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
 // (ISF shader import — drag-drop isn't wired yet — and composition save/load).
