@@ -13,12 +13,13 @@
 
 import { clampCanvasSize } from '../model/layers.js';
 import { el, field } from './dom.js';
+import { Slider } from './controls.js';
 
 // createCompositionPanel({ getShow, setSize })
 //   Canvas resolution only. Composition-global preferences (crossfade, audio
 //   gain, theme, file I/O) moved to the global Settings panel; master opacity
 //   moved to the Composition group head + its inspector.
-export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTitle, setBpm }) {
+export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTitle, setBpm, setMasterOpacity }) {
   const root = el('div', { className: 'fx-panel cmp-panel' });
   let taps = [];   // recent tap-tempo timestamps (ms)
 
@@ -90,6 +91,13 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
       onclick: () => { const c = clampCanvasSize(draft.w, draft.h); setSize(c.w, c.h); render(); },
     }));
     // (Fit-to-fixtures stays removed; crossfade is a PER-LAYER setting in the Layer inspector.)
+    // Master opacity — the composition-wide dimmer (mirrors the deck's master fader).
+    if (setMasterOpacity) {
+      root.append(Slider('Master', Math.round((getShow().composition?.opacity ?? 1) * 100), {
+        min: 0, max: 100, step: 1, default: 100, commit: 'live',
+        onInput: (v) => setMasterOpacity(v / 100),
+      }));
+    }
 
     // Restore focus to the same field (keeps arrow-stepping / typing alive across rebuilds).
     if (focusKey) {

@@ -16,6 +16,23 @@
 
 export const DIRECTIONS = ['forward', 'backward', 'mirror'];
 
+// LFO base WAVEFORMS for timeline modulation. Direction (reverse) and bounce (ping-pong)
+// are separate modifiers (spec.reverse / spec.bounce), so e.g. saw+reverse = ramp-down,
+// saw+bounce = triangle. Legacy specs (no shape) derive reverse/bounce from `direction`
+// (backward→reverse, mirror→bounce), so they're unchanged.
+export const LFO_SHAPES = ['saw', 'sine', 'square', 'random'];
+// Deterministic 0..1 pseudo-random per integer cycle (sample & hold — no Math.random so
+// playback is reproducible frame-to-frame).
+const rand01 = (n) => { const x = Math.sin((n + 1) * 12.9898) * 43758.5453; return x - Math.floor(x); };
+// Map a raw forward phase t∈[0,1) → 0..1 for the given waveform.
+function lfoCurve(shape, t) {
+  switch (shape) {
+    case 'sine': return 0.5 - 0.5 * Math.cos(2 * Math.PI * t);
+    case 'square': return t < 0.5 ? 0 : 1;
+    default: return t;   // 'saw'
+  }
+}
+
 // A param spec is BASIC (no entry), TIMELINE (mode 'timeline', default),
 // AUDIO (mode 'audio', driven by an audio band 0..1 scaled by gain), or
 // EXTERNAL (mode 'external', driven by a live OSC / socket-JSON channel).
@@ -116,9 +133,23 @@ export function animatedValue(spec, timeSec, signals) {
     const v = (signals && signals[key]) || 0;
     p = Math.max(0, Math.min(1, v * (spec.gain ?? 1)));
   } else {
-    // Timeline: beat-synced specs derive their loop length from the live tempo.
+    // Timeline: beat-synced specs derive their loop length from the live tempo. The
+    // LFO shape transforms a raw forward phase (sample & hold uses the cycle index).
     const dur = specDurationMs(spec, signals && signals.__bpm);
-    p = animPhase(timeSec, dur, spec.direction, spec.phase);
+    const shape = spec.shape || 'saw';
+    // reverse/bounce: explicit fields, else derived from a legacy `direction`.
+    const rev = spec.reverse != null ? !!spec.reverse : spec.direction === 'backward';
+    const bnc = spec.bounce != null ? !!spec.bounce : spec.direction === 'mirror';
+    if (shape === 'random') {
+      const dsec = (Number(dur) || 0) / 1000;
+      const cyc = dsec > 0 ? Math.floor((Number(timeSec) || 0) / dsec + (Number(spec.phase) || 0)) : 0;
+      p = rand01(cyc);
+    } else {
+      let t = animPhase(timeSec, dur, 'forward', spec.phase);   // raw 0..1 saw
+      if (bnc) t = 1 - Math.abs(2 * t - 1);                      // bounce → ping-pong 0→1→0
+      if (rev) t = 1 - t;                                        // reverse direction
+      p = lfoCurve(shape, t);
+    }
   }
   return spec.from + (spec.to - spec.from) * p;
 }

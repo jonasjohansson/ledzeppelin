@@ -28,7 +28,7 @@ import {
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
   setCompositionParam, mergeCompositionParams, setCompositionAnim,
   setClipTransform, setClipOpacity, setClipDuration, resetClipTransform,
-  setClipAnim, setLayerAnim, patchLayer,
+  setClipAnim, setLayerAnim, patchLayer, setCompositionOpacity,
   removeLayer, moveLayer,
   mergeClipParams, mergeLayerParams, prefixedDefaults,
   setDashboardLinkValue, setDashboardLinkName,
@@ -295,18 +295,48 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
   return wrap;
 }
 
-// Three small segmented buttons for the sweep direction (mode chosen via the cog).
-function dirButtons(current, onPick) {
-  const defs = [
-    { value: 'forward', glyph: '→', title: 'forward' },
-    { value: 'backward', glyph: '←', title: 'backward' },
-    { value: 'mirror', glyph: '⇄', title: 'ping-pong' },
-  ];
-  return el('div', { className: 'dir-btns' }, defs.map((d) => el('button', {
-    className: 'dir-btn' + (d.value === current ? ' on' : ''),
-    textContent: d.glyph, title: d.title,
-    onclick: (e) => { e.preventDefault(); onPick(d.value); },
-  })));
+// LFO controls for timeline modulation: a base waveform (saw/sine/square/random) plus
+// independent REVERSE (direction) and BOUNCE (ping-pong) toggles.
+const WAVE_DEFS = [
+  { value: 'saw', glyph: '↗', title: 'saw' },
+  { value: 'sine', glyph: '∿', title: 'sine' },
+  { value: 'square', glyph: '⊓', title: 'square' },
+  { value: 'random', glyph: '⋮', title: 'random (sample & hold)' },
+];
+// Re-phase `next` so its post-modifier sweep position equals where `prev` is right now —
+// flipping reverse/bounce continues from the current value instead of jumping.
+function retimeLfo(prev, next, timeSec, bpm) {
+  const durOf = (s) => (s.beats ? (s.beats * 60000) / (bpm || 120) : s.durationMs);
+  const dsec = (Number(durOf(next)) || 0) / 1000;
+  if (dsec <= 0) return next;
+  const rawT = (s) => { const ds = (Number(durOf(s)) || 0) / 1000; return ds > 0 ? (((timeSec / ds) + (Number(s.phase) || 0)) % 1 + 1) % 1 : 0; };
+  const modT = (s, t) => { const rv = s.reverse != null ? !!s.reverse : s.direction === 'backward'; const bn = s.bounce != null ? !!s.bounce : s.direction === 'mirror'; if (bn) t = 1 - Math.abs(2 * t - 1); if (rv) t = 1 - t; return t; };
+  const cur = modT(prev, rawT(prev));                // current output position 0..1
+  const rv = next.reverse != null ? !!next.reverse : next.direction === 'backward';
+  const bn = next.bounce != null ? !!next.bounce : next.direction === 'mirror';
+  let want = cur; if (rv) want = 1 - want;           // undo reverse
+  const rt = bn ? want / 2 : want;                   // undo bounce (rising half)
+  const base = ((timeSec / dsec) % 1 + 1) % 1;
+  return { ...next, phase: rt - base };
+}
+function lfoControls(anim, onAnim, clock, bpm) {
+  const shape = anim.shape || 'saw';
+  const rev = anim.reverse != null ? !!anim.reverse : anim.direction === 'backward';
+  const bnc = anim.bounce != null ? !!anim.bounce : anim.direction === 'mirror';
+  const set = (patch) => {
+    const next = { ...anim, shape, reverse: rev, bounce: bnc, direction: undefined, ...patch };
+    onAnim(retimeLfo(anim, next, clock ? clock() : 0, bpm ? bpm() : 120));   // continue from current position
+  };
+  const btn = (on, glyph, title, patch) => el('button', {
+    className: 'dir-btn' + (on ? ' on' : ''), textContent: glyph, title,
+    onclick: (e) => { e.preventDefault(); set(patch); },
+  });
+  const row = el('div', { className: 'dir-btns' }, WAVE_DEFS.map((d) => btn(d.value === shape, d.glyph, d.title, { shape: d.value })));
+  row.append(
+    btn(rev, '←', rev ? 'forward' : 'reverse direction', { reverse: !rev }),
+    btn(bnc, '⇄', bnc ? 'bounce off' : 'bounce (ping-pong)', { bounce: !bnc }),
+  );
+  return row;
 }
 
 // Fields for an animated param (mode already chosen via the cog menu). The
@@ -366,7 +396,7 @@ function animControls(anim, onAnim, oscAddress, onAnimLive) {
     // (in/out live on the track handles — grab a thumb for its value bubble)
     // Direction/duration edits are RETIMED against the clock so the sweep
     // continues from its current position instead of jumping.
-    kids.push(dirButtons(anim.direction, (d) => onAnim(retimeAnim(anim, { ...anim, direction: d }, animClock()))));
+    kids.push(lfoControls(anim, onAnim, animClock, animBpm));
     // Duration unit: free SECONDS or BEAT-synced (locks the loop to the tempo).
     const beatSync = anim.beats != null;
     const bpm = animBpm();
@@ -608,6 +638,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     //     layer is always kept at the bottom (tidyEmptyLayers), so there's no
     //     manual "+ layer" button. Master opacity is in the Composition inspector.
     const deckBox = el('div', { className: 'deck-layers' });
+    // MASTER row above the layers: ✕ (eject all) · B (master mute / blackout) · the
+    // master opacity fader (composition.opacity).
+    deckBox.append(el('div', { className: 'deck-layer deck-master' }, [masterHead()]));
     // Pad every layer's deck to the same column count so clips line up vertically
     // into a Resolume-style grid (max clips across layers + 1 trailing empty).
     const maxClips = layers.reduce((m, L) => Math.max(m, (L.clips || []).length), 0);
@@ -994,6 +1027,38 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
 
   // Resolume-style layer control block: a vertical opacity fader (the "V"),
   // clear/eject + blend controls, and the layer name bar at the bottom.
+  // The MASTER row (full deck width): ✕ (eject all) · B (master mute = composition.bypass,
+  // a blackout) + a HORIZONTAL master opacity fader (composition.opacity) filling the rest.
+  function masterHead() {
+    const comp = show().composition || {};
+    const row = el('div', { className: 'master-head' });
+    const xBtn = el('button', {
+      className: 'lh-clear', textContent: '✕', title: 'clear all (eject every active clip)',
+      onclick: (e) => { e.stopPropagation(); let s = show(); for (const L of (s.composition?.layers || [])) s = setActiveClip(s, L.id, null); commit(s); },
+    });
+    const bBtn = el('button', {
+      className: 'lh-tog' + (comp.bypass ? ' on' : ''), textContent: 'B',
+      title: comp.bypass ? 'un-mute master' : 'master mute (blackout all output)',
+      onclick: (e) => { e.stopPropagation(); commit({ ...show(), composition: { ...show().composition, bypass: !comp.bypass } }); },
+    });
+    // Horizontal opacity fader: dim fill + a bright accent handle line at the value
+    // (the vertical layer fader's look, on its side). Dragged along X.
+    const op = el('div', { className: 'master-op', title: 'master opacity', role: 'slider' });
+    op.append(el('div', { className: 'master-op-fill' }), el('div', { className: 'master-op-handle' }));
+    const paint = (v) => op.style.setProperty('--fill', Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * 100) + '%');
+    paint(comp.opacity ?? 1);
+    const fromX = (x) => { const r = op.getBoundingClientRect(); let v = r.width ? (x - r.left) / r.width : 0; v = Math.max(0, Math.min(1, v)); return shiftDown ? coarseSnap(v, 0, 1) : v; };
+    const set = (v) => { paint(v); commitLive(setCompositionOpacity(show(), v)); };
+    let drag = false;
+    op.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); drag = true; try { op.setPointerCapture(e.pointerId); } catch { /* not capturable */ } set(fromX(e.clientX)); });
+    op.addEventListener('pointermove', (e) => { if (drag) set(fromX(e.clientX)); });
+    const end = (e) => { if (!drag) return; drag = false; try { op.releasePointerCapture(e.pointerId); } catch { /* released */ } commit(setCompositionOpacity(show(), fromX(e.clientX))); };
+    op.addEventListener('pointerup', end); op.addEventListener('pointercancel', end);
+    op.addEventListener('contextmenu', (e) => { if (document.body.classList.contains('native-ctx')) return; e.preventDefault(); e.stopPropagation(); paint(1); commit(setCompositionOpacity(show(), 1)); });
+    row.append(xBtn, bBtn, op);
+    return row;
+  }
+
   function layerHead(layer, id, index, canReorder) {
     const pct = (v) => Math.round((v ?? 1) * 100) + '%';
     const head = el('div', {

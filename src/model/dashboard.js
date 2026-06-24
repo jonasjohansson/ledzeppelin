@@ -3,8 +3,8 @@
 // Resolume's Dashboard. Knobs are edited in the Composition tab; values persist in
 // the show and are fed into the per-frame `signals` map as `dash:<id>`.
 
-// A fixed bank of 16 links, shown as a 4×4 grid (wider cells = readable names).
-export const DASHBOARD_DEFAULT_LINKS = 16;
+// A fixed bank of 8 links, shown as a 4×2 grid (wider cells = readable names).
+export const DASHBOARD_DEFAULT_LINKS = 8;
 
 export const makeDashboardLink = (i) => ({ id: `d${i + 1}`, name: `Link ${i + 1}`, value: 0 });
 

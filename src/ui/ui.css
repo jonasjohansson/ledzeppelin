@@ -307,12 +307,17 @@ body.output-mode #stagewrap { pointer-events: auto; }
 #topbar {
   position: fixed; top: var(--dock-gap); left: var(--dock-gap); right: var(--dock-gap);
   height: var(--topbar-h); z-index: 8;
-  display: flex; align-items: center; gap: 10px; padding: 0 8px;
+  /* 3 columns: menus (left) · toggles (centred) · right cluster — the side columns are
+     equal (1fr) so the toggle group is truly centred, and the columns RESERVE space so
+     nothing overlaps; if the total exceeds the width the bar scrolls its own content. */
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 0 8px;
   box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line);
-  overflow-x: auto; overflow-y: hidden;   /* a fixed bar can't body-scroll → scroll its own content if it overflows */
+  overflow-x: auto; overflow-y: hidden;
 }
 #topbar .corner-row { display: inline-flex; align-items: center; gap: 6px; }
-#corner-right { margin-left: auto; }   /* bug + install pushed to the far right */
+#corner-menus { justify-self: start; }
+#corner-toggles { justify-self: center; }
+#corner-right { justify-self: end; }   /* bug + install at the far right */
 /* Icon buttons (Save / Open / Import / Settings / Mapping / Control / Bug / Install):
    borderless, larger glyphs — the icon IS the affordance. */
 .g-icon {
@@ -417,6 +422,7 @@ body.output-mode #deckbar { pointer-events: none; }
 body.output-mode #deckbar .lh-clickable,
 body.output-mode #deckbar .clip-cell,
 body.output-mode #deckbar .lh-op,
+body.output-mode #deckbar .master-op,
 body.output-mode #deckbar button { pointer-events: auto; }
 
 /* Group flash — a brief accent ring when a selection surfaces a group. */
@@ -440,14 +446,12 @@ body.view-overlay .island:not(#stage-island) { background: color-mix(in srgb, va
 body.view-overlay .island:not(#stage-island) .island-head { background: color-mix(in srgb, var(--panel-2) 62%, transparent); }
 body.view-overlay .island:not(#stage-island) .island-body { background: color-mix(in srgb, var(--panel-2) 42%, transparent); }
 
-/* RESPONSIVE — #dock/#topbar are position:fixed (can't body-scroll), so instead of a
-   hard min-width we PROGRESSIVELY COLLAPSE panels, keeping the canvas usable down to
-   phone width (where the /control/ surface is the real phone tool). */
-@media (max-width: 1280px) { :root { --left-w: 252px; --side-w: 240px; } }   /* shrink the columns first */
-@media (max-width: 1100px) { #dock-right { display: none; } }                  /* then drop the right column */
-@media (max-width: 860px)  { #dock-left { display: none; } #timeline-island { max-height: 45%; } }  /* then the left */
-@media (max-width: 760px)  { #corner-right { display: none; } #topbar { gap: 6px; } }   /* drop the far-right top-bar cluster */
-@media (max-width: 680px)  { #timeline-island { display: none; } }            /* finally the floating timeline → canvas only */
+/* RESPONSIVE — rather than hiding panels on narrow screens, keep EVERYTHING visible and
+   scroll the dock horizontally below a minimum width. The centre canvas has a min-width
+   so it never collapses; once the columns + canvas exceed the viewport the dock scrolls.
+   (The top bar likewise scrolls its own content — see #topbar overflow-x.) */
+#dock { overflow-x: auto; overflow-y: hidden; }
+#dock-center { min-width: 420px; }
 /* Touch: bump tap targets on coarse pointers. */
 @media (pointer: coarse) {
   .g-icon { min-width: 38px; min-height: 38px; }
@@ -467,15 +471,6 @@ body.view-overlay .island:not(#stage-island) .island-body { background: color-mi
   box-shadow: 0 10px 30px rgba(0,0,0,.5);
 }
 #device-pop[hidden] { display: none; }
-/* The Devices tab carries a small "scan" action inside it (a button within the tab). */
-.island-tab.has-scan { display: flex; align-items: center; justify-content: center; gap: var(--s6); }
-.tab-scan {
-  background: none; border: none; cursor: pointer; padding: 0 var(--s1);
-  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
-  text-transform: uppercase; color: var(--muted);
-}
-.tab-scan:hover, .tab-scan.on { color: var(--accent); }
-.tab-scan:disabled { opacity: .4; cursor: not-allowed; color: var(--faint); }
 /* Override the docked-island body flex (1 1 0) so the group sizes to its CONTENT, and
    keep it translucent over the canvas. */
 #device-pop .island-body { flex: 0 0 auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
@@ -605,6 +600,16 @@ body.gui-hidden #system-settings, body.gui-hidden #mapping-pane, body.gui-hidden
 body.gui-hidden #topbar { display: none; }
 /* The "Show UI" pill: hidden normally, floats top-left only while the UI is hidden,
    so H is never a one-way trapdoor. */
+/* Output-master HUD: shows FROZEN / PANIC top-centre so the operator knows the live state. */
+#out-hud {
+  position: fixed; top: calc(var(--topbar-h) + 12px); left: 50%; transform: translateX(-50%);
+  z-index: 70; padding: 4px 12px; border-radius: var(--radius-sm);
+  font: var(--fw-med) var(--fs-body) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel)); color: var(--accent-text);
+  border: 1px solid var(--accent-line); pointer-events: none;
+}
+#out-hud[hidden] { display: none; }
+#out-hud.is-panic { background: color-mix(in srgb, #ff5252 28%, var(--panel)); color: #ffd9d9; border-color: #ff5252; }
 #show-ui-pill {
   position: fixed; top: var(--s6); left: var(--s6); z-index: 40; display: none;
   font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
@@ -1013,10 +1018,8 @@ input[type=checkbox]:checked::after {
 /* Modulation rail: any DRIVEN param (timeline/audio/external) wears an inset accent
    bar down its left edge, so it's obvious at a glance which params are animated vs
    static — no badge or label. Inset shadow ⇒ zero layout shift. */
-.anim-param.is-animated { box-shadow: inset 2px 0 0 var(--accent-line); }
-/* Dashboard params have no in/out track and read as a plain link picker — drop the
-   modulation rail too (the link dropdown already shows the param is driven). */
-.anim-param.is-dashboard { box-shadow: none; }
+/* (The left accent rail was removed — the in/out track + controls already make it clear
+   a param is animated; the rail read as an unwanted vertical border.) */
 /* BPM field + TAP button (Composition inspector). */
 .cmp-bpm > input { flex: 1 1 0; min-width: 0; }
 .cmp-tap {
@@ -1272,6 +1275,18 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Solo active elsewhere → this layer isn't rendering. Dim the whole row so the
    deck mirrors the output; the row stays clickable (its S still un-solos it). */
 .deck-layer.is-muted { opacity: .4; transition: opacity .12s; }
+/* MASTER row above the layers: ✕ · B (each the layer-button width) + a horizontal
+   opacity fader filling the rest — same look as the vertical layer fader, on its side. */
+.deck-master { align-self: stretch; }
+.master-head { display: flex; align-items: stretch; width: 100%; height: var(--ctrl-h); }
+.master-head .lh-tog, .master-head .lh-clear { flex: 0 0 calc(var(--layer-w) / 4); min-width: 0; }
+.master-op { position: relative; flex: 1 1 auto; min-width: 0; cursor: pointer; box-sizing: border-box;
+  background: var(--line-2); border: 1px solid var(--line); border-left: 0; overflow: hidden; }
+.master-op-fill { position: absolute; top: 0; bottom: 0; left: 0; width: var(--fill, 100%);
+  background: color-mix(in srgb, var(--accent) 30%, var(--field-bg)); pointer-events: none; }
+/* Bright accent handle line at the value (the vertical fader's handle, rotated). */
+.master-op-handle { position: absolute; top: 0; bottom: 0; width: 2px; left: var(--fill, 100%);
+  transform: translateX(-50%); background: var(--accent); pointer-events: none; }
 /* "fx" marker next to a layer / clip name when it carries an effect chain.
    Inherits the bar's text colour (dimmed) so it stays legible on the accent
    highlight of a selected row too. */

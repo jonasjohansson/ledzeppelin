@@ -15,7 +15,7 @@ import { Section } from './ui/section.js';
 import { activateTabs } from './ui/kit/tabs.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, addISFClip, addISFEffect,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, setCompositionOpacity, addISFClip, addISFEffect,
 } from './model/layers.js';
 import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
@@ -129,6 +129,17 @@ let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureType
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
 let samplerDirty = false;   // set during a live fixture drag → rebuild the sampler next frame so lit content follows in realtime
+// --- Output live controls: Freeze (hold the last frame) + Panic (force all output dark).
+//     The master DIMMER is the composition opacity (a fader in the deck's master row),
+//     applied in the compositor — not duplicated here. ---
+let frozen = false, panicOn = false, sendBuf = null;
+// Force the sent frame dark (panic) via a reused buffer; identity otherwise.
+function scaleOutput(rgba, m) {
+  if (m >= 1) return rgba;
+  if (!sendBuf || sendBuf.length !== rgba.length) sendBuf = new Uint8Array(rgba.length);
+  for (let i = 0; i < rgba.length; i += 4) { sendBuf[i] = rgba[i] * m; sendBuf[i + 1] = rgba[i + 1] * m; sendBuf[i + 2] = rgba[i + 2] * m; sendBuf[i + 3] = rgba[i + 3]; }
+  return sendBuf;
+}
 let controlPanel = null;   // Control-tab panel (assigned once built; null-safe before)
 // Global output framerate cap sent to the daemon (System › Settings; persisted).
 const OUTFPS_KEY = 'lz.outfps';
@@ -388,9 +399,9 @@ const panel = createFixturePanel({
   },
   // An Inventory/model row was clicked → pop its editor group up beside the row.
   onPick: () => popAtSelectedRow(),
-  // Inventory "+" instantiates into the scene: a fixture type → a placed fixture;
-  // a controller model → a device. Both then pop up the new item's editor group.
-  onInstantiateFixture: (typeId) => { addInstance(typeId); setOutputTab('fixtures'); popAtSelectedRow(); },
+  // Inventory "+" instantiates into the scene but STAYS on the Inventory tab so you can
+  // click + repeatedly to add many (the row's ×N badge updates as feedback).
+  onInstantiateFixture: (typeId) => addInstance(typeId),
   onInstantiateController: (typeId) => addDeviceOfModel(typeId),
   // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
   // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
@@ -478,6 +489,9 @@ const compositionPanel = createCompositionPanel({
   // BPM is read live from show.composition.bpm each frame — no rebuild needed.
   // Snapshot so a manual BPM change is undoable (coalesced for tap/slider drags).
   setBpm: (b) => { snapshotForUndo(show); show = setShowBpm(show, b); saveShow(show); },
+  // Master opacity — live (the loop reads composition.opacity each frame); the deck's
+  // master fader picks it up on its next render. Same value the deck master row drives.
+  setMasterOpacity: (v) => { show = setCompositionOpacity(show, v); saveShow(show); },
 });
 // Output selection + snap state. Declared here (before the Settings panel, whose
 // initial render reads snap state) to avoid a temporal-dead-zone access.
@@ -1492,9 +1506,7 @@ function addDeviceOfModel(typeId) {
   while (taken.has(`${baseName} ${seq}`)) seq++;
   next.devices.push({ id, name: `${baseName} ${seq}`, ip: '', colorOrder: 'GRB', port: 4048, typeId });
   saveShow(next); rebuild(next);
-  setOutputTab('fixtures');            // reveal the Devices tab so the new controller shows
-  panel.setDevice?.(id); panel.refresh(); renderOutput();
-  popAtSelectedRow();
+  panel.refresh(); renderOutput();   // stay on Inventory so + can be clicked repeatedly
 }
 
 function renderOutput() {
@@ -1618,9 +1630,18 @@ function renderOutput() {
   }
 
   if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
-  // Scan RESULTS render here; the scan TRIGGER is the icon in the Devices tab header.
+  // SCAN button sits UNDER the list (with Unassigned), connected to its results below.
+  // Shows "Scanning…" + disabled while running so you can't double-scan; disabled when
+  // the daemon isn't up. The list re-renders during a scan, so this reflects live state.
+  const scanning = !!panel.scanning?.();
+  const daemonUp = !!bridge?.connected?.();
+  outputListEl.append(oel('button', {
+    className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
+    title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',
+    disabled: scanning || !daemonUp,
+    onclick: () => panel.runScan?.(renderOutput),
+  }));
   const scanRes = panel.scanResultsEl?.(); if (scanRes) outputListEl.append(scanRes);
-  document.getElementById('patch-scan')?.classList.toggle('on', !!panel.scanning?.());   // reflect scanning
 }
 
 const renderOutputList = renderOutput; // back-compat alias
@@ -1773,7 +1794,8 @@ const SHORTCUTS = [
   ['⌘Z', 'Undo'], ['⌘⇧Z', 'Redo'], ['⌘D', 'Duplicate'], ['⌘A', 'Select all'],
   ['⌘C / ⌘V', 'Copy / paste'], ['⌫', 'Delete selected'], ['Esc', 'Deselect'],
   ['← ↑ → ↓', 'Nudge (Shift = ×10)'], ['Space', 'Pan canvas (hold)'],
-  ['0', 'Reset zoom'], ['H', 'Hide / show UI'], ['?', 'This help'],
+  ['0', 'Reset zoom'], ['F', 'Freeze output'], ['K', 'Panic (kill output)'],
+  ['H', 'Hide / show UI'], ['?', 'This help'],
 ];
 let shortcutsEl = null;
 function toggleShortcuts(force) {
@@ -1794,6 +1816,22 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape' && shortcutsEl && !shortcutsEl.hidden) { toggleShortcuts(false); }
 });
 document.getElementById('menu-help')?.addEventListener('click', () => toggleShortcuts());
+
+// --- Freeze (F) / Panic (K) hotkeys, with a corner HUD so the operator always knows
+//     the live state. (The master dimmer is the deck's master-row opacity fader.) ---
+const outHud = (() => { const d = document.createElement('div'); d.id = 'out-hud'; d.hidden = true; document.body.appendChild(d); return d; })();
+function updateOutHud() {
+  const parts = []; if (panicOn) parts.push('PANIC'); if (frozen) parts.push('FROZEN');
+  outHud.textContent = parts.join(' · '); outHud.hidden = !parts.length;
+  outHud.classList.toggle('is-panic', panicOn);
+}
+function setFrozen(v) { frozen = !!v; updateOutHud(); }
+function setPanic(v) { panicOn = !!v; updateOutHud(); }
+document.addEventListener('keydown', (e) => {
+  if (typingIn(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'f' || e.key === 'F') setFrozen(!frozen);
+  else if (e.key === 'k' || e.key === 'K') setPanic(!panicOn);
+});
 
 // Surface a dock group: scroll it into view + a brief accent flash on it (used when a
 // clip/layer/fixture is selected so the relevant group draws the eye). Replaces the
@@ -2157,13 +2195,7 @@ function setInspectorTab(which) {
   try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
 }
 document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
-
-// Scan icon in the Devices/Inventory tab header → trigger a network scan. Gated on the
-// daemon socket (kept in sync by the status loop); results render in the Devices list.
-const patchScanBtn = document.getElementById('patch-scan');
-patchScanBtn?.addEventListener('click', () => { if (!patchScanBtn.disabled) panel.runScan?.(renderOutput); });
-const syncScanBtn = (live) => { if (patchScanBtn) { patchScanBtn.disabled = !live; patchScanBtn.title = live ? 'Scan the network for controllers' : 'Start the daemon (npm start) to scan'; } };
-syncScanBtn(!!bridge?.connected?.());
+// (Scan is a button under the Unassigned heading in the Devices list — see renderOutput.)
 
 // Patch tabs: 'fixtures' (Devices = placement list + controllers) vs 'library'
 // (Inventory = model catalog). Toggles the tab bodies + active tab, and drives which
@@ -2603,7 +2635,8 @@ function loop(ts) {
     // Composite all layers into compositor.tex. (The line generator self-animates
     // in-shader via uT — see manifest.js — so the loop no longer mutates params.)
     // env.trigSec drives triggerable sources (Pulse) via the shader's uTrig.
-    const masterOpacity = show.composition?.opacity ?? 1;
+    // Master mute (deck master-row "B") = composition.bypass → blackout.
+    const masterOpacity = show.composition?.bypass ? 0 : (show.composition?.opacity ?? 1);
     // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
     // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
@@ -2616,11 +2649,13 @@ function loop(ts) {
     if (samplerDirty) { refreshSampler(); samplerDirty = false; }
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
-    lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
+    // FREEZE holds the last sampled frame (don't re-sample); else sample fresh.
+    if (!frozen || !lastRGBA) lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
     if (lastRGBA) {
-      for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
+      if (!frozen) for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
       if (resolveLayerBindings()) bridge?.setRoute?.(curRoute);   // live layer-bound DMX params
-      bridge?.send(lastRGBA);
+      // PANIC forces dark; the master DIMMER is the composition opacity (compositor stage).
+      bridge?.send(panicOn ? scaleOutput(lastRGBA, 0) : lastRGBA);
     }
     // The composition-group "B" mutes all layers (bypass), so a master block reads
     // here naturally — muted layers composite to black, which samples/sends dark.
@@ -2648,7 +2683,7 @@ function loop(ts) {
     // The remote icon jumps to the control surface only while the daemon is up.
     if (remoteBtn) { remoteBtn.disabled = !live; remoteBtn.title = live ? 'Open the control surface (phone remote)' : 'Control surface — start the daemon to enable'; }
     // Daemon came up / went down → refresh the Output list + the scan icon's gate.
-    if (!!live !== lastLive) { lastLive = !!live; syncScanBtn(!!live); if (outputTab === 'fixtures') renderOutput(); }
+    if (!!live !== lastLive) { lastLive = !!live; if (outputTab === 'fixtures') renderOutput(); }   // daemon up/down → refresh scan button state
     frames = 0; last = ts;
   }
   requestAnimationFrame(loop);
