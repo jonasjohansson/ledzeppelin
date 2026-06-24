@@ -9,62 +9,71 @@
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <link rel="stylesheet" href="../src/ui/ui.css">
 <style>
-  html, body { margin: 0; background: var(--bg, #0a0a0a); color: var(--text, #eee); font: 12px var(--sans, system-ui, sans-serif); }
-  .map-wrap { padding: 14px 16px 40px; max-width: 920px; margin: 0 auto; }
+  /* Mappings window — styled from the shared design tokens in ../src/ui/ui.css so
+     it reads as the same serious, near-black, mono, hairline app surface (see
+     [[ui-aesthetic-ocr-disguise]]). All colours/sizes come from var(--…); the
+     fallbacks here only matter if ui.css ever fails to load. */
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
+  .map-wrap { padding: var(--s5) var(--s5) 40px; max-width: 920px; margin: 0 auto; }
   /* Narrow (embedded in the sidebar tab): stack each row onto two lines. */
   @media (max-width: 560px) {
-    .map-wrap { padding: 10px 10px 30px; }
-    .row { grid-template-columns: 1fr auto; grid-template-areas: "label acts" "osc chan"; row-gap: 2px; }
+    .map-wrap { padding: var(--s4) var(--s4) 30px; }
+    .row { grid-template-columns: 1fr auto; grid-template-areas: "label acts" "osc chan"; row-gap: var(--s1); }
     .row-label { grid-area: label; } .row-acts { grid-area: acts; }
     .row-osc { grid-area: osc; } .row-chan { grid-area: chan; justify-self: end; }
   }
-  .map-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .map-title { font-weight: var(--fw-med, 400); letter-spacing: var(--ls-caps, .08em); text-transform: uppercase; color: var(--accent, #e8a35c); }
-  .map-status { margin-left: auto; font-size: 11px; color: var(--muted, #888); }
-  .map-sec { font: var(--fw-med, 500) 11px var(--sans); letter-spacing: var(--ls-caps, .08em); text-transform: uppercase; color: var(--faint, #777);
-    border-bottom: 1px solid color-mix(in srgb, var(--accent, #e8a35c) 24%, transparent); padding: 0 0 4px; margin: 16px 0 8px; }
+  .map-head { display: flex; align-items: center; gap: var(--s5); margin-bottom: var(--s5); }
+  .map-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
+  .map-status { margin-left: auto; font-size: var(--fs-body); color: var(--muted); }
+  /* Section label: uppercase micro caps, hairline underline (restrained accent
+     tint — not a coloured fill). */
+  .map-sec { font: var(--fw-med) var(--fs-micro) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
+    border-bottom: 1px solid var(--line); padding: 0 0 var(--s2); margin: var(--s5) 0 var(--s6); }
   /* live channel monitor */
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { display: flex; align-items: center; gap: 6px; padding: 3px 8px; border: 1px solid var(--line, #333); border-radius: 4px; background: var(--field-bg, #1a1a1a); }
-  .chip-name { font-family: var(--mono, monospace); color: var(--muted, #aaa); }
-  .chip-bar { width: 56px; height: 6px; border-radius: 3px; background: var(--line-2, #444); overflow: hidden; }
-  .chip-fill { height: 100%; background: var(--accent, #e8a35c); width: 0; }
-  .chip-empty { color: var(--faint, #777); font-style: italic; }
-  .sec-aside { color: var(--faint, #777); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--s3); }
+  .chip { display: flex; align-items: center; gap: var(--s3); height: var(--ctrl-h); padding: 0 var(--s6); border: 1px solid var(--line); border-radius: var(--radius); background: var(--field-bg); box-sizing: border-box; }
+  .chip-name { font-family: var(--mono); color: var(--muted); }
+  .chip-bar { width: 56px; height: 5px; border-radius: var(--radius-sm); background: var(--line-2); overflow: hidden; }
+  .chip-fill { height: 100%; background: var(--accent); width: 0; }
+  .chip-empty { color: var(--faint); font-style: italic; }
+  .sec-aside { color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: var(--fw-reg); }
   /* parameter table — columns: label · OSC · MIDI · Key (· mode) */
-  .grp { margin: 11px 0 2px; color: var(--muted, #aaa); font-weight: var(--fw-med, 400); font-size: 11px; }
-  .row { display: grid; grid-template-columns: 1.1fr 1.5fr 116px 116px 64px; align-items: center; gap: 10px; padding: 4px 6px; margin: 0 -6px; border-top: 1px solid color-mix(in srgb, var(--line, #333) 50%, transparent); border-radius: 4px; }
-  .row.bound .row-label { color: var(--accent-text, #f1d6bb); }
-  .row-head { border-top: none; color: var(--faint,#777); font-size: 10px; letter-spacing: var(--ls-caps,.08em); text-transform: uppercase; padding-bottom: 0; }
-  .row-label { color: var(--text, #eee); }
-  .row-osc { font-family: var(--mono, monospace); color: var(--muted, #999); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: copy; }
-  .row-osc:hover { color: var(--accent, #e8a35c); }
-  .cell-h { font-family: var(--sans); color: var(--faint,#777); }
-  /* a MIDI / Key cell */
-  .cell { display: flex; align-items: center; gap: 6px; min-width: 0; border: 1px solid var(--line,#333); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-family: var(--mono, monospace); }
-  .cell:hover { border-color: var(--line-2,#555); }
-  .cell.armed { background: var(--accent-soft,#33271a); border-color: var(--accent-line,#54402b); }
+  .grp { margin: var(--s5) 0 var(--s1); color: var(--muted); font-weight: var(--fw-med); font-size: var(--fs-body); letter-spacing: var(--ls-ui); }
+  .row { display: grid; grid-template-columns: 1.1fr 1.5fr 116px 116px 64px; align-items: center; gap: var(--s4); min-height: var(--row-h); padding: 0 var(--s3); margin: 0 calc(-1 * var(--s3)); border-top: 1px solid var(--line); border-radius: var(--radius); }
+  .row.bound .row-label { color: var(--accent-text); }
+  .row-head { border-top: none; min-height: 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; padding-bottom: 0; }
+  .row-label { color: var(--text); }
+  .row-osc { font-family: var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: copy; }
+  .row-osc:hover { color: var(--accent); }
+  .cell-h { font-family: var(--ui-font); color: var(--faint); }
+  /* a MIDI / Key cell — sized to the shared control height. */
+  .cell { display: flex; align-items: center; gap: var(--s3); min-width: 0; height: var(--ctrl-h); box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius); padding: 0 var(--s3); cursor: pointer; font-family: var(--mono); }
+  .cell:hover { border-color: var(--line-2); }
+  .cell.armed { background: var(--accent-soft); border-color: var(--accent-line); }
   .cell.disabled { border-color: transparent; cursor: default; }
   .cell.disabled:hover { border-color: transparent; }
-  .cell-arm { color: var(--accent,#e8a35c); }
-  .cell-none { color: var(--faint,#777); }
-  .cell-chan { color: var(--accent-text,#f1d6bb); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cell-bar { flex: 1 1 auto; min-width: 14px; height: 5px; border-radius: 3px; background: var(--line-2,#444); overflow: hidden; }
-  .cell-fill { height: 100%; width: 0; background: var(--accent,#e8a35c); }
-  .row-mode { background: var(--field-bg,#1a1a1a); border: 1px solid var(--line,#333); border-radius: 4px; color: var(--muted,#aaa); cursor: pointer; font: 10px var(--mono,monospace); padding: 1px 6px; justify-self: start; }
-  .row-mode:hover { color: var(--text,#eee); }
-  .m-x { background: none; border: none; color: var(--faint, #777); cursor: pointer; font: inherit; padding: 0; }
-  .m-x:hover { color: var(--danger, #e66); }
-  button.m-btn { background: var(--field-bg, #1a1a1a); color: var(--muted, #aaa); border: 1px solid var(--line, #333); border-radius: 4px; padding: 3px 9px; cursor: pointer; font: inherit; }
-  button.m-btn:hover { color: var(--text, #eee); }
-  button.m-btn:disabled { color: var(--accent-text, #f1d6bb); border-color: var(--accent-line, #54402b); }
-  .map-toolbar { display: flex; gap: 8px; align-items: center; }
-  .hint { font-size: 11px; color: var(--faint, #777); }
-  .map-socket { margin: -4px 0 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-  .map-socket code { font-family: var(--mono, monospace); color: var(--accent, #e8a35c); background: var(--field-bg, #1a1a1a); border: 1px solid var(--line, #333); padding: 1px 5px; border-radius: 4px; }
-  .map-osc-in { margin: -4px 0 10px; display: flex; align-items: center; gap: 8px; }
-  .map-osc-in input { width: 72px; font: 12px var(--mono, monospace); color: var(--text, #eee); background: var(--field-bg, #1a1a1a); border: 1px solid var(--line-2, #474c55); border-radius: 4px; padding: 2px 6px; }
-  #osc-port-status { font-size: 11px; }
+  .cell-arm { color: var(--accent); }
+  .cell-none { color: var(--faint); }
+  .cell-chan { color: var(--accent-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell-bar { flex: 1 1 auto; min-width: 14px; height: 5px; border-radius: var(--radius-sm); background: var(--line-2); overflow: hidden; }
+  .cell-fill { height: 100%; width: 0; background: var(--accent); }
+  .row-mode { background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); cursor: pointer; font: var(--fs-micro) var(--mono); padding: 1px var(--s3); justify-self: start; }
+  .row-mode:hover { color: var(--text); }
+  .m-x { background: none; border: none; color: var(--faint); cursor: pointer; font: inherit; padding: 0; }
+  .m-x:hover { color: var(--danger); }
+  /* Button — matches the app's quiet field-chrome button (active = accent text on
+     soft accent surface, no big fill). */
+  button.m-btn { background: var(--field-bg); color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); height: var(--ctrl-h); padding: 0 var(--s5); cursor: pointer; font: var(--fs-ctrl) var(--ui-font); letter-spacing: var(--ls-ui); }
+  button.m-btn:hover { color: var(--text); border-color: var(--line-2); }
+  button.m-btn:disabled { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); cursor: default; }
+  .map-toolbar { display: flex; gap: var(--s6); align-items: center; }
+  .hint { font-size: var(--fs-body); color: var(--faint); }
+  .map-socket { margin: calc(-1 * var(--s2)) 0 var(--s4); display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }
+  .map-socket code { font-family: var(--mono); color: var(--accent); background: var(--field-bg); border: 1px solid var(--line); padding: 1px var(--s3); border-radius: var(--radius); }
+  .map-osc-in { margin: calc(-1 * var(--s2)) 0 var(--s4); display: flex; align-items: center; gap: var(--s6); }
+  .map-osc-in input { width: 72px; height: var(--ctrl-h); box-sizing: border-box; font: var(--fs-ctrl) var(--mono); color: var(--text); background: var(--field-bg); border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0 var(--s3); }
+  .map-osc-in input:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }
+  #osc-port-status { font-size: var(--fs-body); }
 </style>
 </head>
 <body>

@@ -1279,13 +1279,18 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    opacity fader filling the rest — same look as the vertical layer fader, on its side. */
 .deck-master { align-self: stretch; }
 .master-head { display: flex; align-items: stretch; width: 100%; height: var(--ctrl-h); }
+/* ✕ + B match the layer-button width; the "Master" label fills the rest of the head
+   column so the slider STARTS exactly at the first clip column (X + B + label = --layer-w). */
 .master-head .lh-tog, .master-head .lh-clear { flex: 0 0 calc(var(--layer-w) / 4); min-width: 0; }
+.master-label { flex: 0 0 calc(var(--layer-w) / 2); box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  font: var(--fw-med) var(--fs-micro) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps);
+  color: var(--muted); border-right: 1px solid var(--line); }
 .master-op { position: relative; flex: 1 1 auto; min-width: 0; cursor: pointer; box-sizing: border-box;
   background: var(--line-2); border: 1px solid var(--line); border-left: 0; overflow: hidden; }
 .master-op-fill { position: absolute; top: 0; bottom: 0; left: 0; width: var(--fill, 100%);
   background: color-mix(in srgb, var(--accent) 30%, var(--field-bg)); pointer-events: none; }
-/* Bright accent handle line at the value (the vertical fader's handle, rotated). */
-.master-op-handle { position: absolute; top: 0; bottom: 0; width: 2px; left: var(--fill, 100%);
+/* Bright accent handle line at the value; clamp 1px inside so it stays visible at 100%. */
+.master-op-handle { position: absolute; top: 0; bottom: 0; width: 2px; left: min(var(--fill, 100%), calc(100% - 1px));
   transform: translateX(-50%); background: var(--accent); pointer-events: none; }
 /* "fx" marker next to a layer / clip name when it carries an effect chain.
    Inherits the bar's text colour (dimmed) so it stays legible on the accent

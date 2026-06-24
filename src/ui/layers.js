@@ -1055,7 +1055,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     const end = (e) => { if (!drag) return; drag = false; try { op.releasePointerCapture(e.pointerId); } catch { /* released */ } commit(setCompositionOpacity(show(), fromX(e.clientX))); };
     op.addEventListener('pointerup', end); op.addEventListener('pointercancel', end);
     op.addEventListener('contextmenu', (e) => { if (document.body.classList.contains('native-ctx')) return; e.preventDefault(); e.stopPropagation(); paint(1); commit(setCompositionOpacity(show(), 1)); });
-    row.append(xBtn, bBtn, op);
+    row.append(xBtn, bBtn, el('div', { className: 'master-label', textContent: 'Master' }), op);
     return row;
   }
 

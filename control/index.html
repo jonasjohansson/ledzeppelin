@@ -9,60 +9,82 @@
 <meta name="apple-mobile-web-app-title" content="LZ Control">
 <meta name="application-name" content="LZ Control">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#101114">
+<meta name="theme-color" content="#131110">
 <!-- Installable as a home-screen app (iOS Add to Home Screen / Android install). -->
 <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="../icons/icon-180.png">
 <title>Led Zeppelin — Control</title>
 <style>
+  /* Self-host the same face the editor uses (src/ui/ui.css). Served from the repo
+     root at /fonts; the control page lives at /control/ so the path is ../fonts. */
+  @font-face{ font-family:"Commit Mono"; font-style:normal; font-weight:400; font-display:swap;
+              src:url("../fonts/CommitMono.woff2") format("woff2"); }
+  /* Tokens mirror the editor's :root (src/ui/ui.css) VALUES so the phone control
+     surface reads as the same tool: near-black warm ramp, ONE warm accent used as
+     text/underline (not big fills), hairline 1px borders, square-ish 2–3px radii,
+     uppercase micro labels with letter-spacing. Touch sizes are kept generous. */
   :root{
-    --bg:#101114; --panel:#1c1e22; --panel-2:#26282d; --line:#33363e; --line-2:#474c55;
-    --text:#f4f5f7; --muted:#a3aab4; --accent:#e8a35c; --accent-soft:#33271a; --danger:#ff6b6b;
-    --mono:"Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
-    --radius:8px;
+    /* warm near-black ramp */
+    --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
+    --line:#3a342d; --line-2:#4c4538;
+    --field-bg:#161310;
+    /* text */
+    --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84; --readout:#d7dbe0;
+    /* one warm accent + danger */
+    --accent:#e8a35c; --accent-soft:#33271a; --accent-text:#f1d6bb; --accent-line:#54402b;
+    --accent-dark:#07151f; --danger:#ff6b6b;
+    --mono:"Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    /* radii (square-ish) + letter-spacing */
+    --radius:3px; --radius-sm:2px; --ls-caps:.1em;
+    /* spacing scale (editor's --s1..--s6) */
+    --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px; --s6:8px;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
-  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:15px; }
+  html,body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--mono); font-size:15px;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; }
   body{ padding:12px 12px calc(24px + env(safe-area-inset-bottom)); }
-  header{ display:flex; align-items:center; gap:8px; padding:4px 2px 12px; }
-  header .dot{ width:9px; height:9px; border-radius:50%; background:var(--danger); flex:0 0 auto; }
+  header{ display:flex; align-items:center; gap:var(--s6); padding:4px 2px 12px; }
+  header .dot{ width:8px; height:8px; border-radius:var(--radius-sm); background:var(--danger); flex:0 0 auto; }
   header .dot.on{ background:var(--accent); }
-  header h1{ font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:400; margin:0; }
+  header h1{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--muted); font-weight:400; margin:0; }
   .empty{ color:var(--muted); text-align:center; padding:24px 16px; line-height:1.5; }
   /* Touch surface: keep comfortable padding/tap targets, but trim the inter-card gap. */
-  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:8px; }
+  .layer{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:var(--s6); }
   .layer-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-  .layer-name{ flex:1 1 auto; font-size:15px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:6px; border:1px solid var(--line-2); background:var(--panel-2);
-        color:var(--muted); font-family:var(--mono); font-size:15px; }
-  .blk.on{ background:var(--danger); border-color:var(--danger); color:#1a0e0e; }
+  .layer-name{ flex:1 1 auto; font-size:13px; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Block button: hairline tool button, not a candy fill. Active = danger outline + text. */
+  .blk{ flex:0 0 auto; width:40px; height:34px; border-radius:var(--radius-sm); border:1px solid var(--line-2); background:var(--field-bg);
+        color:var(--muted); font-family:var(--mono); font-size:13px; }
+  .blk.on{ background:var(--panel-2); border-color:var(--danger); color:var(--danger); }
   /* Deck-style clip cells: a thumbnail with a name bar underneath, like the
      editor's Composition deck. Tap to trigger; the active clip gets an accent ring. */
-  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:8px; }
-  .clip{ border:1px solid var(--line-2); border-radius:6px; overflow:hidden; background:var(--panel-2);
+  .clips{ display:grid; grid-template-columns:repeat(auto-fill, minmax(96px,1fr)); gap:var(--s6); }
+  .clip{ border:1px solid var(--line-2); border-radius:var(--radius-sm); overflow:hidden; background:var(--panel-2);
          padding:0; cursor:pointer; }
   .clip-thumb{ display:block; width:100%; aspect-ratio:16/9; background:#000 center/cover no-repeat; }
-  .clip-name{ font-family:var(--mono); font-size:12px; color:var(--text); padding:5px 6px; text-align:left;
+  .clip-name{ font-family:var(--mono); font-size:11px; color:var(--text); padding:5px 6px; text-align:left;
               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .clip:active{ border-color:var(--accent); }
-  .clip:active .clip-name{ background:var(--accent); color:#1a120a; }
-  .clip.active{ border-color:var(--accent); }
+  .clip:active .clip-name{ background:var(--accent); color:var(--accent-dark); }
+  .clip.active{ border-color:var(--accent-line); }
   .clip.active .clip-name{ background:var(--accent-soft); color:var(--accent); }
   .ctrl{ margin-top:12px; }
-  .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; }
-  .ctrl-row .lab{ color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ctrl-row .val{ color:var(--text); font-size:13px; font-variant-numeric:tabular-nums; }
+  .ctrl-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:var(--s2); }
+  .ctrl-row .lab{ color:var(--muted); font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase;
+                  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ctrl-row .val{ color:var(--readout); font-size:13px; font-variant-numeric:tabular-nums; }
   /* Big touch sliders. touch-action:none ⇒ a finger drag drives the slider directly
      instead of the browser first waiting to see if it's a page scroll (that wait is
-     both the input lag AND the accidental page-swipe when sliding). */
+     both the input lag AND the accidental page-swipe when sliding). Square-ish track
+     + thumb to match the editor's restrained, non-glassy chrome. */
   input[type=range]{ -webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; margin:0; touch-action:none; }
-  input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line-2); }
+  input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
   input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; appearance:none; width:26px; height:26px; margin-top:-9px;
-        border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
-  input[type=range]::-moz-range-track{ height:10px; border-radius:5px; background:var(--panel-2); border:1px solid var(--line-2); }
-  input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); }
-  .section-label{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:14px 2px 8px; }
+        border-radius:var(--radius); background:var(--accent); border:1px solid var(--accent-line); }
+  input[type=range]::-moz-range-track{ height:10px; border-radius:var(--radius-sm); background:var(--field-bg); border:1px solid var(--line-2); }
+  input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:var(--radius); background:var(--accent); border:1px solid var(--accent-line); }
+  .section-label{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--faint); margin:14px 2px 8px; }
 </style>
 </head>
 <body>
