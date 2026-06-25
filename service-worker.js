@@ -4,7 +4,7 @@
 // the network is instant, so you always get fresh code (no stale-cache pain
 // during development), and the cache is purely an offline safety net. Live
 // daemon endpoints (/api/*) and the frame socket (/frames) are never cached.
-const VERSION = 'lz-v4';
+const VERSION = 'lz-v5';
 
 // Minimal app shell precached on install so the editor opens offline even on the
 // very first launch after install. Everything else (the rest of the ES modules,
@@ -16,7 +16,7 @@ const CORE = [
   './icons/favicon.png',
   './src/ui/ui.css',
   './src/app.js',
-  './fonts/CommitMono.woff2',
+  './fonts/System85MonoPro-Regular.woff2',
   './icons/icon-192.png',
 ];
 

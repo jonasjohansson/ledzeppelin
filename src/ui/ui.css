@@ -5,13 +5,21 @@
 @font-face { font-family: "Spline Sans Mono"; font-style: normal; font-weight: 300 700; font-display: swap; src: url("../../fonts/SplineSansMono.woff2") format("woff2"); }
 @font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 300 700; font-display: swap; src: url("../../fonts/MartianMono.woff2") format("woff2"); }
 @font-face { font-family: "Commit Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/CommitMono.woff2") format("woff2"); }
+/* System85 Mono Pro — the active UI face (pixel/system mono, rendered smooth). */
+@font-face { font-family: "System85"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/System85MonoPro-Regular.woff2") format("woff2"); }
+@font-face { font-family: "System85"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("../../fonts/System85MonoPro-Medium.woff2") format("woff2"); }
+/* Extra pixel faces — selectable via the Settings › Appearance font picker. */
+@font-face { font-family: "PP Neue Bit"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../../fonts/PPNeueBit-Regular.woff2") format("woff2"); }
+@font-face { font-family: "OffBit"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/OffBit-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/PressStart2P-Regular.woff2") format("woff2"); }
 
 /* ── Design tokens (matte-inspired: monospace, lifted panels, vibrant hues) ── */
 :root{
   /* Active UI typeface — MONO-FORWARD: one family for chrome AND data.
      Swap the look by switching the active line: Spline ⇄ Martian. */
-  /* Active UI face. Swappable: Spline / Martian / Commit are all self-hosted below. */
-  --ui-font: "Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Active UI face — System85 Mono Pro (pixel/system mono), rendered SMOOTH. Commit Mono +
+     Spline / Martian remain self-hosted below as swaps. */
+  --ui-font: "System85", "Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --mono: var(--ui-font);
   /* SOLID SOFTWARE (Resolume-calibrated): panels are opaque dark-gray surfaces a
      step brighter than the old near-black, so chrome reads as solid tooling that
@@ -59,7 +67,7 @@
   --ls-caps:.1em; --ls-ui:.04em;
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
-  --radius:3px; --radius-sm:2px;
+  --radius:0px; --radius-sm:0px;   /* square corners */
   --side-w:268px;    /* right panel (Devices/Inventory) width — single pane (editor is the left Device tab) */
   --side2-w:300px;   /* second sidebar (selected fixture/device editor) width */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
