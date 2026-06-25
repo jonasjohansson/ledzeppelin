@@ -8,10 +8,6 @@
 /* System85 Mono Pro — the active UI face (pixel/system mono, rendered smooth). */
 @font-face { font-family: "System85"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/System85MonoPro-Regular.woff2") format("woff2"); }
 @font-face { font-family: "System85"; font-style: normal; font-weight: 500 700; font-display: swap; src: url("../../fonts/System85MonoPro-Medium.woff2") format("woff2"); }
-/* Extra pixel faces — selectable via the Settings › Appearance font picker. */
-@font-face { font-family: "PP Neue Bit"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("../../fonts/PPNeueBit-Regular.woff2") format("woff2"); }
-@font-face { font-family: "OffBit"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/OffBit-Regular.woff2") format("woff2"); }
-@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("../../fonts/PressStart2P-Regular.woff2") format("woff2"); }
 
 /* ── Design tokens (matte-inspired: monospace, lifted panels, vibrant hues) ── */
 :root{

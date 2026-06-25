@@ -2327,27 +2327,6 @@ setUiScale(savedScale());        // apply text scale on boot
 setTranslucency(savedTranslucency());   // apply panel translucency on boot
 applyContrast();                // apply text contrast on boot
 
-// UI FONT picker — try the bundled mono/pixel faces live. Sets --ui-font + --sans/--mono
-// inline on <html> (beats the :root default + reaches the aliased --sans/--mono).
-const FONT_OPTIONS = [
-  ['System85', '"System85", ui-monospace, monospace'],
-  ['Commit Mono', '"Commit Mono", ui-monospace, monospace'],
-  ['PP Neue Bit', '"PP Neue Bit", ui-monospace, monospace'],
-  ['OffBit', '"OffBit", ui-monospace, monospace'],
-  ['Press Start 2P', '"Press Start 2P", ui-monospace, monospace'],
-  ['Spline Sans Mono', '"Spline Sans Mono", ui-monospace, monospace'],
-  ['Martian Mono', '"Martian Mono", ui-monospace, monospace'],
-];
-const UIFONT_KEY = 'lz.uifont';
-const savedUiFont = () => { try { return localStorage.getItem(UIFONT_KEY) || 'System85'; } catch { return 'System85'; } };
-function setUiFont(name) {
-  const opt = FONT_OPTIONS.find((o) => o[0] === name) || FONT_OPTIONS[0];
-  const s = document.documentElement.style;
-  s.setProperty('--ui-font', opt[1]); s.setProperty('--sans', opt[1]); s.setProperty('--mono', opt[1]);
-  try { localStorage.setItem(UIFONT_KEY, opt[0]); } catch { /* private */ }
-}
-setUiFont(savedUiFont());     // apply on boot
-
 applyAccent(savedAccent());   // apply the saved accent (+ brightness + tint) on boot
 
 // --- Hover tooltips (native `title`) — ON by default (the icon-heavy chrome needs
@@ -2468,12 +2447,8 @@ async function buildSettings(mount) {
   // "recording": it re-runs the show live, interactivity intact. MIDI enable +
   // input lives in the Mapping window.)
 
-  // --- Appearance: font / brightness / accent tint / contrast / text size (all live). ---
+  // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'appearance' }));
-  const fsel = oel('select', { title: 'UI font — try the bundled mono / pixel faces' });
-  FONT_OPTIONS.forEach(([name]) => { const o = oel('option', { value: name, textContent: name }); if (name === savedUiFont()) o.selected = true; fsel.append(o); });
-  fsel.addEventListener('change', () => setUiFont(fsel.value));
-  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Font' }), fsel]));
   mount.append(Slider('Brightness', savedBright(), {
     min: -12, max: 20, step: 1, default: 7, commit: 'live',
     onInput: (v) => setBrightness(Math.round(v)),
