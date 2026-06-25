@@ -264,10 +264,10 @@ function portInUse(port) {
     setTimeout(() => done(false), 300);
   });
 }
-// If the port's busy, LEDZeppelin is most likely already running there — a
+// If the port's busy, LED Zeppelin is most likely already running there — a
 // double-click should just OPEN that instance, not crash ("nothing happens").
 if (await portInUse(PORT)) {
-  console.error(`port ${PORT} in use — LEDZeppelin already running? opening ${httpUrl}`);
+  console.error(`port ${PORT} in use — LED Zeppelin already running? opening ${httpUrl}`);
   if (wantOpen()) openBrowser(httpUrl);
   process.exit(0);
 }

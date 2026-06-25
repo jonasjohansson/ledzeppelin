@@ -1,5 +1,5 @@
 {
-  "$description": "Led Zeppelin tokens in Tokens Studio (classic value/type) format. Import in Figma via the Tokens Studio plugin: Tools > Import > paste/upload this file, then 'Create variables' to generate the Figma Variable collections. Mirrors src/ui/ui.css :root. Single set — root groups become variable groups.",
+  "$description": "LED Zeppelin tokens in Tokens Studio (classic value/type) format. Import in Figma via the Tokens Studio plugin: Tools > Import > paste/upload this file, then 'Create variables' to generate the Figma Variable collections. Mirrors src/ui/ui.css :root. Single set — root groups become variable groups.",
   "color": {
     "surface": {
       "bg":          { "value": "#101114", "type": "color" },

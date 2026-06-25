@@ -1,6 +1,6 @@
 {
-  "name": "Led Zeppelin",
-  "short_name": "LedZep",
+  "name": "LED Zeppelin",
+  "short_name": "LED Zeppelin",
   "description": "LED-mapping & VJ tool for addressable LED — composite, map, and output DDP / Art-Net.",
   "id": "./",
   "lang": "en",

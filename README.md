@@ -1,4 +1,4 @@
-# LEDZeppelin
+# LED Zeppelin
 
 A standalone realtime show tool for addressable LED. Render generative visuals on
 a 2D canvas, map your LED fixtures onto it, and stream each fixture's sampled

@@ -1,10 +1,10 @@
-// Led Zeppelin service worker — makes the editor installable + runnable offline.
+// LED Zeppelin service worker — makes the editor installable + runnable offline.
 //
 // Strategy is NETWORK-FIRST for same-origin GETs: on localhost / a live daemon
 // the network is instant, so you always get fresh code (no stale-cache pain
 // during development), and the cache is purely an offline safety net. Live
 // daemon endpoints (/api/*) and the frame socket (/frames) are never cached.
-const VERSION = 'lz-v3';
+const VERSION = 'lz-v4';
 
 // Minimal app shell precached on install so the editor opens offline even on the
 // very first launch after install. Everything else (the rest of the ES modules,
@@ -13,7 +13,7 @@ const CORE = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './favicon.svg',
+  './icons/favicon.png',
   './src/ui/ui.css',
   './src/app.js',
   './fonts/CommitMono.woff2',

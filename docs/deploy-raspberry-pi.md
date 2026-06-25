@@ -1,4 +1,4 @@
-# Deploying Led Zeppelin on a Raspberry Pi
+# Deploying LED Zeppelin on a Raspberry Pi
 
 Goal: the show server **boots on power-on**, **restarts on crash**, and is reachable
 on the LAN at **`http://ledzeppelin.local`** so you can open the editor in any browser
@@ -39,7 +39,7 @@ Adjust `User`/paths to your user.
 ```ini
 # /etc/systemd/system/ledzeppelin.service
 [Unit]
-Description=Led Zeppelin LED show server
+Description=LED Zeppelin LED show server
 After=network-online.target
 Wants=network-online.target
 

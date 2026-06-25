@@ -1,6 +1,6 @@
-# Capturing Led Zeppelin into Figma (html.to.design)
+# Capturing LED Zeppelin into Figma (html.to.design)
 
-This folder is the **capture source** for turning the Led Zeppelin UI into a Figma
+This folder is the **capture source** for turning the LED Zeppelin UI into a Figma
 component library. Capture **this gallery**, not the live app — the app builds
 components with JS and hides them behind tabs (Design / Output / System) plus three
 WebGL/SVG canvases, so a live capture would be partial and flattened. The gallery

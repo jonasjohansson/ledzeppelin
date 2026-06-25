@@ -27,7 +27,7 @@ the binary; it serves `http://localhost:7070` and opens your browser automatical
 
 ## Build a macOS .app (double-clickable)
 ```
-npm run build:mac                 # → "dist/LEDZeppelin.app" (arm64; pass x64 for Intel)
+npm run build:mac                 # → "dist/LED Zeppelin.app" (arm64; pass x64 for Intel)
 ```
 The bundle carries `NSLocalNetworkUsageDescription` (the LAN-permission prompt
 reason). Released builds are signed and notarised. If you build it **unsigned**,

@@ -2763,7 +2763,7 @@ function fitToFixtures() {
 // New project: confirm, then reset to a sensible STARTER — one controller with a
 // single fixture wired to it, lit by a Lines clip. (Not blank, so there's
 // something on screen and a patch to build from.)
-// A fresh project gets a random Led Zeppelin track as its title (beats "untitled").
+// A fresh project gets a random LED Zeppelin track as its title (beats "untitled").
 const LZ_TRACKS = [
   'Stairway to Heaven', 'Kashmir', 'Whole Lotta Love', 'Black Dog', 'Immigrant Song',
   'Rock and Roll', 'Ramble On', 'Going to California', 'Dazed and Confused', 'Heartbreaker',
@@ -2778,7 +2778,7 @@ const randomTrackTitle = () => LZ_TRACKS[Math.floor(Math.random() * LZ_TRACKS.le
 function newProject() {
   if (!window.confirm('Start a new project? This clears the current one (save first if you want to keep it).')) return;
   // Reset to the standard default (Lines + Checkered, Generic Controller, 1280²) —
-  // the same show a fresh install loads — with a random Led Zeppelin track as its title.
+  // the same show a fresh install loads — with a random LED Zeppelin track as its title.
   const next = normalizeComposition(defaultShow());
   if (next.composition) next.composition.title = randomTrackTitle();
   applyFullShow(next);
@@ -2796,7 +2796,7 @@ openShowInput?.addEventListener('change', async () => {
   try {
     const loaded = JSON.parse(await file.text());
     if (!loaded || !Array.isArray(loaded.fixtures) || !loaded.composition) {
-      window.alert(loaded?.instances ? 'That looks like a LEDger file — use “import from LEDger…” in the File menu.' : 'Not a Led Zeppelin project file.');
+      window.alert(loaded?.instances ? 'That looks like a LEDger file — use “import from LEDger…” in the File menu.' : 'Not a LED Zeppelin project file.');
     } else {
       applyFullShow(normalizeComposition(loaded));
     }

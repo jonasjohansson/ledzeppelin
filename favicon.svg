@@ -8,25 +8,19 @@
       <stop offset=".75" stop-color="#5cc8ff"/>
       <stop offset="1"   stop-color="#b18bff"/>
     </linearGradient>
-    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
-      <stop offset="0" stop-color="#5cc8ff" stop-opacity=".55"/>
-      <stop offset="1" stop-color="#5cc8ff" stop-opacity="0"/>
-    </radialGradient>
   </defs>
-  <rect width="32" height="32" rx="7" fill="#0e0f12"/>
-  <!-- soft halo -->
-  <ellipse cx="15" cy="14" rx="15" ry="10" fill="url(#glow)"/>
-  <!-- airship, tilted, made of the LED spectrum -->
-  <g transform="rotate(-12 15 14)">
+  <!-- Outlined mark — no filled tile, so it reads on any background. -->
+  <!-- airship, tilted, made of the LED spectrum, with a black outline -->
+  <g transform="rotate(-12 15 14)" stroke="#0e0f12" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round">
     <ellipse cx="15" cy="14" rx="12.5" ry="5.6" fill="url(#led)"/>
     <!-- seam highlight -->
-    <path d="M3.5 14 H26.5" stroke="#0e0f12" stroke-width="1" opacity=".35"/>
+    <path d="M3.5 14 H26.5" opacity=".35"/>
     <!-- tail fin -->
     <path d="M26 14 l4 -2.6 v5.2 z" fill="#b18bff"/>
     <!-- little gondola -->
-    <rect x="11.5" y="18.6" width="7" height="2.4" rx="1.2" fill="#1b1e24" stroke="#5cc8ff" stroke-width=".8"/>
+    <rect x="11.5" y="18.6" width="7" height="2.4" rx="1.2" fill="#1b1e24"/>
   </g>
   <!-- lightning bolt -->
   <path d="M18 4 l-7 11 h4.2 l-3 9 9 -12 h-4.4 z"
-        fill="#ffd23f" stroke="#0e0f12" stroke-width="1" stroke-linejoin="round"/>
+        fill="#ffd23f" stroke="#0e0f12" stroke-width="1.1" stroke-linejoin="round"/>
 </svg>
