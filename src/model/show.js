@@ -1,4 +1,4 @@
-import { fixtureTypeChannels, DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams, isDmxType } from './dmx.js';
+import { DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -169,36 +169,28 @@ export function syncFixtureTypes(show) {
       typeId = t.id;
     }
     const t = byId.get(typeId);
+    // Each fixture is STANDALONE: it owns its own spec. Read pixel/grid/colour
+    // fields from the INSTANCE first and fall back to the type only for fields the
+    // instance genuinely lacks — editing a type (now a template library only) must
+    // NOT change existing instances. Normalize via the same rules as normFixtureType
+    // so pixelCount === cols·rows stays consistent.
+    const rows = Math.max(1, Math.round(Number(f.rows ?? t.rows) || 1));
+    const cols = Math.max(1, Math.round(Number(f.cols ?? f.pixelCount ?? t.cols ?? t.pixelCount) || 1));
+    const pixelCount = cols * rows;
+    const distribution = Math.max(0, Math.round(Number(f.distribution ?? t.distribution) || 0));
     const out = {
       ...f, typeId,
-      ledsPerMeter: t.ledsPerMeter, meters: t.meters, pixelCount: t.pixelCount, colorOrder: t.colorOrder,
+      ledsPerMeter: f.ledsPerMeter ?? t.ledsPerMeter, meters: f.meters ?? t.meters,
+      pixelCount, colorOrder: f.colorOrder ?? t.colorOrder,
       // Grid (matrix) spec + per-fixture colour format cached onto the instance so
       // pipeline.js / preview / grid.js read them directly (rows=1 ⇒ a plain strip;
       // colorFormat '' ⇒ inherit the controller's colour order).
-      cols: t.cols, rows: t.rows, distribution: t.distribution, colorFormat: t.colorFormat || '',
-      output: { ...f.output, pixelCount: t.pixelCount },
-      input: { ...f.input, samples: t.pixelCount },
+      cols, rows, distribution, colorFormat: f.colorFormat ?? t.colorFormat ?? '',
+      output: { ...f.output, pixelCount },
+      input: { ...f.input, samples: pixelCount },
     };
-    // OUTPUT KIND FOLLOWS THE TYPE. A DMX type → the instance is a DMX fixture (channel
-    // layout owned by the type, so editing the definition propagates in bulk); a pixel
-    // type (strip/matrix) → the instance streams pixels and is NEVER a DMX fixture. This
-    // is what stops an LED strip from becoming a DMX fixture. Legacy/orphan instances
-    // (no real type) keep whatever inline DMX channels they carry.
-    if (hadType) {
-      if (isDmxType(t)) {
-        const prev = out.input?.dmx || {};
-        const dev = (show.devices || []).find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
-          || (show.devices || []).find((d) => d.protocol === 'artnet');
-        out.input = { ...out.input, mode: 'dmx',
-          dmx: { universe: prev.universe ?? dev?.universe ?? 0, address: prev.address ?? 1, fixed: prev.fixed || {}, ...(prev.bind ? { bind: prev.bind } : {}), channels: fixtureTypeChannels(t) } };
-        if (!out.output?.deviceId && dev) out.output = { ...out.output, deviceId: dev.id };
-      } else if (out.input?.dmx) {
-        // Type became (or is) a pixel layout → drop the DMX config; back to a strip/matrix.
-        const { dmx, ...restInput } = out.input;
-        out.input = { ...restInput, mode: t.rows > 1 ? 'grid' : 'bar', samples: t.pixelCount };
-        out.output = { ...out.output, pixelOffset: out.output?.pixelOffset ?? 0, pixelCount: t.pixelCount };
-      }
-    }
+    // DMX-vs-pixel is an INSTANCE property now (not derived from the type): whatever
+    // input.mode / input.dmx the instance carries is preserved as-is via ...f.input.
     return out;
   });
   return { ...show, fixtureTypes: types, fixtures };
