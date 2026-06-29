@@ -1255,11 +1255,15 @@ function groupParamSection(ids) {
   return [flatGroup('Parameters', 'dmx-params', (body) => {
     ctl.forEach((c) => {
       const ci = c.index;
-      // Shared value across the selection, else fall back to the first fixture's.
+      // Shared value across the selection, else fall back to the first fixture's and
+      // dim the row (.is-mixed) to flag that the fader's value differs across the
+      // selection — consistent with the other mixed fields. Editing still writes all.
       const vals = sel.map((f) => f.input?.dmx?.fixed?.[ci] ?? c.value ?? 0);
-      const shown = vals.every((v) => v === vals[0]) ? vals[0] : vals[0];
-      body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
-        onInput: (v) => setEachParam(ci, v) }));
+      const mixed = !vals.every((v) => v === vals[0]);
+      const row = Slider(c.name, vals[0], { min: 0, max: 255, step: 1, commit: 'live',
+        onInput: (v) => setEachParam(ci, v) });
+      if (mixed) row.classList.add('is-mixed');
+      body.append(row);
     });
   })];
 }
