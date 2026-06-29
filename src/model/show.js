@@ -71,10 +71,12 @@ export function deviceTypeInstanceCount(show, typeId) {
 // --- Fixture TYPES (definitions) ---------------------------------------------
 // A fixture TYPE is a reusable physical strip definition (density × length →
 // pixel count, colour order). A fixture is an INSTANCE that references a type by
-// `typeId` and carries only placement + patch (geometry, device, offset). Each
-// instance caches its type's spec (pixelCount/colorOrder/…) so pipeline.js,
-// validate(), and the preview keep reading `fixture.pixelCount` unchanged — the
-// cache is refreshed from the type on every rebuild (see syncFixtureTypes).
+// `typeId` and carries placement + patch (geometry, device, offset) PLUS its own
+// spec (pixelCount/colorOrder/…), which pipeline.js, validate(), and the preview
+// read directly as `fixture.pixelCount`. A new fixture is seeded from a type, but
+// thereafter independent: syncFixtureTypes reads each field from the instance and
+// only falls back to the type for fields the instance is missing — editing a type
+// never changes existing instances.
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 export function makeFixtureType(ledsPerMeter, meters, colorOrder = 'GRB', id, name) {
   const lpm = Math.max(0, Number(ledsPerMeter) || 0);
@@ -151,8 +153,9 @@ function normFixtureType(t) {
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
-// legacy fixtures — which stored spec inline — into deduped types), then copy
-// each type's spec onto its instances as a denormalized cache. Pure.
+// legacy fixtures — which stored spec inline — into deduped types). Each fixture is
+// STANDALONE and owns its own spec; the type is only a fallback for fields the
+// instance lacks, and a template library to seed NEW fixtures from. Pure.
 export function syncFixtureTypes(show) {
   const types = (show.fixtureTypes || []).map((t) => normFixtureType(t));
   // Always keep a permanent generic fixture definition in the catalog.
@@ -174,7 +177,10 @@ export function syncFixtureTypes(show) {
     // instance genuinely lacks — editing a type (now a template library only) must
     // NOT change existing instances. Normalize via the same rules as normFixtureType
     // so pixelCount === cols·rows stays consistent.
-    const rows = Math.max(1, Math.round(Number(f.rows ?? t.rows) || 1));
+    // A strip-shaped legacy instance carries a bare pixelCount with no grid: default
+    // its rows to 1 (not the type's) so a matrix type can't multiply its pixel count.
+    const bareCount = f.pixelCount != null && f.rows == null && f.cols == null;
+    const rows = Math.max(1, Math.round(Number(f.rows ?? (bareCount ? 1 : t.rows)) || 1));
     const cols = Math.max(1, Math.round(Number(f.cols ?? f.pixelCount ?? t.cols ?? t.pixelCount) || 1));
     const pixelCount = cols * rows;
     const distribution = Math.max(0, Math.round(Number(f.distribution ?? t.distribution) || 0));
@@ -182,7 +188,7 @@ export function syncFixtureTypes(show) {
       ...f, typeId,
       ledsPerMeter: f.ledsPerMeter ?? t.ledsPerMeter, meters: f.meters ?? t.meters,
       pixelCount, colorOrder: f.colorOrder ?? t.colorOrder,
-      // Grid (matrix) spec + per-fixture colour format cached onto the instance so
+      // Grid (matrix) spec + per-fixture colour format owned by the instance so
       // pipeline.js / preview / grid.js read them directly (rows=1 ⇒ a plain strip;
       // colorFormat '' ⇒ inherit the controller's colour order).
       cols, rows, distribution, colorFormat: f.colorFormat ?? t.colorFormat ?? '',

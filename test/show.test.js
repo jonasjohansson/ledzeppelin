@@ -63,8 +63,7 @@ test('fixture types carry normalised Parameters (extra DMX channels)', async () 
   assert.deepEqual(noP.fixtureTypes.find((x) => x.id === 'x').params, []);
 });
 
-test('output kind is an instance property: the type does NOT change it', async () => {
-  const { syncFixtureTypes } = await import('../src/model/show.js');
+test('output kind is an instance property: the type does NOT change it', () => {
   // An instance carrying its own DMX config keeps it, even though its type is a pixel strip.
   const s = syncFixtureTypes({
     ...emptyShow(),
@@ -98,4 +97,35 @@ test('editing a type does NOT change an existing instance (standalone)', () => {
   const out = syncFixtureTypes(show);
   assert.equal(out.fixtures[0].pixelCount, 60);
   assert.equal(out.fixtures[0].output.pixelCount, 60);
+});
+
+test('editing a matrix type does NOT change an existing grid instance (owns its grid)', () => {
+  const show = {
+    fixtureTypes: [{ id: 'm1', name: 'Matrix', cols: 8, rows: 4, distribution: 1 }],
+    fixtures: [{ id: 'g1', typeId: 'm1', cols: 8, rows: 4, distribution: 1, pixelCount: 32, colorOrder: 'GRB',
+      output: { deviceId: '', pixelCount: 32 }, input: { points: [[0,0],[1,0]], samples: 32 } }],
+    devices: [],
+  };
+  // Edit the type into a bigger, differently-wired matrix.
+  show.fixtureTypes[0].cols = 16; show.fixtureTypes[0].rows = 8; show.fixtureTypes[0].distribution = 2;
+  const g = syncFixtureTypes(show).fixtures[0];
+  assert.equal(g.cols, 8);
+  assert.equal(g.rows, 4);
+  assert.equal(g.distribution, 1);
+  assert.equal(g.pixelCount, 32);
+  assert.equal(g.output.pixelCount, 32);
+});
+
+test('a bare-pixelCount legacy instance under a matrix type stays a strip (rows not multiplied)', () => {
+  const show = {
+    fixtureTypes: [{ id: 'm1', name: 'Matrix', cols: 8, rows: 4 }],
+    // Legacy instance: only a flat pixelCount, no cols/rows of its own.
+    fixtures: [{ id: 'f1', typeId: 'm1', pixelCount: 60, colorOrder: 'GRB',
+      output: { deviceId: '' }, input: { points: [[0,0],[1,0]] } }],
+    devices: [],
+  };
+  const f = syncFixtureTypes(show).fixtures[0];
+  assert.equal(f.rows, 1);          // defaulted to a strip, NOT the type's rows=4
+  assert.equal(f.cols, 60);
+  assert.equal(f.pixelCount, 60);   // not 60 * 4
 });
