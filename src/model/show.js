@@ -11,10 +11,12 @@ export function addFixture(show, f) { const s = clone(show); s.fixtures.push(f);
 // --- Controller TYPES (device models) ----------------------------------------
 // A device TYPE is a controller MODEL — its physical output count + per-output
 // pixel budget (e.g. a QuinLED DigQuad = 4 outputs). A device is an INSTANCE
-// that references a model by `typeId` and carries only name/ip/colorOrder. Each
-// instance caches its model's spec (outputs/maxPerOutput) so chains/validate/UI
-// keep reading `device.outputs` unchanged — refreshed on every rebuild (see
-// syncDeviceTypes). QuinLED models are seeded into the Library on first sync.
+// that references a model by `typeId` and carries name/ip/colorOrder PLUS its own
+// spec (outputs/maxPerOutput/artnetSync), which chains/validate/UI read directly
+// as `device.outputs`. A new device is seeded from a model, but thereafter
+// independent: syncDeviceTypes reads each field from the instance and only falls
+// back to the model for fields the instance is missing — editing a model never
+// changes existing devices. QuinLED models are seeded into the Library on first sync.
 //
 // maxPerOutput is NOT a fixed board spec — the QuinLED outputs have no pixel cap;
 // the limit is WLED/ESP framerate + RAM. ~830 px/output ≈ 40 fps for WS281x-family
@@ -31,7 +33,9 @@ export function makeDeviceType(name, outputs = 4, maxPerOutput = PX_PER_OUTPUT_4
 }
 
 // Ensure show.deviceTypes exists (seed QuinLED on first run) and every device
-// references a model, caching outputs/maxPerOutput from it (live template). Pure.
+// references a model. Each device is STANDALONE and owns its own spec; the model
+// is only a fallback for fields the instance lacks, and a template library to seed
+// NEW devices from. Pure.
 export function syncDeviceTypes(show) {
   let types = (show.deviceTypes || []).map((t) => ({ ...t }));
   if (!types.length) types = QUINLED_PRESETS.map((t) => ({ ...t }));
@@ -52,13 +56,20 @@ export function syncDeviceTypes(show) {
     // universe (int ≥ 0; the device spans consecutive universes from it).
     const protocol = d.protocol === 'artnet' ? 'artnet' : 'ddp';
     const universe = Math.max(0, Math.round(Number(d.universe) || 0));
+    // Each device is STANDALONE: it owns its own spec. Read outputs/maxPerOutput/
+    // artnetSync from the INSTANCE first and fall back to the model only for fields
+    // the instance genuinely lacks — editing a model (now a template library only)
+    // must NOT change existing devices. Normalize outputs via the same rule as
+    // makeDeviceType.
+    const outputs = Math.max(1, Math.round(Number(d.outputs ?? t.outputs) || 1));
+    const maxPerOutput = Math.max(0, Math.round(Number(d.maxPerOutput ?? t.maxPerOutput) || 0));
     // ArtSync: send an OpSync after each frame's ArtDmx so the node latches all its
-    // universes together (tear-free multi-universe). Now a MODEL-level capability
-    // (set in the Inventory controller editor); legacy per-device value still honoured.
-    const artnetSync = !!(t.artnetSync ?? d.artnetSync);
+    // universes together (tear-free multi-universe). Owned by the device, falling
+    // back to the model's capability when the instance hasn't set it.
+    const artnetSync = !!(d.artnetSync ?? t.artnetSync);
     // Per-device output delay (ms) — time-aligns this controller against the rig.
     const syncDelayMs = Math.max(0, Math.min(1000, Math.round(Number(d.syncDelayMs) || 0)));
-    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe, artnetSync, syncDelayMs };
+    return { ...d, typeId: t.id, outputs, maxPerOutput, protocol, universe, artnetSync, syncDelayMs };
   });
   return { ...show, deviceTypes: types, devices };
 }
