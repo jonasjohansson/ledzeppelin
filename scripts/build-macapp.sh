@@ -66,15 +66,40 @@ echo "✓ $APP"
 
 if [ -n "${SIGN_ID:-}" ]; then
   echo "→ codesigning (hardened runtime)…"
-  codesign --force --deep --options runtime --timestamp --sign "$SIGN_ID" "$APP"
+  # cp -R + Finder can attach extended attributes; codesign then refuses the bundle
+  # with "resource fork, Finder information, or similar detritus not allowed", which
+  # under `set -e` aborts the whole build. Strip them first.
+  xattr -cr "$APP"
+  # Hardened runtime is mandatory for notarisation. The daemon is a Bun /
+  # JavaScriptCore binary, so grant the JIT entitlements JSC may need under the
+  # hardened runtime (harmless if unused; avoids a JIT crash on stricter macOS).
+  ENT="$(mktemp -d)"; ENTFILE="$ENT/entitlements.plist"
+  cat > "$ENTFILE" <<'ENTPLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.cs.allow-jit</key><true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+  <key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict></plist>
+ENTPLIST
+  # Single self-contained binary, no nested frameworks → sign the bundle directly
+  # (no --deep; Apple deprecates it and it's unreliable for notarisation).
+  codesign --force --options runtime --timestamp --entitlements "$ENTFILE" --sign "$SIGN_ID" "$APP"
+  codesign --verify --strict --verbose=2 "$APP"
+  rm -rf "$ENT"
   if [ -n "${NOTARY_PROFILE:-}" ]; then
     echo "→ notarizing…"; ZIP="dist/ledzeppelin.zip"
     ditto -c -k --keepParent "$APP" "$ZIP"
     xcrun notarytool submit "$ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
     xcrun stapler staple "$APP"; rm -f "$ZIP"
-    echo "✓ signed + notarized"
-  else echo "  (set NOTARY_PROFILE to also notarize)"; fi
+    spctl --assess --type execute --verbose=2 "$APP" || true
+    echo "✓ signed + notarized + stapled"
+  else echo "  (set NOTARY_PROFILE to also notarize — unnotarised downloads still show 'damaged')"; fi
 else
-  echo "  (unsigned — set SIGN_ID to codesign; macOS 15+ users otherwise need"
-  echo "   System Settings ▸ Privacy & Security ▸ Open Anyway on first launch)"
+  echo "  (unsigned — set SIGN_ID + NOTARY_PROFILE to sign + notarise. Bun ad-hoc"
+  echo "   signs the binary, so a DOWNLOADED unsigned build is quarantined and macOS"
+  echo "   refuses it with 'is damaged and can't be opened' (no Open Anyway button on"
+  echo "   Apple Silicon / macOS 15+). Recipients clear it with:"
+  echo "     xattr -dr com.apple.quarantine \"LEDZeppelin.app\")"
 fi

@@ -30,10 +30,17 @@ the binary; it serves `http://localhost:7070` and opens your browser automatical
 npm run build:mac                 # → "dist/LED Zeppelin.app" (arm64; pass x64 for Intel)
 ```
 The bundle carries `NSLocalNetworkUsageDescription` (the LAN-permission prompt
-reason). Released builds are signed and notarised. If you build it **unsigned**,
-macOS 15+ makes users go through System Settings ▸ Privacy & Security ▸ "Open
-Anyway" on first launch. To avoid that, sign and notarise with an Apple Developer
-ID:
+reason). Released builds should be signed **and notarised**. Bun's `--compile`
+ad-hoc-signs the inner binary, so an unsigned build runs fine on the machine that
+built it — but once it's **downloaded** (quarantined), Gatekeeper sees an
+ad-hoc/unsigned app and refuses it with *"'LEDZeppelin' is damaged and can't be
+opened. You should move it to the Trash."* There is **no** "Open Anyway" button for
+this on Apple Silicon / macOS 15+ (Sequoia, Tahoe). Recipients can unblock it with:
+```
+xattr -dr com.apple.quarantine "LEDZeppelin.app"
+```
+To skip the quarantine dance entirely, sign and notarise with an Apple Developer
+ID — a notarised build opens with a plain double-click:
 ```
 SIGN_ID="Developer ID Application: Your Name (TEAMID)" \
 NOTARY_PROFILE="lz-notary" \      # from: xcrun notarytool store-credentials
