@@ -25,6 +25,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
+import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
@@ -1092,12 +1093,29 @@ function dmxEditor(sel) {
 }
 
 // Like txField, but the value may be null = "mixed" across the multi-selection:
-// shows a "— mixed —" placeholder and commits only when the user types something.
+// shows a "— mixed —" placeholder, dims the row (.is-mixed), and commits only when
+// the user types something — which then writes that value to EVERY selected fixture.
 function txFieldMulti(label, value, onCommit) {
   const i = oel('input', { type: 'number', step: '1', placeholder: '— mixed —' });
   if (value != null) i.value = String(Math.round(value));
   i.addEventListener('change', () => { if (i.value === '') return; onCommit(Number(i.value)); });
-  return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
+  return oel('label', { className: 'fx-field' + (value == null ? ' is-mixed' : '') }, [oel('span', { textContent: label }), i]);
+}
+
+// A <select> counterpart to txFieldMulti for discrete bulk fields (device/port).
+// `state` is a { value, mixed } from fieldState: when mixed it prepends a selected
+// "— mixed —" option and dims the row; committing writes to EVERY selected fixture.
+function selFieldMulti(label, options, state, onCommit) {
+  const s = oel('select');
+  const MIXED = '__mixed__';
+  if (state.mixed) s.append(oel('option', { value: MIXED, textContent: '— mixed —', selected: true }));
+  for (const o of options) {
+    const op = oel('option', { value: o.value, textContent: o.label });
+    if (!state.mixed && o.value === String(state.value ?? '')) op.selected = true;
+    s.append(op);
+  }
+  s.addEventListener('change', () => { if (s.value !== MIXED) onCommit(s.value); });
+  return oel('label', { className: 'fx-field' + (state.mixed ? ' is-mixed' : '') }, [oel('span', { textContent: label }), s]);
 }
 
 // Position editor for a MULTI-selection — the SAME interface as positionEditor, but
@@ -1130,8 +1148,36 @@ function multiPositionEditor(ids) {
   // reverse button is "on" only when ALL selected strips are reversed.
   const allRev = ids.every((id) => !!fxOf(id)?.input?.reversed);
 
+  // --- PATCH + per-instance DMX (bulk) -------------------------------------
+  // The live selection as fixture objects, plus its strip / DMX subsets. Patch
+  // fields shown depend on what's in the selection: Device is common to both;
+  // Output port is a pixel-strip concept; Universe/Address are DMX-only.
+  const selList = () => ids.map((id) => fxOf(id)).filter(Boolean);
+  const list = selList();
+  const stripList = list.filter((f) => !isDmxFixture(f));
+  const dmxList = list.filter((f) => isDmxFixture(f));
+  // Write a (dotted) field to every selected fixture matching `filter`, via the
+  // tested applyField helper, then commit through the normal show pipeline.
+  // (Device/port/offset are derived by repackOffsets on rebuild, so reassigning
+  // a fixture's device or port here can never corrupt pixel offsets.)
+  const setFieldAll = (key, value, filter = () => true) => {
+    const next = structuredClone(show);
+    const targetIds = new Set(next.fixtures.filter((f) => ids.includes(f.id) && filter(f)).map((f) => f.id));
+    const updated = new Map(applyField(next.fixtures.filter((f) => targetIds.has(f.id)), key, value).map((f) => [f.id, f]));
+    next.fixtures = next.fixtures.map((f) => updated.get(f.id) || f);
+    applyShow(next);
+  };
+  // Device options: "— unassigned —" first (mirrors the single editors), then every
+  // controller. Output options: 1..N where N is the largest output count among the
+  // selection's devices (floor 4) — so the picker always offers the real ports.
+  const devOpts = [{ value: '', label: '— unassigned —' },
+    ...show.devices.map((d) => ({ value: d.id, label: `${d.name || d.id} (${d.id})` }))];
+  const devIds = [...new Set(list.map((f) => f.output?.deviceId).filter(Boolean))];
+  const nOut = Math.max(1, 4, ...devIds.map((id) => Math.round(show.devices.find((d) => d.id === id)?.outputs ?? 4)));
+  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i + 1), label: `Output ${i + 1}` }));
+
   return oel('div', { className: 'output-edit' }, [
-    Section('Position', 'position', (body) => {
+    flatGroup('Position', 'position', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
           txFieldMulti('X', sharedFn(leftOf), (v) => setEachLeft(v)),
@@ -1153,6 +1199,33 @@ function multiPositionEditor(ids) {
             onclick: () => applyAll((nx, id) => flipFixture(nx, id)) }),
         ]),
       );
+    }),
+    // PATCH (bulk): which controller/output the selection is wired to, plus per-
+    // instance DMX address. Each field dims when it differs across the selection
+    // and writes to ALL selected on edit. pixelOffset is intentionally omitted —
+    // it's derived by repackOffsets, never authored.
+    flatGroup('Patch', 'routing', (body) => {
+      const grid = [
+        selFieldMulti('Device', devOpts, fieldState(list, 'output.deviceId'),
+          (v) => setFieldAll('output.deviceId', v)),
+      ];
+      // Output port — pixel-strip concept; show whenever the selection has a strip.
+      if (stripList.length) grid.push(
+        selFieldMulti('Output', portOpts, fieldState(stripList, 'output.port'),
+          (v) => setFieldAll('output.port', Number(v), (f) => !isDmxFixture(f))),
+      );
+      // Universe/Address — DMX-only; show whenever the selection has a DMX fixture.
+      if (dmxList.length) {
+        const u = fieldState(dmxList, 'input.dmx.universe');
+        const a = fieldState(dmxList, 'input.dmx.address');
+        grid.push(
+          txFieldMulti('Universe', u.mixed ? null : (u.value ?? 0),
+            (v) => setFieldAll('input.dmx.universe', Math.max(0, Math.round(v)), isDmxFixture)),
+          txFieldMulti('Address', a.mixed ? null : (a.value ?? 1),
+            (v) => setFieldAll('input.dmx.address', Math.min(512, Math.max(1, Math.round(v))), isDmxFixture)),
+        );
+      }
+      body.append(oel('div', { className: 'output-grid' }, grid));
     }),
     // GROUP parameter control: when every selected fixture is a DMX fixture of the
     // SAME type, expose one named fader per parameter that drives ALL of them at once.
@@ -1179,7 +1252,7 @@ function groupParamSection(ids) {
     }
     applyShow(next);
   };
-  return [Section('Parameters', 'dmx-params', (body) => {
+  return [flatGroup('Parameters', 'dmx-params', (body) => {
     ctl.forEach((c) => {
       const ci = c.index;
       // Shared value across the selection, else fall back to the first fixture's.
