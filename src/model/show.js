@@ -8,40 +8,6 @@ const clone = (s) => structuredClone(s);
 export function addDevice(show, d) { const s = clone(show); s.devices.push({ port: 4048, ...d }); return s; }
 export function addFixture(show, f) { const s = clone(show); s.fixtures.push(f); return s; }
 
-// --- One-time legacy migration: inline the referenced template spec ----------
-// Instances are STANDALONE — they own their spec, and the sync functions no
-// longer copy the type/model onto them on every rebuild (they only fall back to
-// the template for fields the instance is missing). A genuinely legacy or freshly
-// imported instance might carry ONLY a `typeId` (no inline pixelCount/cols/… , or
-// a device with no outputs). bakeInstanceSpecs runs ONCE on show LOAD, before the
-// syncs, and inlines the template's RAW spec fields onto any instance missing
-// them — filling ONLY absent fields (never overwriting one the instance already
-// has). Instances that already carry their own spec pass through untouched. It
-// does NOT normalize (cols·rows, clamping, etc.) — that's the sync functions'
-// job afterward. Pure.
-const FIXTURE_SPEC_FIELDS = ['ledsPerMeter', 'meters', 'pixelCount', 'colorOrder', 'cols', 'rows', 'distribution', 'colorFormat'];
-const DEVICE_SPEC_FIELDS = ['outputs', 'maxPerOutput', 'artnetSync'];
-function fillMissing(inst, template, fields) {
-  if (!template) return inst;
-  let next = inst;
-  for (const k of fields) {
-    if (inst[k] == null && template[k] != null) {
-      if (next === inst) next = { ...inst };   // copy-on-first-write
-      next[k] = template[k];
-    }
-  }
-  return next;
-}
-export function bakeInstanceSpecs(show) {
-  const fixtureTypes = new Map((show.fixtureTypes || []).map((t) => [t.id, t]));
-  const deviceTypes = new Map((show.deviceTypes || []).map((t) => [t.id, t]));
-  const fixtures = (show.fixtures || []).map((f) =>
-    f.typeId ? fillMissing(f, fixtureTypes.get(f.typeId), FIXTURE_SPEC_FIELDS) : f);
-  const devices = (show.devices || []).map((d) =>
-    d.typeId ? fillMissing(d, deviceTypes.get(d.typeId), DEVICE_SPEC_FIELDS) : d);
-  return { ...show, fixtures, devices };
-}
-
 // --- Controller TYPES (device models) ----------------------------------------
 // A device TYPE is a controller MODEL — its physical output count + per-output
 // pixel budget (e.g. a QuinLED DigQuad = 4 outputs). A device is an INSTANCE

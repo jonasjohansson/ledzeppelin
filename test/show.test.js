@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes, bakeInstanceSpecs } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -146,36 +146,30 @@ test('a bare-pixelCount legacy instance under a matrix type stays a strip (rows 
   assert.equal(f.pixelCount, 60);   // not 60 * 4
 });
 
-test('migration inlines a legacy typeId-only fixture once', () => {
+// Regression guards: sync's type-FALLBACK already migrates legacy `typeId`-only
+// instances on first load — no separate bake step is needed (and a pre-sync bake
+// would defeat the bareCount guard, see the matrix test above). These prove the
+// full chain (the path app.js actually runs) does the right thing.
+test('syncFixtureTypes inlines a truly-bare legacy typeId-only fixture from its type', () => {
   const show = {
     fixtureTypes: [{ id: 't1', name: 'Strip', ledsPerMeter: 60, meters: 2, pixelCount: 120, colorOrder: 'GRB', cols: 120, rows: 1, distribution: 0 }],
+    // Legacy instance carrying ONLY a typeId — no inline spec at all.
     fixtures: [{ id: 'f1', typeId: 't1', output: {}, input: {} }],
     devices: [],
   };
-  const out = bakeInstanceSpecs(show);
-  assert.equal(out.fixtures[0].pixelCount, 120);
-  assert.equal(out.fixtures[0].cols, 120);
-  assert.equal(out.fixtures[0].colorOrder, 'GRB');
+  const f = syncFixtureTypes(show).fixtures[0];
+  assert.equal(f.pixelCount, 120);     // filled from the type
+  assert.equal(f.cols, 120);
+  assert.equal(f.colorOrder, 'GRB');
 });
 
-test('migration inlines a legacy typeId-only device once', () => {
+test('syncDeviceTypes inlines a legacy typeId-only device from its model', () => {
   const show = {
     deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830 }],
     devices: [{ id: 'c1', typeId: 'dt1' }],
     fixtures: [],
   };
-  const out = bakeInstanceSpecs(show);
-  assert.equal(out.devices[0].outputs, 4);
-  assert.equal(out.devices[0].maxPerOutput, 830);
-});
-
-test('migration is a no-op when the instance already has its own spec', () => {
-  const show = {
-    fixtureTypes: [{ id: 't1', pixelCount: 120, cols: 120, rows: 1, ledsPerMeter: 60, meters: 2, colorOrder: 'GRB', distribution: 0 }],
-    fixtures: [{ id: 'f1', typeId: 't1', pixelCount: 60, cols: 60, rows: 1, colorOrder: 'RGB' }],
-    devices: [],
-  };
-  const out = bakeInstanceSpecs(show);
-  assert.equal(out.fixtures[0].pixelCount, 60);   // keeps its own, NOT the type's 120
-  assert.equal(out.fixtures[0].colorOrder, 'RGB');
+  const d = syncDeviceTypes(show).devices[0];
+  assert.equal(d.outputs, 4);          // filled from the model
+  assert.equal(d.maxPerOutput, 830);
 });
