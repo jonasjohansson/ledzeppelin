@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes, bakeInstanceSpecs } from '../src/model/show.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -144,4 +144,38 @@ test('a bare-pixelCount legacy instance under a matrix type stays a strip (rows 
   assert.equal(f.rows, 1);          // defaulted to a strip, NOT the type's rows=4
   assert.equal(f.cols, 60);
   assert.equal(f.pixelCount, 60);   // not 60 * 4
+});
+
+test('migration inlines a legacy typeId-only fixture once', () => {
+  const show = {
+    fixtureTypes: [{ id: 't1', name: 'Strip', ledsPerMeter: 60, meters: 2, pixelCount: 120, colorOrder: 'GRB', cols: 120, rows: 1, distribution: 0 }],
+    fixtures: [{ id: 'f1', typeId: 't1', output: {}, input: {} }],
+    devices: [],
+  };
+  const out = bakeInstanceSpecs(show);
+  assert.equal(out.fixtures[0].pixelCount, 120);
+  assert.equal(out.fixtures[0].cols, 120);
+  assert.equal(out.fixtures[0].colorOrder, 'GRB');
+});
+
+test('migration inlines a legacy typeId-only device once', () => {
+  const show = {
+    deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830 }],
+    devices: [{ id: 'c1', typeId: 'dt1' }],
+    fixtures: [],
+  };
+  const out = bakeInstanceSpecs(show);
+  assert.equal(out.devices[0].outputs, 4);
+  assert.equal(out.devices[0].maxPerOutput, 830);
+});
+
+test('migration is a no-op when the instance already has its own spec', () => {
+  const show = {
+    fixtureTypes: [{ id: 't1', pixelCount: 120, cols: 120, rows: 1, ledsPerMeter: 60, meters: 2, colorOrder: 'GRB', distribution: 0 }],
+    fixtures: [{ id: 'f1', typeId: 't1', pixelCount: 60, cols: 60, rows: 1, colorOrder: 'RGB' }],
+    devices: [],
+  };
+  const out = bakeInstanceSpecs(show);
+  assert.equal(out.fixtures[0].pixelCount, 60);   // keeps its own, NOT the type's 120
+  assert.equal(out.fixtures[0].colorOrder, 'RGB');
 });

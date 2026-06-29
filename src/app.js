@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, bakeInstanceSpecs } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -111,7 +111,10 @@ function initialShow() {
 
 // On load: migrate legacy flat fixtures into definitions + instances (so the
 // Library shows definitions immediately), then sync fixture geometry.
-let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(initialShow())))));
+// bakeInstanceSpecs runs ONCE here, before the syncs, to inline the referenced
+// template spec onto any genuinely legacy / freshly-imported instance that carries
+// only a typeId — the sync functions no longer copy the type onto instances live.
+let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureTypes(syncDeviceTypes(bakeInstanceSpecs(initialShow()))))));
 
 // --- Canvas resolution (composition.canvas drives source render + stage) ---
 // The canvas resolution affects ONLY the source render targets + on-screen
