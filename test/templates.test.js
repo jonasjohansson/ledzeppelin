@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stampFixture, stampDevice } from '../src/model/templates.js';
-import { makeFixtureType, makeGridType, makeDeviceType, validate, emptyShow } from '../src/model/show.js';
+import { makeFixtureType, makeGridType, makeDeviceType, validate, emptyShow, syncFixtureTypes, syncDeviceTypes } from '../src/model/show.js';
 
 // --- stampFixture ------------------------------------------------------------
 
@@ -18,8 +18,34 @@ test('stampFixture inlines the template spec onto a standalone instance', () => 
   assert.equal(fx.ledsPerMeter, tmpl.ledsPerMeter);
   assert.equal(fx.meters, tmpl.meters);
   assert.equal(fx.distribution, tmpl.distribution);
-  // Provenance tag (record, not a live link).
-  assert.equal(fx.fromTemplate, tmpl.id);
+  // Resolves to the authored library entry (count/delete-guard stay accurate).
+  assert.equal(fx.typeId, tmpl.id);
+});
+
+test('stampFixture handles a DMX-profile template (inlines params/channels, dmx input)', () => {
+  const tmpl = {
+    id: 'dmxPar', name: 'PAR', pixelCount: 1, cols: 1, rows: 1, colorOrder: 'GRB',
+    params: [{ name: 'RGB', count: 3 }, { name: 'Dimmer', count: 1 }],
+    channels: [{ kind: 'red' }, { kind: 'green' }, { kind: 'blue' }, { kind: 'dimmer' }],
+  };
+  const fx = stampFixture(tmpl, 'fd');
+
+  assert.equal(fx.typeId, 'dmxPar');
+  assert.deepEqual(fx.params, tmpl.params);
+  assert.deepEqual(fx.channels, tmpl.channels);
+  assert.equal(fx.input.mode, 'dmx');
+  assert.ok(fx.input.dmx);
+  assert.equal(fx.input.dmx.universe, 0);
+  assert.equal(fx.input.dmx.address, 1);
+  assert.deepEqual(fx.input.dmx.fixed, {});
+  assert.ok(fx.input.dmx.channels.length > 0);   // expanded channel list, non-empty
+  assert.ok(fx.input.points.length >= 2);         // still has a canvas footprint
+  // Fresh inlined arrays — editing the template must not leak in.
+  assert.notEqual(fx.params, tmpl.params);
+  assert.notEqual(fx.channels, tmpl.channels);
+
+  const show = { ...emptyShow(), fixtures: [fx] };
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
 });
 
 test('stampFixture produces a default patch/placement that validates once placed', () => {
@@ -84,7 +110,7 @@ test('stampDevice inlines outputs/maxPerOutput onto a standalone device', () => 
   assert.equal(d.maxPerOutput, 830);
   assert.equal(d.protocol, 'ddp');
   assert.equal(d.port, 4048);
-  assert.equal(d.fromTemplate, 'digquad');
+  assert.equal(d.typeId, 'digquad');
 });
 
 test('stampDevice name falls back to the template id, then the new id', () => {
@@ -104,4 +130,31 @@ test('stampDevice does not mutate the template', () => {
   const snapshot = JSON.parse(JSON.stringify(tmpl));
   stampDevice(tmpl, 'd3');
   assert.deepEqual(tmpl, snapshot);
+});
+
+// --- round-trip: no catalog pollution ---------------------------------------
+
+test('stamped instances do not mint new catalog types on sync (typeId resolves to source)', () => {
+  const fxType = makeFixtureType(60, 2, 'RGB', 'tA', 'Strip A');
+  const devType = makeDeviceType('DigQuad', 4, 830, 'digquad');
+  const show = {
+    ...emptyShow(),
+    fixtureTypes: [fxType],
+    devices: [stampDevice(devType, 'd1')],
+    deviceTypes: [devType],
+    fixtures: [stampFixture(fxType, 'f1')],
+  };
+  // syncFixtureTypes appends a permanent 'generic' fixture definition; account
+  // for it by comparing against the post-sync baseline of types we authored.
+  const fSynced = syncFixtureTypes(show);
+  const dSynced = syncDeviceTypes(show);
+
+  // No SPURIOUS types minted from the stamped instances: only the authored type
+  // (+ the always-present generic) survive — no t1/t2/dt… orphan types.
+  assert.deepEqual(fSynced.fixtureTypes.map((t) => t.id).sort(), ['generic', 'tA']);
+  assert.deepEqual(dSynced.deviceTypes.map((t) => t.id).sort(), ['digquad', 'generic']);
+
+  // Each stamped instance still resolves to its source template after sync.
+  assert.equal(fSynced.fixtures[0].typeId, 'tA');
+  assert.equal(dSynced.devices[0].typeId, 'digquad');
 });
