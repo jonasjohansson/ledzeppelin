@@ -48,13 +48,18 @@ test('syncDeviceTypes preserves artnet protocol + universe and sanitises bad val
 
 test('editing a device type does NOT change an existing device (standalone)', () => {
   const show = {
-    deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830 }],
-    devices: [{ id: 'c1', name: 'C1', typeId: 'dt1', outputs: 4, maxPerOutput: 830, protocol: 'ddp' }],
+    deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830, artnetSync: false }],
+    devices: [{ id: 'c1', name: 'C1', typeId: 'dt1', outputs: 4, maxPerOutput: 830, artnetSync: false, protocol: 'ddp' }],
     fixtures: [],
   };
-  show.deviceTypes[0].outputs = 8;          // edit the MODEL
+  // Edit the MODEL across the board.
+  show.deviceTypes[0].outputs = 8;
+  show.deviceTypes[0].maxPerOutput = 512;
+  show.deviceTypes[0].artnetSync = true;
   const out = syncDeviceTypes(show);
-  assert.equal(out.devices[0].outputs, 4);  // instance keeps its own
+  assert.equal(out.devices[0].outputs, 4);            // instance keeps its own
+  assert.equal(out.devices[0].maxPerOutput, 830);     // instance keeps its own
+  assert.equal(out.devices[0].artnetSync, false);     // device-first: NOT the model's true
 });
 
 test('fixture types carry normalised Parameters (extra DMX channels)', async () => {
