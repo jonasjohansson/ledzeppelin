@@ -6,6 +6,8 @@ import { makeCompositor } from './engine/compositor.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { stampFixture, stampDevice } from './model/templates.js';
+import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
 import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
@@ -1526,10 +1528,98 @@ function addDeviceOfModel(typeId) {
   panel.refresh(); renderOutput();   // stay on Inventory so + can be clicked repeatedly
 }
 
+// === Add directly from a TEMPLATE (the Devices view's "+ Fixture" / "+ Device") ===
+// The catalog (show.fixtureTypes / show.deviceTypes) is a template LIBRARY. Picking a
+// template STAMPS a standalone instance (spec inlined, typeId = template.id) via the
+// tested stamp helpers, then selects it so its editor opens. Issue #5: a clear,
+// discoverable way to add/patch a fixture without hunting through a separate tab.
+const nextFixtureId = (s) => { let n = (s.fixtures?.length || 0) + 1, id; do { id = `f${n}`; n++; } while ((s.fixtures || []).some((x) => x.id === id)); return id; };
+const nextDeviceId = (s) => { let n = (s.devices?.length || 0) + 1, id; do { id = `c${n}`; n++; } while ((s.devices || []).some((x) => x.id === id)); return id; };
+
+function addFixtureFromTemplate(template) {
+  const next = structuredClone(show);
+  const id = nextFixtureId(next);
+  const fx = stampFixture(template, id);   // standalone instance, centred + unassigned
+  next.fixtures.push(fx);
+  selectedFixtureIds = new Set([id]); selectedDeviceId = null;
+  expandedDevices.add('');             // keep the Unassigned group open so it shows
+  saveShow(next); rebuild(next);
+  setOverlay(true);                    // reveal the canvas overlay so the new fixture is visible
+  panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+function addDeviceFromTemplate(template) {
+  const next = structuredClone(show);
+  const id = nextDeviceId(next);
+  const dev = stampDevice(template, id);
+  // Keep device names unique (the model name repeats across instances).
+  const taken = new Set((next.devices || []).map((d) => d.name));
+  if (taken.has(dev.name)) { let seq = 2; while (taken.has(`${dev.name} ${seq}`)) seq++; dev.name = `${dev.name} ${seq}`; }
+  next.devices.push(dev);
+  selectedDeviceId = id; selectedFixtureIds = new Set(); expandedDevices.add(id);
+  saveShow(next); rebuild(next);
+  panel.refresh(); renderOutput();
+}
+
+// Template-pick popover anchored under the "+ Fixture" / "+ Device" button. Lists the
+// user templates by name (with a size hint) + a "Blank" entry that stamps from the
+// always-present `generic` template. Reuses the kit picker chrome (.pick-pop) + the
+// shared anchor/clamp + click-out/Esc dismissal.
+let tplMenuPop = null, tplMenuDismiss = null;
+function closeTemplateMenu() {
+  if (!tplMenuPop) return;
+  tplMenuPop.remove(); tplMenuPop = null;
+  if (tplMenuDismiss) { tplMenuDismiss(); tplMenuDismiss = null; }
+}
+function openTemplateMenu(anchor, kind) {
+  closeTemplateMenu();
+  const pop = oel('div', { className: 'pick-pop' });
+  const item = (label, onPick) => {
+    const row = oel('div', { className: 'pick-item' }, [oel('span', { className: 'lib-label', textContent: label })]);
+    row.onclick = (e) => { e.stopPropagation(); closeTemplateMenu(); onPick(); };
+    return row;
+  };
+  if (kind === 'fixture') {
+    const types = show.fixtureTypes || [];
+    for (const t of types) {
+      if (t.id === 'generic') continue;   // offered as "Blank" below
+      pop.append(item(`${t.name} (${typeSizeSuffix(t)})`, () => addFixtureFromTemplate(t)));
+    }
+    const generic = types.find((t) => t.id === 'generic');
+    pop.append(item('Blank', () => addFixtureFromTemplate(generic || {})));
+  } else {
+    const dts = show.deviceTypes || [];
+    for (const t of dts) {
+      if (t.id === 'generic') continue;   // offered as "Blank" below
+      pop.append(item(`${t.name} (${t.outputs} out)`, () => addDeviceFromTemplate(t)));
+    }
+    const generic = dts.find((t) => t.id === 'generic');
+    pop.append(item('Blank', () => addDeviceFromTemplate(generic || { name: 'Controller', outputs: 4 })));
+  }
+  placePopover(pop, anchor);                              // anchor + viewport-clamp (kit)
+  tplMenuPop = pop;
+  tplMenuDismiss = dismissOnOutside(pop, closeTemplateMenu);   // click-outside + Esc (kit)
+}
+
 function renderOutput() {
   updateInspector();
   if (!outputListEl) return;
   outputListEl.textContent = '';
+  closeTemplateMenu();   // a re-render detaches the old anchor; drop any open menu
+  // --- Add toolbar: "+ Fixture" / "+ Device" side by side, each opening a template
+  //     pick menu (issue #5: a clear, discoverable way to add/patch a fixture). ---
+  {
+    const tools = oel('div', { className: 'output-tools' });
+    const addRow = oel('div', { className: 'output-addrow' });
+    const addBtn = (label, kind) => oel('button', {
+      className: 'fx-add', textContent: label,
+      title: kind === 'fixture' ? 'add a fixture from a template' : 'add a controller from a template',
+      onclick: (e) => openTemplateMenu(e.currentTarget, kind),
+    });
+    addRow.append(addBtn('+ Fixture', 'fixture'), addBtn('+ Device', 'device'));
+    tools.append(addRow);
+    outputListEl.append(tools);
+  }
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
   if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
