@@ -844,6 +844,12 @@ function txField(label, value, onCommit) {
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
 
+// Live fixture editors keep every group ALWAYS VISIBLE (no collapse): per user
+// feedback, selecting/making a fixture must show all the info at once. `locked`
+// forces the Section open and hides its chevron/toggle (CSS .is-locked) — so no
+// change to the shared Section component, just how these call sites invoke it.
+const flatGroup = (title, key, build) => Section(title, key, build, undefined, true);
+
 // Placement + PATCH editor for one selected fixture (inlined under its row):
 // canvas transform (x/y/length/height/rotation, rotate-90/flip) PLUS the patch —
 // which device it's wired to + its (auto-packed) pixel range. The physical strip
@@ -895,7 +901,7 @@ function positionEditor(sel) {
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
   // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
-    Section('Position', 'position', (body) => {
+    flatGroup('Position', 'position', (body) => {
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
@@ -939,7 +945,7 @@ function positionEditor(sel) {
         ]),
       );
     }),
-    Section('Patch', 'routing', (body) => {
+    flatGroup('Patch', 'routing', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
@@ -978,7 +984,7 @@ function dmxEditor(sel) {
   const liveChannels = () => [...((show.fixtures.find((x) => x.id === sel.id)?.input?.dmx?.channels) || channels)];
 
   const out = oel('div', { className: 'output-edit' }, [
-    Section('Fixture', 'dmx-fixture', (body) => {
+    flatGroup('Fixture', 'dmx-fixture', (body) => {
       // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
       // owned by the type (edit it in Inventory → applies to every placed copy).
       const head = ptype
@@ -997,7 +1003,7 @@ function dmxEditor(sel) {
         txField('H', tf.h, (v) => setT({ h: Math.max(4, v) })),
       ]));
     }),
-    Section('Patch', 'dmx-patch', (body) => {
+    flatGroup('Patch', 'dmx-patch', (body) => {
       const devs = [{ value: '', label: '— unassigned —' },
         ...show.devices.map((d) => ({ value: d.id, label: (d.name || d.id) + (d.protocol === 'artnet' ? '' : ' (not Art-Net)') }))];
       body.append(oel('div', { className: 'output-grid' }, [
@@ -1030,7 +1036,7 @@ function dmxEditor(sel) {
       ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
       ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` })),
     ];
-    out.append(Section('Parameters', 'dmx-params', (body) => {
+    out.append(flatGroup('Parameters', 'dmx-params', (body) => {
       let ci = 0;
       params.forEach((p) => {
         const span = paramSpan(p);
@@ -1064,7 +1070,7 @@ function dmxEditor(sel) {
       });
     }));
   } else if (legacyGeneric || hasFixed) {
-    out.append(Section('Channels', 'dmx-channels', (body) => {
+    out.append(flatGroup('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
         if (legacyGeneric) {
           const kindSel = sel2(DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: k })), c.kind,
