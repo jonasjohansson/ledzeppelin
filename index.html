@@ -167,23 +167,18 @@ canvas{display:block}</style>
     </section>
   </div>
 
-  <!-- RIGHT COLUMN: the Devices patch + the Inventory catalog. The selected item's
-       editor shows in the left sidebar's "Device" tab. -->
+  <!-- RIGHT COLUMN: the Devices patch. The selected item's editor shows in the left
+       sidebar's "Device" tab. (The Inventory catalog moved to a popout window.) -->
   <div id="dock-right" class="dock-col">
-    <!-- Patch island: Fixtures (the placement/wiring list + controller instances)
-         and Inventory (the model catalog) as TABS in one island. -->
+    <!-- Patch island: the placement/wiring list + controller instances. -->
     <section class="island" id="grp-patch">
-      <header class="island-head island-tabs" id="patch-tabs">
-        <button class="island-tab is-on" data-ptab="fixtures">Devices</button>
-        <button class="island-tab" data-ptab="inventory">Inventory</button>
+      <header class="island-head" id="patch-tabs">
+        <span class="island-title">Devices</span>
       </header>
       <div class="island-body">
         <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the
              controllers with their fixtures (click a controller to edit it). -->
         <div id="patch-fixtures"><div id="output-list"></div></div>
-        <div id="patch-inventory" hidden>
-          <div id="library-design"></div>
-        </div>
       </div>
     </section>
   </div>

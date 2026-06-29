@@ -571,10 +571,10 @@ compSettings?.append(compositionPanel.el);     // Title/BPM/canvas-size panel at
 // Fixtures tab = the design editor + Kagora import (placement list is the
 // output-list above). Devices tab = the device editor.
 const devicesDesignEl = document.getElementById('devices-design');
-const libraryDesignEl = document.getElementById('library-design');
 devicesDesignEl?.append(panel.devicesEl);          // Devices tab — instances
-libraryDesignEl?.append(panel.libraryEl);          // Library tab — model catalog
-libraryDesignEl?.append(importPanel.el);           // + Kagora import
+// The Inventory catalog (panel.libraryEl) + the LEDger importer (importPanel.el) are
+// no longer mounted in the main window — they move to the inventory popout (Txx). The
+// builder functions stay on `panel`/`importPanel` so the popout can re-mount them.
 
 // (Output selection + snap state are declared earlier, above the Settings panel.)
 
@@ -1920,12 +1920,10 @@ function focusGroup(id) {
 // (The Canvas/Timeline curtain is retired — the timeline now floats bottom-left over
 //  the canvas and sizes to its content via CSS, so there's no shared height to drag.)
 
-// Patch island tabs (Devices | Inventory) → setOutputTab owns the tab UI + bodies.
-(function setupPatchTabs() {
-  const tabs = document.getElementById('patch-tabs'); if (!tabs) return;
-  tabs.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setOutputTab(b.dataset.ptab === 'inventory' ? 'library' : 'fixtures'); });
-  setOutputTab(outputTab);   // restore the persisted tab on load
-})();
+// The Patch island is Devices-only now (the Inventory tab moved to a popout, Txx).
+// Force the fixtures view so any stale persisted 'library' tab can't leave the patch
+// list hidden. setOutputTab still drives which editor the Device group shows.
+setOutputTab('fixtures');
 
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
@@ -2211,17 +2209,13 @@ function setInspectorTab(which) {
 document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
 // (Scan is a button under the Unassigned heading in the Devices list — see renderOutput.)
 
-// Patch tabs: 'fixtures' (Devices = placement list + controllers) vs 'library'
-// (Inventory = model catalog). Toggles the tab bodies + active tab, and drives which
-// editor the Device group shows.
+// Tracks which editor the Device group reflects: 'fixtures' (Devices = placement list +
+// controllers) vs 'library' (an Inventory model, set when the LEDger importer is open).
+// The Inventory tab itself moved to a popout (Txx), so the main window has no tab bar —
+// this only persists the focus + re-renders the Devices list.
 function setOutputTab(which) {
   outputTab = which === 'library' ? 'library' : 'fixtures';
   try { localStorage.setItem('lz.otab', outputTab); } catch { /* private */ }
-  const inv = outputTab === 'library';
-  const fb = document.getElementById('patch-fixtures'); if (fb) fb.hidden = inv;
-  const ib = document.getElementById('patch-inventory'); if (ib) ib.hidden = !inv;
-  const tabs = document.getElementById('patch-tabs');
-  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', (b.dataset.ptab === 'inventory') === inv);
   renderOutput();
 }
 
