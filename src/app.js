@@ -2405,11 +2405,13 @@ controlPanel = createControlPanel({
 // Mapping opens its breakout window; the Control (remote) icon jumps straight to the
 // companion control surface in its own window — enabled only while the daemon is up
 // (otherwise the button is disabled). No in-app popup.
-function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
+// Open as a browser TAB (no window-features string → a tab, not a popup). The named
+// target reuses the same tab on repeat clicks; the page is a responsive full route.
+function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings'); } catch { return null; } }
 document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
 // Inventory opens the standalone TEMPLATE-LIBRARY editor in its own window (returns
 // null if a popup blocker fires). Live type-merge sync runs over 'lz-inventory' (below).
-function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', 'width=820,height=920'); } catch { return null; } }
+function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory'); } catch { return null; } }
 document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
