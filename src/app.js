@@ -9,7 +9,6 @@ import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
 import { stampFixture, stampDevice } from './model/templates.js';
 import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
-import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
@@ -420,10 +419,6 @@ const panel = createFixturePanel({
   },
   // An Inventory/model row was clicked → pop its editor group up beside the row.
   onPick: () => popAtSelectedRow(),
-  // Inventory "+" instantiates into the scene but STAYS on the Inventory tab so you can
-  // click + repeatedly to add many (the row's ×N badge updates as feedback).
-  onInstantiateFixture: (typeId) => addInstance(typeId),
-  onInstantiateController: (typeId) => addDeviceOfModel(typeId),
   // A scanned controller was added via the ⌖ scan results' ADD button. The panel's
   // commit already persisted + rebuilt; sync the app's selection and re-render the
   // LIVE device list so it shows up (selected/open) without any extra click (#4).
@@ -477,33 +472,32 @@ const layerPanel = createLayerPanel({
     library: document.getElementById('library'),
   },
 });
-// Kagora import → assign-IP → apply. The imported show is a GEOMETRY change, so
-// applyShow routes through rebuild() (same path as fixture edits); onApplied
-// re-renders the fixtures + layers panels against the new show.
-const importPanel = createImportPanel({
-  getShow: () => show,
-  applyShow: (next) => {
-    // Adopt the imported composition canvas (it matches the rig's aspect, so the
-    // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
-    const c = next.composition?.canvas || { w: 1280, h: 720 };
-    const cur = show.composition?.canvas;
-    if (c.w !== cur?.w || c.h !== cur?.h) {
-      canvas.width = c.w; canvas.height = c.h;
-      if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
-      preview?.setBaseSize?.(c.w, c.h);
-      compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
-    }
-    rebuild(next);
-  },
-  onApplied: () => {
-    // Full UI refresh — a (re)import replaces every device + fixture, so the
-    // placement list and canvas overlay must redraw, and any selection of
-    // now-gone fixtures must clear (else the Output list looks unchanged).
-    selectedFixtureIds.clear();
-    panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.();
-    renderOutput(); redrawOverlay();
-  },
-});
+// LEDger import → assign-IP → apply. The import UI now lives in the Inventory
+// popout (it hosts the catalog); the popout persists the imported show + broadcasts
+// 'inventory-import' on the 'lz-inventory' channel. This is the main window's side:
+// adopt the WHOLE imported show (a geometry change), resizing the canvas first then
+// running the normal rebuild() path, and do the full UI refresh an import needs.
+function applyImportedShow(next) {
+  // Adopt the imported composition canvas (it matches the rig's aspect, so the
+  // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
+  const c = next.composition?.canvas || { w: 1280, h: 720 };
+  const cur = show.composition?.canvas;
+  if (c.w !== cur?.w || c.h !== cur?.h) {
+    canvas.width = c.w; canvas.height = c.h;
+    if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+    preview?.setBaseSize?.(c.w, c.h);
+    compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+  }
+  // External (popout) edit: not undoable, and don't echo back over the channel.
+  invMerging = true; undoSuppress = true;
+  try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
+  // Full UI refresh — a (re)import replaces every device + fixture, so the placement
+  // list and canvas overlay must redraw, and any selection of now-gone fixtures must
+  // clear (else the Output list looks unchanged).
+  selectedFixtureIds.clear();
+  panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.();
+  renderOutput(); redrawOverlay();
+}
 // Composition (canvas resolution) is composition-global, so it sits at the top
 // of the editor, above Import/Layers/Fixtures.
 const compositionPanel = createCompositionPanel({
@@ -576,13 +570,12 @@ function applyComposition(comp) {
 //   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
 compSettings?.append(compositionPanel.el);     // Title/BPM/canvas-size panel atop the Composition tab
-// Fixtures tab = the design editor + Kagora import (placement list is the
-// output-list above). Devices tab = the device editor.
-const devicesDesignEl = document.getElementById('devices-design');
-devicesDesignEl?.append(panel.devicesEl);          // Devices tab — instances
-// The Inventory catalog (panel.libraryEl) + the LEDger importer (importPanel.el) are
-// no longer mounted in the main window — they move to the inventory popout (Txx). The
-// builder functions stay on `panel`/`importPanel` so the popout can re-mount them.
+// The live DEVICE list is the Output list below (renderOutput), and the selected
+// device's editor mounts in the left sidebar via panel.deviceDetailEl(). The
+// Inventory catalog (panel.libraryEl) + the LEDger importer are no longer mounted in
+// the main window — they live in the Inventory popout (inventory/). The popout
+// persists imports + broadcasts 'inventory-import'; this window adopts them via
+// applyImportedShow (see the 'lz-inventory' channel handler below).
 
 // (Output selection + snap state are declared earlier, above the Settings panel.)
 
@@ -830,6 +823,14 @@ function maybeBroadcastTypes() {
 }
 if (invBus) {
   invBus.onmessage = (e) => {
+    // A LEDger import was applied in the popout → adopt the WHOLE saved show (devices
+    // + fixtures + composition), not just the type arrays. This is the one inbound
+    // message that replaces the live rig (the import flow's old applyShow path).
+    if (e.data?.type === 'inventory-import') {
+      const saved = loadShow();
+      if (saved) applyImportedShow(saved);
+      return;
+    }
     if (e.data?.type !== 'inventory-changed') return;
     const saved = loadShow();
     if (!saved) return;
@@ -1449,74 +1450,6 @@ function chainSelectedAction() {
   ]);
 }
 
-// Place a new INSTANCE of a definition on the canvas. Spec is cached from the
-// type on rebuild (syncFixtureTypes); the offset auto-packs. Default on-canvas
-// width = the definition's pixel count, clamped (1px/LED, cosmetic).
-function addInstance(typeId) {
-  const next = structuredClone(show);
-  const t = (next.fixtureTypes || []).find((x) => x.id === typeId) || next.fixtureTypes?.[0];
-  if (!t) return;
-  let n = next.fixtures.length + 1, id;
-  do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
-  const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  // Drop new strips in the MIDDLE of the canvas as a thin UPRIGHT strip — Width 10,
-  // Height = pixel count, Rotation 0. Orientation comes from the box aspect (h > w ⇒
-  // vertical), so it reads as a non-rotated vertical strip; widen it past its height
-  // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
-  const k = next.fixtures.length;
-  const off = (k % 8) * 16 - 56;
-  // A DMX TYPE (one defined with DMX parameters in Inventory) places as a DMX
-  // channel-block fixture, patched to an Art-Net controller. Pixel types — strips and
-  // matrices, including a 1×1 single pixel — stream pixels. The output kind is the
-  // TYPE's kind; an LED strip is never a DMX fixture.
-  if (isDmxType(t)) {
-    const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
-    const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
-    const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
-    next.fixtures.push({
-      id, typeId: t.id,
-      output: { deviceId: dev?.id || '' },
-      input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
-        dmx: { channels: fixtureTypeChannels(t), universe: dev?.universe ?? 0, address: 1, fixed: {} } },
-    });
-    selectedFixtureIds = new Set([id]); selectedDeviceId = null;
-    if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
-    saveShow(next); rebuild(next); setOverlay(true);
-    panel.refresh(); renderOutput(); redrawOverlay();
-    return;
-  }
-  // A matrix (rows>1) drops as a RECTANGLE sized by its cols:rows aspect (≈16px
-  // per cell, capped to 60% of the canvas). A strip drops as a thin upright bar.
-  const isGrid = (Number(t.rows) || 1) > 1;
-  let transform, inputMode;
-  if (isGrid) {
-    const cell = 16;
-    const sc = Math.min(1, (cv.w * 0.6) / (t.cols * cell), (cv.h * 0.6) / (t.rows * cell));
-    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: Math.round(t.cols * cell * sc), h: Math.round(t.rows * cell * sc), rotation: 0 };
-    inputMode = 'grid';
-  } else {
-    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 10, h: t.pixelCount, rotation: 0 };
-    inputMode = 'bar';
-  }
-  // If a controller is selected, the new fixture lands ON it; otherwise it's
-  // unassigned. Either way it gets its OWN free output (port) so added strips are
-  // NOT auto-chained together — chain them deliberately via the chain action.
-  const onDev = selectedDeviceId && next.devices.some((d) => d.id === selectedDeviceId) ? selectedDeviceId : '';
-  next.fixtures.push({
-    id, typeId: t.id,
-    output: { deviceId: onDev, port: freePort(next, onDev), pixelOffset: 0, pixelCount: t.pixelCount },
-    input: { mode: inputMode, transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
-  });
-  selectedFixtureIds = new Set([id]);
-  expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
-  // Commit the new fixture FIRST (rebuild), THEN reveal the overlay — setOverlay
-  // re-renders the list, and the list's stale-selection prune would drop the new
-  // id if the fixture weren't in `show` yet (leaving it unselected, editor hidden).
-  saveShow(next); rebuild(next);
-  setOverlay(true);   // reveal the canvas overlay so the new strip is visible
-  panel.refresh(); renderOutput(); redrawOverlay();
-}
-
 // (Output kind — pixels vs DMX — follows the fixture's TYPE; there is no per-fixture
 // toggle. Define a DMX fixture as a DMX type in Inventory, a strip as a pixel type.)
 
@@ -1635,26 +1568,9 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && devicePo
 document.addEventListener('pointerdown', (e) => {
   if (!devicePopOpen()) return;
   if (devicePop.contains(e.target)) return;
-  if (e.target.closest?.('.output-row, .insp-sec-head, [data-fxid], [data-devid], [data-ptab], #stagewrap')) return;   // device/canvas clicks reopen or move it
+  if (e.target.closest?.('.output-row, .insp-sec-head, [data-fxid], [data-devid], #stagewrap')) return;   // device/canvas clicks reopen or move it
   closeDevicePop();
 }, true);
-// Instantiate from Inventory: a fixture type → a placed fixture; a controller model → a device.
-function addDeviceOfModel(typeId) {
-  const next = structuredClone(show);
-  let n = next.devices.length + 1, id;
-  do { id = `c${n}`; n++; } while (next.devices.some((d) => d.id === id));
-  // Name after the controller MODEL + a per-model sequence ("DigQuad 2"), so devices
-  // of the same model read as 1, 2, 3 …. Bump the number until it's unique among ALL
-  // device names (renames/deletes can otherwise leave a gap that collides).
-  const baseName = (next.deviceTypes || []).find((t) => t.id === typeId)?.name || 'Controller';
-  const taken = new Set((next.devices || []).map((d) => d.name));
-  let seq = (next.devices || []).filter((d) => d.typeId === typeId).length + 1;
-  while (taken.has(`${baseName} ${seq}`)) seq++;
-  next.devices.push({ id, name: `${baseName} ${seq}`, ip: '', colorOrder: 'GRB', port: 4048, typeId });
-  saveShow(next); rebuild(next);
-  panel.refresh(); renderOutput();   // stay on Inventory so + can be clicked repeatedly
-}
-
 // === Add directly from a TEMPLATE (the Devices view's "+ Fixture" / "+ Device") ===
 // The catalog (show.fixtureTypes / show.deviceTypes) is a template LIBRARY. Picking a
 // template STAMPS a standalone instance (spec inlined, typeId = template.id) via the
@@ -1854,6 +1770,18 @@ function renderOutput() {
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
     const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
       (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
+    // Online/offline/checking dot (same machinery as the old Devices list): the panel
+    // caches each controller's last health check; renderOutput just paints it. Art-Net
+    // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
+    if (gdev) {
+      const st = panel.deviceState?.(gdev.id);
+      const dotState = gdev.protocol === 'artnet' ? 'artnet'
+        : !gdev.ip ? 'noip'
+        : (panel.isPinging?.(gdev.id) || !st) ? 'check'
+        : st.ok ? 'online' : 'offline';
+      const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
+      head.querySelector('.insp-tri')?.after(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
+    }
     if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
     if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
     dropZone(head, dg.deviceId, null);   // drop a fixture on a controller → assign it there
@@ -1869,6 +1797,11 @@ function renderOutput() {
   // the daemon isn't up. The list re-renders during a scan, so this reflects live state.
   const scanning = !!panel.scanning?.();
   const daemonUp = !!bridge?.connected?.();
+  // Probe each WLED controller's status ONCE (one-shot per id) so the dots above
+  // reflect real online/offline — only when a daemon is up (no daemon → no network).
+  // Each resolved ping re-renders this list to repaint its dot. The Inventory popout
+  // never reaches here, so it never pings.
+  if (daemonUp) panel.pingDevices?.(show.devices, renderOutput);
   outputListEl.append(oel('button', {
     className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
     title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',
@@ -3160,7 +3093,16 @@ document.getElementById('menu-bug')?.addEventListener('click', () => window.open
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
 // (ISF shader import — drag-drop isn't wired yet — and composition save/load).
 document.getElementById('menu-new')?.addEventListener('click', newProject);
-document.getElementById('menu-ledger')?.addEventListener('click', () => { setOutputTab('library'); importPanel.trigger?.(); });
+// LEDger import lives in the Inventory popout (it hosts the catalog + the import UI).
+// Open it and ask it to start the file picker; the popout applies the import and
+// broadcasts it back to this window (handled on the 'lz-inventory' channel).
+document.getElementById('menu-ledger')?.addEventListener('click', () => {
+  const win = openInventoryWindow();
+  // Tell the (possibly just-opened) popout to open the import picker. Broadcast a
+  // little after open so a freshly-loaded popout has its channel listener wired.
+  const ask = () => { if (invBus) { try { invBus.postMessage({ type: 'open-import' }); } catch { /* closed */ } } };
+  ask(); setTimeout(ask, 400); setTimeout(ask, 1000);
+});
 document.getElementById('menu-import')?.addEventListener('click', (e) => {
   e.stopPropagation();
   openMenu(e.currentTarget, menuList([
