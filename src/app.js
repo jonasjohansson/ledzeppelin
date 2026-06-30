@@ -1677,14 +1677,7 @@ function renderOutput() {
       onclick: (e) => openTemplateMenu(e.currentTarget, kind),
     });
     addRow.append(addBtn('+ Fixture', 'fixture'), addBtn('+ Device', 'device'));
-    // Inventory (template library) opens in its own window — sits above the add row
-    // since the templates it defines are what + Fixture / + Device stamp from.
-    const invBtn = oel('button', {
-      className: 'fx-add', textContent: 'Inventory',
-      title: 'open the Inventory — define fixture & controller templates (opens a window)',
-      onclick: () => openInventoryWindow(),
-    });
-    tools.append(invBtn, addRow);
+    tools.append(addRow);   // Inventory now opens from the small icon by the "Devices" title
     outputListEl.append(tools);
   }
   const fixtures = show.fixtures || [];
@@ -2435,6 +2428,7 @@ document.getElementById('menu-mapping')?.addEventListener('click', openMappingsW
 // null if a popup blocker fires). Live type-merge sync runs over 'lz-inventory' (below).
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', 'width=820,height=920'); } catch { return null; } }
 document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
+document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 const remoteBtn = document.getElementById('menu-remote');
 remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { window.open(companionUrl, 'lz-control'); } catch { /* blocked */ } } });
 
