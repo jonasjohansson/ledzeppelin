@@ -2571,6 +2571,11 @@ async function buildSettings(mount) {
     onInput: (v) => { snapshotForUndo(show); show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
   }));
 
+  // --- Composition file (visuals only — the whole rig saves with the project, ⌘S) ---
+  mount.append(oel('div', { className: 'fx-pts', textContent: 'composition file' }));
+  mount.append(oel('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
+  mount.append(oel('div', { className: 'seg-hint', textContent: 'to load: drag a project or composition .json onto the window' }));
+
   // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
   // on/off lives on the viewport corner button (a quick toggle while placing). ---
   mount.append(oel('div', { className: 'fx-pts', textContent: 'snap' }));
@@ -3032,12 +3037,25 @@ openISFInput.addEventListener('change', async () => {
 const isISFName = (n) => /\.(fs|isf|frag|glsl)$/i.test(n || '');
 window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) e.preventDefault(); });
 window.addEventListener('drop', async (e) => {
-  const files = [...(e.dataTransfer?.files || [])].filter((f) => isISFName(f.name));
-  if (!files.length) return;
+  const all = [...(e.dataTransfer?.files || [])];
+  const isf = all.filter((f) => isISFName(f.name));
+  const json = all.filter((f) => /\.json$/i.test(f.name));
+  if (!isf.length && !json.length) return;
   e.preventDefault();
+  // ISF shaders → a new generator clip under the drop target (layer/clip cell).
   const node = document.elementFromPoint(e.clientX, e.clientY);
   const target = { layerId: node?.closest?.('.deck-layer')?.dataset.layer, clipId: node?.closest?.('.clip-cell')?.dataset.clip };
-  for (const f of files) importISFText(await f.text(), f.name, target);
+  for (const f of isf) importISFText(await f.text(), f.name, target);
+  // .json → load a LED Zeppelin project (rig + visuals) or a composition (visuals only).
+  for (const f of json) {
+    try {
+      const data = JSON.parse(await f.text());
+      if (data && Array.isArray(data.fixtures) && data.composition) applyFullShow(normalizeComposition(data));
+      else if (data && (data.layers || data.canvas)) applyComposition(data);
+      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Inventory tab.');
+      else window.alert('Unrecognised .json — expected a LED Zeppelin project or composition.');
+    } catch (err) { window.alert('Load failed: ' + err.message); }
+  }
 });
 // Bundled ISF examples (source picker's "ISF" group): fetch one + import it.
 function importISFExample(file) {
@@ -3096,7 +3114,7 @@ document.getElementById('menu-install')?.addEventListener('click', () => window.
 // tooltip still carries the full description). One label per known button id.
 const TOPBAR_CAPTIONS = {
   'menu-lock': 'Lock', 'menu-save': 'Save', 'menu-open': 'Open', 'menu-new': 'New',
-  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-import': 'Import', 'menu-guide': 'Guide',
+  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-guide': 'Guide',
   'menu-mapping': 'Mapping', 'menu-inventory': 'Inventory', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
   'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
@@ -3140,15 +3158,8 @@ document.getElementById('menu-new')?.addEventListener('click', newProject);
 // broadcasts it back to this window (handled on the 'lz-inventory' channel).
 // (LEDger import lives inside the Inventory tab — no separate top-bar button.)
 document.getElementById('menu-guide')?.addEventListener('click', () => { try { window.open('guide/', 'lz-guide'); } catch { /* blocked */ } });
-document.getElementById('menu-import')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  openMenu(e.currentTarget, menuList([
-    { label: 'Import ISF shader…', act: () => openISFInput.click() },
-    { sep: true },
-    { label: 'Save composition…', act: saveCompositionToFile },
-    { label: 'Load composition…', act: () => openCompInput.click() },
-  ]));
-});
+// (Import is drag-and-drop now: drop an ISF shader, a project .json, or a composition
+// .json onto the window. "Save composition…" lives in Settings; ⌘S saves the project.)
 // (Audio input + gain and the snap grid/distance config moved to System ›
 // Settings — see buildSettings.) The corner snap button is now a quick on/off
 // toggle; it only bites while placing fixtures, so it's disabled with the overlay off.
