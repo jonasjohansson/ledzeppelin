@@ -475,12 +475,22 @@ const layerPanel = createLayerPanel({
 // LEDger import → assign-IP → apply. The import UI now lives in the Inventory
 // popout (it hosts the catalog); the popout persists the imported show + broadcasts
 // 'inventory-import' on the 'lz-inventory' channel. This is the main window's side:
-// adopt the WHOLE imported show (a geometry change), resizing the canvas first then
-// running the normal rebuild() path, and do the full UI refresh an import needs.
-function applyImportedShow(next) {
+// adopt only the RIG (devices + fixtures + their types) and the canvas from the
+// saved blob, KEEPING the live composition (layers/clips) — the popout's blob carries
+// a STALE composition, so adopting it whole would clobber edits made here since the
+// popout opened. Resize the canvas first, then run the normal rebuild() path.
+function applyImportedShow(saved) {
+  // Build the adopted show: LIVE main-window `show` + rig/canvas from the saved blob.
+  // Guard every field with ?? so a malformed blob can't inject undefined; keep
+  // show.composition.layers (the live ones) and take only the canvas from `saved`.
+  const next = { ...show,
+    devices: saved.devices ?? [], fixtures: saved.fixtures ?? [],
+    deviceTypes: saved.deviceTypes ?? [], fixtureTypes: saved.fixtureTypes ?? [],
+    composition: { ...show.composition, canvas: saved.composition?.canvas ?? show.composition.canvas },
+  };
   // Adopt the imported composition canvas (it matches the rig's aspect, so the
   // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
-  const c = next.composition?.canvas || { w: 1280, h: 720 };
+  const c = next.composition.canvas || { w: 1280, h: 720 };
   const cur = show.composition?.canvas;
   if (c.w !== cur?.w || c.h !== cur?.h) {
     canvas.width = c.w; canvas.height = c.h;
@@ -488,9 +498,16 @@ function applyImportedShow(next) {
     preview?.setBaseSize?.(c.w, c.h);
     compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
   }
-  // External (popout) edit: not undoable, and don't echo back over the channel.
-  invMerging = true; undoSuppress = true;
+  // An import is a SINGLE undoable step: capture one snapshot of the CURRENT
+  // (pre-import) show now, so ⌘Z restores the prior rig + composition. Then suppress
+  // ONLY around rebuild() so its own internal snapshotForUndo doesn't double-enter.
+  snapshotForUndo(show);
+  invMerging = true; undoSuppress = true;   // don't echo back over the channel; no second undo entry
   try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
+  // The popout's persisted blob carries a stale composition; now that we keep the
+  // live layers, our adopted show differs from storage — persist it (else a reload
+  // resurrects the blob's composition). Mirrors the 'inventory-changed' branch.
+  saveShow(show);
   // Full UI refresh — a (re)import replaces every device + fixture, so the placement
   // list and canvas overlay must redraw, and any selection of now-gone fixtures must
   // clear (else the Output list looks unchanged).
