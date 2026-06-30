@@ -23,6 +23,19 @@ import { fitCanvasToFixtures } from './fixture-transform.js';
 export function importKagora(preset) {
   const DEFAULT_PORT = 4048;
   const DEFAULT_COLOR_ORDER = 'GRB';
+  const DEFAULT_STRIP_PX = 60;
+
+  // C2 — reject anything that isn't a LEDger preset object up front, with a
+  // human-readable message (never a downstream TypeError).
+  if (!preset || typeof preset !== 'object' || Array.isArray(preset)) {
+    throw new Error('not a LEDger preset (expected an object)');
+  }
+  if (!Array.isArray(preset.types) && !Array.isArray(preset.instances) && !Array.isArray(preset.edges)) {
+    throw new Error('not a LEDger preset (no types/instances/edges)');
+  }
+
+  // I4 — human-readable diagnostics surfaced to the caller (UI shows these later).
+  const warnings = [];
 
   const typeById = new Map((preset.types ?? []).map((t) => [t.id, t]));
   const instById = new Map((preset.instances ?? []).map((i) => [i.id, i]));
@@ -33,10 +46,22 @@ export function importKagora(preset) {
   // Signal (data) edges only.
   const dataEdges = (preset.edges ?? []).filter((e) => e.channel === 'signal');
 
+  // Helper: does this edge originate at a controller? (used to prefer the real
+  // controller feed over a strip→strip loopback when both target the same data-in.)
+  const fromIsController = (e) => instById.get(e?.from?.instId)?.kind === 'controller';
+
   // Map: strip id -> the single edge feeding its data-in.
+  // C4 — a strip can have BOTH a controller feed and a loopback (strip→strip)
+  // edge into the same data-in. Last-writer-wins would let the loopback clobber
+  // the controller feed (orphaning the whole chain). Prefer a controller-sourced
+  // edge: only overwrite a stored controller edge with another controller edge.
+  // I2 — require a real `to.instId` so a dangling signal edge can't blow up.
   const incomingByStrip = new Map();
   for (const e of dataEdges) {
-    if (e.to?.id === 'data-in') incomingByStrip.set(e.to.instId, e);
+    if (e.to?.id !== 'data-in' || e.to?.instId == null) continue;
+    const prev = incomingByStrip.get(e.to.instId);
+    if (prev && fromIsController(prev) && !fromIsController(e)) continue;
+    incomingByStrip.set(e.to.instId, e);
   }
   // Map: source strip id -> edge leaving its data-out (next strip in chain).
   const outgoingByStrip = new Map();
@@ -115,7 +140,7 @@ export function importKagora(preset) {
         cursor += stripPixelCount(s);
         run.push(cur);
         const next = outgoingByStrip.get(cur);
-        cur = next ? next.to.instId : null;
+        cur = next?.to?.instId ?? null;   // I2: dangling data-out edge can't throw
       }
       if (run.length >= 2) daisyRuns.push(run);   // a multi-strip run → a chain
     }
@@ -248,6 +273,18 @@ export function importKagora(preset) {
   show.fixtures.sort((a, b) =>
     (a.output.deviceId < b.output.deviceId ? -1 : a.output.deviceId > b.output.deviceId ? 1 : 0)
     || (a.output.port - b.output.port) || (ord(a) - ord(b)));
+
+  // N1 — ids must be unique within devices and within fixtures, or downstream
+  // (Maps keyed by id, validate, the engine) silently loses one. Fail loud.
+  const assertUnique = (rows, what) => {
+    const seen = new Set();
+    for (const r of rows) {
+      if (seen.has(r.id)) throw new Error(`import failed: duplicate id ${r.id}`);
+      seen.add(r.id);
+    }
+  };
+  assertUnique(show.devices, 'device');
+  assertUnique(show.fixtures, 'fixture');
 
   // Guarantee a new-shape (clip schema) composition. The import only sets
   // devices/fixtures; normalizeComposition just ensures canvas + an (empty)
