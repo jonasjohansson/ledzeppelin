@@ -364,11 +364,11 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 .g-icon {
   background: transparent !important; border: none !important;
   min-width: 28px; padding: 2px 6px !important; position: relative; color: var(--muted);
-  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
 }
 /* Tiny uppercase caption under a top-bar icon — says what the button does at a glance;
    the title tooltip still carries the full description. */
-.g-label { font-size: 8px; line-height: 1; letter-spacing: .04em; text-transform: uppercase;
+.g-label { font-size: 7px; line-height: 1; letter-spacing: .03em; text-transform: uppercase;
   color: var(--faint); white-space: nowrap; pointer-events: none; }
 .g-icon:hover .g-label { color: inherit; }
 .g-icon.on .g-label, .g-icon.open .g-label { color: inherit; }
@@ -376,7 +376,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 .g-icon.open, .g-icon.on, .g-icon:active { color: var(--accent); }   /* active toggle = accent glyph (no box) */
 .g-icon:disabled { opacity: .35; }
 /* Pixelarticon SVGs render crispest at integer (16px) sizes; fill follows currentColor. */
-.g-icon .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
+.g-icon .ic { width: 20px; height: 20px; fill: currentColor; display: block; }
 /* Inline icon used inside small buttons (rotation / reverse). */
 .ic-sm { width: 14px; height: 14px; fill: currentColor; display: inline-block; vertical-align: middle; }
 .ic-flip { transform: scaleX(-1); }   /* mirror for the opposite rotation direction */
