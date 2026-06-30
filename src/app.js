@@ -3080,6 +3080,21 @@ const REPO_URL = 'https://github.com/jonasjohansson/ledzeppelin';
 // Project I/O as top-bar icon buttons (no File dropdown). Save / Open are direct;
 // Import opens a small menu for the less-common project options.
 document.getElementById('menu-install')?.addEventListener('click', () => window.open(`${REPO_URL}/releases`, '_blank', 'noopener'));
+// Force-update / clear cache — a manual debugging escape hatch for when stale cached
+// code is suspected. Wipes ONLY the service-worker registration + Cache Storage (the
+// app's code/assets), NEVER localStorage — so the saved project + prefs are untouched.
+document.getElementById('menu-refresh')?.addEventListener('click', async () => {
+  if (!window.confirm('Reload with fresh app files?\n\nThis clears cached app code and reloads. Your saved project and settings are kept; live output pauses briefly during the reload.')) return;
+  try {
+    const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
+    await Promise.all(regs.map((r) => r.unregister()));
+  } catch { /* SW API unavailable — ignore */ }
+  try {
+    const keys = (await caches?.keys?.()) || [];
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  } catch { /* Cache Storage unavailable / quota — ignore */ }
+  location.reload();
+});
 document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
 document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
 document.getElementById('menu-undo')?.addEventListener('click', () => undo());
