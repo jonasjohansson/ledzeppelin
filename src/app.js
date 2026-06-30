@@ -1925,7 +1925,10 @@ document.addEventListener('pointerdown', (e) => {
   // list) owns its own selection logic — a click inside it must NOT trigger the
   // global clear, or a real first click on + Fixture would clear the selection and
   // re-render the button out from under the gesture (needing a second click).
-  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop, #grp-patch')) return;
+  // #device-pop is the floating fixture editor — its controls (e.g. the multi-select
+  // Output/Device dropdowns) EDIT the current selection, so pressing them must NOT
+  // clear it (that collapsed a multi-selection to single-fixture mode).
+  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop, #grp-patch, #device-pop')) return;
   clearFixtureSelection();
 });
 
@@ -2302,7 +2305,7 @@ document.addEventListener('keydown', (e) => {
   // they fire over the pasteboard and even when the (transformed) canvas has been
   // panned out from under the cursor. Skipped over the scrollable chrome so the
   // sidebar / deck / menus still scroll normally.
-  const overChrome = (t) => t?.closest?.('#side, #deckbar, #corner-controls, #menu-pop, .pick-pop');
+  const overChrome = (t) => t?.closest?.('#side, #deckbar, #corner-controls, #menu-pop, .pick-pop, #device-pop');
   window.addEventListener('wheel', (e) => {
     if (overChrome(e.target)) return;                        // let panels scroll
     e.preventDefault();
