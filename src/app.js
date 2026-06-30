@@ -830,7 +830,7 @@ if (invBus) {
     const saved = loadShow();
     if (!saved) return;
     // Merge ONLY the type arrays; keep the live devices/fixtures/scenes/composition.
-    const next = { ...show, fixtureTypes: saved.fixtureTypes, deviceTypes: saved.deviceTypes };
+    const next = { ...show, fixtureTypes: saved.fixtureTypes ?? [], deviceTypes: saved.deviceTypes ?? [] };
     invMerging = true; undoSuppress = true;     // external library edit: not undoable, no echo
     try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
     saveShow(show);            // persist our live show + merged types (the popout's blob has stale fixtures)
@@ -1984,7 +1984,11 @@ document.addEventListener('pointerdown', (e) => {
   // #stagewrap (the whole stage incl. the pasteboard margin) is the drag surface
   // now — it does its own empty-click clear via the marquee, and must NOT be
   // double-cleared here or it would wipe a just-made off-canvas selection.
-  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
+  // #grp-patch (the patch panel holding + Fixture / + Device + the device/fixture
+  // list) owns its own selection logic — a click inside it must NOT trigger the
+  // global clear, or a real first click on + Fixture would clear the selection and
+  // re-render the button out from under the gesture (needing a second click).
+  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop, #grp-patch')) return;
   clearFixtureSelection();
 });
 
