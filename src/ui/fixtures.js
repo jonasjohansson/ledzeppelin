@@ -630,7 +630,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         row.prepend(el('i', { className: `dev-dot dev-${state}`, title }));
         devList.append(row);
       }
-      autoPing(show.devices);
+      if (getConnected()) autoPing(show.devices);   // only probe WLED when a daemon is up (popout passes getConnected:()=>false)
       if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet — add one or scan, or define models in the Inventory tab' }));
       b.append(devList);
       b.append(el('button', {

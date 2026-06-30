@@ -223,6 +223,7 @@ function rebuild(next) {
   lastRGBA = null;
   syncWallDim();         // live-view dim follows fixture count (don't blank an empty stage)
   broadcastManifest();   // geometry change can rename/restructure → refresh the phone
+  maybeBroadcastTypes(); // if this rebuild changed the type LIBRARY, tell the Inventory popout
 }
 
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
@@ -798,6 +799,45 @@ try { mapBus = new BroadcastChannel('lz-mappings'); } catch { /* unsupported */ 
 function postMapParams() { if (mapBus) { try { mapBus.postMessage({ type: 'params', data: listMappables(show) }); } catch { /* closed */ } } }
 function pushMapChannels() { if (mapBus) { try { mapBus.postMessage({ type: 'channels', data: { ...extChannels() } }); } catch { /* closed */ } } }
 function postMapMidi() { if (mapBus) { try { mapBus.postMessage({ type: 'midi', enabled: midiEnabled(), inputs: midiInputs().map((i) => i.name) }); } catch { /* closed */ } } }
+
+// --- Inventory window sync (BroadcastChannel 'lz-inventory') -----------------
+// The Inventory popout (inventory/) edits the TEMPLATE LIBRARY (show.fixtureTypes /
+// show.deviceTypes) on the SAME localStorage key and broadcasts { type:
+// 'inventory-changed' }. The store is whole-document last-writer-wins, and the
+// popout's saved blob carries a STALE copy of devices/fixtures/scenes/composition —
+// so on receive we MERGE ONLY the two type arrays into the live show (never adopt
+// the whole saved show), then re-run the normal rebuild path. Symmetric: when OUR
+// type arrays actually change (signature diff), we post back so the popout reloads.
+let invBus = null;
+try { invBus = new BroadcastChannel('lz-inventory'); } catch { /* unsupported */ }
+let lastTypeSig = '';                 // signature of the last broadcast/applied type arrays
+let invMerging = false;               // true while applying an inbound merge → suppress echo
+const typeSig = (s) => JSON.stringify(s.fixtureTypes || []) + ' :: ' + JSON.stringify(s.deviceTypes || []);
+lastTypeSig = typeSig(show);          // baseline from the loaded show — never broadcast on init
+// Called from rebuild() (the single chokepoint for type-affecting changes). Posts
+// ONLY when the type arrays changed vs the last seen signature, and never echoes an
+// inbound merge — so the ~30 ordinary saveShow sites stay silent.
+function maybeBroadcastTypes() {
+  const sig = typeSig(show);
+  if (sig === lastTypeSig) return;
+  lastTypeSig = sig;
+  if (invMerging) return;             // don't echo a change we just merged in
+  if (invBus) { try { invBus.postMessage({ type: 'inventory-changed' }); } catch { /* closed */ } }
+}
+if (invBus) {
+  invBus.onmessage = (e) => {
+    if (e.data?.type !== 'inventory-changed') return;
+    const saved = loadShow();
+    if (!saved) return;
+    // Merge ONLY the type arrays; keep the live devices/fixtures/scenes/composition.
+    const next = { ...show, fixtureTypes: saved.fixtureTypes, deviceTypes: saved.deviceTypes };
+    invMerging = true; undoSuppress = true;     // external library edit: not undoable, no echo
+    try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
+    saveShow(show);            // persist our live show + merged types (the popout's blob has stale fixtures)
+    closeTemplateMenu();       // drop any open + Fixture/+ Device menu so it rebuilds with fresh types
+    panel.refresh(); renderOutput(); redrawOverlay();   // renderOutput rebuilds the add toolbar from fresh show.*Types
+  };
+}
 
 const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 const setKeyChannel = (code, on) => { extSet('key:' + code, on ? 1 : 0); pushMapChannels(); };   // immediate push so Learn catches a momentary key
@@ -2419,6 +2459,10 @@ controlPanel = createControlPanel({
 // (otherwise the button is disabled). No in-app popup.
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
 document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
+// Inventory opens the standalone TEMPLATE-LIBRARY editor in its own window (returns
+// null if a popup blocker fires). Live type-merge sync runs over 'lz-inventory' (below).
+function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', 'width=820,height=920'); } catch { return null; } }
+document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
 const remoteBtn = document.getElementById('menu-remote');
 remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { window.open(companionUrl, 'lz-control'); } catch { /* blocked */ } } });
 
