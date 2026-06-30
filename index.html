@@ -59,6 +59,8 @@ canvas{display:block}</style>
   <symbol id="ic-eye-off" viewBox="0 0 24 24"><path d="M0 10h2v4H0zm24 0h-2v4h2zm-8 0h-2v2h2zm-6 0H8v4h2zM2 8h2v2H2zm0 8h2v-2H2zm20-8h-2v2h2zm0 8h-2v-2h2zM4 6h4v2H4zm0 12h4v-2H4zM20 6h-4v2h4zM10 4h6v2h-6zM8 20h8v-2H8zm4-12h2v2h-2zm-2 6h4v2h-4zM8 8h2v2H8zm2 2h2v4h-2zm2 2h2v2h-2z"/><path d="M6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm12 12h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2z"/></symbol>
   <symbol id="ic-snap" viewBox="0 0 24 24"><path d="M5 4h14v4H5zM5 8h5v11H5zm9 0h5v11h-5z"/></symbol>
   <symbol id="ic-grid" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm0 18h20v2H2zM2 4h2v16H2zm18 0h2v16h-2zM4 8h16v2H4zm0 6h16v2H4z"/><path d="M8 4h2v16H8zm6 0h2v16h-2z"/></symbol>
+  <symbol id="ic-fixture" viewBox="0 0 24 24"><path d="M2 10h4v4H2zm6 0h4v4H8zm6 0h4v4h-4zm6 0h2v4h-2z"/></symbol>
+  <symbol id="ic-device" viewBox="0 0 24 24"><path d="M5 5h14v2H5zm0 12h14v2H5zM5 5h2v14H5zm12 0h2v14h-2z"/><path d="M9 9h6v6H9z"/></symbol>
   <symbol id="ic-colour" viewBox="0 0 24 24"><path d="M12 2h10v2H12zm2 18h8v2h-8zM4 20h10v2H4zm8-16h2v16h-2zm8 0h2v16h-2zM2 14h2v8H2zm2 0h8v2H4zm12 2h2v2h-2zM6 12h2v2H6zm-2-2h2v2H4zm2-2h2v2H6zm2-2h2v2H8zm2 2h2v2h-2z"/></symbol>
   <symbol id="ic-live" viewBox="0 0 24 24"><path d="M21 2H3v2h18V2Zm0 18H3v2h18v-2ZM5 4H3v16h2V4Zm16 0h-2v16h2V4Zm-8 2H7v2h6V6Zm-4 4H7v8h2v-8Zm8 0h-2v8h2v-8Zm-8 0h6v2H9zm0 6h6v2H9z"/></symbol>
   <symbol id="ic-align" viewBox="0 0 24 24"><path d="M5 8h4V6H5zm10 2h4V8h-4zm-6 8h2V6H9zm10-2h2V8h-2zM5 18h4v-2H5zm10-2h4v-2h-4zM3 18h2V6H3zm10-2h2V8h-2zM6 2h2v4H6zm0 16h2v4H6zm10-2h2v6h-2zm0-14h2v6h-2z"/></symbol>
@@ -185,7 +187,11 @@ canvas{display:block}</style>
     <section class="island" id="grp-patch">
       <header class="island-head">
         <span class="island-title">Devices</span>
-        <button id="devices-inventory" class="island-act" title="Inventory — fixture & controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
+        <span class="island-acts">
+          <button id="devices-add-fixture" class="island-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
+          <button id="devices-add-device" class="island-act" title="Add a device"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
+          <button id="devices-inventory" class="island-act" title="Inventory — fixture & controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
+        </span>
       </header>
       <div class="island-body">
         <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the

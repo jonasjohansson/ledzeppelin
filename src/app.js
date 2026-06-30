@@ -1666,20 +1666,8 @@ function renderOutput() {
   if (!outputListEl) return;
   outputListEl.textContent = '';
   closeTemplateMenu();   // a re-render detaches the old anchor; drop any open menu
-  // --- Add toolbar: "+ Fixture" / "+ Device" side by side, each opening a template
-  //     pick menu (issue #5: a clear, discoverable way to add/patch a fixture). ---
-  {
-    const tools = oel('div', { className: 'output-tools' });
-    const addRow = oel('div', { className: 'output-addrow' });
-    const addBtn = (label, kind) => oel('button', {
-      className: 'fx-add', textContent: label,
-      title: kind === 'fixture' ? 'add a fixture from a template' : 'add a controller from a template',
-      onclick: (e) => openTemplateMenu(e.currentTarget, kind),
-    });
-    addRow.append(addBtn('+ Fixture', 'fixture'), addBtn('+ Device', 'device'));
-    tools.append(addRow);   // Inventory now opens from the small icon by the "Devices" title
-    outputListEl.append(tools);
-  }
+  // Add fixture / add device / inventory are header icons by the "Devices" title now
+  // (wired once at boot) — no in-list toolbar.
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
   if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
@@ -1727,15 +1715,10 @@ function renderOutput() {
   // (▾ accent header + body). The triangle toggles; clicking the header selects the
   // controller (or unassign group). Returns its parts so callers can wire drop-zones.
   const devSection = (deviceId, title, badges, headClick) => {
-    const open = !collapsedDevices.has(deviceId);
-    const sec = oel('div', { className: 'insp-sec out-sec' + (open ? ' is-open' : '') });
-    const tri = oel('span', { className: 'insp-tri' });
-    tri.addEventListener('click', (e) => {
-      e.stopPropagation();
-      collapsedDevices.has(deviceId) ? collapsedDevices.delete(deviceId) : collapsedDevices.add(deviceId);
-      renderOutput();
-    });
-    const head = oel('div', { className: 'insp-sec-head' }, [tri, oel('span', { className: 'insp-sec-title', textContent: (title || '').toUpperCase() })]);
+    // Controllers are ALWAYS expanded — no fold/collapse. Clicking the header still
+    // selects the controller for editing.
+    const sec = oel('div', { className: 'insp-sec out-sec is-open' });
+    const head = oel('div', { className: 'insp-sec-head' }, [oel('span', { className: 'insp-sec-title', textContent: (title || '').toUpperCase() })]);
     for (const b of (badges || [])) head.append(oel('span', { className: 'fx-badge', textContent: b }));
     if (headClick) head.onclick = headClick;
     const body = oel('div', { className: 'insp-sec-body' });
@@ -2429,6 +2412,8 @@ document.getElementById('menu-mapping')?.addEventListener('click', openMappingsW
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', 'width=820,height=920'); } catch { return null; } }
 document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
+document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
+document.getElementById('devices-add-device')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'device'));
 const remoteBtn = document.getElementById('menu-remote');
 remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { window.open(companionUrl, 'lz-control'); } catch { /* blocked */ } } });
 

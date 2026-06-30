@@ -152,10 +152,11 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
 
 /* --- Output mapping: fixture list --- */
-/* Small inventory icon sitting at the right of the "Devices" island title. */
+/* Add-fixture / add-device / inventory icons at the right of the "Devices" title. */
 #grp-patch .island-head { display: flex; align-items: center; gap: var(--s2); }
-.island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; margin-left: auto; padding: 2px; display: inline-flex; }
-.island-act .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
+.island-acts { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
+.island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
