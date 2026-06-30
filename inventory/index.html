@@ -29,6 +29,7 @@
     border-bottom: 1px solid var(--line); padding: 0 0 var(--s2); margin: 0 0 var(--s4); }
   .inv-detail { min-width: 0; }
   .inv-detail-hint { color: var(--faint); font-style: italic; font-size: var(--fs-body); }
+  .inv-import { margin-top: var(--s5); }
 </style>
 </head>
 <body>
@@ -46,6 +47,14 @@
       <div class="inv-pane-title" id="inv-detail-title">properties</div>
       <div id="inv-detail"></div>
     </div>
+  </div>
+  <!-- LEDger import: pick a preset → assign controller IPs → apply. Lives here (the
+       Inventory popout already hosts the catalog) so the assign/apply UI has a
+       mounted, visible home. Triggered from the main window's "Import from LEDger…". -->
+  <div class="inv-import">
+    <div class="inv-pane-title">import from ledger</div>
+    <button class="fx-add" id="inv-import-pick">choose preset file…</button>
+    <div id="inv-import"></div>
   </div>
 </div>
 <script type="module" src="./inventory.js"></script>
