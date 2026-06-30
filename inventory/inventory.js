@@ -20,7 +20,6 @@ const $ = (id) => document.getElementById(id);
 const listEl = $('inv-list');
 const detailEl = $('inv-detail');
 const detailTitleEl = $('inv-detail-title');
-const statusEl = $('inv-status');
 const importEl = $('inv-import');
 const importPickBtn = $('inv-import-pick');
 
@@ -104,5 +103,3 @@ bus.onmessage = (e) => {
   show = readShow();
   panel.refresh();   // → onSelect → mountDetail()
 };
-
-statusEl.textContent = 'editing the template library — changes save instantly';

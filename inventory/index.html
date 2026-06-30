@@ -20,7 +20,6 @@
   .inv-wrap { padding: var(--s5); max-width: 880px; margin: 0 auto; }
   .inv-head { display: flex; align-items: baseline; gap: var(--s5); margin-bottom: var(--s4); }
   .inv-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
-  .inv-status { margin-left: auto; font-size: var(--fs-body); color: var(--muted); }
   /* Two framed panes: the model LIST (controllers + fixtures) and the selected
      item's DETAIL editor — the same master/detail split the app used in its sidebar.
      Hairline frames make each region structural (vs floating in empty space). */
@@ -42,7 +41,6 @@
 <div class="inv-wrap">
   <div class="inv-head">
     <span class="inv-title">Inventory</span>
-    <span class="inv-status" id="inv-status"></span>
   </div>
   <div class="inv-cols">
     <div class="inv-pane">

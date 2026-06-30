@@ -363,9 +363,15 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
    borderless, larger glyphs — the icon IS the affordance. */
 .g-icon {
   background: transparent !important; border: none !important;
-  min-width: 28px; padding: 0 6px !important; position: relative; color: var(--muted);
-  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 28px; padding: 2px 6px !important; position: relative; color: var(--muted);
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
 }
+/* Tiny uppercase caption under a top-bar icon — says what the button does at a glance;
+   the title tooltip still carries the full description. */
+.g-label { font-size: 8px; line-height: 1; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--faint); white-space: nowrap; pointer-events: none; }
+.g-icon:hover .g-label { color: inherit; }
+.g-icon.on .g-label, .g-icon.open .g-label { color: inherit; }
 .g-icon:hover { color: var(--accent-text); }
 .g-icon.open, .g-icon.on, .g-icon:active { color: var(--accent); }   /* active toggle = accent glyph (no box) */
 .g-icon:disabled { opacity: .35; }

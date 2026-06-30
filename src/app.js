@@ -3090,6 +3090,20 @@ const REPO_URL = 'https://github.com/jonasjohansson/ledzeppelin';
 // Project I/O as top-bar icon buttons (no File dropdown). Save / Open are direct;
 // Import opens a small menu for the less-common project options.
 document.getElementById('menu-install')?.addEventListener('click', () => window.open(`${REPO_URL}/releases`, '_blank', 'noopener'));
+// Tiny uppercase caption under each top-bar icon (what it does at a glance; the title
+// tooltip still carries the full description). One label per known button id.
+const TOPBAR_CAPTIONS = {
+  'menu-lock': 'Lock', 'menu-save': 'Save', 'menu-open': 'Open', 'menu-new': 'New',
+  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-ledger': 'LEDger', 'menu-import': 'Import',
+  'menu-mapping': 'Mapping', 'menu-inventory': 'Inventory', 'menu-remote': 'Remote', 'menu-align': 'Align',
+  'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
+  'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
+  'menu-health': 'Daemon', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
+};
+for (const [id, label] of Object.entries(TOPBAR_CAPTIONS)) {
+  const btn = document.getElementById(id);
+  if (btn && !btn.querySelector('.g-label')) btn.append(oel('span', { className: 'g-label', textContent: label }));
+}
 // Force-update / clear cache — a manual debugging escape hatch for when stale cached
 // code is suspected. Wipes ONLY the service-worker registration + Cache Storage (the
 // app's code/assets), NEVER localStorage — so the saved project + prefs are untouched.
