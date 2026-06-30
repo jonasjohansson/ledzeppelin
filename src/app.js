@@ -424,6 +424,10 @@ const panel = createFixturePanel({
   // click + repeatedly to add many (the row's ×N badge updates as feedback).
   onInstantiateFixture: (typeId) => addInstance(typeId),
   onInstantiateController: (typeId) => addDeviceOfModel(typeId),
+  // A scanned controller was added via the ⌖ scan results' ADD button. The panel's
+  // commit already persisted + rebuilt; sync the app's selection and re-render the
+  // LIVE device list so it shows up (selected/open) without any extra click (#4).
+  onDeviceAdded: (id) => { selectedDeviceId = id; selectedFixtureIds = new Set(); expandedDevices.add(id); renderOutput(); },
   // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
   // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
   getConnected: () => bridge?.connected?.() ?? false,

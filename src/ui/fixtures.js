@@ -138,7 +138,7 @@ const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '')
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, getConnected = () => true }) {
+export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, onDeviceAdded, getConnected = () => true }) {
   // The Devices + Library tabs render LISTS only; the selected item's editor goes
   // into the left sidebar (app wires that via deviceDetailEl / libraryDetailEl and
   // re-renders it on onSelect).
@@ -324,6 +324,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         next.devices.push(makeDevice(next, id));
         selDeviceId = id; lastSel = 'device';
         commit(next);
+        // commit() only refreshes the panel's own render; tell the app so the LIVE
+        // #output-list re-renders + selects the new device immediately (issue #4).
+        onDeviceAdded?.(id);
       };
       return el('div', { className: 'output-row scan-row' }, [
         el('span', { textContent: label }), el('span', { className: 'fx-badge', textContent: ip }),
