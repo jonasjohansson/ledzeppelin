@@ -284,9 +284,32 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     });
   }
   // The scan RESULTS (error / found controllers), rendered separately below the row.
-  // Null when there's nothing to show yet.
+  // While running, shows a live PROGRESS block (the two probes, each marked done as
+  // it resolves). Null only when idle with nothing to show yet.
   function scanResults(show) {
     const art = scanState.artnet;   // null = not scanned yet, [] = scanned, none found
+    // === IN PROGRESS ====================================================
+    // Don't go blank during the scan: name both probes and reflect each leg's
+    // independent completion (the two legs resolve + rerender on their own).
+    if (scanState.running) {
+      const wrap = el('div', { className: 'scan-block scan-progress' });
+      wrap.append(el('div', { className: 'scan-status' }, [
+        el('span', { className: 'scan-spinner', role: 'status', 'aria-label': 'scanning' }),
+        el('span', { textContent: 'Scanning…' }),
+      ]));
+      const probe = (label, done, detail) => el('div', { className: 'scan-probe' + (done ? ' is-done' : '') }, [
+        el('span', { className: 'scan-mark', textContent: done ? '✓' : '·' }),
+        el('span', { textContent: label }),
+        el('span', { className: 'fx-badge', textContent: detail }),
+      ]);
+      // WLED leg is done once result OR error is set; Art-Net leg once artnet !== null.
+      const wledDone = scanState.result != null || scanState.error != null;
+      wrap.append(probe('WLED subnet sweep', wledDone,
+        scanState.error ? 'failed' : wledDone ? `${scanState.result?.devices.length ?? 0} found` : 'scanning…'));
+      const artDone = art != null;
+      wrap.append(probe('Art-Net ArtPoll', artDone, artDone ? `${art.length} found` : 'scanning…'));
+      return wrap;
+    }
     if (!scanState.result && !scanState.error && !art) return null;
     const wrap = el('div', { className: 'scan-block' });
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));

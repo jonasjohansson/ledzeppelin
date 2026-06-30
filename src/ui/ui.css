@@ -784,6 +784,18 @@ body.gui-hidden #show-ui-pill { display: block; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
 .scan-block { display: flex; flex-direction: column; gap: 3px; }
 .scan-row .ctrl-btn { margin-left: auto; }
+/* Scan in progress — a quiet status block while the two probes resolve, so SCAN
+   never looks frozen. Each probe row flips done (✓, accent mark) as its leg lands. */
+.scan-progress { gap: 4px; margin-top: 4px; }
+.scan-status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-body); }
+.scan-spinner { width: 9px; height: 9px; border: 1px solid var(--line-2); border-top-color: var(--accent); border-radius: 50%; animation: scan-spin 700ms linear infinite; }
+@keyframes scan-spin { to { transform: rotate(360deg); } }
+.scan-probe { display: flex; align-items: center; gap: 6px; font-size: var(--fs-micro); color: var(--faint); }
+.scan-probe.is-done { color: var(--muted); }
+.scan-probe .scan-mark { width: 10px; text-align: center; }
+.scan-probe.is-done .scan-mark { color: var(--accent); }
+.scan-probe .fx-badge { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .scan-spinner { animation: none; } }
 .fx-detail-actions { grid-column: 1 / -1; display: flex; gap: 14px; }
 /* Rotate-90° / flip row in the Output editor — full-width, equal shares (action
    buttons either fill the row or split it evenly; never intrinsic-width chips). */
