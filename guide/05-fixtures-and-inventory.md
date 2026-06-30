@@ -3,6 +3,8 @@
 > **Status: outline — draft in progress.** The heart of patching. Builds on
 > [concepts: the three things](02-concepts.md).
 
+![The Inventory popout: the template library (controller models + fixture types), a model editor, and LEDger import.](img/inventory.png)
+
 ## What this page will cover
 - **Fixtures vs templates** — why placed fixtures are *standalone* (editing a template never
   changes lights already placed).

@@ -2,6 +2,8 @@
 
 > **Status: outline — draft in progress.** Controlling the app live.
 
+![The Mapping popout window for MIDI / keyboard / OSC bindings.](img/mappings.png)
+
 ## What this page will cover
 - The **Mapping popout** (top-bar icon) — a separate window.
 - **MIDI**, **keyboard**, and **OSC** input; binding a control to a parameter or action.
