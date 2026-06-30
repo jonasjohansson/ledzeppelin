@@ -320,7 +320,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
       add.onclick = () => {
         const next = structuredClone(show);
-        const id = `c${next.devices.length + 1}`;
+        // Unique id: increment until unused (a mid-list delete can make
+        // `length + 1` collide with an existing id — and this id drives selection).
+        let n = (next.devices.length || 0) + 1, id;
+        do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id));
         next.devices.push(makeDevice(next, id));
         selDeviceId = id; lastSel = 'device';
         commit(next);

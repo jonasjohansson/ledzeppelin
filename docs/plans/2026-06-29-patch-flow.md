@@ -110,37 +110,21 @@ permanent `generic`. Keep `typeId` as provenance.
 
 ---
 
-### Task 3: Migration — bake spec onto any instance missing it
+### Task 3: Migration — REVERSED (no separate bake function needed)
 
-**Files:**
-- Modify: `src/model/show.js` (add `bakeInstanceSpecs(show)`, call it where shows load —
-  find the load/normalize chokepoint via `grep -n "syncFixtureTypes\|syncDeviceTypes" src/app.js`)
-- Test: `test/show.test.js`
+**What we actually did:** nothing new. Tasks 1–2 already made `syncFixtureTypes` /
+`syncDeviceTypes` read each instance's spec first and fall back to the referenced
+type when a field is missing. That fallback IS the migration: a legacy instance
+carrying only `{ id, typeId }` gets its spec (`pixelCount`, `outputs`, …) inlined
+from the type the first time the show is synced on load. Adding a separate
+`bakeInstanceSpecs(show)` would have duplicated that logic, so it was dropped.
 
-**Step 1: Write the failing test** — a legacy fixture that carries ONLY `typeId` (no
-inline `pixelCount`) must come out with the type's spec inlined exactly once.
+**Coverage:** the full-chain tests assert that running a legacy typeId-only fixture
+and device through `syncFixtureTypes(syncDeviceTypes(show))` + `repackOffsets`
+yields a valid show with the spec populated from the type — proving sync inlines
+legacy instances without a dedicated migration step.
 
-```js
-test('migration inlines a legacy typeId-only fixture once', () => {
-  const show = {
-    fixtureTypes: [{ id: 't1', name: 'Strip', ledsPerMeter: 60, meters: 2, pixelCount: 120, colorOrder: 'GRB', cols: 120, rows: 1, distribution: 0 }],
-    fixtures: [{ id: 'f1', typeId: 't1', output: {}, input: {} }],
-    devices: [],
-  };
-  const out = bakeInstanceSpecs(show);
-  assert.equal(out.fixtures[0].pixelCount, 120);
-});
-```
-
-**Step 2: Run to verify it fails** (function not defined).
-
-**Step 3: Implement** `bakeInstanceSpecs`: for any fixture/device missing its spec
-fields, copy them from the referenced template once. (Most saved shows already have the
-fields cached, so this is a no-op for them.) Wire it into the load path BEFORE the sync
-functions run.
-
-**Step 4: Run `npm test`; Step 5: Commit**
-`git commit -m "model(show): one-time spec bake for legacy typeId-only instances"`
+**No source change, no separate commit for this task.**
 
 ---
 
@@ -187,7 +171,7 @@ dotted keys (e.g. `output.port`) — small helper for get/set.
 
 **Step 1: Write failing test** — `stampFixture(template, id)` returns a standalone
 fixture with the template spec inlined, a fresh `id`, default geometry/`output`/`input`,
-and NO live link (a `fromTemplate` provenance tag is fine).
+and NO live link (a `typeId` provenance tag is fine).
 
 **Step 2: fail → Step 3: implement → Step 4: pass → Step 5: commit**
 `git commit -m "model(templates): stampFixture/stampDevice inline a template"`
