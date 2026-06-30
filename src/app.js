@@ -2330,8 +2330,12 @@ document.addEventListener('keydown', (e) => {
   // panned out from under the cursor. Skipped over the scrollable chrome so the
   // sidebar / deck / menus still scroll normally.
   const overChrome = (t) => t?.closest?.('#side, #deckbar, #corner-controls, #menu-pop, .pick-pop, #device-pop');
+  // Wheel-zoom/pan ONLY when the cursor is over the canvas/pasteboard (#stagewrap).
+  // Everywhere else (the device list, docks, popouts, menus) the wheel scrolls that
+  // panel natively — so the Devices list etc. scroll normally.
+  const overStage = (t) => !!t?.closest?.('#stagewrap');
   window.addEventListener('wheel', (e) => {
-    if (overChrome(e.target)) return;                        // let panels scroll
+    if (!overStage(e.target)) return;                        // not over the canvas → let the panel scroll
     e.preventDefault();
     // Shift = pan instead of zoom — both axes (deltaX from a trackpad; a plain mouse
     // wheel only has deltaY, which pans vertically).

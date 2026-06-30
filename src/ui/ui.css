@@ -365,6 +365,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
   background: transparent !important; border: none !important;
   min-width: 24px; padding: 2px 3px !important; position: relative; color: var(--muted);
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  height: auto !important;   /* don't inherit the 22px control height — size to the icon + caption */
 }
 /* Tiny uppercase caption under a top-bar icon — says what the button does at a glance;
    the title tooltip still carries the full description. */
@@ -1042,7 +1043,10 @@ input[type=checkbox]:checked::after {
   flex: 1 1 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
   border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--mono); box-sizing: border-box;
 }
-.imp-row { grid-template-columns: 2fr 1fr; }
+/* Assign-IP rows reflow: IP field + colour-order sit side by side when there's room,
+   and stack when the popout is narrow — so no column is ever clipped off the edge. */
+.imp-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s2) var(--s3); align-items: center; }
+.imp-row .fx-field > span:first-child { flex-basis: auto; max-width: 150px; }
 .imp-apply { color: var(--accent); border-color: var(--line); }
 .imp-apply:disabled { color: var(--faint); border-color: var(--line); opacity: 0.5; cursor: not-allowed; }
 .imp-cancel { color: var(--danger); border-color: var(--line); }
