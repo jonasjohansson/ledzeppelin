@@ -17,72 +17,97 @@ From [Releases](https://github.com/jonasjohansson/ledzeppelin/releases):
 - **Linux / Pi** — the `linux` tarball → `./ledzeppelin`. Open `http://localhost:7070`.
 - **From source** *(developers)* — `npm install && npm start`.
 
-The app opens in your browser: **top bar** of tools, **canvas** centre, **Devices** panel
-right. The daemon runs with the app — confirm via the **health icon** in the top bar (reads
-"offline" until it's up).
+The app opens in your browser: a **top bar** of tools, the **canvas** and **clip grid** in the
+centre, the **Devices** panel on the right. The browser tab title shows the version
+(`LED Zeppelin v1.0.x`). The daemon runs with the app — confirm via the **Daemon icon** in the
+top bar (reads "offline" until it's up). The **Guide** (book icon) reopens these pages.
 
 > **macOS:** click **Allow** on the Local Network prompt the first time it scans/streams, or
 > nothing works.
 
-## 2. Add your controller
+## 2. Add your controller (device)
 
-In the **Devices** panel (right):
+A **device** is a physical controller (WLED / QuinLED / Art-Net). Work in the **Devices** panel
+on the right. Its header — the title **Devices** — carries three small icons: **add-fixture**,
+**add-device**, and **inventory**.
 
-![The Devices panel: + Fixture, + Device, the controller list, and the SCAN control.](img/devices.png)
+![The Devices panel: the Devices header with its add-fixture / add-device / inventory icons, the controller list, and the scan button below it.](img/devices.png)
 
-- **Scan (recommended)** — click **SCAN** (⌖). It finds WLED + Art-Net devices and lists them;
-  click **ADD** and the controller appears in the list, selected.
-- **Manual** — **+ Device**, pick a model (e.g. DigQuad), set its **IP** in the editor.
+- **Scan (recommended)** — click **⌖ scan** (under the list). It finds WLED + Art-Net
+  controllers and shows live progress; click **ADD** on a result and that controller appears in
+  the list immediately, selected. (Scan needs the daemon; the button is disabled until it's up.)
+- **Manual** — click the **add-device** icon, pick a model (e.g. DigQuad) or **Blank**, then set
+  its **IP** in the editor.
 
-Select the device, hit **identify** to flash the physical box, and set **colour order** (WLED
-strips often need **GRB** — if reds/greens swap, that's why).
+Select the device and set its **colour order** (WLED strips often need **GRB** — if reds/greens
+swap, that's why). For pixel devices, **identify** flashes the physical box so you know which is
+which. Controllers in the list are **always expanded** — there's no fold.
 
 ## 3. Add a fixture
 
-Click **+ Fixture** and pick a template (or **Blank**):
+A **fixture** is a mapped light shape on the canvas. Click the **add-fixture** icon in the
+Devices header and pick a **template** (or **Blank**); templates carry a size, shown in
+parentheses. The fixture lands under **Unassigned**, selected, on the canvas.
 
-![The + Fixture menu listing fixture templates and a Blank option.](img/add-fixture.png)
-
-It lands under **Unassigned**, selected, on the canvas. Need many identical strips? Add one,
-then **duplicate** it.
+Fixtures are **standalone** — each owns its own spec. Editing a template later never changes
+fixtures already placed. Need many identical strips? Add one, then **duplicate** it. Selecting
+several at once **bulk-edits**: shared values show, differing ones dim as "mixed", and an edit
+writes to all selected.
 
 ## 4. Patch it to the controller
 
-With the fixture selected, set its **Device** and **Output (port)** in the editor (e.g.
-DigQuad, output 1). Pixel addresses pack automatically — no offsets to enter. The fixture
-moves under that device in the list.
+Drag the fixture row onto a controller group in the list (or onto a specific output) to assign
+it; pixel addresses pack automatically — no offsets to enter. You can also set **Device** and
+**Output (port)** in the editor with the fixture selected. It then moves under that device.
+Dragging a fixture back onto **Unassigned** unpatches it.
 
 ## 5. Give the canvas something to show
 
-A fixture samples the **canvas**, so it needs visuals or the strip stays dark. Visuals live in
-the **clip grid** under the canvas — each layer row has clip cells:
+A fixture samples the **canvas**, so it needs visuals or the strip stays dark. The composition
+is one layer holding a deck of **clips**; each clip is a source plus an effect chain. The clips
+live in the **clip grid** in the centre.
 
-![The layer/clip grid: layers with clip cells and + buttons to add a source.](img/clips.png)
+![The clip grid in the centre: clip cells plus an empty "+" cell to add a source.](img/canvas-clips.png)
 
-Click a **`+` clip cell** in a layer, pick a source from the picker (the bundled ISF examples
-are an easy start), and click the clip to make it active. The canvas should now show motion.
+- Click an empty **`+` cell** → a **source** picker opens (grouped: Basic, Pattern, Motion,
+  Organic). Pick one (e.g. `noise` or `gradient`) and it becomes a new clip.
+- In the deck, **click** a clip to select it (edit it in the inspector), **double-click** to
+  trigger it live. The canvas should now show motion.
+- You can also **drag** files onto the window (see step 7).
+
 (Full detail: [The canvas](06-canvas-sources-effects.md).)
 
 ## 6. See it light up
 
-Daemon up + fixture patched + canvas showing visuals → the strip shows whatever is under it.
-Drag the fixture on the canvas to change what it samples.
+Daemon up + fixture patched + a clip triggered → the strip shows whatever is under it on the
+canvas. Drag the fixture (with the fixture overlay on) to change what it samples. The **preview**
+wall button dims the canvas and lights only each fixture's sampled pixels, so you can read the
+mapping directly.
 
 **Dark strip? Check, in order:**
-1. **Daemon up?** Top-bar health icon — if "offline", relaunch the app (the website can't stream).
-2. **Fixture patched?** An **Unassigned** fixture isn't wired — set device + port (step 4).
+1. **Daemon up?** Top-bar Daemon icon — if "offline", relaunch the app (the website can't stream).
+2. **Fixture patched?** A fixture left under **Unassigned** isn't wired — assign it (step 4).
 3. **Local Network allowed?** (macOS).
 4. **Device online?** Its status dot should be green; else check IP/power.
-5. **Canvas black?** No active clip = nothing to sample (step 5).
+5. **Canvas black?** No triggered clip = nothing to sample (step 5).
 
 More in [Troubleshooting](12-troubleshooting.md).
 
-## 7. Save
+## 7. Save, open, import
 
-**⌘S** to save, **⌘O** to reopen. Capture a look to recall later with [Scenes](07-scenes.md).
+- **⌘S** saves the whole **project** (rig + visuals); **⌘O** opens one.
+- **Drag a file onto the window** to load: a LED Zeppelin **project** `.json` (rig + visuals), a
+  **composition** `.json` (visuals only), or an **ISF shader** (`.fs` / `.isf` / `.frag` / `.glsl`) → a new
+  generator clip. There's no Import button — it's all drag-and-drop.
+- **Save composition…** (visuals only) lives in **Settings**.
+- A **LEDger** preset isn't dropped here — open the **Inventory** tab (grid icon in the top bar,
+  or the inventory icon in the Devices header) and use **import from LEDger / choose preset
+  file**. Inventory and **Mapping** (mapping icon) open as browser tabs.
+
+Capture a look to recall later with [Scenes](07-scenes.md).
 
 ---
 
-**The core loop:** add device → add fixture → patch → map on canvas → output. Everything else
+**The core loop:** add device → add fixture → patch → trigger a clip → output. Everything else
 builds on it. Next: [Fixtures & the Inventory](05-fixtures-and-inventory.md),
 [The canvas](06-canvas-sources-effects.md).
