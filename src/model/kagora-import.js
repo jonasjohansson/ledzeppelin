@@ -1,4 +1,4 @@
-import { emptyShow, makeFixtureType } from './show.js';
+import { emptyShow, makeFixtureType, syncDeviceTypes, syncFixtureTypes, repackOffsets } from './show.js';
 import { normalizeComposition } from './layers.js';
 import { fitCanvasToFixtures } from './fixture-transform.js';
 
@@ -63,24 +63,32 @@ export function importKagora(preset) {
     if (prev && fromIsController(prev) && !fromIsController(e)) continue;
     incomingByStrip.set(e.to.instId, e);
   }
-  // Map: source strip id -> edge leaving its data-out (next strip in chain).
+  // Map: source strip id -> ALL edges leaving its data-out. Usually one (the next
+  // strip in the chain), but a strip CAN fan out to several — I3 keeps the first
+  // as the primary and warns about the rest, rather than silently dropping them.
+  // Edges with no resolvable `to.instId` are dropped here (I2).
   const outgoingByStrip = new Map();
   for (const e of dataEdges) {
-    if (e.from?.id === 'data-out' && instById.get(e.from.instId)?.kind === 'strip') {
-      outgoingByStrip.set(e.from.instId, e);
+    if (e.from?.id === 'data-out' && instById.get(e.from.instId)?.kind === 'strip' && e.to?.instId != null) {
+      if (!outgoingByStrip.has(e.from.instId)) outgoingByStrip.set(e.from.instId, []);
+      outgoingByStrip.get(e.from.instId).push(e);
     }
   }
 
   const stripType = (s) => typeById.get(s.typeId);
+  const warnedMissingType = new Set();
   const stripPixelCount = (s) => {
     const t = stripType(s);
     if (!t) {
-      // Missing stripType → 0-pixel fixture. Surface the data loss instead of
-      // silently dropping pixels; still produce the fixture (don't throw).
-      console.warn(`importKagora: strip "${s.id}" has missing stripType (typeId="${s.typeId}"); producing 0-pixel fixture`);
-      return 0;
+      // I4 — missing stripType: fall back to a DEFAULT_STRIP_PX strip so it stays
+      // addressable (a 0-px fixture is dead output) and surface it as a warning.
+      if (!warnedMissingType.has(s.id)) {
+        warnedMissingType.add(s.id);
+        warnings.push(`strip "${s.id}" has missing stripType (typeId="${s.typeId}"); using ${DEFAULT_STRIP_PX}px default`);
+      }
+      return DEFAULT_STRIP_PX;
     }
-    return t.pixelCount ?? 0;
+    return t.pixelCount ?? DEFAULT_STRIP_PX;
   };
   const stripColorOrder = (s) => stripType(s)?.colorOrder ?? DEFAULT_COLOR_ORDER;
 
@@ -103,8 +111,20 @@ export function importKagora(preset) {
   // ordered by controller output port, and within each chain by daisy order.
   // The first chain on a device therefore yields offsets 0 / firstPixelCount;
   // later chains continue from the running device cursor.
-  const offsetByStrip = new Map();
   const deviceIdByStrip = new Map();
+  // C1 — the REAL controller output port (parsed from the head's `data-out-N`),
+  // recorded for EVERY strip in that head's run regardless of run length. This is
+  // authoritative for output.port; we only fall back to a sequential counter when
+  // a port id carries no numeric suffix.
+  const portByStrip = new Map();
+  // Position of a strip within its daisy run (0 = head) — the wiring order.
+  const runIndexByStrip = new Map();
+
+  // Trailing integer of a port id (e.g. data-out-2 → 2). null if none.
+  const portIndex = (p) => {
+    const m = String(p ?? '').match(/(\d+)\s*$/);
+    return m ? Number(m[1]) : null;
+  };
 
   // Group heads by device, then order by output port for a stable layout.
   const headsByDevice = new Map();
@@ -117,17 +137,16 @@ export function importKagora(preset) {
   for (const [controllerId, heads] of headsByDevice) {
     // Order by the NUMERIC trailing index of the port id (e.g. data-out-2 before
     // data-out-10). Parse defensively: fall back to string compare if no number.
-    const portIndex = (p) => {
-      const m = String(p ?? '').match(/(\d+)\s*$/);
-      return m ? Number(m[1]) : null;
-    };
     heads.sort((a, b) => {
       const ia = portIndex(a.port), ib = portIndex(b.port);
       if (ia === null || ib === null) return String(a.port).localeCompare(String(b.port));
       return ia - ib;
     });
-    let cursor = 0;
+    // Sequential fallback port, only used when a head's port id has no number.
+    let fallbackPort = 0;
     for (const head of heads) {
+      const real = portIndex(head.port);
+      const port = real ?? (++fallbackPort);
       let cur = head.stripId;
       const seen = new Set();
       const run = [];
@@ -135,15 +154,43 @@ export function importKagora(preset) {
         seen.add(cur);
         const s = instById.get(cur);
         if (!s || s.kind !== 'strip') break;
-        offsetByStrip.set(cur, cursor);
         deviceIdByStrip.set(cur, controllerId);
-        cursor += stripPixelCount(s);
+        // Every strip in this run shares the head's real controller port.
+        portByStrip.set(cur, port);
+        runIndexByStrip.set(cur, run.length);
         run.push(cur);
-        const next = outgoingByStrip.get(cur);
-        cur = next?.to?.instId ?? null;   // I2: dangling data-out edge can't throw
+        // I3 — a strip can have >1 outgoing data edge (fan-out). Keep a
+        // deterministic primary (the first edge seen) and warn about the rest.
+        const outs = outgoingByStrip.get(cur) || [];
+        if (outs.length > 1) {
+          for (const dropped of outs.slice(1)) {
+            warnings.push(`strip "${cur}" fans out to multiple strips; kept "${outs[0].to?.instId}", dropped branch to "${dropped.to?.instId}"`);
+          }
+        }
+        cur = outs[0]?.to?.instId ?? null;   // I2: dangling data-out edge can't throw
       }
       if (run.length >= 2) daisyRuns.push(run);   // a multi-strip run → a chain
     }
+  }
+
+  // I3 — strips that never reached a controller (unwired / orphaned by a cycle or
+  // a dangling edge). Emit them as UNASSIGNED fixtures (deviceId '') rather than
+  // dropping them silently; validate() accepts unassigned fixtures. Warn for each.
+  const orphanStrips = strips.filter((s) => !deviceIdByStrip.has(s.id));
+  for (const s of orphanStrips) {
+    warnings.push(`strip "${s.id}" is not wired to any controller; imported as an unassigned fixture`);
+  }
+
+  // I4 — note any instance kinds we don't model (anything but strip/controller),
+  // so the operator knows what the importer ignored (psu, etc.).
+  const ignoredKinds = new Map();
+  for (const i of (preset.instances ?? [])) {
+    if (i?.kind !== 'strip' && i?.kind !== 'controller') {
+      ignoredKinds.set(i?.kind, (ignoredKinds.get(i?.kind) || 0) + 1);
+    }
+  }
+  for (const [kind, n] of ignoredKinds) {
+    warnings.push(`ignored ${n} instance(s) of kind "${kind}" (only strips and controllers are imported)`);
   }
 
   // Per-controller default colorOrder: first strip's colorOrder on that device.
@@ -205,25 +252,21 @@ export function importKagora(preset) {
       colorOrder: colorOrderByDevice.get(c.id) ?? DEFAULT_COLOR_ORDER,
     }));
 
-  // Each daisy-run = one controller OUTPUT (port). Assign a per-device port to
-  // every strip in a run, and record its position in the run (= wiring order).
-  // Chains are now DERIVED from (device, port) + array order — no explicit list.
-  const portByStrip = new Map(), runIndexByStrip = new Map(), portCounter = new Map();
-  daisyRuns.forEach((run) => {
-    const devId = deviceIdByStrip.get(run[0]);
-    const p = (portCounter.get(devId) || 0) + 1; portCounter.set(devId, p);
-    run.forEach((sid, idx) => { portByStrip.set(sid, p); runIndexByStrip.set(sid, idx); });
-  });
+  // (portByStrip / runIndexByStrip are populated during the chain walk above:
+  // output.port is the REAL controller port and runIndex is the wiring order.)
 
   // Fixture TYPES — one per Kagora stripType in use, so imported strips appear in
   // the Inventory AND keep their real pixel counts. Without a typeId, syncFixtureTypes
   // would coerce every fixture to its 60px default; here pixelCount is authoritative
   // from Kagora (meters = px/lpm so makeFixtureType reproduces it exactly).
+  // Strips we will emit as fixtures: controller-attached strips first (stable
+  // device/port order via repack later), then orphan strips as unassigned.
+  const emittedStrips = [...strips.filter((s) => deviceIdByStrip.has(s.id)), ...orphanStrips];
+
   const fixtureTypeByStrip = new Map();
   const fixtureTypes = [];
   const seenStripType = new Map();   // stripType id → fixtureType id (dedupe)
-  for (const s of strips) {
-    if (!deviceIdByStrip.has(s.id)) continue;
+  for (const s of emittedStrips) {
     const tid = s.typeId;
     if (tid == null) continue;
     if (!seenStripType.has(tid)) {
@@ -240,31 +283,32 @@ export function importKagora(preset) {
   }
   show.fixtureTypes = fixtureTypes;
 
-  show.fixtures = strips
-    .filter((s) => deviceIdByStrip.has(s.id))
-    .map((s) => {
-      const pixelCount = stripPixelCount(s);
-      return {
-        id: s.id,
-        name: s.name ?? s.id,
-        typeId: fixtureTypeByStrip.get(s.id),
+  show.fixtures = emittedStrips.map((s) => {
+    const pixelCount = stripPixelCount(s);
+    // I3 — an orphan strip has no device: emit it UNASSIGNED (deviceId '').
+    const deviceId = deviceIdByStrip.get(s.id) ?? '';
+    return {
+      id: s.id,
+      name: s.name ?? s.id,
+      typeId: fixtureTypeByStrip.get(s.id),
+      pixelCount,
+      colorOrder: stripColorOrder(s),
+      output: {
+        deviceId,
+        port: portByStrip.get(s.id) ?? 1,
+        // I1 — pixelOffset is NOT hand-authored here; repackOffsets derives it
+        // below so what validate() sees is exactly what the engine rebuilds.
         pixelCount,
-        colorOrder: stripColorOrder(s),
-        output: {
-          deviceId: deviceIdByStrip.get(s.id),
-          port: portByStrip.get(s.id) ?? 1,
-          pixelOffset: offsetByStrip.get(s.id) ?? 0,
-          pixelCount,
-        },
-        input: (() => {
-          const np = normalizedPoints(s);
-          // A bent run (>2 points) stays a polyline (normalized points are canonical);
-          // a straight strip becomes a BAR with an explicit uniform-pixel transform.
-          if (np.length > 2) return { mode: 'polyline', points: np, samples: pixelCount };
-          return { mode: 'bar', transform: barTransform(s), points: np, samples: pixelCount };
-        })(),
-      };
-    });
+      },
+      input: (() => {
+        const np = normalizedPoints(s);
+        // A bent run (>2 points) stays a polyline (normalized points are canonical);
+        // a straight strip becomes a BAR with an explicit uniform-pixel transform.
+        if (np.length > 2) return { mode: 'polyline', points: np, samples: pixelCount };
+        return { mode: 'bar', transform: barTransform(s), points: np, samples: pixelCount };
+      })(),
+    };
+  });
 
   // Order fixtures so that within each (device, port) they follow the run's
   // data-flow order — that array order IS the daisy-chain order (output→input),
@@ -276,24 +320,37 @@ export function importKagora(preset) {
 
   // N1 — ids must be unique within devices and within fixtures, or downstream
   // (Maps keyed by id, validate, the engine) silently loses one. Fail loud.
-  const assertUnique = (rows, what) => {
+  const assertUnique = (rows) => {
     const seen = new Set();
     for (const r of rows) {
       if (seen.has(r.id)) throw new Error(`import failed: duplicate id ${r.id}`);
       seen.add(r.id);
     }
   };
-  assertUnique(show.devices, 'device');
-  assertUnique(show.fixtures, 'fixture');
+  assertUnique(show.devices);
+  assertUnique(show.fixtures);
 
   // Guarantee a new-shape (clip schema) composition. The import only sets
   // devices/fixtures; normalizeComposition just ensures canvas + an (empty)
   // clip-shape layers array so downstream code never sees the old shape.
-  const out = normalizeComposition(show);
+  let out = normalizeComposition(show);
+
+  // I1 — run the SAME pipeline the engine rebuild does (syncDeviceTypes →
+  // syncFixtureTypes → repackOffsets) inside the importer, so what validate()
+  // sees here is identical to what the engine reconstructs. repackOffsets derives
+  // every device-local pixelOffset from (device, port, array order) — which is why
+  // we order the fixtures array by (device, real port, wiring index) above and let
+  // repack agree, rather than hand-authoring offsets.
+  out = repackOffsets(syncFixtureTypes(syncDeviceTypes(out)));
+
   // Seed the RIG's bounding aspect (same `scl` the transforms use) so the strips'
   // normalized points map back to proportional pixels …
   out.composition.canvas = { w: Math.max(2, Math.round(spanX * scl)), h: Math.max(2, Math.round(spanY * scl)) };
   // … then run Fit-to-fixtures so the canvas hugs the strips' full OUTER footprint
   // (includes bar thickness + a small margin), exactly as the menu action would.
-  return fitCanvasToFixtures(out);
+  out = fitCanvasToFixtures(out);
+
+  // I4 — surface diagnostics on the returned show (the UI will display these).
+  out.warnings = warnings;
+  return out;
 }

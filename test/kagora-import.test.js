@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { importKagora } from '../src/model/kagora-import.js';
-import { validate } from '../src/model/show.js';
+import { validate, repackOffsets } from '../src/model/show.js';
 import { chainOf } from '../src/model/chains.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -150,6 +150,184 @@ test('a strip with a controller feed AND a loopback edge keeps its controller', 
   const f1 = show.fixtures.find((f) => f.id === 's1');
   assert.ok(f1, 's1 should still import');
   assert.equal(f1.output.deviceId, 'brain');
+});
+
+// --- Real port index (C1) -------------------------------------------------
+test('a strip wired to data-out-3 imports with output.port === 3', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-3' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  assert.equal(show.fixtures.find((f) => f.id === 's1').output.port, 3);
+});
+
+test('a SOLO strip on data-out-2 gets output.port === 2 (not a sequential 1)', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-2' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  assert.equal(show.fixtures.find((f) => f.id === 's1').output.port, 2);
+});
+
+test('two solo strips on different outputs of one controller keep distinct real ports', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+      { kind: 'strip', id: 's2', typeId: 't', points: [{ x: 0, y: 5 }, { x: 5, y: 5 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-2' }, to: { instId: 's1', id: 'data-in' } },
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-4' }, to: { instId: 's2', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  assert.equal(show.fixtures.find((f) => f.id === 's1').output.port, 2);
+  assert.equal(show.fixtures.find((f) => f.id === 's2').output.port, 4);
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
+});
+
+// --- Fan-out + orphan strips (I3) ----------------------------------------
+test('an orphan strip imports as an UNASSIGNED fixture and still validates', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 90, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+      // orphan: never wired to a controller
+      { kind: 'strip', id: 'orphan', typeId: 't', points: [{ x: 0, y: 9 }, { x: 5, y: 9 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-1' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  const o = show.fixtures.find((f) => f.id === 'orphan');
+  assert.ok(o, 'orphan strip should still be emitted');
+  assert.equal(o.output.deviceId, '', 'orphan is unassigned');
+  assert.ok(o.input.points.length >= 2);
+  assert.equal(o.pixelCount, 90);
+  // controller-attached fixture is unaffected
+  const s1 = show.fixtures.find((f) => f.id === 's1');
+  assert.equal(s1.output.deviceId, 'brain');
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
+});
+
+test('a fan-out strip keeps a deterministic primary and warns about the dropped branch', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+      { kind: 'strip', id: 'a', typeId: 't', points: [{ x: 5, y: 0 }, { x: 10, y: 0 }] },
+      { kind: 'strip', id: 'b', typeId: 't', points: [{ x: 5, y: 1 }, { x: 10, y: 1 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-1' }, to: { instId: 's1', id: 'data-in' } },
+      // s1 fans out to BOTH a and b
+      { channel: 'signal', from: { instId: 's1', id: 'data-out' }, to: { instId: 'a', id: 'data-in' } },
+      { channel: 'signal', from: { instId: 's1', id: 'data-out' }, to: { instId: 'b', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  assert.ok(Array.isArray(show.warnings) && show.warnings.some((w) => /fan-?out|drop/i.test(w)),
+    `expected a fan-out warning, got: ${JSON.stringify(show.warnings)}`);
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
+});
+
+// --- Warnings channel (I4) ------------------------------------------------
+test('importing a preset with an orphan strip yields a warning mentioning it', () => {
+  const p = {
+    types: [
+      { kind: 'stripType', id: 't', pixelCount: 60, colorOrder: 'GRB' },
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 't', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+      { kind: 'strip', id: 'orphan', typeId: 't', points: [{ x: 0, y: 9 }, { x: 5, y: 9 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-1' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  assert.ok(Array.isArray(show.warnings) && show.warnings.length > 0);
+  assert.ok(show.warnings.some((w) => /orphan/.test(w)), JSON.stringify(show.warnings));
+});
+
+test('a strip with a missing stripType falls back to a default and warns', () => {
+  const p = {
+    types: [
+      { kind: 'controllerType', id: 'ct' },
+    ],
+    instances: [
+      { kind: 'controller', id: 'brain', typeId: 'ct' },
+      { kind: 'strip', id: 's1', typeId: 'no-such-type', points: [{ x: 0, y: 0 }, { x: 5, y: 0 }] },
+    ],
+    edges: [
+      { channel: 'signal', from: { instId: 'brain', id: 'data-out-1' }, to: { instId: 's1', id: 'data-in' } },
+    ],
+  };
+  const show = importKagora(p);
+  const f = show.fixtures.find((x) => x.id === 's1');
+  assert.ok(f, 'strip with missing type should still import');
+  assert.ok(f.pixelCount > 0, 'should fall back to a non-zero default pixel count');
+  assert.ok(show.warnings.some((w) => /stripType/i.test(w)), JSON.stringify(show.warnings));
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
+});
+
+// --- Pipeline parity (I1) -------------------------------------------------
+test('imported pixelOffsets match repackOffsets and the chain validates', () => {
+  const show = importKagora(preset);
+  // Offsets the importer emits must already equal what repackOffsets derives.
+  const repacked = repackOffsets(show);
+  for (const f of show.fixtures) {
+    const r = repacked.fixtures.find((x) => x.id === f.id);
+    assert.equal(f.output.pixelOffset, r.output.pixelOffset, `offset drift on ${f.id}`);
+  }
+  // Per-device offsets are contiguous from 0.
+  for (const d of show.devices) {
+    const fs = show.fixtures
+      .filter((f) => f.output.deviceId === d.id)
+      .sort((a, b) => a.output.pixelOffset - b.output.pixelOffset);
+    let expected = 0;
+    for (const f of fs) {
+      assert.equal(f.output.pixelOffset, expected, `device ${d.id} non-contiguous at ${f.id}`);
+      expected += f.output.pixelCount;
+    }
+  }
+  assert.equal(validate(show).ok, true, JSON.stringify(validate(show).errors));
 });
 
 test('a bent strip (>2 points) imports as a polyline, keeping every bend', () => {
