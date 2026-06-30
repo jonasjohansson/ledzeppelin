@@ -303,7 +303,7 @@ body.output-mode #stagewrap { pointer-events: auto; }
    A full-width top bar over three columns of stacked "island" panels (Photoshop /
    MadMapper style). Everything is visible at once — no section switching. Splitters
    between islands (and on the column edges) resize neighbours. */
-:root { --dock-gap: 4px; --topbar-h: 38px; }
+:root { --dock-gap: 4px; --topbar-h: 46px; }
 
 /* TOP BAR: an island-styled control strip (window menus + view presets + canvas
    toggles + the runtime zoom pill) — framed + inset by a dock gutter like the other
@@ -376,7 +376,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 .g-icon.open, .g-icon.on, .g-icon:active { color: var(--accent); }   /* active toggle = accent glyph (no box) */
 .g-icon:disabled { opacity: .35; }
 /* Pixelarticon SVGs render crispest at integer (16px) sizes; fill follows currentColor. */
-.g-icon .ic { width: 24px; height: 24px; fill: currentColor; display: block; }
+.g-icon .ic { width: 28px; height: 28px; fill: currentColor; display: block; }
 /* Inline icon used inside small buttons (rotation / reverse). */
 .ic-sm { width: 14px; height: 14px; fill: currentColor; display: inline-block; vertical-align: middle; }
 .ic-flip { transform: scaleX(-1); }   /* mirror for the opposite rotation direction */
