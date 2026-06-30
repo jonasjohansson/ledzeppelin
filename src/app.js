@@ -3096,7 +3096,7 @@ document.getElementById('menu-install')?.addEventListener('click', () => window.
 // tooltip still carries the full description). One label per known button id.
 const TOPBAR_CAPTIONS = {
   'menu-lock': 'Lock', 'menu-save': 'Save', 'menu-open': 'Open', 'menu-new': 'New',
-  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-ledger': 'LEDger', 'menu-import': 'Import',
+  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-import': 'Import', 'menu-guide': 'Guide',
   'menu-mapping': 'Mapping', 'menu-inventory': 'Inventory', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
   'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
@@ -3138,13 +3138,8 @@ document.getElementById('menu-new')?.addEventListener('click', newProject);
 // LEDger import lives in the Inventory popout (it hosts the catalog + the import UI).
 // Open it and ask it to start the file picker; the popout applies the import and
 // broadcasts it back to this window (handled on the 'lz-inventory' channel).
-document.getElementById('menu-ledger')?.addEventListener('click', () => {
-  const win = openInventoryWindow();
-  // Tell the (possibly just-opened) popout to open the import picker. Broadcast a
-  // little after open so a freshly-loaded popout has its channel listener wired.
-  const ask = () => { if (invBus) { try { invBus.postMessage({ type: 'open-import' }); } catch { /* closed */ } } };
-  ask(); setTimeout(ask, 400); setTimeout(ask, 1000);
-});
+// (LEDger import lives inside the Inventory tab — no separate top-bar button.)
+document.getElementById('menu-guide')?.addEventListener('click', () => { try { window.open('guide/', 'lz-guide'); } catch { /* blocked */ } });
 document.getElementById('menu-import')?.addEventListener('click', (e) => {
   e.stopPropagation();
   openMenu(e.currentTarget, menuList([
