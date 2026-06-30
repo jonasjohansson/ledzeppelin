@@ -783,6 +783,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; }
+.out-sec .insp-sec-head { border-bottom: none; }   /* no hairline under controller headers */
 .out-sec .insp-sec-head.is-sel { background: var(--accent-soft); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
