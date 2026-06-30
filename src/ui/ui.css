@@ -782,7 +782,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .fx-badge.out-over { color: var(--danger); border-color: var(--danger); }   /* output over capacity */
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
-.out-sec .insp-sec-title { flex: 1 1 auto; }
+.out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
 .out-sec .insp-sec-head { border-bottom: none; }   /* no hairline under controller headers */
 .out-sec .insp-sec-head.is-sel { background: var(--accent-soft); }
 .fx-detail { margin-top: 2px; }
