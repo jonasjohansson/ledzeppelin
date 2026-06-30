@@ -22,7 +22,7 @@ bun build server/index.js --compile --minify --target "$TARGET" --outfile "$C/Ma
 chmod +x "$C/MacOS/ledzeppelin"
 
 echo "→ staging web assets into Resources…"
-for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory examples; do
+for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory guide examples; do
   [ -e "$p" ] && cp -R "$p" "$C/Resources/"
 done
 

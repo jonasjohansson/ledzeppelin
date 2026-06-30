@@ -5,7 +5,7 @@ import { createGzip } from 'node:zlib';
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.glsl': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml',
+  '.glsl': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
@@ -13,7 +13,7 @@ export function contentType(path) {
   return TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream';
 }
 // Text types worth gzipping (woff2/png/ico are already compressed — never gzip those).
-const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.glsl', '.svg', '.webmanifest']);
+const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.glsl', '.md', '.svg', '.webmanifest']);
 // Long-cache the content-stable binaries; revalidate code/markup with an ETag.
 const IMMUTABLE = new Set(['.woff2', '.png', '.ico', '.svg']);
 
