@@ -6,6 +6,17 @@
 <meta name="color-scheme" content="dark">
 <!-- theme-color matches the app's actual background so the installed PWA chrome has no seam. -->
 <meta name="theme-color" content="#131110">
+<!-- Preload the UI font so first paint isn't a fallback-font flash. -->
+<link rel="preload" as="font" type="font/woff2" href="fonts/System85MonoPro-Regular.woff2" crossorigin>
+<!-- Boot fade-in: paint the dark surface immediately (no white flash), keep the UI
+     hidden until app.js has applied the accent/theme + painted the first frame, then
+     fade in. A safety timeout reveals it even if boot stalls, so it can't stay blank. -->
+<style>
+  html { background: #131110; opacity: 0; }
+  html.ready { opacity: 1; transition: opacity .28s ease; }
+  @media (prefers-reduced-motion: reduce) { html.ready { transition: none; } }
+</style>
+<script>addEventListener('load', () => setTimeout(() => document.documentElement.classList.add('ready'), 4000));</script>
 <link rel="canonical" href="https://ledzeppelin.jonasjohansson.se/">
 <!-- Social unfurl (the live demo domain). -->
 <meta property="og:type" content="website">

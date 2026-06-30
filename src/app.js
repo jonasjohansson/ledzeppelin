@@ -3145,6 +3145,7 @@ updateUndoButtons();   // initial greyed state (both stacks empty at boot)
 const healthBtn = document.getElementById('menu-health');
 healthBtn?.addEventListener('click', () => { if (!healthBtn.disabled) window.open('/health', '_blank', 'noopener'); });
 function updateHealthBtn(live) { if (healthBtn) { healthBtn.disabled = !live; healthBtn.title = live ? 'Daemon health — open /health ↗' : 'Daemon health (offline)'; } }
+document.title = `LED Zeppelin v${VERSION}`;   // build version in the tab title so it's always visible
 document.getElementById('menu-bug')?.addEventListener('click', () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener'));
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
 // (ISF shader import — drag-drop isn't wired yet — and composition save/load).
@@ -3190,3 +3191,11 @@ armStartupRiff();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   navigator.serviceWorker.register('./service-worker.js').catch(() => { /* offline support unavailable — non-fatal */ });
 }
+
+// Boot fade-in: the accent/theme + initial render are applied above during module
+// eval; wait for the UI font to load and one paint, then reveal the (initially
+// hidden, see index.html) UI in one smooth fade. The head's safety timeout reveals
+// it anyway if this never runs.
+(document.fonts?.ready ?? Promise.resolve()).then(() => {
+  requestAnimationFrame(() => document.documentElement.classList.add('ready'));
+});
