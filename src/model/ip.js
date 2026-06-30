@@ -31,3 +31,20 @@ export function nextIPs(base, count) {
   }
   return out;
 }
+
+// Like nextIPs, but never returns null on overflow: it fills as many sequential
+// IPs as fit before the final octet would pass .255, and reports how many that
+// was. { ips, filled } where ips.length === filled (the ones that fit). Returns
+// null only when the base itself is invalid (caller can't proceed at all).
+// fillIPs('10.0.0.254', 4) → { ips:['10.0.0.254','10.0.0.255'], filled:2 }.
+export function fillIPs(base, count) {
+  if (!isValidIPv4(base) || !Number.isInteger(count) || count < 0) return null;
+  const parts = base.trim().split('.').map(Number);
+  const last = parts[3];
+  const fits = Math.max(0, Math.min(count, 256 - last));
+  const ips = [];
+  for (let i = 0; i < fits; i++) {
+    ips.push(`${parts[0]}.${parts[1]}.${parts[2]}.${last + i}`);
+  }
+  return { ips, filled: fits };
+}

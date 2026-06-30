@@ -1044,7 +1044,26 @@ input[type=checkbox]:checked::after {
 }
 .imp-row { grid-template-columns: 2fr 1fr; }
 .imp-apply { color: var(--accent); border-color: var(--line); }
+.imp-apply:disabled { color: var(--faint); border-color: var(--line); opacity: 0.5; cursor: not-allowed; }
 .imp-cancel { color: var(--danger); border-color: var(--line); }
+
+/* Preview summary block (I7). */
+.imp-preview { margin: 4px 0 6px; padding: 6px 8px; background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius); }
+.imp-prev-line { font: var(--fw-med) var(--fs-ctrl) var(--mono); color: var(--text); }
+.imp-prev-dev { font: var(--fs-micro) var(--mono); color: var(--muted); margin-top: 2px; }
+
+/* Importer warnings (I4) — muted amber, one line each. */
+.imp-warn { margin: 4px 0 6px; padding: 6px 8px; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius); }
+.imp-warn-line { font: var(--fs-micro) var(--mono); color: var(--accent-text); }
+.imp-warn-line + .imp-warn-line { margin-top: 2px; }
+
+/* Live IP-validity status (I7). */
+.imp-ipstatus { color: var(--danger); }
+.imp-ipstatus.imp-ipstatus-ok { color: var(--muted); }
+
+/* No-op import (C2) + success banner (C3). */
+.imp-empty { font: var(--fs-ctrl) var(--mono); color: var(--muted); margin: 4px 0 6px; }
+.imp-success { margin: 4px 0 6px; padding: 6px 8px; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius); font: var(--fs-ctrl) var(--mono); color: var(--accent-text); white-space: pre-wrap; }
 
 /* --- Layer-stack panel --- */
 .ly-panel { margin-bottom: var(--s4); }
