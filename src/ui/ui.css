@@ -628,6 +628,10 @@ body.gui-hidden #system-settings, body.gui-hidden #mapping-pane, body.gui-hidden
   background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 0;
   height: var(--ctrl-h); padding: 0 10px; font: var(--fs-body) var(--sans); cursor: pointer;
 }
+/* Zoom readout — a plain clickable number, no box, centred in the (taller) bar. */
+#corner-toggles .g-btn { border: none; background: transparent; height: auto; padding: 0 6px; }
+#corner-toggles .g-btn:hover { color: var(--accent-text); }
+#corner-toggles .g-btn.on { color: var(--accent); }
 /* Fixed width so toggling "Hide UI" ⇄ "Show UI" (proportional font) doesn't shift
    the cluster. */
 #g-hide { min-width: 74px; text-align: center; }
