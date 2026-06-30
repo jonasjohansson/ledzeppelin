@@ -212,7 +212,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
    text colour. (The output tree's filled-selection pattern, applied here too.) */
-.output-row.selected { background: var(--accent-soft); border-color: var(--accent-line); }
+.output-row.selected { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); border-color: var(--accent-line); box-shadow: inset 3px 0 0 var(--accent); }
 .output-row.selected > span:first-of-type { color: var(--accent-text); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 /* When the editor is the inspector's only content (a selected fixture), the
@@ -784,7 +784,7 @@ body.gui-hidden #show-ui-pill { display: block; }
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
 .out-sec .insp-sec-head { border-bottom: none; }   /* no hairline under controller headers */
-.out-sec .insp-sec-head.is-sel { background: var(--accent-soft); }
+.out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); box-shadow: inset 3px 0 0 var(--accent); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
    panel line through as hairline seams (no floating cells / unnecessary gaps). */
