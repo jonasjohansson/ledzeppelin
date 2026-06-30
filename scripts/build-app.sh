@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 command -v bun >/dev/null || { echo "bun not found — install: curl -fsSL https://bun.sh/install | bash"; exit 1; }
 
 # Web assets the daemon serves over HTTP (NOT the server JS — that's compiled in).
-ASSETS=(index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings examples)
+ASSETS=(index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory examples)
 
 build_one() {
   local target="$1" outdir bin

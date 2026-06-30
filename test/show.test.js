@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -46,6 +46,22 @@ test('syncDeviceTypes preserves artnet protocol + universe and sanitises bad val
   assert.equal(s.devices[1].universe, 0);         // universe clamped to int ≥ 0
 });
 
+test('editing a device type does NOT change an existing device (standalone)', () => {
+  const show = {
+    deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830, artnetSync: false }],
+    devices: [{ id: 'c1', name: 'C1', typeId: 'dt1', outputs: 4, maxPerOutput: 830, artnetSync: false, protocol: 'ddp' }],
+    fixtures: [],
+  };
+  // Edit the MODEL across the board.
+  show.deviceTypes[0].outputs = 8;
+  show.deviceTypes[0].maxPerOutput = 512;
+  show.deviceTypes[0].artnetSync = true;
+  const out = syncDeviceTypes(show);
+  assert.equal(out.devices[0].outputs, 4);            // instance keeps its own
+  assert.equal(out.devices[0].maxPerOutput, 830);     // instance keeps its own
+  assert.equal(out.devices[0].artnetSync, false);     // device-first: NOT the model's true
+});
+
 test('fixture types carry normalised Parameters (extra DMX channels)', async () => {
   const { syncFixtureTypes } = await import('../src/model/show.js');
   const s = syncFixtureTypes({
@@ -63,9 +79,8 @@ test('fixture types carry normalised Parameters (extra DMX channels)', async () 
   assert.deepEqual(noP.fixtureTypes.find((x) => x.id === 'x').params, []);
 });
 
-test('output kind follows the type: a pixel strip is never a DMX fixture', async () => {
-  const { syncFixtureTypes } = await import('../src/model/show.js');
-  // A pixel-strip type whose instance wrongly carries a DMX config → reverts to pixel.
+test('output kind is an instance property: the type does NOT change it', () => {
+  // An instance carrying its own DMX config keeps it, even though its type is a pixel strip.
   const s = syncFixtureTypes({
     ...emptyShow(),
     devices: [{ id: 'd1', protocol: 'artnet', universe: 0 }],
@@ -73,10 +88,10 @@ test('output kind follows the type: a pixel strip is never a DMX fixture', async
     fixtures: [{ id: 'f1', typeId: 'strip', input: { mode: 'dmx', dmx: { channels: [{ kind: 'red' }], universe: 0, address: 1, fixed: {} } }, output: { deviceId: 'd1' } }],
   });
   const f1 = s.fixtures.find((x) => x.id === 'f1');
-  assert.equal(!!f1.input.dmx, false);   // DMX config dropped → a strip
-  assert.equal(f1.input.mode, 'bar');
+  assert.equal(!!f1.input.dmx, true);    // instance owns its DMX config → preserved
+  assert.equal(f1.input.mode, 'dmx');
 
-  // A DMX type (name+count params) whose instance is plain → becomes a DMX fixture.
+  // A plain (pixel) instance stays a pixel fixture even though its type is a DMX profile.
   const s2 = syncFixtureTypes({
     ...emptyShow(),
     devices: [{ id: 'd1', protocol: 'artnet', universe: 0 }],
@@ -84,6 +99,77 @@ test('output kind follows the type: a pixel strip is never a DMX fixture', async
     fixtures: [{ id: 'f2', typeId: 'par', input: { mode: 'bar' }, output: { deviceId: 'd1' } }],
   });
   const f2 = s2.fixtures.find((x) => x.id === 'f2');
-  assert.equal(f2.input.mode, 'dmx');
-  assert.equal(f2.input.dmx.channels.length, 3);
+  assert.equal(f2.input.mode, 'bar');
+  assert.equal(!!f2.input.dmx, false);
+});
+
+test('editing a type does NOT change an existing instance (standalone)', () => {
+  const show = {
+    fixtureTypes: [{ id: 't1', name: 'Strip', ledsPerMeter: 60, meters: 1, pixelCount: 60, colorOrder: 'GRB', cols: 60, rows: 1, distribution: 0 }],
+    fixtures: [{ id: 'f1', typeId: 't1', pixelCount: 60, cols: 60, rows: 1, ledsPerMeter: 60, meters: 1, colorOrder: 'GRB', colorFormat: '', output: { deviceId: '', pixelCount: 60 }, input: { points: [[0,0],[1,0]], samples: 60 } }],
+    devices: [],
+  };
+  show.fixtureTypes[0].pixelCount = 144; show.fixtureTypes[0].cols = 144; show.fixtureTypes[0].ledsPerMeter = 144;
+  const out = syncFixtureTypes(show);
+  assert.equal(out.fixtures[0].pixelCount, 60);
+  assert.equal(out.fixtures[0].output.pixelCount, 60);
+});
+
+test('editing a matrix type does NOT change an existing grid instance (owns its grid)', () => {
+  const show = {
+    fixtureTypes: [{ id: 'm1', name: 'Matrix', cols: 8, rows: 4, distribution: 1 }],
+    fixtures: [{ id: 'g1', typeId: 'm1', cols: 8, rows: 4, distribution: 1, pixelCount: 32, colorOrder: 'GRB',
+      output: { deviceId: '', pixelCount: 32 }, input: { points: [[0,0],[1,0]], samples: 32 } }],
+    devices: [],
+  };
+  // Edit the type into a bigger, differently-wired matrix.
+  show.fixtureTypes[0].cols = 16; show.fixtureTypes[0].rows = 8; show.fixtureTypes[0].distribution = 2;
+  const g = syncFixtureTypes(show).fixtures[0];
+  assert.equal(g.cols, 8);
+  assert.equal(g.rows, 4);
+  assert.equal(g.distribution, 1);
+  assert.equal(g.pixelCount, 32);
+  assert.equal(g.output.pixelCount, 32);
+});
+
+test('a bare-pixelCount legacy instance under a matrix type stays a strip (rows not multiplied)', () => {
+  const show = {
+    fixtureTypes: [{ id: 'm1', name: 'Matrix', cols: 8, rows: 4 }],
+    // Legacy instance: only a flat pixelCount, no cols/rows of its own.
+    fixtures: [{ id: 'f1', typeId: 'm1', pixelCount: 60, colorOrder: 'GRB',
+      output: { deviceId: '' }, input: { points: [[0,0],[1,0]] } }],
+    devices: [],
+  };
+  const f = syncFixtureTypes(show).fixtures[0];
+  assert.equal(f.rows, 1);          // defaulted to a strip, NOT the type's rows=4
+  assert.equal(f.cols, 60);
+  assert.equal(f.pixelCount, 60);   // not 60 * 4
+});
+
+// Regression guards: sync's type-FALLBACK already migrates legacy `typeId`-only
+// instances on first load — no separate bake step is needed (and a pre-sync bake
+// would defeat the bareCount guard, see the matrix test above). These prove the
+// full chain (the path app.js actually runs) does the right thing.
+test('syncFixtureTypes inlines a truly-bare legacy typeId-only fixture from its type', () => {
+  const show = {
+    fixtureTypes: [{ id: 't1', name: 'Strip', ledsPerMeter: 60, meters: 2, pixelCount: 120, colorOrder: 'GRB', cols: 120, rows: 1, distribution: 0 }],
+    // Legacy instance carrying ONLY a typeId — no inline spec at all.
+    fixtures: [{ id: 'f1', typeId: 't1', output: {}, input: {} }],
+    devices: [],
+  };
+  const f = syncFixtureTypes(show).fixtures[0];
+  assert.equal(f.pixelCount, 120);     // filled from the type
+  assert.equal(f.cols, 120);
+  assert.equal(f.colorOrder, 'GRB');
+});
+
+test('syncDeviceTypes inlines a legacy typeId-only device from its model', () => {
+  const show = {
+    deviceTypes: [{ id: 'dt1', name: 'Quad', outputs: 4, maxPerOutput: 830 }],
+    devices: [{ id: 'c1', typeId: 'dt1' }],
+    fixtures: [],
+  };
+  const d = syncDeviceTypes(show).devices[0];
+  assert.equal(d.outputs, 4);          // filled from the model
+  assert.equal(d.maxPerOutput, 830);
 });

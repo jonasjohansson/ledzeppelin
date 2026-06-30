@@ -85,6 +85,7 @@ canvas{display:block}</style>
     <button id="menu-ledger" class="g-icon" title="Import from LEDger…"><svg class="ic" aria-hidden="true"><use href="#ic-ledger"/></svg></button>
     <button id="menu-import" class="g-icon" title="Import shader / save & load composition…"><svg class="ic" aria-hidden="true"><use href="#ic-import"/></svg></button>
     <button id="menu-mapping" class="g-icon" title="MIDI / keyboard / OSC mapping (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-mapping"/></svg></button>
+    <button id="menu-inventory" class="g-icon" title="Inventory — fixture &amp; controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
     <button id="menu-remote" class="g-icon" title="Control surface (phone remote)"><svg class="ic" aria-hidden="true"><use href="#ic-remote"/></svg><span class="tab-dot" id="control-subdot" title="companion / daemon status"></span></button>
     <button id="menu-align" class="g-icon" title="align / distribute the selected fixtures" disabled><svg class="ic" aria-hidden="true"><use href="#ic-align"/></svg></button>
   </div>
@@ -167,23 +168,18 @@ canvas{display:block}</style>
     </section>
   </div>
 
-  <!-- RIGHT COLUMN: the Devices patch + the Inventory catalog. The selected item's
-       editor shows in the left sidebar's "Device" tab. -->
+  <!-- RIGHT COLUMN: the Devices patch. The selected item's editor shows in the left
+       sidebar's "Device" tab. (The Inventory catalog moved to a popout window.) -->
   <div id="dock-right" class="dock-col">
-    <!-- Patch island: Fixtures (the placement/wiring list + controller instances)
-         and Inventory (the model catalog) as TABS in one island. -->
+    <!-- Patch island: the placement/wiring list + controller instances. -->
     <section class="island" id="grp-patch">
-      <header class="island-head island-tabs" id="patch-tabs">
-        <button class="island-tab is-on" data-ptab="fixtures">Devices</button>
-        <button class="island-tab" data-ptab="inventory">Inventory</button>
+      <header class="island-head">
+        <span class="island-title">Devices</span>
       </header>
       <div class="island-body">
         <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the
              controllers with their fixtures (click a controller to edit it). -->
         <div id="patch-fixtures"><div id="output-list"></div></div>
-        <div id="patch-inventory" hidden>
-          <div id="library-design"></div>
-        </div>
       </div>
     </section>
   </div>

@@ -1,4 +1,4 @@
-import { validate, makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount } from '../model/show.js';
+import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount } from '../model/show.js';
 import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
@@ -138,12 +138,12 @@ const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '')
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, getConnected = () => true }) {
-  // The Devices + Library tabs render LISTS only; the selected item's editor goes
-  // into the left sidebar (app wires that via deviceDetailEl / libraryDetailEl and
-  // re-renders it on onSelect).
-  const devicesBox = el('div', { className: 'fx-panel' });   // Devices tab — instances
-  const libraryBox = el('div', { className: 'fx-panel' });   // Library tab — controller + fixture models
+export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, onDeviceAdded, getConnected = () => true }) {
+  // This panel renders the catalog LIST only (the library of controller + fixture
+  // models); the selected item's editor goes into the host's sidebar (app wires that
+  // via deviceDetailEl / libraryDetailEl and re-renders it on onSelect). The live
+  // device list lives in the app's Output list (renderOutput), not here.
+  const libraryBox = el('div', { className: 'fx-panel' });   // Library — controller + fixture models
   let selDeviceId = null;   // master-detail: which device INSTANCE's editor is open
   let selTypeId = null;     // which fixture DEFINITION's editor is open
   let selDevTypeId = null;  // which controller MODEL's editor is open
@@ -159,12 +159,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
   // Auto-check every device with an IP whose status we don't know yet, so the
   // Devices list can show online/offline without opening each one. One-shot per
   // (id) — the per-device "check" button refreshes a single controller on demand.
-  const autoPing = (devices) => {
+  // onUpdate (optional): called when any ping resolves so a list mounted OUTSIDE this
+  // panel (the app's Output device list, which paints the status dot) can re-render.
+  // When omitted, falls back to the panel's own coalesced render.
+  const autoPing = (devices, onUpdate) => {
     for (const d of devices) {
       // Art-Net nodes have no WLED JSON API — never poll them (avoids a false "offline").
       if (!d.ip || d.protocol === 'artnet' || deviceStatus.has(d.id) || pinging.has(d.id)) continue;
       pinging.add(d.id);
-      getDeviceState(d.ip).then((st) => { pinging.delete(d.id); deviceStatus.set(d.id, st); scheduleRender(); });
+      getDeviceState(d.ip).then((st) => { pinging.delete(d.id); deviceStatus.set(d.id, st); onUpdate ? onUpdate() : scheduleRender(); });
     }
   };
 
@@ -284,9 +287,32 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     });
   }
   // The scan RESULTS (error / found controllers), rendered separately below the row.
-  // Null when there's nothing to show yet.
+  // While running, shows a live PROGRESS block (the two probes, each marked done as
+  // it resolves). Null only when idle with nothing to show yet.
   function scanResults(show) {
     const art = scanState.artnet;   // null = not scanned yet, [] = scanned, none found
+    // === IN PROGRESS ====================================================
+    // Don't go blank during the scan: name both probes and reflect each leg's
+    // independent completion (the two legs resolve + rerender on their own).
+    if (scanState.running) {
+      const wrap = el('div', { className: 'scan-block scan-progress' });
+      wrap.append(el('div', { className: 'scan-status' }, [
+        el('span', { className: 'scan-spinner', role: 'status', 'aria-label': 'scanning' }),
+        el('span', { textContent: 'Scanning…' }),
+      ]));
+      const probe = (label, done, detail) => el('div', { className: 'scan-probe' + (done ? ' is-done' : '') }, [
+        el('span', { className: 'scan-mark', textContent: done ? '✓' : '·' }),
+        el('span', { textContent: label }),
+        el('span', { className: 'fx-badge', textContent: detail }),
+      ]);
+      // WLED leg is done once result OR error is set; Art-Net leg once artnet !== null.
+      const wledDone = scanState.result != null || scanState.error != null;
+      wrap.append(probe('WLED subnet sweep', wledDone,
+        scanState.error ? 'failed' : wledDone ? `${scanState.result?.devices.length ?? 0} found` : 'scanning…'));
+      const artDone = art != null;
+      wrap.append(probe('Art-Net ArtPoll', artDone, artDone ? `${art.length} found` : 'scanning…'));
+      return wrap;
+    }
     if (!scanState.result && !scanState.error && !art) return null;
     const wrap = el('div', { className: 'scan-block' });
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
@@ -297,10 +323,16 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
       add.onclick = () => {
         const next = structuredClone(show);
-        const id = `c${next.devices.length + 1}`;
+        // Unique id: increment until unused (a mid-list delete can make
+        // `length + 1` collide with an existing id — and this id drives selection).
+        let n = (next.devices.length || 0) + 1, id;
+        do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id));
         next.devices.push(makeDevice(next, id));
         selDeviceId = id; lastSel = 'device';
         commit(next);
+        // commit() only refreshes the panel's own render; tell the app so the LIVE
+        // #output-list re-renders + selects the new device immediately (issue #4).
+        onDeviceAdded?.(id);
       };
       return el('div', { className: 'output-row scan-row' }, [
         el('span', { textContent: label }), el('span', { className: 'fx-badge', textContent: ip }),
@@ -592,67 +624,22 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
 
   function render() {
     const show = getShow();
-    devicesBox.textContent = '';
     libraryBox.textContent = '';
-
-    const v = validate(show);
-    // --- Validation banner (whole show) — only surfaces when something's wrong;
-    //     a clean show shows nothing (no "valid" noise). ---
-    if (!v.ok) devicesBox.append(el('div', { className: 'fx-err', textContent: v.errors.join(' · ') }));
-
-    // No daemon banner here: the bottom-left HUD already surfaces output/connection
-    // state ("◐ output offline — start the daemon"), and only when a device is
-    // actually configured to need it — so this tab stays clean.
 
     // Compact selectable row (master): name + a couple of badges. Clicking opens
     // its editor below. Reuses the Output tab's list styling.
     const listRow = (label, badges, selected, onClick) => ListRow(label, { badges, selected, onClick });
 
-    // Pixels routed to one device (hidden fixtures still occupy DDP address space).
-    const devicePixels = (devId) => show.fixtures
-      .filter((f) => (f.output?.deviceId || '') === devId)
-      .reduce((m, f) => m + (f.pixelCount || 0), 0);
-
-    // --- Devices: a selectable list; the editor opens in the LEFT sidebar. ---
+    // Keep the device-editor selection valid for the app's left-sidebar editor
+    // (deviceDetailEl / setDevice read selDeviceId). The device LIST itself is the
+    // app's Output list (renderOutput); this panel only builds the catalog now.
     if (!show.devices.some((d) => d.id === selDeviceId)) selDeviceId = show.devices[0]?.id ?? null;
-    const modelName = (d) => (show.deviceTypes || []).find((m) => m.id === d.typeId)?.name || 'no model';
-    // The Devices tab is already labelled — render the list directly (no
-    // redundant "DEVICES" section header).
-    {
-      const b = devicesBox;
-      const devList = el('div', { className: 'fx-list' });
-      for (const d of show.devices) {
-        const st = deviceStatus.get(d.id);
-        const state = d.protocol === 'artnet' ? 'artnet' : !d.ip ? 'noip' : pinging.has(d.id) || !st ? 'check' : st.ok ? 'online' : 'offline';
-        const title = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[state];
-        const row = listRow(d.name || d.id, [d.ip || 'no ip', modelName(d), `${devicePixels(d.id)} px`],
-          d.id === selDeviceId, () => { selDeviceId = d.id; lastSel = 'device'; render(); });
-        row.prepend(el('i', { className: `dev-dot dev-${state}`, title }));
-        devList.append(row);
-      }
-      autoPing(show.devices);
-      if (!show.devices.length) b.append(el('div', { className: 'seg-hint', textContent: 'no devices yet — add one or scan, or define models in the Inventory tab' }));
-      b.append(devList);
-      b.append(el('button', {
-        className: 'fx-add', textContent: '+ device',
-        onclick: () => {
-          const next = structuredClone(show);
-          const id = `c${next.devices.length + 1}`;
-          const dts = next.deviceTypes || [];
-          const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
-          next.devices.push({ id, name: id, ip: '', colorOrder: 'GRB', port: 4048, typeId });   // blank IP — set it or scan to bind a real controller
-          selDeviceId = id; lastSel = 'device';
-          commit(next);
-        },
-      }));
-      const sr = scanResults(show); if (sr) b.append(sr);
-    }
 
-    // === INVENTORY tab = the catalog of MODELS you build with =================
-    // Each item has a "+" to INSTANTIATE it into the scene (a fixture type → a placed
-    // fixture; a controller model → a device), a "⧉" to duplicate it (author a
-    // variant), and clicking the row opens its editor popover. Authoring a brand-new
-    // blank model lives at the END of each section ("+ new …").
+    // === The catalog of MODELS you build with ================================
+    // Each item has a "⧉" to duplicate it (author a variant), and clicking the row
+    // opens its editor popover. Authoring a brand-new blank model lives at the END of
+    // each section ("+ new …"). (In contexts that place onto a canvas, a "+" to
+    // instantiate also appears — gated on onInstantiate*; absent in the popout.)
 
     // --- Controller MODELS (flat — not foldable; just a label + the full list). ---
     const devTypes = show.deviceTypes || [];
@@ -662,9 +649,12 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
         const count = deviceTypeInstanceCount(show, t.id);
-        const add = el('button', { className: 'lib-add', textContent: '+', title: 'add a controller of this model to the scene', onclick: (e) => { e.stopPropagation(); onInstantiateController?.(t.id); } });
+        // The "+" only instantiates onto a canvas — render it ONLY where a handler is
+        // wired (the main app). The Inventory popout has no canvas, so it omits the
+        // handler and the button doesn't appear (it would be inert).
+        const add = onInstantiateController && el('button', { className: 'lib-add', textContent: '+', title: 'add a controller of this model to the scene', onclick: (e) => { e.stopPropagation(); onInstantiateController(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
-        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, add, dup],
+        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, add, dup].filter(Boolean),
           libSel === 'controller' && t.id === selDevTypeId,
           () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); onPick?.(); }));
       }
@@ -682,10 +672,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
         const count = typeInstanceCount(show, t.id);
-        const add = el('button', { className: 'lib-add', textContent: '+', title: 'place a fixture of this type on the canvas', onclick: (e) => { e.stopPropagation(); onInstantiateFixture?.(t.id); } });
+        // "+" only when an instantiate handler is wired (see controllers, above).
+        const add = onInstantiateFixture && el('button', { className: 'lib-add', textContent: '+', title: 'place a fixture of this type on the canvas', onclick: (e) => { e.stopPropagation(); onInstantiateFixture(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
         // Size shows as a greyed suffix on the name ("(6ch)" / "(60px)"); ×N = instances.
-        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, add, dup],
+        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, add, dup].filter(Boolean),
           selected: libSel === 'fixture' && t.id === selTypeId,
           onClick: () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); onPick?.(); } }));
       }
@@ -700,7 +691,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
   render();
   mounted = true;
   return {
-    devicesEl: devicesBox, libraryEl: libraryBox, refresh: render,
+    libraryEl: libraryBox, refresh: render,
+    // Device health for the app's Output list (renderOutput paints the status dot):
+    // pingDevices kicks one-shot health checks (calling onUpdate when each resolves),
+    // deviceState returns the cached { ok, … } for an id. The popout never calls
+    // pingDevices (it has no live device list and passes getConnected:()=>false), so
+    // it never touches the network.
+    pingDevices: (devices, onUpdate) => autoPing(devices, onUpdate),
+    deviceState: (id) => deviceStatus.get(id),
+    isPinging: (id) => pinging.has(id),
     // What was last clicked: 'device' | 'devtype' | 'type' (lets the app point the
     // Fixture editor group at a device vs. an Inventory model without tabs).
     lastSel: () => lastSel,

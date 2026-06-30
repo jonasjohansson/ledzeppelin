@@ -1,4 +1,4 @@
-import { fixtureTypeChannels, DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams, isDmxType } from './dmx.js';
+import { DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -11,10 +11,12 @@ export function addFixture(show, f) { const s = clone(show); s.fixtures.push(f);
 // --- Controller TYPES (device models) ----------------------------------------
 // A device TYPE is a controller MODEL — its physical output count + per-output
 // pixel budget (e.g. a QuinLED DigQuad = 4 outputs). A device is an INSTANCE
-// that references a model by `typeId` and carries only name/ip/colorOrder. Each
-// instance caches its model's spec (outputs/maxPerOutput) so chains/validate/UI
-// keep reading `device.outputs` unchanged — refreshed on every rebuild (see
-// syncDeviceTypes). QuinLED models are seeded into the Library on first sync.
+// that references a model by `typeId` and carries name/ip/colorOrder PLUS its own
+// spec (outputs/maxPerOutput/artnetSync), which chains/validate/UI read directly
+// as `device.outputs`. A new device is seeded from a model, but thereafter
+// independent: syncDeviceTypes reads each field from the instance and only falls
+// back to the model for fields the instance is missing — editing a model never
+// changes existing devices. QuinLED models are seeded into the Library on first sync.
 //
 // maxPerOutput is NOT a fixed board spec — the QuinLED outputs have no pixel cap;
 // the limit is WLED/ESP framerate + RAM. ~830 px/output ≈ 40 fps for WS281x-family
@@ -31,7 +33,9 @@ export function makeDeviceType(name, outputs = 4, maxPerOutput = PX_PER_OUTPUT_4
 }
 
 // Ensure show.deviceTypes exists (seed QuinLED on first run) and every device
-// references a model, caching outputs/maxPerOutput from it (live template). Pure.
+// references a model. Each device is STANDALONE and owns its own spec; the model
+// is only a fallback for fields the instance lacks, and a template library to seed
+// NEW devices from. Pure.
 export function syncDeviceTypes(show) {
   let types = (show.deviceTypes || []).map((t) => ({ ...t }));
   if (!types.length) types = QUINLED_PRESETS.map((t) => ({ ...t }));
@@ -52,13 +56,20 @@ export function syncDeviceTypes(show) {
     // universe (int ≥ 0; the device spans consecutive universes from it).
     const protocol = d.protocol === 'artnet' ? 'artnet' : 'ddp';
     const universe = Math.max(0, Math.round(Number(d.universe) || 0));
+    // Each device is STANDALONE: it owns its own spec. Read outputs/maxPerOutput/
+    // artnetSync from the INSTANCE first and fall back to the model only for fields
+    // the instance genuinely lacks — editing a model (now a template library only)
+    // must NOT change existing devices. Normalize outputs via the same rule as
+    // makeDeviceType.
+    const outputs = Math.max(1, Math.round(Number(d.outputs ?? t.outputs) || 1));
+    const maxPerOutput = Math.max(0, Math.round(Number(d.maxPerOutput ?? t.maxPerOutput) || 0));
     // ArtSync: send an OpSync after each frame's ArtDmx so the node latches all its
-    // universes together (tear-free multi-universe). Now a MODEL-level capability
-    // (set in the Inventory controller editor); legacy per-device value still honoured.
-    const artnetSync = !!(t.artnetSync ?? d.artnetSync);
+    // universes together (tear-free multi-universe). Owned by the device, falling
+    // back to the model's capability when the instance hasn't set it.
+    const artnetSync = !!(d.artnetSync ?? t.artnetSync);
     // Per-device output delay (ms) — time-aligns this controller against the rig.
     const syncDelayMs = Math.max(0, Math.min(1000, Math.round(Number(d.syncDelayMs) || 0)));
-    return { ...d, typeId: t.id, outputs: t.outputs, maxPerOutput: t.maxPerOutput, protocol, universe, artnetSync, syncDelayMs };
+    return { ...d, typeId: t.id, outputs, maxPerOutput, protocol, universe, artnetSync, syncDelayMs };
   });
   return { ...show, deviceTypes: types, devices };
 }
@@ -71,10 +82,12 @@ export function deviceTypeInstanceCount(show, typeId) {
 // --- Fixture TYPES (definitions) ---------------------------------------------
 // A fixture TYPE is a reusable physical strip definition (density × length →
 // pixel count, colour order). A fixture is an INSTANCE that references a type by
-// `typeId` and carries only placement + patch (geometry, device, offset). Each
-// instance caches its type's spec (pixelCount/colorOrder/…) so pipeline.js,
-// validate(), and the preview keep reading `fixture.pixelCount` unchanged — the
-// cache is refreshed from the type on every rebuild (see syncFixtureTypes).
+// `typeId` and carries placement + patch (geometry, device, offset) PLUS its own
+// spec (pixelCount/colorOrder/…), which pipeline.js, validate(), and the preview
+// read directly as `fixture.pixelCount`. A new fixture is seeded from a type, but
+// thereafter independent: syncFixtureTypes reads each field from the instance and
+// only falls back to the type for fields the instance is missing — editing a type
+// never changes existing instances.
 const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 export function makeFixtureType(ledsPerMeter, meters, colorOrder = 'GRB', id, name) {
   const lpm = Math.max(0, Number(ledsPerMeter) || 0);
@@ -151,8 +164,9 @@ function normFixtureType(t) {
 }
 
 // Ensure show.fixtureTypes exists and every fixture references one (migrating
-// legacy fixtures — which stored spec inline — into deduped types), then copy
-// each type's spec onto its instances as a denormalized cache. Pure.
+// legacy fixtures — which stored spec inline — into deduped types). Each fixture is
+// STANDALONE and owns its own spec; the type is only a fallback for fields the
+// instance lacks, and a template library to seed NEW fixtures from. Pure.
 export function syncFixtureTypes(show) {
   const types = (show.fixtureTypes || []).map((t) => normFixtureType(t));
   // Always keep a permanent generic fixture definition in the catalog.
@@ -169,36 +183,31 @@ export function syncFixtureTypes(show) {
       typeId = t.id;
     }
     const t = byId.get(typeId);
+    // Each fixture is STANDALONE: it owns its own spec. Read pixel/grid/colour
+    // fields from the INSTANCE first and fall back to the type only for fields the
+    // instance genuinely lacks — editing a type (now a template library only) must
+    // NOT change existing instances. Normalize via the same rules as normFixtureType
+    // so pixelCount === cols·rows stays consistent.
+    // A strip-shaped legacy instance carries a bare pixelCount with no grid: default
+    // its rows to 1 (not the type's) so a matrix type can't multiply its pixel count.
+    const bareCount = f.pixelCount != null && f.rows == null && f.cols == null;
+    const rows = Math.max(1, Math.round(Number(f.rows ?? (bareCount ? 1 : t.rows)) || 1));
+    const cols = Math.max(1, Math.round(Number(f.cols ?? f.pixelCount ?? t.cols ?? t.pixelCount) || 1));
+    const pixelCount = cols * rows;
+    const distribution = Math.max(0, Math.round(Number(f.distribution ?? t.distribution) || 0));
     const out = {
       ...f, typeId,
-      ledsPerMeter: t.ledsPerMeter, meters: t.meters, pixelCount: t.pixelCount, colorOrder: t.colorOrder,
-      // Grid (matrix) spec + per-fixture colour format cached onto the instance so
+      ledsPerMeter: f.ledsPerMeter ?? t.ledsPerMeter, meters: f.meters ?? t.meters,
+      pixelCount, colorOrder: f.colorOrder ?? t.colorOrder,
+      // Grid (matrix) spec + per-fixture colour format owned by the instance so
       // pipeline.js / preview / grid.js read them directly (rows=1 ⇒ a plain strip;
       // colorFormat '' ⇒ inherit the controller's colour order).
-      cols: t.cols, rows: t.rows, distribution: t.distribution, colorFormat: t.colorFormat || '',
-      output: { ...f.output, pixelCount: t.pixelCount },
-      input: { ...f.input, samples: t.pixelCount },
+      cols, rows, distribution, colorFormat: f.colorFormat ?? t.colorFormat ?? '',
+      output: { ...f.output, pixelCount },
+      input: { ...f.input, samples: pixelCount },
     };
-    // OUTPUT KIND FOLLOWS THE TYPE. A DMX type → the instance is a DMX fixture (channel
-    // layout owned by the type, so editing the definition propagates in bulk); a pixel
-    // type (strip/matrix) → the instance streams pixels and is NEVER a DMX fixture. This
-    // is what stops an LED strip from becoming a DMX fixture. Legacy/orphan instances
-    // (no real type) keep whatever inline DMX channels they carry.
-    if (hadType) {
-      if (isDmxType(t)) {
-        const prev = out.input?.dmx || {};
-        const dev = (show.devices || []).find((d) => d.id === f.output?.deviceId && d.protocol === 'artnet')
-          || (show.devices || []).find((d) => d.protocol === 'artnet');
-        out.input = { ...out.input, mode: 'dmx',
-          dmx: { universe: prev.universe ?? dev?.universe ?? 0, address: prev.address ?? 1, fixed: prev.fixed || {}, ...(prev.bind ? { bind: prev.bind } : {}), channels: fixtureTypeChannels(t) } };
-        if (!out.output?.deviceId && dev) out.output = { ...out.output, deviceId: dev.id };
-      } else if (out.input?.dmx) {
-        // Type became (or is) a pixel layout → drop the DMX config; back to a strip/matrix.
-        const { dmx, ...restInput } = out.input;
-        out.input = { ...restInput, mode: t.rows > 1 ? 'grid' : 'bar', samples: t.pixelCount };
-        out.output = { ...out.output, pixelOffset: out.output?.pixelOffset ?? 0, pixelCount: t.pixelCount };
-      }
-    }
+    // DMX-vs-pixel is an INSTANCE property now (not derived from the type): whatever
+    // input.mode / input.dmx the instance carries is preserved as-is via ...f.input.
     return out;
   });
   return { ...show, fixtureTypes: types, fixtures };

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#131110">
+<title>Inventory · LED Zeppelin</title>
+<link rel="icon" type="image/png" href="../icons/favicon.png">
+<link rel="stylesheet" href="../src/ui/ui.css">
+<style>
+  /* Inventory window — the standalone TEMPLATE-LIBRARY editor (controller models +
+     fixture types). Styled from the shared design tokens in ../src/ui/ui.css so it
+     reads as the same serious, near-black, mono, hairline app surface (see
+     [[ui-aesthetic-ocr-disguise]]). It mounts the SAME library list + detail editor
+     that used to live in the removed Inventory tab — see inventory.js. All
+     colours/sizes come from var(--…); the fallbacks here only matter if ui.css
+     ever fails to load. */
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
+  .inv-wrap { padding: var(--s5) var(--s5) 40px; max-width: 1100px; margin: 0 auto; }
+  .inv-head { display: flex; align-items: baseline; gap: var(--s5); margin-bottom: var(--s5); }
+  .inv-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
+  .inv-status { margin-left: auto; font-size: var(--fs-body); color: var(--muted); }
+  /* Two panes: the model LIST (controllers + fixtures) and the selected item's
+     DETAIL editor — the same master/detail split the main app used in its sidebar. */
+  .inv-cols { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: var(--s5); align-items: start; }
+  @media (max-width: 720px) { .inv-cols { grid-template-columns: 1fr; } }
+  .inv-pane-title { font: var(--fw-med) var(--fs-micro) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
+    border-bottom: 1px solid var(--line); padding: 0 0 var(--s2); margin: 0 0 var(--s4); }
+  .inv-detail { min-width: 0; }
+  .inv-detail-hint { color: var(--faint); font-style: italic; font-size: var(--fs-body); }
+  .inv-import { margin-top: var(--s5); }
+</style>
+</head>
+<body>
+<div class="inv-wrap">
+  <div class="inv-head">
+    <span class="inv-title">Inventory</span>
+    <span class="inv-status" id="inv-status"></span>
+  </div>
+  <div class="inv-cols">
+    <div>
+      <div class="inv-pane-title">library</div>
+      <div id="inv-list"></div>
+    </div>
+    <div class="inv-detail">
+      <div class="inv-pane-title" id="inv-detail-title">properties</div>
+      <div id="inv-detail"></div>
+    </div>
+  </div>
+  <!-- LEDger import: pick a preset → assign controller IPs → apply. Lives here (the
+       Inventory popout already hosts the catalog) so the assign/apply UI has a
+       mounted, visible home. Triggered from the main window's "Import from LEDger…". -->
+  <div class="inv-import">
+    <div class="inv-pane-title">import from ledger</div>
+    <button class="fx-add" id="inv-import-pick">choose preset file…</button>
+    <div id="inv-import"></div>
+  </div>
+</div>
+<script type="module" src="./inventory.js"></script>
+</body>
+</html>

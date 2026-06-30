@@ -6,8 +6,9 @@ import { makeCompositor } from './engine/compositor.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { stampFixture, stampDevice } from './model/templates.js';
+import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
-import { createImportPanel } from './ui/import.js';
 import { createCompositionPanel } from './ui/composition.js';
 import { createControlPanel } from './ui/control.js';
 import { Slider } from './ui/controls.js';
@@ -23,6 +24,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
+import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
@@ -220,6 +222,7 @@ function rebuild(next) {
   lastRGBA = null;
   syncWallDim();         // live-view dim follows fixture count (don't blank an empty stage)
   broadcastManifest();   // geometry change can rename/restructure → refresh the phone
+  maybeBroadcastTypes(); // if this rebuild changed the type LIBRARY, tell the Inventory popout
 }
 
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
@@ -416,10 +419,10 @@ const panel = createFixturePanel({
   },
   // An Inventory/model row was clicked → pop its editor group up beside the row.
   onPick: () => popAtSelectedRow(),
-  // Inventory "+" instantiates into the scene but STAYS on the Inventory tab so you can
-  // click + repeatedly to add many (the row's ×N badge updates as feedback).
-  onInstantiateFixture: (typeId) => addInstance(typeId),
-  onInstantiateController: (typeId) => addDeviceOfModel(typeId),
+  // A scanned controller was added via the ⌖ scan results' ADD button. The panel's
+  // commit already persisted + rebuilt; sync the app's selection and re-render the
+  // LIVE device list so it shows up (selected/open) without any extra click (#4).
+  onDeviceAdded: (id) => { selectedDeviceId = id; selectedFixtureIds = new Set(); expandedDevices.add(id); renderOutput(); },
   // LAN scan needs the daemon; it's absent on the hosted web demo. Gate the
   // Scan button on a live daemon socket (re-checked via onStatus → panel.refresh).
   getConnected: () => bridge?.connected?.() ?? false,
@@ -469,33 +472,32 @@ const layerPanel = createLayerPanel({
     library: document.getElementById('library'),
   },
 });
-// Kagora import → assign-IP → apply. The imported show is a GEOMETRY change, so
-// applyShow routes through rebuild() (same path as fixture edits); onApplied
-// re-renders the fixtures + layers panels against the new show.
-const importPanel = createImportPanel({
-  getShow: () => show,
-  applyShow: (next) => {
-    // Adopt the imported composition canvas (it matches the rig's aspect, so the
-    // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
-    const c = next.composition?.canvas || { w: 1280, h: 720 };
-    const cur = show.composition?.canvas;
-    if (c.w !== cur?.w || c.h !== cur?.h) {
-      canvas.width = c.w; canvas.height = c.h;
-      if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
-      preview?.setBaseSize?.(c.w, c.h);
-      compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
-    }
-    rebuild(next);
-  },
-  onApplied: () => {
-    // Full UI refresh — a (re)import replaces every device + fixture, so the
-    // placement list and canvas overlay must redraw, and any selection of
-    // now-gone fixtures must clear (else the Output list looks unchanged).
-    selectedFixtureIds.clear();
-    panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.();
-    renderOutput(); redrawOverlay();
-  },
-});
+// LEDger import → assign-IP → apply. The import UI now lives in the Inventory
+// popout (it hosts the catalog); the popout persists the imported show + broadcasts
+// 'inventory-import' on the 'lz-inventory' channel. This is the main window's side:
+// adopt the WHOLE imported show (a geometry change), resizing the canvas first then
+// running the normal rebuild() path, and do the full UI refresh an import needs.
+function applyImportedShow(next) {
+  // Adopt the imported composition canvas (it matches the rig's aspect, so the
+  // layout isn't stretched) — resize stage/overlay/compositor, then rebuild.
+  const c = next.composition?.canvas || { w: 1280, h: 720 };
+  const cur = show.composition?.canvas;
+  if (c.w !== cur?.w || c.h !== cur?.h) {
+    canvas.width = c.w; canvas.height = c.h;
+    if (previewCanvas) { previewCanvas.width = c.w; previewCanvas.height = c.h; }
+    preview?.setBaseSize?.(c.w, c.h);
+    compositor.dispose(); compositor = makeCompositor(gl, c.w, c.h);
+  }
+  // External (popout) edit: not undoable, and don't echo back over the channel.
+  invMerging = true; undoSuppress = true;
+  try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
+  // Full UI refresh — a (re)import replaces every device + fixture, so the placement
+  // list and canvas overlay must redraw, and any selection of now-gone fixtures must
+  // clear (else the Output list looks unchanged).
+  selectedFixtureIds.clear();
+  panel.refresh(); layerPanel.refresh(); compositionPanel.refresh?.();
+  renderOutput(); redrawOverlay();
+}
 // Composition (canvas resolution) is composition-global, so it sits at the top
 // of the editor, above Import/Layers/Fixtures.
 const compositionPanel = createCompositionPanel({
@@ -568,13 +570,12 @@ function applyComposition(comp) {
 //   Fixtures    → design fixtures + devices + Kagora import.
 const compSettings = document.getElementById('comp-settings');
 compSettings?.append(compositionPanel.el);     // Title/BPM/canvas-size panel atop the Composition tab
-// Fixtures tab = the design editor + Kagora import (placement list is the
-// output-list above). Devices tab = the device editor.
-const devicesDesignEl = document.getElementById('devices-design');
-const libraryDesignEl = document.getElementById('library-design');
-devicesDesignEl?.append(panel.devicesEl);          // Devices tab — instances
-libraryDesignEl?.append(panel.libraryEl);          // Library tab — model catalog
-libraryDesignEl?.append(importPanel.el);           // + Kagora import
+// The live DEVICE list is the Output list below (renderOutput), and the selected
+// device's editor mounts in the left sidebar via panel.deviceDetailEl(). The
+// Inventory catalog (panel.libraryEl) + the LEDger importer are no longer mounted in
+// the main window — they live in the Inventory popout (inventory/). The popout
+// persists imports + broadcasts 'inventory-import'; this window adopts them via
+// applyImportedShow (see the 'lz-inventory' channel handler below).
 
 // (Output selection + snap state are declared earlier, above the Settings panel.)
 
@@ -796,6 +797,53 @@ function postMapParams() { if (mapBus) { try { mapBus.postMessage({ type: 'param
 function pushMapChannels() { if (mapBus) { try { mapBus.postMessage({ type: 'channels', data: { ...extChannels() } }); } catch { /* closed */ } } }
 function postMapMidi() { if (mapBus) { try { mapBus.postMessage({ type: 'midi', enabled: midiEnabled(), inputs: midiInputs().map((i) => i.name) }); } catch { /* closed */ } } }
 
+// --- Inventory window sync (BroadcastChannel 'lz-inventory') -----------------
+// The Inventory popout (inventory/) edits the TEMPLATE LIBRARY (show.fixtureTypes /
+// show.deviceTypes) on the SAME localStorage key and broadcasts { type:
+// 'inventory-changed' }. The store is whole-document last-writer-wins, and the
+// popout's saved blob carries a STALE copy of devices/fixtures/scenes/composition —
+// so on receive we MERGE ONLY the two type arrays into the live show (never adopt
+// the whole saved show), then re-run the normal rebuild path. Symmetric: when OUR
+// type arrays actually change (signature diff), we post back so the popout reloads.
+let invBus = null;
+try { invBus = new BroadcastChannel('lz-inventory'); } catch { /* unsupported */ }
+let lastTypeSig = '';                 // signature of the last broadcast/applied type arrays
+let invMerging = false;               // true while applying an inbound merge → suppress echo
+const typeSig = (s) => JSON.stringify(s.fixtureTypes || []) + ' :: ' + JSON.stringify(s.deviceTypes || []);
+lastTypeSig = typeSig(show);          // baseline from the loaded show — never broadcast on init
+// Called from rebuild() (the single chokepoint for type-affecting changes). Posts
+// ONLY when the type arrays changed vs the last seen signature, and never echoes an
+// inbound merge — so the ~30 ordinary saveShow sites stay silent.
+function maybeBroadcastTypes() {
+  const sig = typeSig(show);
+  if (sig === lastTypeSig) return;
+  lastTypeSig = sig;
+  if (invMerging) return;             // don't echo a change we just merged in
+  if (invBus) { try { invBus.postMessage({ type: 'inventory-changed' }); } catch { /* closed */ } }
+}
+if (invBus) {
+  invBus.onmessage = (e) => {
+    // A LEDger import was applied in the popout → adopt the WHOLE saved show (devices
+    // + fixtures + composition), not just the type arrays. This is the one inbound
+    // message that replaces the live rig (the import flow's old applyShow path).
+    if (e.data?.type === 'inventory-import') {
+      const saved = loadShow();
+      if (saved) applyImportedShow(saved);
+      return;
+    }
+    if (e.data?.type !== 'inventory-changed') return;
+    const saved = loadShow();
+    if (!saved) return;
+    // Merge ONLY the type arrays; keep the live devices/fixtures/scenes/composition.
+    const next = { ...show, fixtureTypes: saved.fixtureTypes ?? [], deviceTypes: saved.deviceTypes ?? [] };
+    invMerging = true; undoSuppress = true;     // external library edit: not undoable, no echo
+    try { rebuild(next); } finally { invMerging = false; undoSuppress = false; }
+    saveShow(show);            // persist our live show + merged types (the popout's blob has stale fixtures)
+    closeTemplateMenu();       // drop any open + Fixture/+ Device menu so it rebuilds with fresh types
+    panel.refresh(); renderOutput(); redrawOverlay();   // renderOutput rebuilds the add toolbar from fresh show.*Types
+  };
+}
+
 const isTyping = (t) => !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
 const setKeyChannel = (code, on) => { extSet('key:' + code, on ? 1 : 0); pushMapChannels(); };   // immediate push so Learn catches a momentary key
 document.addEventListener('keydown', (e) => { if (!e.repeat && !isTyping(e.target)) setKeyChannel(e.code, true); });
@@ -841,6 +889,12 @@ function txField(label, value, onCommit) {
   i.addEventListener('change', () => onCommit(i.value === '' ? 0 : Number(i.value)));
   return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
 }
+
+// Live fixture editors keep every group ALWAYS VISIBLE (no collapse): per user
+// feedback, selecting/making a fixture must show all the info at once. `locked`
+// forces the Section open and hides its chevron/toggle (CSS .is-locked) — so no
+// change to the shared Section component, just how these call sites invoke it.
+const flatGroup = (title, key, build) => Section(title, key, build, undefined, true);
 
 // Placement + PATCH editor for one selected fixture (inlined under its row):
 // canvas transform (x/y/length/height/rotation, rotate-90/flip) PLUS the patch —
@@ -893,7 +947,7 @@ function positionEditor(sel) {
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
   // (The fixture's name is shown by the editor dock's title bar.)
   return oel('div', { className: 'output-edit' }, [
-    Section('Position', 'position', (body) => {
+    flatGroup('Position', 'position', (body) => {
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
@@ -937,7 +991,7 @@ function positionEditor(sel) {
         ]),
       );
     }),
-    Section('Patch', 'routing', (body) => {
+    flatGroup('Patch', 'routing', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
@@ -976,7 +1030,7 @@ function dmxEditor(sel) {
   const liveChannels = () => [...((show.fixtures.find((x) => x.id === sel.id)?.input?.dmx?.channels) || channels)];
 
   const out = oel('div', { className: 'output-edit' }, [
-    Section('Fixture', 'dmx-fixture', (body) => {
+    flatGroup('Fixture', 'dmx-fixture', (body) => {
       // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
       // owned by the type (edit it in Inventory → applies to every placed copy).
       const head = ptype
@@ -995,7 +1049,7 @@ function dmxEditor(sel) {
         txField('H', tf.h, (v) => setT({ h: Math.max(4, v) })),
       ]));
     }),
-    Section('Patch', 'dmx-patch', (body) => {
+    flatGroup('Patch', 'dmx-patch', (body) => {
       const devs = [{ value: '', label: '— unassigned —' },
         ...show.devices.map((d) => ({ value: d.id, label: (d.name || d.id) + (d.protocol === 'artnet' ? '' : ' (not Art-Net)') }))];
       body.append(oel('div', { className: 'output-grid' }, [
@@ -1028,7 +1082,7 @@ function dmxEditor(sel) {
       ...layers.map((L) => ({ value: `layer:${L.id}`, label: `Layer · ${L.name || L.id}` })),
       ...dashLinks.map((d) => ({ value: `dash:${d.id}`, label: `Dash · ${d.name || d.id}` })),
     ];
-    out.append(Section('Parameters', 'dmx-params', (body) => {
+    out.append(flatGroup('Parameters', 'dmx-params', (body) => {
       let ci = 0;
       params.forEach((p) => {
         const span = paramSpan(p);
@@ -1062,7 +1116,7 @@ function dmxEditor(sel) {
       });
     }));
   } else if (legacyGeneric || hasFixed) {
-    out.append(Section('Channels', 'dmx-channels', (body) => {
+    out.append(flatGroup('Channels', 'dmx-channels', (body) => {
       channels.forEach((c, i) => {
         if (legacyGeneric) {
           const kindSel = sel2(DMX_CHANNEL_KINDS.map((k) => ({ value: k, label: k })), c.kind,
@@ -1084,12 +1138,29 @@ function dmxEditor(sel) {
 }
 
 // Like txField, but the value may be null = "mixed" across the multi-selection:
-// shows a "— mixed —" placeholder and commits only when the user types something.
+// shows a "— mixed —" placeholder, dims the row (.is-mixed), and commits only when
+// the user types something — which then writes that value to EVERY selected fixture.
 function txFieldMulti(label, value, onCommit) {
   const i = oel('input', { type: 'number', step: '1', placeholder: '— mixed —' });
   if (value != null) i.value = String(Math.round(value));
   i.addEventListener('change', () => { if (i.value === '') return; onCommit(Number(i.value)); });
-  return oel('label', { className: 'fx-field' }, [oel('span', { textContent: label }), i]);
+  return oel('label', { className: 'fx-field' + (value == null ? ' is-mixed' : '') }, [oel('span', { textContent: label }), i]);
+}
+
+// A <select> counterpart to txFieldMulti for discrete bulk fields (device/port).
+// `state` is a { value, mixed } from fieldState: when mixed it prepends a selected
+// "— mixed —" option and dims the row; committing writes to EVERY selected fixture.
+function selFieldMulti(label, options, state, onCommit) {
+  const s = oel('select');
+  const MIXED = '__mixed__';
+  if (state.mixed) s.append(oel('option', { value: MIXED, textContent: '— mixed —', selected: true }));
+  for (const o of options) {
+    const op = oel('option', { value: o.value, textContent: o.label });
+    if (!state.mixed && o.value === String(state.value ?? '')) op.selected = true;
+    s.append(op);
+  }
+  s.addEventListener('change', () => { if (s.value !== MIXED) onCommit(s.value); });
+  return oel('label', { className: 'fx-field' + (state.mixed ? ' is-mixed' : '') }, [oel('span', { textContent: label }), s]);
 }
 
 // Position editor for a MULTI-selection — the SAME interface as positionEditor, but
@@ -1122,8 +1193,36 @@ function multiPositionEditor(ids) {
   // reverse button is "on" only when ALL selected strips are reversed.
   const allRev = ids.every((id) => !!fxOf(id)?.input?.reversed);
 
+  // --- PATCH + per-instance DMX (bulk) -------------------------------------
+  // The live selection as fixture objects, plus its strip / DMX subsets. Patch
+  // fields shown depend on what's in the selection: Device is common to both;
+  // Output port is a pixel-strip concept; Universe/Address are DMX-only.
+  const selList = () => ids.map((id) => fxOf(id)).filter(Boolean);
+  const list = selList();
+  const stripList = list.filter((f) => !isDmxFixture(f));
+  const dmxList = list.filter((f) => isDmxFixture(f));
+  // Write a (dotted) field to every selected fixture matching `filter`, via the
+  // tested applyField helper, then commit through the normal show pipeline.
+  // (Device/port/offset are derived by repackOffsets on rebuild, so reassigning
+  // a fixture's device or port here can never corrupt pixel offsets.)
+  const setFieldAll = (key, value, filter = () => true) => {
+    const next = structuredClone(show);
+    const targetIds = new Set(next.fixtures.filter((f) => ids.includes(f.id) && filter(f)).map((f) => f.id));
+    const updated = new Map(applyField(next.fixtures.filter((f) => targetIds.has(f.id)), key, value).map((f) => [f.id, f]));
+    next.fixtures = next.fixtures.map((f) => updated.get(f.id) || f);
+    applyShow(next);
+  };
+  // Device options: "— unassigned —" first (mirrors the single editors), then every
+  // controller. Output options: 1..N where N is the largest output count among the
+  // selection's devices (floor 4) — so the picker always offers the real ports.
+  const devOpts = [{ value: '', label: '— unassigned —' },
+    ...show.devices.map((d) => ({ value: d.id, label: `${d.name || d.id} (${d.id})` }))];
+  const devIds = [...new Set(list.map((f) => f.output?.deviceId).filter(Boolean))];
+  const nOut = Math.max(1, 4, ...devIds.map((id) => Math.round(show.devices.find((d) => d.id === id)?.outputs ?? 4)));
+  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i + 1), label: `Output ${i + 1}` }));
+
   return oel('div', { className: 'output-edit' }, [
-    Section('Position', 'position', (body) => {
+    flatGroup('Position', 'position', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
           txFieldMulti('X', sharedFn(leftOf), (v) => setEachLeft(v)),
@@ -1145,6 +1244,33 @@ function multiPositionEditor(ids) {
             onclick: () => applyAll((nx, id) => flipFixture(nx, id)) }),
         ]),
       );
+    }),
+    // PATCH (bulk): which controller/output the selection is wired to, plus per-
+    // instance DMX address. Each field dims when it differs across the selection
+    // and writes to ALL selected on edit. pixelOffset is intentionally omitted —
+    // it's derived by repackOffsets, never authored.
+    flatGroup('Patch', 'routing', (body) => {
+      const grid = [
+        selFieldMulti('Device', devOpts, fieldState(list, 'output.deviceId'),
+          (v) => setFieldAll('output.deviceId', v)),
+      ];
+      // Output port — pixel-strip concept; show whenever the selection has a strip.
+      if (stripList.length) grid.push(
+        selFieldMulti('Output', portOpts, fieldState(stripList, 'output.port'),
+          (v) => setFieldAll('output.port', Number(v), (f) => !isDmxFixture(f))),
+      );
+      // Universe/Address — DMX-only; show whenever the selection has a DMX fixture.
+      if (dmxList.length) {
+        const u = fieldState(dmxList, 'input.dmx.universe');
+        const a = fieldState(dmxList, 'input.dmx.address');
+        grid.push(
+          txFieldMulti('Universe', u.mixed ? null : (u.value ?? 0),
+            (v) => setFieldAll('input.dmx.universe', Math.max(0, Math.round(v)), isDmxFixture)),
+          txFieldMulti('Address', a.mixed ? null : (a.value ?? 1),
+            (v) => setFieldAll('input.dmx.address', Math.min(512, Math.max(1, Math.round(v))), isDmxFixture)),
+        );
+      }
+      body.append(oel('div', { className: 'output-grid' }, grid));
     }),
     // GROUP parameter control: when every selected fixture is a DMX fixture of the
     // SAME type, expose one named fader per parameter that drives ALL of them at once.
@@ -1171,14 +1297,18 @@ function groupParamSection(ids) {
     }
     applyShow(next);
   };
-  return [Section('Parameters', 'dmx-params', (body) => {
+  return [flatGroup('Parameters', 'dmx-params', (body) => {
     ctl.forEach((c) => {
       const ci = c.index;
-      // Shared value across the selection, else fall back to the first fixture's.
+      // Shared value across the selection, else fall back to the first fixture's and
+      // dim the row (.is-mixed) to flag that the fader's value differs across the
+      // selection — consistent with the other mixed fields. Editing still writes all.
       const vals = sel.map((f) => f.input?.dmx?.fixed?.[ci] ?? c.value ?? 0);
-      const shown = vals.every((v) => v === vals[0]) ? vals[0] : vals[0];
-      body.append(Slider(c.name, shown, { min: 0, max: 255, step: 1, commit: 'live',
-        onInput: (v) => setEachParam(ci, v) }));
+      const mixed = !vals.every((v) => v === vals[0]);
+      const row = Slider(c.name, vals[0], { min: 0, max: 255, step: 1, commit: 'live',
+        onInput: (v) => setEachParam(ci, v) });
+      if (mixed) row.classList.add('is-mixed');
+      body.append(row);
     });
   })];
 }
@@ -1320,74 +1450,6 @@ function chainSelectedAction() {
   ]);
 }
 
-// Place a new INSTANCE of a definition on the canvas. Spec is cached from the
-// type on rebuild (syncFixtureTypes); the offset auto-packs. Default on-canvas
-// width = the definition's pixel count, clamped (1px/LED, cosmetic).
-function addInstance(typeId) {
-  const next = structuredClone(show);
-  const t = (next.fixtureTypes || []).find((x) => x.id === typeId) || next.fixtureTypes?.[0];
-  if (!t) return;
-  let n = next.fixtures.length + 1, id;
-  do { id = `f${n}`; n++; } while (next.fixtures.some((x) => x.id === id));
-  const cv = next.composition?.canvas || { w: 1280, h: 720 };
-  // Drop new strips in the MIDDLE of the canvas as a thin UPRIGHT strip — Width 10,
-  // Height = pixel count, Rotation 0. Orientation comes from the box aspect (h > w ⇒
-  // vertical), so it reads as a non-rotated vertical strip; widen it past its height
-  // to make it horizontal. Cascaded so adds don't overlap; left UNASSIGNED until wired.
-  const k = next.fixtures.length;
-  const off = (k % 8) * 16 - 56;
-  // A DMX TYPE (one defined with DMX parameters in Inventory) places as a DMX
-  // channel-block fixture, patched to an Art-Net controller. Pixel types — strips and
-  // matrices, including a 1×1 single pixel — stream pixels. The output kind is the
-  // TYPE's kind; an LED strip is never a DMX fixture.
-  if (isDmxType(t)) {
-    const selDev = next.devices.find((d) => d.id === selectedDeviceId && d.protocol === 'artnet');
-    const dev = selDev || next.devices.find((d) => d.protocol === 'artnet');
-    const transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 24, h: 24, rotation: 0 };
-    next.fixtures.push({
-      id, typeId: t.id,
-      output: { deviceId: dev?.id || '' },
-      input: { mode: 'dmx', transform, points: pointsFromTransform(transform, cv),
-        dmx: { channels: fixtureTypeChannels(t), universe: dev?.universe ?? 0, address: 1, fixed: {} } },
-    });
-    selectedFixtureIds = new Set([id]); selectedDeviceId = null;
-    if (dev) expandedDevices.add(dev.id); else expandedDevices.add('');
-    saveShow(next); rebuild(next); setOverlay(true);
-    panel.refresh(); renderOutput(); redrawOverlay();
-    return;
-  }
-  // A matrix (rows>1) drops as a RECTANGLE sized by its cols:rows aspect (≈16px
-  // per cell, capped to 60% of the canvas). A strip drops as a thin upright bar.
-  const isGrid = (Number(t.rows) || 1) > 1;
-  let transform, inputMode;
-  if (isGrid) {
-    const cell = 16;
-    const sc = Math.min(1, (cv.w * 0.6) / (t.cols * cell), (cv.h * 0.6) / (t.rows * cell));
-    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: Math.round(t.cols * cell * sc), h: Math.round(t.rows * cell * sc), rotation: 0 };
-    inputMode = 'grid';
-  } else {
-    transform = { x: cv.w / 2 + off, y: cv.h / 2 + off, w: 10, h: t.pixelCount, rotation: 0 };
-    inputMode = 'bar';
-  }
-  // If a controller is selected, the new fixture lands ON it; otherwise it's
-  // unassigned. Either way it gets its OWN free output (port) so added strips are
-  // NOT auto-chained together — chain them deliberately via the chain action.
-  const onDev = selectedDeviceId && next.devices.some((d) => d.id === selectedDeviceId) ? selectedDeviceId : '';
-  next.fixtures.push({
-    id, typeId: t.id,
-    output: { deviceId: onDev, port: freePort(next, onDev), pixelOffset: 0, pixelCount: t.pixelCount },
-    input: { mode: inputMode, transform, points: pointsFromTransform(transform, cv), samples: t.pixelCount },
-  });
-  selectedFixtureIds = new Set([id]);
-  expandedDevices.add('');   // keep the Unassigned group open so the new strip shows in the list
-  // Commit the new fixture FIRST (rebuild), THEN reveal the overlay — setOverlay
-  // re-renders the list, and the list's stale-selection prune would drop the new
-  // id if the fixture weren't in `show` yet (leaving it unselected, editor hidden).
-  saveShow(next); rebuild(next);
-  setOverlay(true);   // reveal the canvas overlay so the new strip is visible
-  panel.refresh(); renderOutput(); redrawOverlay();
-}
-
 // (Output kind — pixels vs DMX — follows the fixture's TYPE; there is no per-fixture
 // toggle. Define a DMX fixture as a DMX type in Inventory, a strip as a pixel type.)
 
@@ -1506,30 +1568,101 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && devicePo
 document.addEventListener('pointerdown', (e) => {
   if (!devicePopOpen()) return;
   if (devicePop.contains(e.target)) return;
-  if (e.target.closest?.('.output-row, .insp-sec-head, [data-fxid], [data-devid], [data-ptab], #stagewrap')) return;   // device/canvas clicks reopen or move it
+  if (e.target.closest?.('.output-row, .insp-sec-head, [data-fxid], [data-devid], #stagewrap')) return;   // device/canvas clicks reopen or move it
   closeDevicePop();
 }, true);
-// Instantiate from Inventory: a fixture type → a placed fixture; a controller model → a device.
-function addDeviceOfModel(typeId) {
+// === Add directly from a TEMPLATE (the Devices view's "+ Fixture" / "+ Device") ===
+// The catalog (show.fixtureTypes / show.deviceTypes) is a template LIBRARY. Picking a
+// template STAMPS a standalone instance (spec inlined, typeId = template.id) via the
+// tested stamp helpers, then selects it so its editor opens. Issue #5: a clear,
+// discoverable way to add/patch a fixture without hunting through a separate tab.
+const nextFixtureId = (s) => { let n = (s.fixtures?.length || 0) + 1, id; do { id = `f${n}`; n++; } while ((s.fixtures || []).some((x) => x.id === id)); return id; };
+const nextDeviceId = (s) => { let n = (s.devices?.length || 0) + 1, id; do { id = `c${n}`; n++; } while ((s.devices || []).some((x) => x.id === id)); return id; };
+
+function addFixtureFromTemplate(template) {
   const next = structuredClone(show);
-  let n = next.devices.length + 1, id;
-  do { id = `c${n}`; n++; } while (next.devices.some((d) => d.id === id));
-  // Name after the controller MODEL + a per-model sequence ("DigQuad 2"), so devices
-  // of the same model read as 1, 2, 3 …. Bump the number until it's unique among ALL
-  // device names (renames/deletes can otherwise leave a gap that collides).
-  const baseName = (next.deviceTypes || []).find((t) => t.id === typeId)?.name || 'Controller';
-  const taken = new Set((next.devices || []).map((d) => d.name));
-  let seq = (next.devices || []).filter((d) => d.typeId === typeId).length + 1;
-  while (taken.has(`${baseName} ${seq}`)) seq++;
-  next.devices.push({ id, name: `${baseName} ${seq}`, ip: '', colorOrder: 'GRB', port: 4048, typeId });
+  const id = nextFixtureId(next);
+  const fx = stampFixture(template, id);   // standalone instance, centred + unassigned
+  next.fixtures.push(fx);
+  selectedFixtureIds = new Set([id]); selectedDeviceId = null;
+  expandedDevices.add('');             // keep the Unassigned group open so it shows
   saveShow(next); rebuild(next);
-  panel.refresh(); renderOutput();   // stay on Inventory so + can be clicked repeatedly
+  setOverlay(true);                    // reveal the canvas overlay so the new fixture is visible
+  panel.refresh(); renderOutput(); redrawOverlay();
+}
+
+function addDeviceFromTemplate(template) {
+  const next = structuredClone(show);
+  const id = nextDeviceId(next);
+  const dev = stampDevice(template, id);
+  // Keep device names unique (the model name repeats across instances).
+  const taken = new Set((next.devices || []).map((d) => d.name));
+  if (taken.has(dev.name)) { let seq = 2; while (taken.has(`${dev.name} ${seq}`)) seq++; dev.name = `${dev.name} ${seq}`; }
+  next.devices.push(dev);
+  selectedDeviceId = id; selectedFixtureIds = new Set(); expandedDevices.add(id);
+  saveShow(next); rebuild(next);
+  panel.refresh(); renderOutput();
+}
+
+// Template-pick popover anchored under the "+ Fixture" / "+ Device" button. Lists the
+// user templates by name (with a size hint) + a "Blank" entry that stamps from the
+// always-present `generic` template. Reuses the kit picker chrome (.pick-pop) + the
+// shared anchor/clamp + click-out/Esc dismissal.
+let tplMenuPop = null, tplMenuDismiss = null;
+function closeTemplateMenu() {
+  if (!tplMenuPop) return;
+  tplMenuPop.remove(); tplMenuPop = null;
+  if (tplMenuDismiss) { tplMenuDismiss(); tplMenuDismiss = null; }
+}
+function openTemplateMenu(anchor, kind) {
+  closeTemplateMenu();
+  const pop = oel('div', { className: 'pick-pop' });
+  const item = (label, onPick) => {
+    const row = oel('div', { className: 'pick-item' }, [oel('span', { className: 'lib-label', textContent: label })]);
+    row.onclick = (e) => { e.stopPropagation(); closeTemplateMenu(); onPick(); };
+    return row;
+  };
+  if (kind === 'fixture') {
+    const types = show.fixtureTypes || [];
+    for (const t of types) {
+      if (t.id === 'generic') continue;   // offered as "Blank" below
+      pop.append(item(`${t.name} (${typeSizeSuffix(t)})`, () => addFixtureFromTemplate(t)));
+    }
+    const generic = types.find((t) => t.id === 'generic');
+    pop.append(item('Blank', () => addFixtureFromTemplate(generic || {})));
+  } else {
+    const dts = show.deviceTypes || [];
+    for (const t of dts) {
+      if (t.id === 'generic') continue;   // offered as "Blank" below
+      pop.append(item(`${t.name} (${t.outputs} out)`, () => addDeviceFromTemplate(t)));
+    }
+    const generic = dts.find((t) => t.id === 'generic');
+    pop.append(item('Blank', () => addDeviceFromTemplate(generic || { name: 'Controller', outputs: 4 })));
+  }
+  placePopover(pop, anchor);                              // anchor + viewport-clamp (kit)
+  tplMenuPop = pop;
+  tplMenuDismiss = dismissOnOutside(pop, closeTemplateMenu);   // click-outside + Esc (kit)
 }
 
 function renderOutput() {
   updateInspector();
   if (!outputListEl) return;
   outputListEl.textContent = '';
+  closeTemplateMenu();   // a re-render detaches the old anchor; drop any open menu
+  // --- Add toolbar: "+ Fixture" / "+ Device" side by side, each opening a template
+  //     pick menu (issue #5: a clear, discoverable way to add/patch a fixture). ---
+  {
+    const tools = oel('div', { className: 'output-tools' });
+    const addRow = oel('div', { className: 'output-addrow' });
+    const addBtn = (label, kind) => oel('button', {
+      className: 'fx-add', textContent: label,
+      title: kind === 'fixture' ? 'add a fixture from a template' : 'add a controller from a template',
+      onclick: (e) => openTemplateMenu(e.currentTarget, kind),
+    });
+    addRow.append(addBtn('+ Fixture', 'fixture'), addBtn('+ Device', 'device'));
+    tools.append(addRow);
+    outputListEl.append(tools);
+  }
   const fixtures = show.fixtures || [];
   for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
   if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
@@ -1637,6 +1770,18 @@ function renderOutput() {
     const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
     const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
       (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
+    // Online/offline/checking dot (same machinery as the old Devices list): the panel
+    // caches each controller's last health check; renderOutput just paints it. Art-Net
+    // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
+    if (gdev) {
+      const st = panel.deviceState?.(gdev.id);
+      const dotState = gdev.protocol === 'artnet' ? 'artnet'
+        : !gdev.ip ? 'noip'
+        : (panel.isPinging?.(gdev.id) || !st) ? 'check'
+        : st.ok ? 'online' : 'offline';
+      const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
+      head.querySelector('.insp-tri')?.after(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
+    }
     if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
     if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
     dropZone(head, dg.deviceId, null);   // drop a fixture on a controller → assign it there
@@ -1652,6 +1797,11 @@ function renderOutput() {
   // the daemon isn't up. The list re-renders during a scan, so this reflects live state.
   const scanning = !!panel.scanning?.();
   const daemonUp = !!bridge?.connected?.();
+  // Probe each WLED controller's status ONCE (one-shot per id) so the dots above
+  // reflect real online/offline — only when a daemon is up (no daemon → no network).
+  // Each resolved ping re-renders this list to repaint its dot. The Inventory popout
+  // never reaches here, so it never pings.
+  if (daemonUp) panel.pingDevices?.(show.devices, renderOutput);
   outputListEl.append(oel('button', {
     className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
     title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',
@@ -1771,7 +1921,11 @@ document.addEventListener('pointerdown', (e) => {
   // #stagewrap (the whole stage incl. the pasteboard margin) is the drag surface
   // now — it does its own empty-click clear via the marquee, and must NOT be
   // double-cleared here or it would wipe a just-made off-canvas selection.
-  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop')) return;
+  // #grp-patch (the patch panel holding + Fixture / + Device + the device/fixture
+  // list) owns its own selection logic — a click inside it must NOT trigger the
+  // global clear, or a real first click on + Fixture would clear the selection and
+  // re-render the button out from under the gesture (needing a second click).
+  if (e.target.closest?.('#stagewrap, #side, #side-2, #deckbar, #corner-controls, #show-ui, #menu-pop, #grp-patch')) return;
   clearFixtureSelection();
 });
 
@@ -1920,12 +2074,10 @@ function focusGroup(id) {
 // (The Canvas/Timeline curtain is retired — the timeline now floats bottom-left over
 //  the canvas and sizes to its content via CSS, so there's no shared height to drag.)
 
-// Patch island tabs (Devices | Inventory) → setOutputTab owns the tab UI + bodies.
-(function setupPatchTabs() {
-  const tabs = document.getElementById('patch-tabs'); if (!tabs) return;
-  tabs.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setOutputTab(b.dataset.ptab === 'inventory' ? 'library' : 'fixtures'); });
-  setOutputTab(outputTab);   // restore the persisted tab on load
-})();
+// The Patch island is Devices-only now (the Inventory tab moved to a popout, Txx).
+// Force the fixtures view so any stale persisted 'library' tab can't leave the patch
+// list hidden. setOutputTab still drives which editor the Device group shows.
+setOutputTab('fixtures');
 
 // Delete key removes the current selection: the active clip on Composition, or
 // the selected fixture on Output/Fixtures. Ignored while typing in a field.
@@ -2211,17 +2363,13 @@ function setInspectorTab(which) {
 document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
 // (Scan is a button under the Unassigned heading in the Devices list — see renderOutput.)
 
-// Patch tabs: 'fixtures' (Devices = placement list + controllers) vs 'library'
-// (Inventory = model catalog). Toggles the tab bodies + active tab, and drives which
-// editor the Device group shows.
+// Tracks which editor the Device group reflects: 'fixtures' (Devices = placement list +
+// controllers) vs 'library' (an Inventory model, set when the LEDger importer is open).
+// The Inventory tab itself moved to a popout (Txx), so the main window has no tab bar —
+// this only persists the focus + re-renders the Devices list.
 function setOutputTab(which) {
   outputTab = which === 'library' ? 'library' : 'fixtures';
   try { localStorage.setItem('lz.otab', outputTab); } catch { /* private */ }
-  const inv = outputTab === 'library';
-  const fb = document.getElementById('patch-fixtures'); if (fb) fb.hidden = inv;
-  const ib = document.getElementById('patch-inventory'); if (ib) ib.hidden = !inv;
-  const tabs = document.getElementById('patch-tabs');
-  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', (b.dataset.ptab === 'inventory') === inv);
   renderOutput();
 }
 
@@ -2252,6 +2400,10 @@ controlPanel = createControlPanel({
 // (otherwise the button is disabled). No in-app popup.
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', 'width=820,height=920'); } catch { return null; } }
 document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
+// Inventory opens the standalone TEMPLATE-LIBRARY editor in its own window (returns
+// null if a popup blocker fires). Live type-merge sync runs over 'lz-inventory' (below).
+function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', 'width=820,height=920'); } catch { return null; } }
+document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
 const remoteBtn = document.getElementById('menu-remote');
 remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { window.open(companionUrl, 'lz-control'); } catch { /* blocked */ } } });
 
@@ -2941,7 +3093,16 @@ document.getElementById('menu-bug')?.addEventListener('click', () => window.open
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
 // (ISF shader import — drag-drop isn't wired yet — and composition save/load).
 document.getElementById('menu-new')?.addEventListener('click', newProject);
-document.getElementById('menu-ledger')?.addEventListener('click', () => { setOutputTab('library'); importPanel.trigger?.(); });
+// LEDger import lives in the Inventory popout (it hosts the catalog + the import UI).
+// Open it and ask it to start the file picker; the popout applies the import and
+// broadcasts it back to this window (handled on the 'lz-inventory' channel).
+document.getElementById('menu-ledger')?.addEventListener('click', () => {
+  const win = openInventoryWindow();
+  // Tell the (possibly just-opened) popout to open the import picker. Broadcast a
+  // little after open so a freshly-loaded popout has its channel listener wired.
+  const ask = () => { if (invBus) { try { invBus.postMessage({ type: 'open-import' }); } catch { /* closed */ } } };
+  ask(); setTimeout(ask, 400); setTimeout(ask, 1000);
+});
 document.getElementById('menu-import')?.addEventListener('click', (e) => {
   e.stopPropagation();
   openMenu(e.currentTarget, menuList([
