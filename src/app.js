@@ -1660,7 +1660,14 @@ function renderOutput() {
       onclick: (e) => openTemplateMenu(e.currentTarget, kind),
     });
     addRow.append(addBtn('+ Fixture', 'fixture'), addBtn('+ Device', 'device'));
-    tools.append(addRow);
+    // Inventory (template library) opens in its own window — sits above the add row
+    // since the templates it defines are what + Fixture / + Device stamp from.
+    const invBtn = oel('button', {
+      className: 'fx-add', textContent: 'Inventory',
+      title: 'open the Inventory — define fixture & controller templates (opens a window)',
+      onclick: () => openInventoryWindow(),
+    });
+    tools.append(invBtn, addRow);
     outputListEl.append(tools);
   }
   const fixtures = show.fixtures || [];
@@ -1817,7 +1824,7 @@ const renderOutputList = renderOutput; // back-compat alias
 // everywhere EXCEPT editable text fields (where copy/paste is wanted), and sliders keep
 // their right-click-to-reset. A Settings toggle ("native right-click") disables all of
 // that so a normal browser context menu is available — modules read body.native-ctx.
-let nativeCtxMenu = (() => { try { return localStorage.getItem('lz.ctxmenu') === '1'; } catch { return false; } })();
+let nativeCtxMenu = (() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })();
 const nativeCtxOn = () => nativeCtxMenu;
 const setNativeCtxMenu = (on) => {
   nativeCtxMenu = !!on;
@@ -2454,13 +2461,13 @@ function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KE
 // = darker than base), accent tint, text contrast, text size. Persisted; live. ---
 const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
 const BRIGHT_KEY = 'lz.brightness';
-const savedBright = () => num(BRIGHT_KEY, 7, -12, 20);
+const savedBright = () => num(BRIGHT_KEY, 0, -12, 20);
 function setBrightness(v) { try { localStorage.setItem(BRIGHT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
 const TINT_KEY = 'lz.tint.amt';
 const savedTint = () => num(TINT_KEY, 100, 0, 220);
 function setTint(v) { try { localStorage.setItem(TINT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
 const CONTRAST_KEY = 'lz.contrast';
-const savedContrast = () => num(CONTRAST_KEY, 100, 60, 130);
+const savedContrast = () => num(CONTRAST_KEY, 130, 60, 130);
 function applyContrast() {
   const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
   const s = document.documentElement.style;
@@ -2476,7 +2483,7 @@ function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.doc
 // Translucency of the floating panels (device editor + timeline): 0 = opaque … higher =
 // more see-through. Drives --pop-opacity = (100 − translucency)%.
 const TRANSLU_KEY = 'lz.translucency';
-const savedTranslucency = () => num(TRANSLU_KEY, 38, 0, 90);
+const savedTranslucency = () => num(TRANSLU_KEY, 0, 0, 90);
 function setTranslucency(v) { const c = Math.max(0, Math.min(90, Math.round(v))); document.documentElement.style.setProperty('--pop-opacity', (100 - c) + '%'); try { localStorage.setItem(TRANSLU_KEY, String(c)); } catch { /* private */ } }
 setUiScale(savedScale());        // apply text scale on boot
 setTranslucency(savedTranslucency());   // apply panel translucency on boot
