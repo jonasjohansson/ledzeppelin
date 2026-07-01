@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#131110">
+<link rel="icon" type="image/png" href="../icons/favicon.png">
+<title>LED Zeppelin — Leap Motion</title>
+<style>
+  @font-face{ font-family:"Commit Mono"; font-style:normal; font-weight:400; font-display:swap;
+              src:url("../fonts/CommitMono.woff2") format("woff2"); }
+  :root{
+    --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
+    --line:#3a342d; --line-2:#4c4538;
+    --field-bg:#161310;
+    --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84; --readout:#d7dbe0;
+    --accent:#e8a35c; --accent-soft:#33271a; --accent-text:#f1d6bb; --accent-line:#54402b;
+    --danger:#ff6b6b;
+    --mono:"Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius:3px; --radius-sm:2px; --ls-caps:.1em;
+    --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px; --s6:8px;
+  }
+  *{ box-sizing:border-box; margin:0; }
+  html,body{ background:var(--bg); color:var(--text); font-family:var(--mono); font-size:14px;
+    -webkit-font-smoothing:antialiased; height:100%; }
+  body{ display:flex; flex-direction:column; padding:12px 16px; gap:10px; }
+
+  header{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  header h1{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--muted); font-weight:400; }
+  .dot{ width:8px; height:8px; border-radius:var(--radius-sm); background:var(--danger); flex:0 0 auto; transition:background .2s; }
+  .dot.on{ background:var(--accent); }
+  .dots{ display:flex; gap:6px; align-items:center; margin-left:auto; }
+  .dots .tag{ font-size:10px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--faint); }
+
+  .main{ display:flex; gap:12px; flex:1 1 auto; min-height:0; }
+
+  /* Left: 3D hand visualiser */
+  .viz{ flex:1 1 60%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); position:relative; overflow:hidden; }
+  .viz canvas{ width:100%; height:100%; display:block; }
+  .viz .no-hand{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--faint); font-size:12px; letter-spacing:var(--ls-caps); text-transform:uppercase; pointer-events:none; }
+
+  /* Right: channel readouts */
+  .channels{ flex:0 0 260px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+  .ch{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:6px 8px; }
+  .ch-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px; }
+  .ch-name{ font-size:11px; color:var(--muted); letter-spacing:var(--ls-caps); text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ch-val{ font-size:13px; color:var(--readout); font-variant-numeric:tabular-nums; min-width:40px; text-align:right; }
+  .ch-bar{ height:4px; border-radius:1px; background:var(--field-bg); overflow:hidden; }
+  .ch-fill{ height:100%; background:var(--accent); border-radius:1px; transition:width .05s linear; }
+
+  .status{ flex:0 0 auto; font-size:11px; color:var(--faint); letter-spacing:var(--ls-caps); text-transform:uppercase; text-align:center; padding:4px; }
+
+  @media (max-width:640px){
+    .main{ flex-direction:column; }
+    .channels{ flex:0 0 auto; max-height:40vh; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Leap Motion → LED Zeppelin</h1>
+    <div class="dots">
+      <label style="margin-right:14px; cursor:pointer; color:var(--faint);"><input type="checkbox" id="stream"> stream to LZ</label>
+      <span class="tag">Leap</span><span class="dot" id="dotLeap"></span>
+      <span class="tag" style="margin-left:8px">LZ</span><span class="dot" id="dotLZ"></span>
+    </div>
+  </header>
+  <div class="main">
+    <div class="viz">
+      <canvas id="canvas"></canvas>
+      <div class="no-hand" id="noHand">No hand detected</div>
+    </div>
+    <div class="channels" id="channels"></div>
+  </div>
+  <div class="status" id="status">connecting…</div>
+  <div class="status" id="fingers" style="text-transform:none; letter-spacing:0; color:var(--readout);"></div>
+
+<script>
+// --- Config -----------------------------------------------------------------
+const LEAP_URL = 'ws://127.0.0.1:6437/v7.json';
+const RATE = 40;     // Hz send rate to LZ
+
+// --- Helpers ----------------------------------------------------------------
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const remap = (v, lo, hi) => clamp01((v - lo) / (hi - lo));
+const fmt = v => v.toFixed(2);
+const $ = id => document.getElementById(id);
+
+function palmAngles(hand) {
+  const n = hand.palmNormal || [0, -1, 0];
+  const d = hand.direction  || [0, 0, -1];
+  return {
+    roll:  (Math.atan2(n[0], -n[1]) * 180 / Math.PI + 180) / 360,
+    pitch: (Math.atan2(d[1], -d[2]) * 180 / Math.PI + 180) / 360,
+    yaw:   (Math.atan2(d[0], -d[2]) * 180 / Math.PI + 180) / 360,
+  };
+}
+
+function fingerSpread(hand) {
+  const fingers = hand.fingers;
+  if (!fingers || fingers.length < 2) return 0;
+  const dirs = fingers.filter(f => f.extended).map(f => f.direction);
+  if (dirs.length < 2) return 0;
+  let sum = 0, n = 0;
+  for (let i = 1; i < dirs.length; i++) {
+    const a = dirs[i - 1], b = dirs[i];
+    sum += Math.acos(clamp01(Math.abs(a[0]*b[0] + a[1]*b[1] + a[2]*b[2])));
+    n++;
+  }
+  return n ? clamp01((sum / n) / (Math.PI / 4)) : 0;
+}
+
+// Per-finger extended state by type (0=thumb..4=pinky); falls back to array order
+// if a finger carries no `type`. Used for point detection AND the on-screen debug.
+function fingerExt(hand) {
+  const ext = [false, false, false, false, false];
+  (hand.fingers || []).forEach((f, i) => { const t = typeof f.type === 'number' ? f.type : i; if (t >= 0 && t < 5) ext[t] = !!f.extended; });
+  return ext;
+}
+// Pointing: index extended, and at most one of middle/ring/pinky still extended
+// (thumb ignored) — tolerates a partly-curled finger so it doesn't flicker.
+function pointStrength(hand) {
+  const e = fingerExt(hand);
+  if (!e[1]) return 0;
+  const othersOut = (e[2] ? 1 : 0) + (e[3] ? 1 : 0) + (e[4] ? 1 : 0);
+  return othersOut <= 1 ? 1 : 0;
+}
+
+// Where the index finger points: the direction's x/y components (−1..1), 0 = forward.
+function aimFromIndex(hand) {
+  const fs = hand.fingers || [];
+  const idx = fs.find((f) => (typeof f.type === 'number' ? f.type : -1) === 1) || fs[1];
+  const d = idx && idx.direction;
+  if (!d) return null;
+  return { x: d[0], y: d[1] };
+}
+
+// The v6/v7 frame keeps fingers in a top-level `pointables` array linked by
+// handId (NOT hand.fingers). Attach them so spread/point/finger-viz all work.
+function attachFingers(frame) {
+  const ps = frame.pointables;
+  if (!Array.isArray(ps)) return;
+  for (const h of frame.hands || []) if (!h.fingers) h.fingers = ps.filter((p) => p.handId === h.id);
+}
+
+function extractChannels(frame) {
+  const out = {};
+  const hands = frame.hands || [];
+  out['/leap/hands'] = clamp01(hands.length / 2);
+  for (const hand of hands) {
+    const prefix = hands.length > 1 ? `/leap/${hand.type || 'hand'}` : '/leap/hand';
+    const p = hand.palmPosition || hand.stabilizedPalmPosition || [0, 200, 0];
+    out[`${prefix}/x`]     = remap(p[0], -200, 200);
+    out[`${prefix}/y`]     = remap(p[1],   50, 400);
+    out[`${prefix}/z`]     = remap(p[2], -150, 150);
+    out[`${prefix}/grab`]  = clamp01(hand.grabStrength  ?? 0);
+    out[`${prefix}/pinch`] = clamp01(hand.pinchStrength ?? 0);
+    const angles = palmAngles(hand);
+    out[`${prefix}/roll`]  = angles.roll;
+    out[`${prefix}/pitch`] = angles.pitch;
+    out[`${prefix}/yaw`]   = angles.yaw;
+    out[`${prefix}/spread`]= fingerSpread(hand);
+    const tracked = Number(hand.confidence ?? 1) >= 0.2;   // edge-of-FOV → low confidence → ignore gestures
+    const point = tracked ? pointStrength(hand) : 0;
+    const fist  = tracked && clamp01(hand.grabStrength ?? 0) >= 0.5;
+    out[`${prefix}/point`] = point;
+    out[`${prefix}/ball`]  = (fist || point) ? 1 : 0;
+    const AIM = Math.sin(45 * Math.PI / 180);
+    const aim = tracked ? aimFromIndex(hand) : null;
+    out[`${prefix}/aimx`] = aim ? remap(aim.x, -AIM, AIM) : 0.5;
+    out[`${prefix}/aimy`] = aim ? remap(aim.y, -AIM, AIM) : 0.5;
+    const v = hand.palmVelocity || [0, 0, 0];
+    out[`${prefix}/vel`]   = remap(Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]), 0, 1500);
+  }
+  if (!hands.length) {
+    for (const k of ['/x','/y','/z','/grab','/pinch','/roll','/pitch','/yaw','/spread','/vel'])
+      out[`/leap/hand${k}`] = (k==='/y'||k==='/roll'||k==='/pitch'||k==='/yaw') ? 0.5 : 0;
+  }
+  return out;
+}
+
+// --- Canvas visualiser (simple 2D top-down + side projection) ---------------
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+let latestFrame = null;
+
+function drawHands() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const hands = latestFrame?.hands || [];
+  $('noHand').style.display = hands.length ? 'none' : '';
+
+  if (!hands.length) return;
+
+  for (const hand of hands) {
+    const p = hand.palmPosition || [0, 200, 0];
+    // Map palm position into canvas coords.
+    const cx = w/2 + (p[0] / 200) * (w * 0.35);
+    const cy = h   - (p[1] / 400) * (h * 0.85) - h * 0.05;
+    const radius = 14 + (1 - remap(p[2], -150, 150)) * 10;
+
+    // Palm circle.
+    const alpha = 0.6 + clamp01(hand.grabStrength || 0) * 0.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(232,163,92,${alpha})`;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(232,163,92,0.3)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Fingers.
+    const fingers = hand.fingers || [];
+    for (const f of fingers) {
+      const tip = f.tipPosition || f.stabilizedTipPosition;
+      if (!tip) continue;
+      const fx = w/2 + (tip[0] / 200) * (w * 0.35);
+      const fy = h   - (tip[1] / 400) * (h * 0.85) - h * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(fx, fy);
+      ctx.strokeStyle = f.extended ? 'rgba(232,163,92,0.4)' : 'rgba(115,122,132,0.2)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(fx, fy, f.extended ? 4 : 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = f.extended ? 'rgba(232,163,92,0.7)' : 'rgba(115,122,132,0.3)';
+      ctx.fill();
+    }
+
+    // Label.
+    ctx.font = '10px "Commit Mono", monospace';
+    ctx.fillStyle = 'rgba(163,170,180,0.6)';
+    ctx.textAlign = 'center';
+    ctx.fillText(hand.type || 'hand', cx, cy + radius + 14);
+  }
+}
+
+// --- Channel readout UI -----------------------------------------------------
+const channelEls = {};
+function updateChannelUI(channels) {
+  const container = $('channels');
+  for (const [name, value] of Object.entries(channels)) {
+    let el = channelEls[name];
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'ch';
+      el.innerHTML = `<div class="ch-head"><span class="ch-name">${name}</span><span class="ch-val">0.00</span></div><div class="ch-bar"><div class="ch-fill"></div></div>`;
+      container.appendChild(el);
+      channelEls[name] = el;
+    }
+    el.querySelector('.ch-val').textContent = fmt(value);
+    el.querySelector('.ch-fill').style.width = (value * 100) + '%';
+  }
+}
+
+// --- LED Zeppelin WebSocket -------------------------------------------------
+let lzWs = null, lzBackoff = 500;
+function connectLZ() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/frames`;
+  lzWs = new WebSocket(url);
+  lzWs.addEventListener('open', () => { lzBackoff = 500; $('dotLZ').classList.add('on'); updateStatus(); });
+  lzWs.addEventListener('close', () => { $('dotLZ').classList.remove('on'); updateStatus(); setTimeout(connectLZ, lzBackoff); lzBackoff = Math.min(lzBackoff*2, 5000); });
+  lzWs.addEventListener('error', () => { try { lzWs.close(); } catch{} });
+}
+
+function sendToLZ(channels) {
+  // OFF by default: this page is a pure visualiser so it won't double-feed the
+  // node bridge (two sources of the same channel fight → glitchy params). Tick
+  // "stream to LZ" only if you want THIS page to drive the editor instead.
+  if (!$('stream')?.checked) return;
+  if (!lzWs || lzWs.readyState !== WebSocket.OPEN) return;
+  for (const [channel, value] of Object.entries(channels)) {
+    lzWs.send(JSON.stringify({ type: 'ext', channel, value }));
+  }
+}
+
+// Per-finger extended state + the point/ball result, so you can SEE what the
+// point detector reads (▮ = extended, ▯ = curled).
+function updateFingerDebug() {
+  const hands = latestFrame?.hands || [];
+  if (!hands.length) { $('fingers').textContent = 'no hand'; return; }
+  const NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+  $('fingers').textContent = hands.map((h) => {
+    const e = fingerExt(h);
+    const flags = NAMES.map((n, i) => `${n}:${e[i] ? '▮' : '▯'}`).join(' ');
+    const fs = h.fingers || [];
+    const idx = fs.find((f) => (typeof f.type === 'number' ? f.type : -1) === 1) || fs[1];
+    const v3 = (a) => a ? `[${a[0].toFixed(2)} ${a[1].toFixed(2)} ${a[2].toFixed(2)}]` : '—';
+    return `${h.type || 'hand'} ${flags}  pt:${pointStrength(h)} conf:${Number(h.confidence ?? 1).toFixed(2)}  idxType:${idx ? (idx.type ?? '?') : '-'} idxDir:${v3(idx && idx.direction)} handDir:${v3(h.direction)}`;
+  }).join('   |   ');
+}
+
+// --- Leap Motion WebSocket --------------------------------------------------
+let leapWs = null, leapBackoff = 500, leapConnected = false;
+function connectLeap() {
+  leapWs = new WebSocket(LEAP_URL);
+  leapWs.addEventListener('open', () => {
+    leapBackoff = 500; leapConnected = true;
+    $('dotLeap').classList.add('on'); updateStatus();
+    leapWs.send(JSON.stringify({ enableGestures: false, optimizeHMD: false, focused: true }));
+  });
+  leapWs.addEventListener('message', (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.hands !== undefined) { attachFingers(msg); latestFrame = msg; }
+    } catch{}
+  });
+  leapWs.addEventListener('close', () => {
+    leapConnected = false; $('dotLeap').classList.remove('on'); updateStatus();
+    setTimeout(connectLeap, leapBackoff); leapBackoff = Math.min(leapBackoff*2, 5000);
+  });
+  leapWs.addEventListener('error', () => { try { leapWs.close(); } catch{} });
+}
+
+function updateStatus() {
+  const leap = $('dotLeap').classList.contains('on');
+  const lz   = $('dotLZ').classList.contains('on');
+  $('status').textContent = leap && lz ? 'streaming' : leap ? 'leap ok · lz disconnected' : lz ? 'lz ok · waiting for leap' : 'connecting…';
+}
+
+// --- Main loop --------------------------------------------------------------
+connectLZ();
+connectLeap();
+
+setInterval(() => {
+  drawHands();
+  updateFingerDebug();
+  if (latestFrame) {
+    const channels = extractChannels(latestFrame);
+    updateChannelUI(channels);
+    sendToLZ(channels);
+  }
+}, 1000 / RATE);
+</script>
+</body>
+</html>
