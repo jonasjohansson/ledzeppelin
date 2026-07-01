@@ -1,18 +1,33 @@
-import { samplePoints } from './sampling.js';
+import { samplePoints, samplePoints3D } from './sampling.js';
 import { chainOffset } from './chains.js';
 import { gridPoints, isGridFixture } from './grid.js';
 import { isDmxFixture, dmxChannelsOf } from './dmx.js';
 import { fixtureCentreUV } from './fixture-transform.js';
+import { project, cameraFromView3d } from './project3d.js';
+
+// True when a fixture's polyline carries 3D points (any point has a defined
+// third component) — the signal to resample by 3D arc length and project.
+function pointsAre3D(points) {
+  return Array.isArray(points) && points.some((p) => p && p[2] !== undefined);
+}
 
 // The normalized sample UVs for one fixture, in LED-index order. A matrix (grid)
 // fixture samples a cols×rows block in its wiring order; a strip resamples its
 // polyline evenly. `reversed` flips which physical end is pixel 0 for both.
-function fixtureSampleUVs(f, canvas) {
+//
+// `cam` is the composition's projection camera. In 2D mode it's the flat camera
+// (mode === 'flat') and the strip path is byte-identical with today. In 3D mode,
+// when the fixture's points are 3D, resample by TRUE 3D arc length and project
+// each sample through the camera to get its 2D UV (perspective foreshortening).
+function fixtureSampleUVs(f, canvas, cam) {
   if (isGridFixture(f)) {
     const pts = gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, canvas);
     return f.input?.reversed ? pts.reverse() : pts;
   }
   const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
+  if (cam && cam.mode !== 'flat' && pointsAre3D(f.input.points)) {
+    return samplePoints3D(basePts, f.input.samples).map((p) => project(p, cam));
+  }
   return samplePoints(basePts, f.input.samples);
 }
 
@@ -40,6 +55,9 @@ export function buildPipelineInputs(show) {
   const fixtureOrder = [];
   const route = [];
   const canvas = show.composition?.canvas;
+  // Projection camera for this composition: flat in 2D (no-op), the view's
+  // camera in 3D. Derived once and threaded into every strip sample.
+  const cam = cameraFromView3d(show.composition?.view3d);
   let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
   for (const d of show.devices) {
@@ -55,7 +73,7 @@ export function buildPipelineInputs(show) {
     for (const f of fs) {
       // FLIP = reverse pixel direction (which physical end is pixel 0). Applied
       // at sample time so the canonical input.points stay put (no double-reverse).
-      const pts = fixtureSampleUVs(f, canvas);
+      const pts = fixtureSampleUVs(f, canvas, cam);
       // Chain stagger: shift this fixture's sample position by its chain offset so
       // a travelling source cascades across the run (no-op when not chained).
       const [ox, oy] = chainOffset(show, f.id);
@@ -120,7 +138,7 @@ export function buildPipelineInputs(show) {
   const deviceIds = new Set(show.devices.map((d) => d.id));
   for (const f of show.fixtures) {
     if (deviceIds.has(f.output?.deviceId)) continue;   // already routed above
-    const pts = fixtureSampleUVs(f, canvas);
+    const pts = fixtureSampleUVs(f, canvas, cam);
     const [ox, oy] = chainOffset(show, f.id);
     spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
     fixtureOrder.push(f);

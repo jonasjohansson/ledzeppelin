@@ -13,6 +13,18 @@ export function flatCamera() {
   return { mode: 'flat' };
 }
 
+// cameraFromView3d(view3d): resolve the projection camera for a composition's
+// view3d state. In 2D mode (absent view3d, or mode !== '3d') return the flat
+// camera so projection is a no-op (byte-identical with today). In 3D mode use
+// the view's projectionCamera when it looks like a valid camera; otherwise fall
+// back to flat so a half-configured 3D view can't crash the pipeline.
+export function cameraFromView3d(view3d) {
+  if (!view3d || view3d.mode !== '3d') return flatCamera();
+  const cam = view3d.projectionCamera;
+  if (cam && typeof cam === 'object' && typeof cam.mode === 'string') return cam;
+  return flatCamera();
+}
+
 // perspectiveCamera: a pinhole camera framing the world with a vertical FOV.
 // pos: eye position, target: look-at point, up: world up (default +y),
 // fov: vertical field of view in degrees, aspect: width/height (default 1).
