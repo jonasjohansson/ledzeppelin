@@ -187,6 +187,24 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+// Spot — a soft round dot at (centerX, centerY) with a controllable radius. The
+// hand-controlled twin of two crossed Lines, but RADIAL (a ball, not a box): bind
+// centerX/centerY to a 2-D input (e.g. Leap hand x/y) to move it, and `radius` to
+// a gesture (e.g. grab) to focus it down to a point. `aspect` (auto-injected) keeps
+// it circular on any canvas.
+const SPOT = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float centerX; uniform float centerY; uniform float radius; uniform float softness; uniform float aspect;
+void main(){
+  vec2 p = uv - vec2(centerX, centerY);
+  p.x *= max(aspect, 1e-4);                       // correct the canvas stretch => a round dot
+  float d = length(p);
+  float edge = max(1e-4, radius);
+  float inner = edge * (1.0 - clamp(softness, 0.0, 1.0));
+  float v = 1.0 - smoothstep(inner, edge, d);     // 1 in the core, fading to 0 by the radius
+  frag = vec4(vec3(v), 1.0);
+}`;
+
 const DISPLACE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float amt; uniform float uT;
@@ -548,6 +566,15 @@ export const REGISTRY = {
       { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
+  spot: {
+    name: 'spot', type: 'generator', src: SPOT,
+    params: [
+      { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'radius', type: 'float', min: 0, max: 1, default: 0.25 },
+      { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+    ],
+  },
   noise: {
     name: 'noise', type: 'generator', src: NOISE,
     params: [
@@ -722,7 +749,7 @@ export function hexToRgb(hex) {
 // used by params/routing; this is purely what the UI shows.
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
-  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
+  checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', spot: 'Spot', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
