@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { emptyShow, addDevice, addFixture } from '../src/model/show.js';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
 import { samplePoints } from '../src/model/sampling.js';
-import { perspectiveCamera } from '../src/model/project3d.js';
+import { perspectiveCamera, flatCamera } from '../src/model/project3d.js';
 
 // REGRESSION (critical): a normal 2D show (no composition.view3d) must produce
 // UVs byte-identical to today — i.e. exactly samplePoints(input.points, samples)
@@ -30,6 +30,38 @@ test('2D show UVs are unchanged (equal to raw samplePoints)', () => {
     const expect = Array.from(Float32Array.from(samplePoints(pts, samples).flat()));
     assert.equal(slice.length, expect.length);
     slice.forEach((v, i) => assert.equal(v, expect[i], `${id} uv[${i}]`));
+  }
+});
+
+// BACKWARD-COMPAT: an EXPLICIT 3D view whose camera frames the z=0 plane 1:1
+// must reproduce the 2D result exactly. The simplest such camera is the flat
+// camera (project drops z, returns [x,y] unchanged). So a show in `mode:'3d'`
+// with `projectionCamera: flatCamera()` and all points at z=0 produces UVs
+// byte-identical to the same show WITHOUT any view3d (the pure 2D path). This
+// proves "3D mode collapses to 2D at z=0" and that view3d survives into the
+// pipeline (it isn't stripped before cameraFromView3d sees it).
+test('3D mode with a flat camera at z=0 equals the 2D show exactly', () => {
+  const aPts = [[0, 0, 0], [0, 0.5, 0], [0, 1, 0]];
+  const bPts = [[1, 0, 0], [0.5, 0.5, 0], [0, 1, 0]];
+  let base = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  base = addFixture(base, { id: 'a', name: 'a', pixelCount: 3, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 3 },
+    input: { mode: 'polyline', points: aPts, samples: 3 } });
+  base = addFixture(base, { id: 'b', name: 'b', pixelCount: 4, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 3, pixelCount: 4 },
+    input: { mode: 'polyline', points: bPts, samples: 4 } });
+
+  // 2D show (no view3d) — the reference.
+  const twoD = buildPipelineInputs(base);
+
+  // Same show, but with an explicit 3D view using the flat camera.
+  const threeD = structuredClone(base);
+  threeD.composition.view3d = { mode: '3d', projectionCamera: flatCamera() };
+  const projected = buildPipelineInputs(threeD);
+
+  assert.equal(projected.sampleUVs.length, twoD.sampleUVs.length);
+  for (let i = 0; i < twoD.sampleUVs.length; i++) {
+    assert.equal(projected.sampleUVs[i], twoD.sampleUVs[i], `uv[${i}] must match the 2D result exactly`);
   }
 });
 

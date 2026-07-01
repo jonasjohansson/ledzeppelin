@@ -242,6 +242,12 @@ export function normalizeComposition(show) {
     : { ...DEFAULT_CANVAS };
 
   const bpm = Number.isFinite(Number(comp.bpm)) ? Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(Number(comp.bpm)))) : BPM_DEFAULT;
+  // `...comp` is what carries `view3d` (the composition's 3D projection state:
+  // { mode, projectionCamera, orbit }) through the normalizer untouched. Absent
+  // view3d stays absent → the pipeline's cameraFromView3d falls back to the flat
+  // camera, i.e. byte-identical 2D. Do NOT switch this to an explicit field
+  // whitelist without preserving view3d, or existing 3D shows would silently
+  // downgrade to 2D on load.
   return { ...src, composition: { ...comp, canvas, layers, bpm, dashboard: normDashboard(comp.dashboard), blendV2: true, opacityV2: true } };
 }
 

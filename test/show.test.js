@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
+import { normalizeComposition } from '../src/model/layers.js';
+import { flatCamera } from '../src/model/project3d.js';
 
 test('valid minimal show passes validation', () => {
   let s = emptyShow();
@@ -9,6 +11,25 @@ test('valid minimal show passes validation', () => {
     output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 300 },
     input: { points: [[0.1,0.2],[0.1,0.8]], samples: 300 } });
   assert.equal(validate(s).ok, true);
+});
+
+test('composition.view3d survives normalizeComposition (persistence round-trip)', () => {
+  // saveShow/loadShow are raw JSON.stringify/parse of the whole show, so they
+  // preserve anything; the real risk is the composition normalizer stripping
+  // fields it doesn't recognize. Prove view3d rides through it intact — a JSON
+  // round-trip first (localStorage equivalent) then normalizeComposition.
+  const view3d = { mode: '3d', projectionCamera: flatCamera(), orbit: { az: 0.3, el: 0.1, dist: 2 } };
+  const s = emptyShow();
+  s.composition.view3d = view3d;
+
+  const roundTripped = JSON.parse(JSON.stringify(s));   // saveShow → loadShow
+  const norm = normalizeComposition(roundTripped);
+  assert.deepEqual(norm.composition.view3d, view3d);
+});
+
+test('normalizeComposition leaves view3d absent when the show has none (2D default)', () => {
+  const norm = normalizeComposition(emptyShow());
+  assert.equal('view3d' in norm.composition, false);
 });
 
 test('a fixture with 3-tuple (3D) points passes validation', () => {
