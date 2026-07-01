@@ -34,7 +34,7 @@
   .sec-aside { color: var(--faint); text-transform: none; letter-spacing: 0; font-weight: var(--fw-reg); }
   /* parameter table — columns: label · OSC · MIDI · Key (· mode) */
   .grp { margin: var(--s5) 0 var(--s1); color: var(--muted); font-weight: var(--fw-med); font-size: var(--fs-body); letter-spacing: var(--ls-ui); }
-  .row { display: grid; grid-template-columns: 1.1fr 1.5fr 116px 116px 64px; align-items: center; gap: var(--s4); min-height: var(--row-h); padding: 0 var(--s3); margin: 0 calc(-1 * var(--s3)); border-top: 1px solid var(--line); border-radius: var(--radius); }
+  .row { display: grid; grid-template-columns: 1fr 1.2fr 210px 120px 64px; align-items: center; gap: var(--s4); min-height: var(--row-h); padding: 0 var(--s3); margin: 0 calc(-1 * var(--s3)); border-top: 1px solid var(--line); border-radius: var(--radius); }
   .row.bound .row-label { color: var(--accent-text); }
   .row-head { border-top: none; min-height: 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; padding-bottom: 0; }
   .row-label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -50,6 +50,12 @@
   .cell-arm { color: var(--accent); }
   .cell-none { color: var(--faint); }
   .cell-chan { color: var(--accent-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Explicit channel picker (MIDI cell): a borderless mono select that fills the
+     cell, so the chosen channel name reads in full. */
+  .cell-pick { flex: 1 1 auto; min-width: 0; height: 100%; background: transparent; color: var(--accent-text);
+    border: none; padding: 0; cursor: pointer; font: inherit; font-family: var(--mono); }
+  .cell-pick:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }
+  .cell-pick option { background: var(--field-bg); color: var(--text); font-family: var(--mono); }
   .cell-bar { flex: 1 1 auto; min-width: 14px; height: 5px; border-radius: var(--radius-sm); background: var(--line-2); overflow: hidden; }
   .cell-fill { height: 100%; width: 0; background: var(--accent); }
   .row-mode { background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius); color: var(--muted); cursor: pointer; font: var(--fs-micro) var(--mono); padding: 1px var(--s3); justify-self: start; }
