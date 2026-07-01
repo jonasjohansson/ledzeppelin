@@ -128,15 +128,6 @@ function pointStrength(hand) {
   return othersOut <= 1 ? 1 : 0;
 }
 
-// Where the index finger points: the direction's x/y components (−1..1), 0 = forward.
-function aimFromIndex(hand) {
-  const fs = hand.fingers || [];
-  const idx = fs.find((f) => (typeof f.type === 'number' ? f.type : -1) === 1) || fs[1];
-  const d = idx && idx.direction;
-  if (!d) return null;
-  return { x: d[0], y: d[1] };
-}
-
 // The v6/v7 frame keeps fingers in a top-level `pointables` array linked by
 // handId (NOT hand.fingers). Attach them so spread/point/finger-viz all work.
 function attachFingers(frame) {
@@ -167,10 +158,6 @@ function extractChannels(frame) {
     const fist  = tracked && clamp01(hand.grabStrength ?? 0) >= 0.5;
     out[`${prefix}/point`] = point;
     out[`${prefix}/ball`]  = (fist || point) ? 1 : 0;
-    const AIM = Math.sin(45 * Math.PI / 180);
-    const aim = tracked ? aimFromIndex(hand) : null;
-    out[`${prefix}/aimx`] = aim ? remap(aim.x, -AIM, AIM) : 0.5;
-    out[`${prefix}/aimy`] = aim ? remap(aim.y, -AIM, AIM) : 0.5;
     const v = hand.palmVelocity || [0, 0, 0];
     out[`${prefix}/vel`]   = remap(Math.sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]), 0, 1500);
   }
@@ -290,12 +277,9 @@ function updateFingerDebug() {
   const NAMES = ['thumb', 'index', 'middle', 'ring', 'pinky'];
   $('fingers').textContent = hands.map((h) => {
     const e = fingerExt(h);
-    const flags = NAMES.map((n, i) => `${n}:${e[i] ? '▮' : '▯'}`).join(' ');
-    const fs = h.fingers || [];
-    const idx = fs.find((f) => (typeof f.type === 'number' ? f.type : -1) === 1) || fs[1];
-    const v3 = (a) => a ? `[${a[0].toFixed(2)} ${a[1].toFixed(2)} ${a[2].toFixed(2)}]` : '—';
-    return `${h.type || 'hand'} ${flags}  pt:${pointStrength(h)} conf:${Number(h.confidence ?? 1).toFixed(2)}  idxType:${idx ? (idx.type ?? '?') : '-'} idxDir:${v3(idx && idx.direction)} handDir:${v3(h.direction)}`;
-  }).join('   |   ');
+    const flags = NAMES.map((n, i) => `${n}:${e[i] ? '▮' : '▯'}`).join('  ');
+    return `${h.type || 'hand'}  ${flags}   point:${pointStrength(h)}  grab:${(h.grabStrength ?? 0).toFixed(2)}  conf:${Number(h.confidence ?? 1).toFixed(2)}`;
+  }).join('     |     ');
 }
 
 // --- Leap Motion WebSocket --------------------------------------------------

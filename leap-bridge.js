@@ -17,8 +17,6 @@
 //   /leap/hand/vel      hand speed       (0..~1, clamped)
 //   /leap/hand/point    index-point      (1 = index out, rest curled; else 0)
 //   /leap/hand/ball     fist OR point    (1 = either gesture; else 0)
-//   /leap/hand/aimx     index aim L→R    (0.5 = pointing forward; ±AIM° → 0..1)
-//   /leap/hand/aimy     index aim down→up (0.5 = level)
 //   /leap/hands         number of hands  (0 or 0.5 or 1)
 //
 // In ledzeppelin, set any parameter's modulation to "external" and pick the
@@ -82,11 +80,6 @@ const Z_FLOOR = trimFlag('zfloor', 0), Z_CEIL = trimFlag('zceil', 1);
 // glitch. Position channels (x/y/z) are unaffected. Raise it if edge-flicker
 // persists; lower it if real gestures get ignored. Default 0.2.
 const CONF_MIN = numFlag('conf', 0.2);
-
-// Half-angle (degrees) that the index-finger AIM channels span. Pointing straight
-// forward = centre (0.5); swinging the finger ±AIM° maps to 0 / 1. Default 45°.
-const AIM_RANGE = numFlag('aim', 45) * Math.PI / 180;
-const AIM_SPAN = Math.sin(AIM_RANGE);   // map the direction's x/y COMPONENT (not an atan2 angle, which wraps near ±90°)
 
 // --- Helpers ----------------------------------------------------------------
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -152,18 +145,6 @@ function pointStrength(hand) {
   return othersOut <= 1 ? 1 : 0;
 }
 
-// Where the INDEX finger points: the direction's x/y components (each −1..1), 0 =
-// forward. Smooth (no atan2 wrap). NOTE: the original Leap loses a clean view of the
-// index finger as the hand rotates, so the tracked direction gets noisy/dips at
-// angle — keep aim to a comfortable forward cone (small --aim) for best results.
-function aimFromIndex(hand) {
-  const fs = hand.fingers || [];
-  const idx = fs.find((f) => (typeof f.type === 'number' ? f.type : -1) === 1) || fs[1];
-  const d = idx && idx.direction;
-  if (!d) return null;
-  return { x: d[0], y: d[1] };
-}
-
 // --- State ------------------------------------------------------------------
 let leapWs = null, lzWs = null;
 let latestFrame = null;
@@ -213,12 +194,6 @@ function extractChannels(frame) {
     out[`${prefix}/point`] = point;
     out[`${prefix}/ball`]  = (fist || point) ? 1 : 0;
 
-    // Index-finger AIM — where the finger POINTS (its direction angle), so you can
-    // steer with a still hand by angling the finger. 0.5 = pointing forward.
-    const aim = tracked ? aimFromIndex(hand) : null;
-    out[`${prefix}/aimx`] = aim ? remap(aim.x, -AIM_SPAN, AIM_SPAN) : 0.5;
-    out[`${prefix}/aimy`] = aim ? remap(aim.y, -AIM_SPAN, AIM_SPAN) : 0.5;
-
     // Hand velocity (mm/s → normalise; ~1500 mm/s is a fast swipe).
     const v = hand.palmVelocity || [0, 0, 0];
     const speed = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
@@ -227,8 +202,8 @@ function extractChannels(frame) {
 
   // When no hand is visible, zero out the generic channels so params relax.
   if (!hands.length) {
-    for (const k of ['/x', '/y', '/z', '/grab', '/pinch', '/roll', '/pitch', '/yaw', '/spread', '/vel', '/point', '/ball', '/aimx', '/aimy']) {
-      out[`/leap/hand${k}`] = (k === '/y' || k === '/roll' || k === '/pitch' || k === '/yaw' || k === '/aimx' || k === '/aimy') ? 0.5 : 0;
+    for (const k of ['/x', '/y', '/z', '/grab', '/pinch', '/roll', '/pitch', '/yaw', '/spread', '/vel', '/point', '/ball']) {
+      out[`/leap/hand${k}`] = (k === '/y' || k === '/roll' || k === '/pitch' || k === '/yaw') ? 0.5 : 0;
     }
   }
 
@@ -303,7 +278,7 @@ function connectLZ() {
 // --- Exports (for tests) ----------------------------------------------------
 // The pure channel logic is exported so it can be unit-tested; the runtime below
 // only starts when this file is executed directly (not when imported).
-export { extractChannels, pointStrength, fingerExt, aimFromIndex, attachFingers };
+export { extractChannels, pointStrength, fingerExt, attachFingers };
 
 // --- Main -------------------------------------------------------------------
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

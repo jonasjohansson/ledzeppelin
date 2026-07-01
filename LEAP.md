@@ -63,16 +63,15 @@ Per hand, prefixed `/leap/hand/…` (one hand) or `/leap/left/…` + `/leap/righ
 | `vel`     | hand speed (clamped)                                |
 | `point`   | index-point gesture: index out, ≤1 of the other three out (1/0) |
 | `ball`    | fist **OR** point (1/0) — one trigger for both      |
-| `aimx aimy` | index-finger pointing direction (0.5 = forward) — see caveat |
 | `/leap/hands` | number of hands (0 / 0.5 / 1)                   |
 
-Gesture channels (`grab`/`point`/`ball`/`aim*`) only report when the hand is
-confidently tracked (see `--conf`) — at the sensor's edge the Leap invents a fist.
+Gesture channels (`grab`/`point`/`ball`) only report when the hand is confidently
+tracked (see `--conf`) — at the sensor's edge the Leap invents a fist.
 
-> **`aimx`/`aimy` caveat:** the original Leap can't resolve finger *direction*
-> reliably once the hand turns (a level finger's vertical reads ±0.15 of noise at
-> `conf:1.0`). Use **palm `x`/`y`** to aim; `aim*` is left in for a future Ultraleap
-> Gemini device, which tracks fingers far better.
+> **Aiming note:** the original Leap can't resolve finger *direction* reliably once
+> the hand turns (a level finger's vertical reads ±0.15 of noise at `conf:1.0`), so
+> use **palm `x`/`y`** to position the ball — not finger pointing. A future Ultraleap
+> Gemini device tracks fingers well enough to revisit finger-aim.
 
 ## Calibration flags
 
@@ -87,7 +86,6 @@ a noisy edge; the rest gate/scale gestures.
 | `--zlo/--zhi` | `-150/150` | palm Z range (mm) |
 | `--xfloor/--xceil` etc. | `0/1` | trim: readings ≤floor pin to 0, ≥ceil to 1, rescaled |
 | `--conf` | `0.2` | min hand-tracking confidence for gesture channels |
-| `--aim` | `45` | index-aim half-angle (°) |
 | `--leap` / `--lz` | — | override the WebSocket URLs |
 
 **Tuning height:** watch the bound param's live value (or the `/leap/` page). At

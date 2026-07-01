@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractChannels, pointStrength, fingerExt, aimFromIndex, attachFingers } from '../leap-bridge.js';
+import { extractChannels, pointStrength, fingerExt, attachFingers } from '../leap-bridge.js';
 
 // Build a fingers array from an extended-flags list [thumb, index, middle, ring, pinky].
 const fingers = (ext) => ext.map((e, i) => ({ type: i, extended: e }));
@@ -20,12 +20,6 @@ test('fingerExt: by type, falling back to array order', () => {
   assert.deepEqual(fingerExt({ fingers: [{ extended: true }, { extended: false }, { extended: true }] }),
     [true, false, true, false, false]);
   assert.deepEqual(fingerExt({}), [false, false, false, false, false]);
-});
-
-test('aimFromIndex: the index finger direction’s x/y components', () => {
-  assert.deepEqual(aimFromIndex({ fingers: [{ type: 1, extended: true, direction: [0.3, -0.2, -0.9] }] }), { x: 0.3, y: -0.2 });
-  assert.equal(aimFromIndex({ fingers: [] }), null);
-  assert.equal(aimFromIndex({ fingers: [{ type: 1 }] }), null);   // no direction
 });
 
 test('attachFingers: links top-level pointables to hands by handId, without clobbering', () => {
@@ -76,11 +70,9 @@ test('extractChannels: an index point drives point AND ball', () => {
   assert.equal(out['/leap/hand/ball'], 1);                 // ball = fist OR point
 });
 
-test('extractChannels: no hands relax to neutral (y/aim centred, gestures off)', () => {
+test('extractChannels: no hands relax to neutral (y centred, gestures off)', () => {
   const out = extractChannels({ hands: [] });
   assert.equal(out['/leap/hand/y'], 0.5);
-  assert.equal(out['/leap/hand/aimx'], 0.5);
-  assert.equal(out['/leap/hand/aimy'], 0.5);
   assert.equal(out['/leap/hand/grab'], 0);
   assert.equal(out['/leap/hand/ball'], 0);
   assert.equal(out['/leap/hands'], 0);
