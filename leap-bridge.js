@@ -43,6 +43,7 @@
 //   --yceil  0.9   ceil the top 10%      (also --xfloor/--xceil, --zfloor/--zceil)
 
 import WebSocket from 'ws';
+import { pathToFileURL } from 'node:url';
 
 // --- CLI args ---------------------------------------------------------------
 const args = process.argv.slice(2);
@@ -299,21 +300,29 @@ function connectLZ() {
   });
 }
 
+// --- Exports (for tests) ----------------------------------------------------
+// The pure channel logic is exported so it can be unit-tested; the runtime below
+// only starts when this file is executed directly (not when imported).
+export { extractChannels, pointStrength, fingerExt, aimFromIndex, attachFingers };
+
 // --- Main -------------------------------------------------------------------
-console.log(`\n  Leap Motion → LED Zeppelin bridge`);
-console.log(`  Leap:  ${LEAP_URL}`);
-console.log(`  LZ:    ${LZ_URL}`);
-console.log(`  Rate:  ${RATE} Hz\n`);
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  console.log(`\n  Leap Motion → LED Zeppelin bridge`);
+  console.log(`  Leap:  ${LEAP_URL}`);
+  console.log(`  LZ:    ${LZ_URL}`);
+  console.log(`  Rate:  ${RATE} Hz\n`);
 
-connectLeap();
-connectLZ();
-sendTimer = setInterval(sendChannels, 1000 / RATE);
+  connectLeap();
+  connectLZ();
+  sendTimer = setInterval(sendChannels, 1000 / RATE);
 
-// Graceful shutdown.
-process.on('SIGINT', () => {
-  console.log('\n[bridge] shutting down');
-  clearInterval(sendTimer);
-  try { leapWs?.close(); } catch { /* */ }
-  try { lzWs?.close(); }   catch { /* */ }
-  process.exit(0);
-});
+  // Graceful shutdown.
+  process.on('SIGINT', () => {
+    console.log('\n[bridge] shutting down');
+    clearInterval(sendTimer);
+    try { leapWs?.close(); } catch { /* */ }
+    try { lzWs?.close(); }   catch { /* */ }
+    process.exit(0);
+  });
+}

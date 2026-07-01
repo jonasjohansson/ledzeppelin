@@ -17,6 +17,7 @@
 //   (the JSON under localStorage 'ledzeppelin.show').
 
 import { readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 // Canvas-Y (normalised, TOP-DOWN: 0 = top, 1 = bottom) for the crest and the feet.
 // Small margins keep the extreme LEDs off the very edge.
@@ -87,8 +88,9 @@ export function tentShow(show) {
   return { changed, total: fixtures.length };
 }
 
-// --- CLI --------------------------------------------------------------------
-const inPath = process.argv[2];
+// --- CLI (only when run directly, not when imported for tests) --------------
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+const inPath = isMain ? process.argv[2] : null;
 if (inPath) {
   const outPath = process.argv[3] || inPath.replace(/\.json$/i, '') + '.tent.json';
   const show = JSON.parse(readFileSync(inPath, 'utf8'));
