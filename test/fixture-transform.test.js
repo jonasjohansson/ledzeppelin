@@ -120,6 +120,22 @@ test('removeFixtureVertex drops a bend; at two points it reverts to a bar', () =
   assert.ok(next.fixtures[0].input.transform);           // bar transform restored
 });
 
+// --- 3D mapping: preserve a z coordinate on 3-tuple points ---
+test('syncFixtureGeometry preserves z on a 3-tuple polyline (does not drop to 2D)', () => {
+  const bent3d = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
+  const f = { id: 'f1', input: { mode: 'polyline', points: bent3d, samples: 20 } };
+  const out = syncFixtureGeometry(f, CANVAS);
+  assert.equal(out.input.mode, 'polyline');
+  assert.deepEqual(out.input.points, bent3d);            // z intact through the sync path
+});
+
+test('syncFixtureGeometry leaves a 2-tuple fixture untouched (no spurious z)', () => {
+  const f = { id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]], samples: 9 } };
+  const out = syncFixtureGeometry(f, CANVAS);
+  assert.deepEqual(out.input.points, [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]]);
+  for (const p of out.input.points) assert.equal(p.length, 2);  // still 2-tuples
+});
+
 test('syncShowFixtures recomputes points when the canvas changes', () => {
   let show = {
     composition: { canvas: CANVAS },

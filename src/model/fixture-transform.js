@@ -84,8 +84,11 @@ const normTransform = (t) => ({
 // extend onto the pasteboard (off-canvas), where the sampler reads black. Keeping
 // both fixture kinds unclamped makes off-canvas placement behave the same for all.
 const num = (v) => Number(v) || 0;
+// A point is 2-tuple [x,y] or 3-tuple [x,y,z] (3D mapping). Preserve z when it's
+// present so a 3D fixture survives the sync path; 2D fixtures stay exactly [x,y].
 const normPts = (pts) =>
-  (Array.isArray(pts) ? pts : []).map((p) => [num(p?.[0]), num(p?.[1])]);
+  (Array.isArray(pts) ? pts : []).map((p) =>
+    (p?.length > 2 ? [num(p[0]), num(p[1]), num(p[2])] : [num(p?.[0]), num(p?.[1])]));
 
 // A fixture is POLYLINE mode (a bendable, multi-segment run) when it carries an
 // explicit mode flag or more than two points; otherwise BAR mode (a single
