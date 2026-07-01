@@ -44,6 +44,7 @@ let learn = null;                // { id, slot } currently armed
 let learnBaseline = null;        // channel snapshot at arm time
 let rowFills = [];               // [{ channel, el }] live value bars
 let lastBus = 0;
+let lastParamsSig = '';          // last params snapshot, to skip the editor's identical 2s re-push
 
 bus.postMessage({ type: 'hello' });
 $('enable-midi').addEventListener('click', () => bus.postMessage({ type: 'enableMidi' }));
@@ -57,7 +58,18 @@ const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' ||
 bus.onmessage = (e) => {
   const m = e.data || {};
   lastBus = performance.now();
-  if (m.type === 'params') { params = m.data || []; renderParams(); }
+  if (m.type === 'params') {
+    // The editor re-pushes the FULL params list every 2s to catch structural
+    // changes. Re-rendering on an UNCHANGED snapshot would snap an open picker
+    // shut, so only rebuild when the structure actually differs.
+    const next = m.data || [];
+    const sig = JSON.stringify(next);
+    if (sig === lastParamsSig) return;
+    lastParamsSig = sig; params = next; renderParams();
+  }
+  // Channel values arrive continuously — only update the live bars + learn, NEVER
+  // re-render the table (that would snap any open picker shut). New channels show
+  // up because each picker rebuilds its options when it's opened (see cell()).
   else if (m.type === 'channels') { channels = m.data || {}; updateValues(); tickLearn(); }
   else if (m.type === 'midi') {
     const btn = $('enable-midi'), st = $('midi-status');
@@ -66,20 +78,75 @@ bus.onmessage = (e) => {
   }
 };
 
-// One MIDI/Key cell: armed prompt, bound channel + live bar + clear, or click-to-arm.
+// One MIDI/Key cell.
+//   KEY slot  → press-to-learn (a dropdown of key codes would be useless).
+//   MIDI slot → an explicit channel PICKER: choose e.g. /leap/hand/y straight from
+//               the live channel list, so you SEE and SELECT the binding instead of
+//               wiggling and hoping the right axis wins the max-delta race. The old
+//               move-to-learn is still available as the "⊙ learn" entry (handy for
+//               a MIDI controller, whose cc appears only once you twist it).
+function clearBtn(p, slot) {
+  const x = el('button', 'm-x', '×'); x.title = 'clear';
+  x.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'clear', id: p.id, slot }); });
+  return x;
+}
+function liveBar(ch) {
+  const bar = el('div', 'cell-bar'); const fill = el('div', 'cell-fill'); bar.append(fill);
+  rowFills.push({ channel: ch, el: fill }); return bar;
+}
+
 function cell(p, slot) {
   const c = el('div', 'cell');
   const disabled = slot === 'key' && !p.keyable;
   if (disabled) { c.classList.add('disabled'); c.append(el('span', 'cell-none', '—')); return c; }
   const ch = slot === 'midi' ? p.midi : p.key;
   const armed = learn && learn.id === p.id && learn.slot === slot;
-  if (armed) { c.classList.add('armed'); c.append(el('span', 'cell-arm', slot === 'midi' ? 'move…' : 'press…')); }
-  else if (ch) {
-    c.append(el('span', 'cell-chan', slot === 'key' ? ch.replace(/^key:/, '') : ch));
-    const bar = el('div', 'cell-bar'); const fill = el('div', 'cell-fill'); bar.append(fill); c.append(bar); rowFills.push({ channel: ch, el: fill });
-    const x = el('button', 'm-x', '×'); x.title = 'clear'; x.addEventListener('click', (ev) => { ev.stopPropagation(); bus.postMessage({ type: 'clear', id: p.id, slot }); }); c.append(x);
-  } else c.append(el('span', 'cell-none', '+'));
-  c.addEventListener('click', () => { learn = armed ? null : { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); });
+
+  // KEY: unchanged press-to-learn.
+  if (slot === 'key') {
+    if (armed) { c.classList.add('armed'); c.append(el('span', 'cell-arm', 'press…')); }
+    else if (ch) { c.append(el('span', 'cell-chan', ch.replace(/^key:/, '')), clearBtn(p, slot)); }
+    else c.append(el('span', 'cell-none', '+'));
+    c.addEventListener('click', () => { learn = armed ? null : { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); });
+    return c;
+  }
+
+  // MIDI: while armed for move-to-learn, show the prompt (click to cancel).
+  if (armed) {
+    c.classList.add('armed');
+    const a = el('span', 'cell-arm', 'move…');
+    c.addEventListener('click', () => { learn = null; renderParams(); });
+    c.append(a);
+    return c;
+  }
+
+  // MIDI: the explicit picker. Options = a placeholder, the learn fallback, every
+  // live channel (plus the bound one if it's gone offline), and a clear entry.
+  const sel = document.createElement('select');
+  sel.className = 'cell-pick';
+  const opt = (val, label) => { const o = document.createElement('option'); o.value = val; o.textContent = label; return o; };
+  // (Re)build options from the CURRENT live channels. Called on creation and again
+  // each time the picker is focused/opened, so a channel that appears later (e.g.
+  // the bridge coming online) shows up — without re-rendering the whole table.
+  const fillOpts = () => {
+    const names = Object.keys(channels).filter((n) => !n.startsWith('key:')).sort();
+    if (ch && !names.includes(ch)) names.unshift(ch);
+    sel.textContent = '';
+    sel.append(opt('__none__', '＋ pick channel'), opt('__learn__', '⊙ learn (move a control)'));
+    for (const n of names) sel.append(opt(n, n));
+    if (ch) sel.append(opt('__clear__', '✕ clear'));
+    sel.value = ch || '__none__';
+  };
+  fillOpts();
+  sel.addEventListener('focus', fillOpts);   // refresh the channel list right before the dropdown opens
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    if (v === '__learn__') { learn = { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); }
+    else if (v === '__clear__') bus.postMessage({ type: 'clear', id: p.id, slot });
+    else if (v !== '__none__') bus.postMessage({ type: 'bind', id: p.id, channel: v, slot });
+  });
+  c.append(sel);
+  if (ch) c.append(liveBar(ch), clearBtn(p, slot));
   return c;
 }
 
