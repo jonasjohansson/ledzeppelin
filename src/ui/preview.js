@@ -585,11 +585,12 @@ export function createPreview(canvasEl, opts = {}) {
           if (rr > 0.02 && rr < 2) rings3(cx, cy, cz, rr, css(0.4 * op), ck);
         }
       } else if (id === FIELD_IDS.noise3d && latBudget >= NLAT_X * NLAT_Y * NLAT_Z) {
-        // A = (scale, speed): a sparse lattice probe — evaluate the REAL field
-        // (fields.js noise3d, drift included) on a coarse grid and dot where it
-        // reads bright, so the volume's texture is visible off the strips.
+        // A = (scale, speed, axis, drift): a sparse lattice probe — evaluate
+        // the REAL field (fields.js noise3d, directional drift included) on a
+        // coarse grid and dot where it reads bright, so the volume's texture
+        // (and its drift along the axis) is visible off the strips.
         latBudget -= NLAT_X * NLAT_Y * NLAT_Z;
-        const prm = { scale: A[o4], speed: A[o4 + 1], color: [1, 1, 1] };   // colour applied via css() below
+        const prm = { scale: A[o4], speed: A[o4 + 1], axis: A[o4 + 2], drift: A[o4 + 3], color: [1, 1, 1] };   // colour applied via css() below
         const dot = Math.max(1.5, 2.4 * ck);
         for (let zi = 0; zi < NLAT_Z; zi++) {
           for (let yi = 0; yi < NLAT_Y; yi++) {

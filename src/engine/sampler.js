@@ -61,8 +61,11 @@ vec4 fieldColor(int i, vec3 p){
     float g = fract(vaxis(p, uVolA[i].x) - uVolA[i].y);
     return vec4(mix(uVolColA[i], uVolColB[i], g), 1.0);
   }
-  if (id == 2) {           // noise 3d: A = (scale, speed, -, -)
-    float v = clamp(vfbm3(p * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
+  if (id == 2) {           // noise 3d: A = (scale, speed, axis, drift)
+    // Directional drift (twin of fields.js noise3d): sample at p − axisVec·(t·drift).
+    // drift 0 subtracts an exact 0 → byte-identical to the pre-drift field.
+    vec3 ax = uVolA[i].z < 0.5 ? vec3(1.0, 0.0, 0.0) : (uVolA[i].z < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+    float v = clamp(vfbm3((p - ax * (uT * uVolA[i].w)) * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
     return vec4(uVolColA[i] * v, v);
   }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).

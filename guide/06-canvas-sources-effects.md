@@ -95,7 +95,7 @@ then blended onto the sampled colour with the layer's blend mode + opacity:
 | --- | --- |
 | **Plane Sweep** | A coloured band around a plane ⊥ a chosen axis (x/y/z) at `pos` — animate `pos` on z and the band climbs a standing arch. |
 | **Axis Gradient** | A two-colour ramp along an axis, scrollable (wraps). |
-| **Noise 3D** | fbm value noise in space — organic volume shimmer. |
+| **Noise 3D** | fbm value noise in space — organic volume shimmer; give it a **drift** (axis + speed) and the volume flows along x/y/z — drift on z climbs a standing arch. |
 | **Sphere Pulse** | A radial shell from a point in space; *triggerable* — each ⚡ fires an expanding shell. |
 
 They live in the deck like any clip (same triggering, params, animation,

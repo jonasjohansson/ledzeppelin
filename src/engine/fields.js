@@ -86,11 +86,21 @@ function fbm3(x, y, z) {
   return n;
 }
 
-// Noise 3D — fbm value noise in space, drifting along the diagonal with time
-// (q = p·scale + t·speed, matching the 2D Noise generator's uPhase offset).
-export function noise3d(p, t, { scale = 3, speed = 0.3, color = [1, 1, 1] } = {}) {
+// Noise 3D — fbm value noise in space, evolving along the diagonal with time
+// (q = p·scale + t·speed, matching the 2D Noise generator's uPhase offset),
+// plus an optional DIRECTIONAL drift: the whole field flows along one axis
+// (`axis` 0/1/2, plane-sweep convention) at `drift` world-units/sec — the
+// noise is sampled at p − axisVec·(t·drift), so drift along z makes organic
+// light climb a standing arch. `drift` defaults to 0, which subtracts an
+// exact 0 from p and leaves the field byte-identical to the pre-drift form
+// (the diagonal time term above is untouched).
+export function noise3d(p, t, { scale = 3, speed = 0.3, axis = 2, drift = 0, color = [1, 1, 1] } = {}) {
   const o = t * speed;
-  const v = clamp01(fbm3(p[0] * scale + o, p[1] * scale + o, p[2] * scale + o));
+  const dv = t * drift;
+  const x = p[0] - (axis < 0.5 ? dv : 0);
+  const y = p[1] - (axis >= 0.5 && axis < 1.5 ? dv : 0);
+  const z = p[2] - (axis >= 1.5 ? dv : 0);
+  const v = clamp01(fbm3(x * scale + o, y * scale + o, z * scale + o));
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
@@ -152,7 +162,8 @@ export function packVolumetrics(active) {
       colA.set(C('colorA'), i * 3);
       colB.set(C('colorB'), i * 3);
     } else if (id === FIELD_IDS.noise3d) {
-      a.set([P('scale'), P('speed'), 0, 0], i * 4);
+      // A = (scale, speed, axis, drift)
+      a.set([P('scale'), P('speed'), P('axis'), P('drift')], i * 4);
       colA.set(C('color'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
@@ -173,7 +184,7 @@ export function evalPacked(packed, i, p, t, trigAges = []) {
   const id = packed.meta[i * 4];
   if (id === FIELD_IDS.planesweep) return planeSweep(p, { axis: A[0], pos: A[1], thickness: A[2], softness: A[3], color: cA });
   if (id === FIELD_IDS.axisgradient) return axisGradient(p, { axis: A[0], colorA: cA, colorB: cB, scroll: A[1] });
-  if (id === FIELD_IDS.noise3d) return noise3d(p, t, { scale: A[0], speed: A[1], color: cA });
+  if (id === FIELD_IDS.noise3d) return noise3d(p, t, { scale: A[0], speed: A[1], axis: A[2], drift: A[3], color: cA });
   const B = packed.b.subarray(i * 4, i * 4 + 4);
   const base = { center: [A[0], A[1], A[2]], thickness: B[0], softness: B[1], color: cA };
   let out = spherePulse(p, { ...base, radius: A[3] });

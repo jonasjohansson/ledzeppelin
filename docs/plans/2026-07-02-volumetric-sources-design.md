@@ -30,7 +30,9 @@ LED's world position — a field, not an image.
   - **Plane sweep** — a colored plane (thickness, softness) moving along a chosen
     axis (x/y/z); `pos` animatable → the motivating use case.
   - **Axis gradient** — a color ramp along x/y/z, scrollable.
-  - **Noise 3D** — fbm value-noise in space (organic volume shimmer).
+  - **Noise 3D** — fbm value-noise in space (organic volume shimmer), with an
+    optional directional **drift** (axis + speed, default off) that flows the
+    whole volume along x/y/z — drift along z climbs a standing arch.
   - **Sphere pulse** — radial burst from a point in space (triggerable).
 - **UI: clips in the same deck** (interview decision). Volumetric sources appear in
   the clip picker under a **"Volumetric"** group and live in the layer/clip grid like

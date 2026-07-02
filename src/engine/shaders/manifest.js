@@ -593,6 +593,10 @@ export const REGISTRY = {
     params: [
       { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
+      // Directional drift: the field flows along `axis` at `drift` units/sec
+      // (drift 0 = today's field exactly). Drift along z climbs a standing arch.
+      { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
+      { key: 'drift', type: 'float', min: 0, max: 2, default: 0 },
       { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },

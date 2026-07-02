@@ -69,6 +69,33 @@ test('noise3d: varies along z (the point of a 3D field)', () => {
   assert.notEqual(noise3d([0.2, 0.4, 0.0], 1.5, P)[3], noise3d([0.2, 0.4, 0.1], 1.5, P)[3]);
 });
 
+test('noise3d: drift 0 (the default) is byte-identical to the pre-drift field', () => {
+  // The pinned values above were captured BEFORE drift existed; an explicit
+  // drift: 0 (any axis) must reproduce them exactly — including at t ≠ 0,
+  // where the diagonal time-evolution term is live.
+  for (const axis of [0, 1, 2]) {
+    const P = { scale: 3, speed: 0.3, axis, drift: 0, color: [1, 1, 1] };
+    assert.equal(noise3d([0.2, 0.4, 0.1], 1.5, P)[3], 0.35013648885883053);
+    assert.equal(noise3d([0.7, 0.1, 0.6], 0, P)[3], 0.5138662882062016);
+  }
+});
+
+test('noise3d: drift shifts the pattern along the chosen axis (same value at p + axisVec·t·drift)', () => {
+  const t = 1.25, drift = 0.8, base = { scale: 3, speed: 0.3, color: [1, 1, 1] };
+  const p = [0.3, 0.55, 0.2];
+  for (const axis of [0, 1, 2]) {
+    // Sampling WITH drift at p + axisVec·(t·drift) lands exactly where the
+    // undrifted field reads at p — the whole volume translated along the axis.
+    const shifted = [...p];
+    shifted[axis] = p[axis] + t * drift;
+    const got = noise3d(shifted, t, { ...base, axis, drift });
+    const want = noise3d(p, t, { ...base, axis, drift: 0 });
+    got.forEach((v, i) => near(v, want[i], 1e-12));
+    // …and at the unshifted point the drifted field actually CHANGED.
+    assert.notEqual(noise3d(p, t, { ...base, axis, drift })[3], want[3]);
+  }
+});
+
 test('noise3d: output stays in 0..1 over a sweep', () => {
   for (let i = 0; i < 50; i++) {
     const v = noise3d([i * 0.13, i * 0.07, i * 0.05], i * 0.3, { scale: 5, speed: 1, color: [1, 1, 1] })[3];
@@ -108,7 +135,7 @@ test('manifest: the 4 volumetric generators exist with pinned defaults', () => {
     { axis: 2, pos: 0.5, thickness: 0.25, softness: 0.5, color: '#ffffff' });
   assert.deepEqual(defaultParams('axisgradient'),
     { axis: 2, scroll: 0, colorA: '#000000', colorB: '#ffffff' });
-  assert.deepEqual(defaultParams('noise3d'), { scale: 3, speed: 0.3, color: '#ffffff' });
+  assert.deepEqual(defaultParams('noise3d'), { scale: 3, speed: 0.3, axis: 2, drift: 0, color: '#ffffff' });
   assert.deepEqual(defaultParams('spherepulse'),
     { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
   assert.equal(REGISTRY.spherepulse.triggerable, true);
@@ -139,9 +166,9 @@ test('packVolumetrics: resolves namespaced params, blends, colours; caps at 4', 
   // clip 1: axisgradient — defaults, colB white
   assert.deepEqual([...p.meta.slice(4, 8)], [1, 1, 1, 0]);
   assert.deepEqual([...p.colB.slice(3, 6)], [1, 1, 1]);
-  // clip 2: noise3d — scale override, screen=2
+  // clip 2: noise3d — scale override, screen=2; A = (scale, speed, axis, drift)
   assert.deepEqual([...p.meta.slice(8, 12)], [2, 2, 1, 0]);
-  assert.equal(p.a[8], 7);
+  assert.deepEqual([...p.a.slice(8, 12)], [7, Math.fround(0.3), 2, 0]);
   // clip 3: spherepulse — A = (cx, cy, cz, radius), B = (th, soft, speed, 0)
   assert.deepEqual([...p.meta.slice(12, 16)], [3, 3, 1, 0]);
   assert.deepEqual([...p.a.slice(12, 16)], [0.5, 0.5, Math.fround(0.4), Math.fround(0.35)]);
@@ -164,6 +191,13 @@ test('evalPacked matches the direct field functions', () => {
     planeSweep(pt, { axis: 2, pos: 0.4, thickness: 0.25, softness: 0, color: [1, 1, 1] }), 1e-6);
   nearRGBA(evalPacked(p, 1, pt, 2.5),
     noise3d(pt, 2.5, { scale: 3, speed: 0.3, color: [1, 1, 1] }), 1e-6);
+  // A drifting noise3d packs axis+drift into A slots 2/3 and round-trips
+  // through evalPacked (float32 params → small tolerance).
+  const pd = packVolumetrics([{ generator: 'noise3d',
+    params: { 'noise3d.speed': 0, 'noise3d.axis': 0, 'noise3d.drift': 1.5 }, blend: 'add', opacity: 1 }]);
+  assert.deepEqual([...pd.a.slice(0, 4)], [3, 0, 0, 1.5]);
+  nearRGBA(evalPacked(pd, 0, pt, 2),
+    noise3d(pt, 2, { scale: 3, speed: 0, axis: 0, drift: 1.5, color: [1, 1, 1] }), 1e-6);
   // spherepulse with a trigger: an expanding shell (radius = age·speed) stacks
   // with the static shell — brightest wins.
   const still = evalPacked(p, 2, pt, 0);

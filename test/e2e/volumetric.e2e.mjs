@@ -5,6 +5,8 @@
 //  1. 3D: a lifted arch with a Plane Sweep clip (axis z) — the band lights only
 //     PART of the arch, moving `pos` moves the band (buffer changes), z=0 bars
 //     stay dark, and the GPU bytes match the JS reference (evalPacked) exactly.
+//  1b. Noise 3D drift: with speed 0 the field is byte-stable at drift 0 and
+//     keeps moving at drift 1 (the volume flows along the chosen axis).
 //  2. 2D: a plane sweep along X on a plain 2D show works on the z=0 plane.
 //  3. UI: the source picker shows the "Volumetric" group; picking Plane Sweep
 //     creates a clip whose cell carries the 3D badge.
@@ -93,6 +95,43 @@ try {
     for (let ch = 0; ch < 3; ch++) maxErr = Math.max(maxErr, Math.abs(bufMid[i * 4 + ch] - Math.round(f[ch] * 255)));
   }
   if (maxErr > 2) fail(`GPU vs JS reference mismatch (maxErr ${maxErr})`); else ok(`GPU matches the JS field reference (max channel error ${maxErr})`);
+
+  // --- 1b. Noise 3D drift: axis+speed flow an otherwise time-frozen field -----
+  // GPU noise is NOT byte-pinned against the JS reference (float32 sin-hash —
+  // see fields.js), so drift is verified behaviourally on the GPU: with
+  // speed 0 the field has no time term left, so drift 0 must be byte-STABLE
+  // frame to frame, while drift 1 must keep the bytes MOVING (the volume
+  // sliding along z through the arch + the z=0 bars).
+  const noiseShow = (drift) => {
+    const s = plainShow();
+    s.composition.layers[0].activeClipId = null;
+    s.composition.layers.push({
+      id: 'l2', name: 'Noise', blend: 'add', opacity: 1, effects: [], params: {},
+      clips: [{ id: 'n1', name: 'noise', generator: 'noise3d',
+        params: { 'noise3d.scale': 3, 'noise3d.speed': 0, 'noise3d.axis': 2, 'noise3d.drift': drift, 'noise3d.color': '#ffffff' },
+        effects: [] }],
+      activeClipId: 'n1',
+    });
+    return s;
+  };
+  {
+    const { browser, page, errors } = await openApp(noiseShow(0));
+    await stableRGBA(page);   // throws if the drift-0 field isn't byte-stable
+    ok('noise3d speed 0 + drift 0: sampled buffer is byte-stable (no time term)');
+    await browser.close();
+    if (errors.length) fail('page errors (noise drift 0):\n  ' + errors.join('\n  '));
+  }
+  {
+    const { browser, page, errors } = await openApp(noiseShow(1));
+    const read = () => page.evaluate(() => Array.from(window.__lz.rgba() || []));
+    const a = await read();
+    await page.waitForTimeout(700);
+    const b = await read();
+    if (a.length && a.join(',') !== b.join(',')) ok('noise3d drift 1 keeps the field moving (bytes change over time)');
+    else fail('noise3d drift 1 did not animate the sampled buffer');
+    await browser.close();
+    if (errors.length) fail('page errors (noise drift 1):\n  ' + errors.join('\n  '));
+  }
 
   // --- 2. plain 2D show: a plane sweep along X on the z=0 plane --------------
   const s2 = volShow(0.5);
