@@ -10,8 +10,9 @@ import { isDmxFixture } from '../model/dmx.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
   setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel,
-  thicknessOf,
+  thicknessOf, setBezierControl,
 } from '../model/fixture-transform.js';
+import { isBezierFixture, bezierToPoints } from '../model/bezier.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
 // (so draw() and hitTest() — which use different pixel scales — agree).
@@ -33,6 +34,8 @@ function groupBox(show, selectedIds, baseW, baseH) {
     if (!selectedIds.has(f.id)) continue;
     const eps = f.input?.points || [];
     if (!eps.length) continue;
+    // A bezier's box hugs the EVALUATED curve (the arch bulges past its chord).
+    if (isBezierFixture(f.input)) { for (const [x, y] of geomOf(f)) acc(x, y); continue; }
     if (isPolylineFixture(f.input) || eps.length < 2) { for (const [x, y] of eps) acc(x, y); continue; }
     // BAR: the 4 outer corners of the thickness rectangle (same math as buildChrome).
     const ax = eps[0][0] * W, ay = eps[0][1] * Hh, bx = eps[eps.length - 1][0] * W, by = eps[eps.length - 1][1] * Hh;
@@ -81,6 +84,9 @@ const view3dOf = (show) => {
 };
 // A polyline as clean 3-tuples for viewport projection (missing z = 0).
 const pts3Of = (pts) => (pts || []).map((p) => [p?.[0] || 0, p?.[1] || 0, p?.[2] || 0]);
+// A fixture's DRAWN/SAMPLED centreline: the evaluated curve for a bezier, the
+// raw points otherwise. Everything that walks geometry goes through this.
+const geomOf = (f) => (isBezierFixture(f.input) ? bezierToPoints(f.input) : f.input.points);
 
 export function createPreview(canvasEl, opts = {}) {
   const ctx = canvasEl.getContext('2d');
@@ -148,7 +154,7 @@ export function createPreview(canvasEl, opts = {}) {
     // a strip resamples its centreline.
     const samplePts = fixtureOrder.map((f) => (isGridFixture(f)
       ? gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, show.composition?.canvas)
-      : samplePoints(f.input.points, f.input.samples)));
+      : samplePoints(geomOf(f), f.input.samples)));
     const { runColor } = controllerColorMap(show);
     const chainColors = {};
     for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
@@ -163,7 +169,7 @@ export function createPreview(canvasEl, opts = {}) {
     if (!pi.samplePts3D) {
       pi.samplePts3D = pi.fixtureOrder.map((f) => (isGridFixture(f)
         ? gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, show.composition?.canvas).map((p) => [p[0], p[1], 0])
-        : samplePoints3D(pts3Of(f.input.points), f.input.samples)));
+        : samplePoints3D(pts3Of(geomOf(f)), f.input.samples)));
     }
     return pi.samplePts3D;
   }
@@ -232,7 +238,8 @@ export function createPreview(canvasEl, opts = {}) {
       const f = fixtureOrder[fi];
       // Cull off-screen fixtures (footprint AABB vs the visible region). Grids skip
       // the cull — their 2-pt centreline cache understates the rectangle footprint.
-      const P0 = f.input.points;
+      // Beziers cull on their EVALUATED curve (the chord understates an arch).
+      const P0 = geomOf(f);
       if (P0 && P0.length && !isGridFixture(f)) {
         let nx = 1, ny = 1, xx = 0, xy = 0;
         for (const p of P0) { if (p[0] < nx) nx = p[0]; if (p[0] > xx) xx = p[0]; if (p[1] < ny) ny = p[1]; if (p[1] > xy) xy = p[1]; }
@@ -283,7 +290,9 @@ export function createPreview(canvasEl, opts = {}) {
             if (aa) ctx.fillRect(Math.round(cx - cw / 2), Math.round(cy - chh / 2), Math.round(cw), Math.round(chh));
             else { ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.fillRect(-cw / 2, -chh / 2, cw, chh); ctx.restore(); }
           }
-        } else if (!isPolylineFixture(f.input) && count >= 2) {
+        } else if (!isPolylineFixture(f.input) && !isBezierFixture(f.input) && count >= 2) {
+          // (a bezier takes the per-LED fallback below — its LEDs lie on a CURVE,
+          // not on the straight endpoint-to-endpoint row this fast path blits)
           // BINARY cells: each LED is an axis-aligned square SNAPPED to the device
           // pixel grid — only its POSITION follows the bar's angle; the square
           // itself stays straight, so every edge lands exactly on pixels: hard,
@@ -462,7 +471,8 @@ export function createPreview(canvasEl, opts = {}) {
       const dim = (c) => (colorTint ? c : accCss(.9));
       for (const f of drawList) {
         const eps = f.input.points; if (!eps || !eps.length) continue;
-        const pts3 = pts3Of(eps);
+        const bez = isBezierFixture(f.input);
+        const pts3 = pts3Of(geomOf(f));                  // bezier draws its EVALUATED curve
         const selected = isSelected(selectedIds, f.id);
         if (f.hidden) {                                  // faint ghost outline
           poly3(pts3, selected ? accCss(.55) : 'rgba(150,156,166,.28)', 1.25 * ck, DASH);
@@ -471,13 +481,22 @@ export function createPreview(canvasEl, opts = {}) {
         const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
         poly3(pts3, stroke, (selected ? 2 : 1.25) * ck);
         if (selected) {
-          // Vertex handles + the label. Polyline vertices are DRAGGABLE in 3D
-          // (ground-plane move; Alt = vertical) so they get the same 8px chrome
-          // as 2D; bar/grid endpoints are view-only markers (smaller).
-          const hs = isPolylineFixture(f.input) ? 4 * ck : 3 * ck;
-          for (const pt of pts3) {
+          // Vertex handles + the label. Polyline vertices and bezier ENDS are
+          // DRAGGABLE in 3D (ground-plane move; Alt = vertical) so they get the
+          // same 8px chrome as 2D; bar/grid endpoints are view-only markers.
+          const hs = (isPolylineFixture(f.input) || bez) ? 4 * ck : 3 * ck;
+          for (const pt of pts3Of(bez ? [eps[0], eps[eps.length - 1]] : eps)) {
             const q = prj(pt[0], pt[1], pt[2]);
             if (finite(q)) p.push(rectS(q[0] - hs, q[1] - hs, hs * 2, hs * 2, stroke, 1.25 * ck));
+          }
+          if (bez) {
+            // The CONTROL: a hollow diamond, tethered to both ends by faint
+            // dashed guides — Alt-drag it up to raise the arch.
+            const c = pts3Of([f.input.bezier?.c || eps[0]])[0];
+            const e0 = pts3Of([eps[0]])[0], e1 = pts3Of([eps[eps.length - 1]])[0];
+            poly3([e0, c, e1], accCss(.45), ck, DASH);
+            const q = prj(c[0], c[1], c[2]);
+            if (finite(q)) p.push(diamondS(q[0], q[1], 5 * ck, stroke, 1.5 * ck));
           }
           if (showLabels) {
             const q = prj(pts3[0][0], pts3[0][1], pts3[0][2]);
@@ -494,6 +513,10 @@ export function createPreview(canvasEl, opts = {}) {
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const rectS = (x, y, w, h, stroke, sw) =>
     `<rect x="${nz(x)}" y="${nz(y)}" width="${nz(w)}" height="${nz(h)}" fill="rgba(20,20,24,.9)" stroke="${stroke}" stroke-width="${nz(sw)}"/>`;
+  // Hollow diamond — the bezier CONTROL handle, visually distinct from the
+  // square end/vertex handles so "this shapes the curve" reads at a glance.
+  const diamondS = (cx, cy, r, stroke, sw) =>
+    `<polygon points="${nz(cx)},${nz(cy - r)} ${nz(cx + r)},${nz(cy)} ${nz(cx)},${nz(cy + r)} ${nz(cx - r)},${nz(cy)}" fill="rgba(20,20,24,.9)" stroke="${stroke}" stroke-width="${nz(sw)}"/>`;
   // Filled arrowhead at p0 pointing toward p1 (direction / pixel-0). `thick` scales
   // it with a bar's thickness; omitted ⇒ constant screen size.
   const arrowS = (p0x, p0y, p1x, p1y, color, thick, ck) => {
@@ -552,7 +575,7 @@ export function createPreview(canvasEl, opts = {}) {
         const reversed = !!f.input.reversed;
         if (f.hidden) {                                  // faint ghost outline
           const onSel = isSelected(selectedIds, f.id);
-          poly(eps, onSel ? accCss(.55) : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
+          poly(geomOf(f), onSel ? accCss(.55) : 'rgba(150,156,166,.28)', (onSel ? 1.5 : 1.25) * ck, DASH);
           continue;
         }
         const selected = isSelected(selectedIds, f.id);
@@ -567,6 +590,22 @@ export function createPreview(canvasEl, opts = {}) {
         const fIdx = show.fixtures.indexOf(f);
         const dash = selected ? null : DASH;
 
+        if (isBezierFixture(f.input)) {
+          // Bezier: the EVALUATED curve is the body; ends get square handles,
+          // the control a hollow diamond tethered by faint dashed guides.
+          const curve = geomOf(f);
+          poly(curve, stroke, (selected ? 1.5 : 1) * ck, dash);
+          const cL = curve.length - 1, a0 = reversed ? curve[cL] : curve[0], a1 = reversed ? curve[cL - 1] : curve[1];
+          p.push(arrowS(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke, null, ck));
+          if (selected) {
+            for (const e of [eps[0], eps[eps.length - 1]]) { const hx = e[0] * W, hy = e[1] * Hh, s = 4 * ck; p.push(rectS(hx - s, hy - s, s * 2, s * 2, stroke, 1.25 * ck)); }
+            const c = f.input.bezier?.c || eps[0];
+            poly([eps[0], c, eps[eps.length - 1]], accCss(.45), ck, DASH);
+            p.push(diamondS(c[0] * W, c[1] * Hh, 5 * ck, stroke, 1.5 * ck));
+          }
+          if (showLabels && showLbl) p.push(labelS(fixtureLabel(f, fIdx), eps[0][0] * W, eps[0][1] * Hh - 10, selected, ck));
+          continue;
+        }
         if (isPolylineFixture(f.input)) {
           poly(eps, stroke, ck, dash);
           if (selected) for (const e of eps) { const hx = e[0] * W, hy = e[1] * Hh, s = 4 * ck; p.push(rectS(hx - s, hy - s, s * 2, s * 2, stroke, 1.25 * ck)); }
@@ -691,7 +730,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     if (!hit) return 'default';
     if (hit.rotate) return 'grab';                 // rotate knob
     if (hit.scaleCorner != null || hit.scaleEdge != null || hit.groupHandle) return hit.cursor || 'nwse-resize';
-    if (hit.vertex != null || hit.seg != null) return 'move';   // body / vertex → move
+    if (hit.vertex != null || hit.control || hit.seg != null || hit.bez) return 'move';   // body / vertex / bezier control → move
     return 'default';
   }
 
@@ -708,24 +747,32 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const [px, py, rw, rh] = localPx(ev);
     const cam = orbitCamera(v3.orbit, rw / rh);
     const fixtures = show.fixtures ?? [];
-    const screenPts = (f) => pts3Of(f.input?.points || []).map((e) => {
+    const toScreen = (pts) => pts3Of(pts || []).map((e) => {
       const uv = project(e, cam);
       return Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? [uv[0] * rw, uv[1] * rh] : null;
     });
-    // Vertex handles first (topmost wins) — polyline fixtures only.
+    // Handles first (topmost wins): a bezier's control diamond + its two ends;
+    // a polyline's vertices. Both drag in world space (Alt = vertical).
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
-      if (!isPolylineFixture(f.input)) continue;
-      const q = screenPts(f);
-      for (let v = 0; v < q.length; v++) {
+      const bez = isBezierFixture(f.input);
+      if (!bez && !isPolylineFixture(f.input)) continue;
+      if (bez && f.input.bezier?.c) {
+        const [qc] = toScreen([f.input.bezier.c]);
+        if (qc && Math.hypot(px - qc[0], py - qc[1]) <= vtxR) return { fxId: f.id, control: true };
+      }
+      const q = toScreen(f.input.points);
+      for (const v of bez ? [0, q.length - 1] : q.keys()) {
         if (q[v] && Math.hypot(px - q[v][0], py - q[v][1]) <= vtxR) return { fxId: f.id, vertex: v };
       }
     }
     // Then bodies — the NEAREST segment across all fixtures wins (as in 2D).
+    // A bezier's body is its EVALUATED curve (seg/t then address the curve, so
+    // dblclick-insert is disabled for beziers — see the dblclick handler).
     let best = null;
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
-      const q = screenPts(f);
+      const q = toScreen(geomOf(f));
       for (let s = 0; s < q.length - 1; s++) {
         const a = q[s], b = q[s + 1];
         if (!a || !b) continue;
@@ -765,7 +812,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const selId = sel ? (sel.has ? (sel.size === 1 ? [...sel][0] : null) : sel) : null;
     if (selId) {
       const f = fixtures.find((x) => x.id === selId);
-      if (f && !isPolylineFixture(f.input)) {
+      // Rotate/resize chrome is BAR-only (a bezier/polyline has no box transform).
+      if (f && !isPolylineFixture(f.input) && !isBezierFixture(f.input)) {
         const pts = f.input.points;
         const a0 = pts[0], a1 = pts[pts.length - 1];
         const cxN = (a0[0] + a1[0]) / 2, cyN = (a0[1] + a1[1]) / 2;
@@ -803,6 +851,21 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
       const pts = f.input.points;
+      if (isBezierFixture(f.input)) {
+        // Control diamond first (precise), then the two end handles, then the
+        // EVALUATED curve as the body.
+        const c = f.input.bezier?.c;
+        if (c && Math.hypot(px - c[0] * rw, py - c[1] * rh) <= vtxR) return { fxId: f.id, control: true };
+        for (const v of [0, pts.length - 1]) {
+          if (Math.hypot(px - pts[v][0] * rw, py - pts[v][1] * rh) <= vtxR) return { fxId: f.id, vertex: v };
+        }
+        const curve = geomOf(f);
+        for (let v = 0; v < curve.length - 1; v++) {
+          const d = segDist(px, py, curve[v][0] * rw, curve[v][1] * rh, curve[v + 1][0] * rw, curve[v + 1][1] * rh);
+          if (d <= hitR) consider({ fxId: f.id, bez: true }, d);
+        }
+        continue;
+      }
       if (isPolylineFixture(f.input)) {
         for (let v = 0; v < pts.length; v++) {            // vertices first (precise)
           if (Math.hypot(px - pts[v][0] * rw, py - pts[v][1] * rh) <= vtxR) return { fxId: f.id, vertex: v };
@@ -867,8 +930,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       // WITHOUT entering undo history (like zoom/pan, it isn't an edit).
       const hit3 = hitTest3D(ev, v3);
       if (hit3) onSelect?.(hit3.fxId, ev);
-      if (hit3 && hit3.vertex != null) {
-        dragState = { kind: 'vertex3d', id: hit3.fxId, index: hit3.vertex,
+      if (hit3 && (hit3.vertex != null || hit3.control)) {
+        // ctl: the bezier CONTROL rides the same plane/Alt gestures as a vertex
+        // — Alt-dragging it up pulls a flat strip into a standing arch.
+        dragState = { kind: 'vertex3d', id: hit3.fxId, index: hit3.vertex, ctl: !!hit3.control,
           lastY: ev.clientY, cursor: 'move' };
       } else {
         const o = v3.orbit || {};
@@ -904,6 +969,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const corner0 = { x: (h.col === 0 ? gb.minX : gb.maxX) * cv.w, y: (h.row === 0 ? gb.minY : gb.maxY) * cv.h };
       const items = [...getSelected()].map((id) => {
         const f = show.fixtures.find((x) => x.id === id); if (!f) return null;
+        if (isBezierFixture(f.input)) return { id, mode: 'bez', pts0: f.input.points.map((q) => q.slice()), c0: (f.input.bezier?.c || f.input.points[0]).slice() };
         if (isPolylineFixture(f.input)) return { id, mode: 'poly', pts0: f.input.points.map((q) => q.slice()) };
         const tf = f.input?.transform || transformFromPoints(f.input.points, cv);
         return { id, mode: 'bar', x0: tf.x, y0: tf.y, w0: Number(tf.w) || 0, h0: Number(tf.h) || 0, rot: Number(tf.rotation) || 0 };
@@ -960,6 +1026,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
           dragState = { kind: 'scaleEdge', axis: 'p', id: hit.fxId, cv, ux, uy, pxx, pyy, anchor: { x: t.x + pxx * sp * hh, y: t.y + pyy * sp * hh } };
         }
       }
+    } else if (hit.control) {
+      dragState = { kind: 'bezctl', id: hit.fxId };   // bezier control — x/y here; z via 3D Alt-drag
     } else if (hit.vertex != null) {
       dragState = { kind: 'vertex', id: hit.fxId, index: hit.vertex };
     } else {
@@ -969,6 +1037,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const items = ids.map((id) => {
         const f = show.fixtures.find((x) => x.id === id);
         if (!f) return null;
+        if (isBezierFixture(f.input)) return { id, mode: 'bez', pts0: f.input.points.map((p) => p.slice()), c0: (f.input.bezier?.c || f.input.points[0]).slice() };
         if (isPolylineFixture(f.input)) return { id, mode: 'poly', pts0: f.input.points.map((p) => p.slice()) };
         const tf = f.input?.transform;
         return tf ? { id, mode: 'bar', x0: tf.x, y0: tf.y } : null;
@@ -994,7 +1063,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const v3h = view3dOf(getShow());
       if (v3h) {
         const h3 = hitTest3D(ev, v3h);
-        evEl.style.cursor = h3 ? (h3.vertex != null ? 'move' : 'pointer') : 'grab';
+        evEl.style.cursor = h3 ? ((h3.vertex != null || h3.control) ? 'move' : 'pointer') : 'grab';
       } else evEl.style.cursor = cursorFor(hitTest(ev));
       return;
     }
@@ -1010,8 +1079,13 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const show3 = getShow();
       const v3d = view3dOf(show3); if (!v3d) return;   // mode flipped mid-drag
       const f = (show3.fixtures || []).find((x) => x.id === dragState.id);
-      const cur = pts3Of(f?.input?.points || [])[dragState.index];
+      const cur = dragState.ctl
+        ? (f?.input?.bezier?.c && pts3Of([f.input.bezier.c])[0])
+        : pts3Of(f?.input?.points || [])[dragState.index];
       if (!cur) return;
+      const write = (nx, ny, nzz) => (dragState.ctl
+        ? setBezierControl(show3, dragState.id, [nx, ny, nzz])
+        : setFixtureVertex(show3, dragState.id, dragState.index, nx, ny, nzz));
       const [px3, py3, rw3, rh3] = localPx(ev);
       const cam3 = orbitCamera(v3d.orbit, rw3 / rh3);
       const cvH3 = (show3.composition?.canvas?.h) || 720;
@@ -1020,12 +1094,12 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const camDist = Math.hypot(cur[0] - cam3.pos[0], cur[1] - cam3.pos[1], cur[2] - cam3.pos[2]);
         const wpp = (2 * camDist * Math.tan((cam3.fov * Math.PI / 180) / 2)) / (rh3 || 1);
         const z = cur[2] - (ev.clientY - dragState.lastY) * wpp;   // drag up → +z
-        next3 = setFixtureVertex(show3, dragState.id, dragState.index, cur[0], cur[1], z);
+        next3 = write(cur[0], cur[1], z);
         hint3 = `z ${Math.round(z * cvH3)} px`;
       } else {
         const hit = rayPlaneZ(unproject(px3 / rw3, py3 / rh3, cam3), cur[2]);
         if (hit) {
-          next3 = setFixtureVertex(show3, dragState.id, dragState.index, hit[0], hit[1], cur[2]);
+          next3 = write(hit[0], hit[1], cur[2]);
           const cvW3 = (show3.composition?.canvas?.w) || 1280;
           hint3 = `${Math.round(hit[0] * cvW3)}, ${Math.round(hit[1] * cvH3)}`;
         }
@@ -1131,10 +1205,15 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       sx = Math.max(0.05, sx); sy = Math.max(0.05, sy);
       if (ev.shiftKey) { const drive = (ax && ay) ? Math.max(sx, sy) : (ax ? sx : sy); sx = drive; sy = drive; }
       for (const it of items) {
-        if (it.mode === 'poly') {
-          next = setFixturePoints(next, it.id, it.pts0.map(([x, y]) => [
-            (anchor.x + sx * (x * cv.w - anchor.x)) / cv.w, (anchor.y + sy * (y * cv.h - anchor.y)) / cv.h,
-          ]));
+        if (it.mode === 'poly' || it.mode === 'bez') {
+          // Scale x/y about the anchor; z (height) rides along unchanged. A
+          // bezier's control scales with its ends so the arch keeps its shape.
+          const map2 = (q) => {
+            const m = [(anchor.x + sx * (q[0] * cv.w - anchor.x)) / cv.w, (anchor.y + sy * (q[1] * cv.h - anchor.y)) / cv.h];
+            return q.length > 2 ? [...m, q[2]] : m;
+          };
+          next = setFixturePoints(next, it.id, it.pts0.map(map2));
+          if (it.mode === 'bez') next = setBezierControl(next, it.id, map2(it.c0));
         } else {
           // A bar's LENGTH runs along its rotation axis; map the box's x/y scale to
           // length/thickness by the bar's dominant orientation (exact at 0°/90°).
@@ -1146,6 +1225,11 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         }
       }
       hintText = (ax && ay) ? `${sx.toFixed(2)}×${sy.toFixed(2)}` : (ax ? `↔ ${sx.toFixed(2)}` : `↕ ${sy.toFixed(2)}`);
+    } else if (dragState.kind === 'bezctl') {
+      // Bezier control in 2D: move c in x/y (its height is preserved by
+      // setBezierControl's 2-arg form; lift it with Alt-drag in 3D).
+      const [nx, ny] = norm(ev);
+      next = setBezierControl(next, dragState.id, [nx, ny]);
     } else if (dragState.kind === 'vertex') {
       const [nx, ny] = norm(ev);
       next = setFixtureVertex(next, dragState.id, dragState.index, nx, ny);
@@ -1156,8 +1240,12 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const dxN = nxNow - dragState.nx0, dyN = nyNow - dragState.ny0;
       const draggedIds = dragState.items.map((it) => it.id);
       for (const it of dragState.items) {
-        if (it.mode === 'poly') {
-          next = setFixturePoints(next, it.id, it.pts0.map(([x, y]) => [x + dxN, y + dyN]));
+        if (it.mode === 'poly' || it.mode === 'bez') {
+          // Shift x/y; z (height) rides along. The bezier control moves WITH
+          // its ends so the whole arch translates rigidly.
+          const shift = (q) => [q[0] + dxN, q[1] + dyN, ...(q.length > 2 ? [q[2]] : [])];
+          next = setFixturePoints(next, it.id, it.pts0.map(shift));
+          if (it.mode === 'bez') next = setBezierControl(next, it.id, shift(it.c0));
         } else {
           let nx = it.x0 + dxPx, ny = it.y0 + dyPx;
           if (snap) { const s = snap(nx, ny, it.id, draggedIds); nx = s[0]; ny = s[1]; }
@@ -1207,8 +1295,9 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const v3 = view3dOf(getShow());
     if (v3) {
       const hit3 = hitTest3D(ev, v3);
-      if (!hit3 || hit3.vertex != null || hit3.seg == null) return;
+      if (!hit3 || hit3.vertex != null || hit3.control || hit3.seg == null) return;
       const f = (getShow().fixtures || []).find((x) => x.id === hit3.fxId);
+      if (isBezierFixture(f?.input)) return;   // a quadratic has no insertable vertices
       const pts3 = pts3Of(f?.input?.points || []);
       const a = pts3[hit3.seg], b = pts3[hit3.seg + 1];
       if (!a || !b) return;
@@ -1219,7 +1308,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       return;
     }
     const hit = hitTest(ev);
-    if (!hit || hit.vertex != null) return;
+    if (!hit || hit.vertex != null || hit.control || hit.bez) return;
     const [nx, ny] = norm(ev);
     const next = addFixtureVertex(getShow(), hit.fxId, hit.seg ?? 0, [nx, ny]);
     onCommit?.(next);
@@ -1232,6 +1321,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const v3 = view3dOf(getShow());
     const hit = v3 ? hitTest3D(ev, v3) : hitTest(ev);
     if (hit && hit.vertex != null) {
+      const f = (getShow().fixtures || []).find((x) => x.id === hit.fxId);
+      if (isBezierFixture(f?.input)) return;   // a bezier's two ends aren't removable
       ev.preventDefault();
       onCommit?.(removeFixtureVertex(getShow(), hit.fxId, hit.vertex));
     }

@@ -12,6 +12,8 @@
 // derived cache that must be recomputed whenever the transform OR the canvas
 // resolution changes (pixel positions are fixed; their 0..1 mapping is not).
 
+import { isBezierFixture, bezierToPoints, midOf } from './bezier.js';
+
 const DEG = Math.PI / 180;
 const DEFAULT_CANVAS = { w: 1280, h: 720 };
 const DEFAULT_THICKNESS = 8;
@@ -120,7 +122,12 @@ export function setFixtureZ(show, fxId, z) {
       f.input?.points?.length ? f.input.points : pointsFromTransform(f.input?.transform, cv),
     );
     const points = base.map((p) => (zz === 0 ? [p[0], p[1]] : [p[0], p[1], zz]));
-    return { ...f, input: { ...f.input, points } };
+    // A bezier's CONTROL rides along with the whole-fixture lift, else the arch
+    // would deform (ends up, apex left behind).
+    const bez = f.input?.bezier?.c
+      ? { bezier: { ...f.input.bezier, c: zz === 0 ? [num(f.input.bezier.c[0]), num(f.input.bezier.c[1])] : [num(f.input.bezier.c[0]), num(f.input.bezier.c[1]), zz] } }
+      : {};
+    return { ...f, input: { ...f.input, points, ...bez } };
   });
 }
 
@@ -147,7 +154,9 @@ export function centrelineLengthPx(f, canvas) {
     return isAutoThickness(h) ? w : Math.max(w, h);
   }
   const { w: W, h: H } = canvasOf(canvas);
-  const pts = Array.isArray(input?.points) ? input.points : [];
+  // A bezier's length is the EVALUATED curve's, not its 2-point chord.
+  const pts = isBezierFixture(input) ? bezierToPoints(input)
+    : Array.isArray(input?.points) ? input.points : [];
   let L = 0;
   for (let i = 1; i < pts.length; i++) {
     L += Math.hypot(((Number(pts[i]?.[0]) || 0) - (Number(pts[i - 1]?.[0]) || 0)) * W,
@@ -200,6 +209,17 @@ export function fixtureRange(f) {
 // polyline mode keeps its normalized points as-is. Pure — returns a new fixture.
 export function syncFixtureGeometry(fixture, canvas) {
   const input = fixture.input || {};
+  if (isBezierFixture(input)) {
+    // Bezier: the TWO ends + the control are canonical (normalized like points;
+    // z kept). No transform — the evaluated curve is the geometry.
+    const pts = normPts(input.points);
+    const ends = [pts[0], pts[pts.length - 1]];
+    const c = Array.isArray(input.bezier?.c)
+      ? normPts([input.bezier.c])[0]
+      : midOf(ends[0], ends[1]);
+    const { transform, ...rest } = input;
+    return { ...fixture, input: { ...rest, mode: 'bezier', points: ends, bezier: { c } } };
+  }
   if (isPolylineFixture(input)) {
     const pts = normPts(input.points);
     const points = pts.length >= 2 ? pts : [[0.05, 0.5], [0.95, 0.5]];
@@ -221,11 +241,53 @@ const mapFixture = (show, fxId, fn) => ({
   fixtures: (show.fixtures || []).map((f) => (f.id === fxId ? fn(f) : f)),
 });
 
-// Replace a polyline fixture's full point list (normalized). Used by group-move.
+// Replace a points-canonical fixture's full point list (normalized). Used by
+// group-move/scale. A bezier keeps its mode (its two ends ARE its point list).
 export function setFixturePoints(show, fxId, points) {
   return mapFixture(show, fxId, (f) => ({
-    ...f, input: { ...f.input, mode: 'polyline', points: normPts(points) },
+    ...f, input: { ...f.input, mode: isBezierFixture(f.input) ? 'bezier' : 'polyline', points: normPts(points) },
   }));
+}
+
+// Move a bezier fixture's CONTROL point (normalized). `c` may be [x, y] —
+// keeping the control's existing height, like setFixtureVertex — or [x, y, z].
+// z = 0 strips back to a 2-tuple (the 2D guard).
+export function setBezierControl(show, fxId, c) {
+  return mapFixture(show, fxId, (f) => {
+    if (!isBezierFixture(f.input)) return f;
+    const prev = Array.isArray(f.input.bezier?.c) ? f.input.bezier.c : [];
+    const z = c.length > 2 ? num(c[2]) : num(prev[2]);
+    const nc = z !== 0 ? [num(c[0]), num(c[1]), z] : [num(c[0]), num(c[1])];
+    return { ...f, input: { ...f.input, bezier: { ...f.input.bezier, c: nc } } };
+  });
+}
+
+// Switch a fixture's SHAPE: 'bar' (straight transform) | 'polyline' (bendable
+// run) | 'bezier' (quadratic arch). Ends carry over; entering bezier seeds the
+// control at the chord midpoint; leaving bezier drops it. Pure.
+export function setFixtureShape(show, fxId, shape, canvas) {
+  const cv = canvas ?? show.composition?.canvas;
+  return mapFixture(show, fxId, (f) => {
+    const input = f.input || {};
+    const cur = isBezierFixture(input) ? 'bezier' : isPolylineFixture(input) ? 'polyline' : 'bar';
+    if (cur === shape) return f;
+    const base = normPts(
+      input.points?.length ? input.points : pointsFromTransform(input.transform, cv),
+    );
+    const ends = base.length >= 2 ? [base[0], base[base.length - 1]] : [[0.05, 0.5], [0.95, 0.5]];
+    if (shape === 'bezier') {
+      const { transform, ...rest } = input;
+      return { ...f, input: { ...rest, mode: 'bezier', points: ends, bezier: { c: midOf(ends[0], ends[1]) } } };
+    }
+    if (shape === 'polyline') {
+      const { transform, bezier, ...rest } = input;
+      return { ...f, input: { ...rest, mode: 'polyline', points: base.length >= 2 ? base : ends } };
+    }
+    // bar: straighten end-to-end; z (if any) survives via the points cache.
+    const transform = transformFromPoints(ends, cv);
+    const { bezier, ...rest } = input;
+    return { ...f, input: { ...rest, mode: 'bar', transform, points: withZOf(ends, pointsFromTransform(transform, cv)) } };
+  });
 }
 
 // Move ONE vertex of a polyline fixture to an absolute normalized position.
@@ -240,7 +302,7 @@ export function setFixtureVertex(show, fxId, index, nx, ny, nz) {
     const z = nz != null ? num(nz) : num(pts[index][2]);
     pts[index] = [num(nx), num(ny), z];
     const flat = pts.every((p) => !p[2]);
-    return { ...f, input: { ...f.input, mode: 'polyline',
+    return { ...f, input: { ...f.input, mode: isBezierFixture(f.input) ? 'bezier' : 'polyline',
       points: flat ? pts.map((p) => [p[0], p[1]]) : normPts(pts) } };
   });
 }
@@ -310,6 +372,11 @@ export function fitCanvasToFixtures(show, { target = 1280, pad = 24 } = {}) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const ext = (x, y) => { if (x < minX) minX = x; if (y < minY) minY = y; if (x > maxX) maxX = x; if (y > maxY) maxY = y; };
   for (const f of fixtures) {
+    if (isBezierFixture(f.input)) {
+      // Bezier: the EVALUATED curve is the footprint (the arch bulges past its ends).
+      for (const p of bezierToPoints(f.input)) ext((Number(p[0]) || 0) * cv.w, (Number(p[1]) || 0) * cv.h);
+      continue;
+    }
     const pts = (Array.isArray(f.input?.points) ? f.input.points : [])
       .map((p) => [(Number(p?.[0]) || 0) * cv.w, (Number(p?.[1]) || 0) * cv.h]);
     if (!pts.length) continue;
@@ -330,13 +397,19 @@ export function fitCanvasToFixtures(show, { target = 1280, pad = 24 } = {}) {
   const newW = Math.round(spanX * scale + pad * 2);
   const newH = Math.round(spanY * scale + pad * 2);
   const newCanvas = { w: newW, h: newH };
-  // Map a current-canvas normalized point → fitted normalized point.
+  // Map a current-canvas normalized point → fitted normalized point (z, when
+  // present, rides along unchanged — the fit is a 2D reframe).
   const remap = (p) => {
     const px = (Number(p?.[0]) || 0) * cv.w, py = (Number(p?.[1]) || 0) * cv.h;
-    return [((px - minX) * scale + pad) / newW, ((py - minY) * scale + pad) / newH];
+    const q = [((px - minX) * scale + pad) / newW, ((py - minY) * scale + pad) / newH];
+    if (p?.length > 2) q.push(Number(p[2]) || 0);
+    return q;
   };
   const out = fixtures.map((f) => {
     const pts = (Array.isArray(f.input?.points) ? f.input.points : []).map(remap);
+    if (isBezierFixture(f.input)) {
+      return { ...f, input: { ...f.input, points: pts, bezier: { ...f.input.bezier, c: remap(f.input.bezier?.c || pts[0]) } } };
+    }
     if (isPolylineFixture(f.input)) {
       return { ...f, input: { ...f.input, mode: 'polyline', points: pts.length >= 2 ? pts : f.input.points } };
     }

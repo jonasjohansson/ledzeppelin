@@ -125,6 +125,55 @@ test('3D perspective projection foreshortens an arc bending away in depth', () =
     'flat 2D path should sample the arc with near-uniform spacing');
 });
 
+// --- bezier fixtures (Phase 4): the EVALUATED curve is the sampled centreline ---
+import { validate } from '../src/model/show.js';
+import { bezierToPoints } from '../src/model/bezier.js';
+import { samplePoints3D } from '../src/model/sampling.js';
+import { project } from '../src/model/project3d.js';
+
+const bezierShow = (c, view3d) => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  s = addFixture(s, { id: 'arc', name: 'arc', pixelCount: 30, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 30 },
+    input: { mode: 'bezier', points: [[0.2, 0.5, 0], [0.8, 0.5, 0]], bezier: { c }, samples: 30 } });
+  if (view3d) s.composition.view3d = view3d;
+  return s;
+};
+const uvsOf = (r, id) => {
+  const sp = r.spans.find((x) => x.id === id);
+  const out = [];
+  for (let i = sp.start; i < sp.start + sp.count; i++) out.push([r.sampleUVs[i * 2], r.sampleUVs[i * 2 + 1]]);
+  return out;
+};
+
+test('validate() accepts a bezier fixture (2 end points)', () => {
+  const s = bezierShow([0.5, 0.5, 0.5]);
+  assert.deepEqual(validate(s), { ok: true, errors: [] });
+});
+
+test('bezier UVs = the projected 3D-arc-length resample of the EVALUATED curve', () => {
+  const cam = perspectiveCamera({ pos: [0.5, 0.5, -0.5], target: [0.5, 0.5, 0], up: [0, -1, 0], fov: 90, aspect: 1 });
+  const s = bezierShow([0.5, 0.5, 0.5], { mode: '3d', projectionCamera: cam });
+  const got = uvsOf(buildPipelineInputs(s), 'arc');
+  const expect = samplePoints3D(bezierToPoints(s.fixtures[0].input), 30)
+    .map((p) => { const uv = project(p, cam); return Number.isFinite(uv[0]) ? uv : [-1, -1]; })
+    .map(([u, v]) => [Math.fround(u), Math.fround(v)]);   // pipeline stores Float32
+  assert.equal(got.length, expect.length);
+  got.forEach(([u, v], i) => { assert.equal(u, expect[i][0], `u[${i}]`); assert.equal(v, expect[i][1], `v[${i}]`); });
+});
+
+test('a mid-lift arch under the FLAT camera keeps a symmetric UV distribution about the apex', () => {
+  // 2D mode (no view3d): the flat path samples the evaluated curve — a
+  // symmetric standing arch must sample symmetrically about its apex (x = 0.5).
+  const s = bezierShow([0.5, 0.5, 0.5]);
+  const uv = uvsOf(buildPipelineInputs(s), 'arc');
+  const n = uv.length;
+  for (let k = 0; k < n; k++) {
+    assert.ok(Math.abs((uv[k][0] - 0.5) + (uv[n - 1 - k][0] - 0.5)) < 1e-6, `u mirrors at k=${k}`);
+    assert.ok(Math.abs(uv[k][1] - uv[n - 1 - k][1]) < 1e-6, `v mirrors at k=${k}`);
+  }
+});
+
 // BEHIND-CAMERA LEDs must go BLACK: projectFramed returns [NaN, NaN] for a point
 // at/behind the camera plane; the pipeline substitutes the out-of-range sentinel
 // [-1, -1], which the GPU sampler's bounds check already reads as "outside the

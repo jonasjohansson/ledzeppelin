@@ -23,7 +23,8 @@ import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl } from './model/fixture-transform.js';
+import { isBezierFixture } from './model/bezier.js';
 import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
@@ -985,36 +986,66 @@ function positionEditor(sel) {
       return b;
     })(),
   ]);
-  // POLYLINE: the geometry IS its vertices, so Position is a compact per-vertex
-  // XYZ table (px; Z = height off the canvas plane, visible in 3D mode). The
-  // bar's transform fields don't apply — writing a transform would straighten
-  // the run. Values commit through setFixtureVertex (undoable via rebuild).
-  const vertexTable = () => {
+  // Compact XYZ table (px; Z = height off the canvas plane, visible in 3D
+  // mode) for geometries whose SHAPE is their points — a polyline's vertices, a
+  // bezier's ends + control — where the bar's transform fields don't apply.
+  // rows = [{ key, label, p (normalized [x,y,z?]), set(n3) }]; commits are
+  // undoable via rebuild.
+  const xyzTable = (rows, title) => {
     const cv = show.composition?.canvas || { w: 1280, h: 720 };
     const grid = oel('div', { className: 'vtx-grid' });
     for (const h of ['#', 'X', 'Y', 'Z']) grid.append(oel('span', { className: 'vtx-h', textContent: h }));
-    const setV = (i, axis, v) => {
-      const p = ((show.fixtures.find((f) => f.id === sel.id)?.input?.points) || [])[i];
-      if (!p) return;
-      const n = [Number(p[0]) || 0, Number(p[1]) || 0, Number(p[2]) || 0];
-      n[axis] = axis === 0 ? v / cv.w : v / cv.h;   // x normalizes by width; y/z by height
-      apply(setFixtureVertex(show, sel.id, i, n[0], n[1], n[2]));
-    };
-    (sel.input.points || []).forEach((p, i) => {
-      grid.append(oel('span', { className: 'vtx-idx', textContent: String(i + 1) }));
+    rows.forEach((row) => {
+      grid.append(oel('span', { className: 'vtx-idx', textContent: row.label }));
+      const p = row.p || [0, 0];
       [((Number(p[0]) || 0) * cv.w), ((Number(p[1]) || 0) * cv.h), ((Number(p[2]) || 0) * cv.h)].forEach((val, axis) => {
         const inp = oel('input', { type: 'number', step: '1', value: String(Math.round(val)) });
         // data-vtx keys focus restoration across the inspector rebuild (see updateInspector).
-        inp.dataset.vtx = `${i}:${axis}`;
-        inp.addEventListener('change', () => setV(i, axis, inp.value === '' ? 0 : Number(inp.value)));
+        inp.dataset.vtx = `${row.key}:${axis}`;
+        inp.addEventListener('change', () => {
+          const v = inp.value === '' ? 0 : Number(inp.value);
+          const n = [Number(p[0]) || 0, Number(p[1]) || 0, Number(p[2]) || 0];
+          n[axis] = axis === 0 ? v / cv.w : v / cv.h;   // x normalizes by width; y/z by height
+          row.set(n);
+        });
         grid.append(inp);
       });
     });
-    grid.title = 'vertex positions in canvas px — Z lifts a vertex off the canvas plane (edit in 3D mode with Alt-drag too)';
+    grid.title = title;
     return grid;
+  };
+  const vertexTable = () => xyzTable(
+    (sel.input.points || []).map((p, i) => ({ key: String(i), label: String(i + 1), p,
+      set: (n) => apply(setFixtureVertex(show, sel.id, i, n[0], n[1], n[2])) })),
+    'vertex positions in canvas px — Z lifts a vertex off the canvas plane (edit in 3D mode with Alt-drag too)');
+  const bezierTable = () => {
+    const pts = sel.input.points || [];
+    const endRow = (i, label) => ({ key: String(i), label, p: pts[i],
+      set: (n) => apply(setFixtureVertex(show, sel.id, i, n[0], n[1], n[2])) });
+    return xyzTable([
+      endRow(0, '1'),
+      { key: 'c', label: 'C', p: sel.input.bezier?.c, set: (n) => apply(setBezierControl(show, sel.id, n)) },
+      endRow(pts.length - 1, '2'),
+    ], 'the arch: two ends + the C(ontrol) in canvas px — raise C’s Z to pull the middle up into a standing arch');
+  };
+  // SHAPE row — Bar (straight box) | Polyline (bendable run) | Bezier (arch).
+  // Conversions keep the ends; entering bezier seeds the control at the chord
+  // midpoint. Matrices keep their grid footprint (no shape row).
+  const shapeRow = () => {
+    const cur = isBezierFixture(sel.input) ? 'bezier' : isPolylineFixture(sel.input) ? 'polyline' : 'bar';
+    return oel('div', { className: 'dir-btns shape-row' }, [
+      ['bar', 'Bar', 'straight strip — an x/y/w/h/rotation box'],
+      ['polyline', 'Polyline', 'bendable multi-segment run (double-click the run to add bends)'],
+      ['bezier', 'Bezier', 'quadratic arch — drag the diamond control; in 3D, Alt-drag it up into a standing arch'],
+    ].map(([m, label, tip]) => oel('button', {
+      className: 'dir-btn' + (m === cur ? ' on' : ''), textContent: label, title: tip,
+      onclick: () => { if (m !== cur) apply(setFixtureShape(show, sel.id, m)); },
+    })));
   };
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
+      if (sel.input?.mode !== 'grid') body.append(shapeRow());
+      if (isBezierFixture(sel.input)) { body.append(bezierTable(), reverseRow()); return; }
       if (isPolylineFixture(sel.input)) { body.append(vertexTable(), reverseRow()); return; }
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
@@ -2286,7 +2317,13 @@ function placeFixtureCopies(srcList) {
       const th = thicknessOf(copy, next.composition?.canvas || { w: 1280, h: 720 });
       const aabbW = Math.abs(Math.cos(rad)) * (tf.w || 0) + Math.abs(Math.sin(rad)) * th;
       tf.x = (tf.x || 0) + Math.max(aabbW, 12) + 8;
-    } else if (Array.isArray(copy.input?.points)) copy.input.points = copy.input.points.map(([x, y]) => [x + 0.02, y + 0.02]);
+    } else if (Array.isArray(copy.input?.points)) {
+      // Nudge a points-canonical copy off its original — z (height) rides along,
+      // and a bezier's control moves WITH its ends so the arch stays intact.
+      const nudge = (p) => [p[0] + 0.02, p[1] + 0.02, ...(p.length > 2 ? [p[2]] : [])];
+      copy.input.points = copy.input.points.map(nudge);
+      if (Array.isArray(copy.input.bezier?.c)) copy.input.bezier.c = nudge(copy.input.bezier.c);
+    }
     next.fixtures.push(copy);
     newIds.push(copy.id);
     placed.push(structuredClone(copy));

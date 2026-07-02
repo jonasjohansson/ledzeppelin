@@ -3,6 +3,7 @@ import { chainOffset } from './chains.js';
 import { gridPoints, isGridFixture } from './grid.js';
 import { isDmxFixture, dmxChannelsOf } from './dmx.js';
 import { fixtureCentreUV } from './fixture-transform.js';
+import { isBezierFixture, bezierToPoints } from './bezier.js';
 import { project, cameraFromView3d } from './project3d.js';
 
 // True when a fixture's polyline carries 3D points (any point has a defined
@@ -24,8 +25,12 @@ function fixtureSampleUVs(f, canvas, cam) {
     const pts = gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, canvas);
     return f.input?.reversed ? pts.reverse() : pts;
   }
-  const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
-  if (cam && cam.mode !== 'flat' && pointsAre3D(f.input.points)) {
+  // A bezier's sampled centreline is its EVALUATED curve, not the control
+  // triangle — after evaluation it flows through the same resample/project
+  // path as a polyline (the evaluated points carry z when the arch is lifted).
+  const geomPts = isBezierFixture(f.input) ? bezierToPoints(f.input) : f.input.points;
+  const basePts = f.input.reversed ? [...geomPts].reverse() : geomPts;
+  if (cam && cam.mode !== 'flat' && pointsAre3D(geomPts)) {
     return samplePoints3D(basePts, f.input.samples).map((p) => {
       const uv = project(p, cam);
       // A point at/behind the camera projects to [NaN, NaN] (see projectFramed).

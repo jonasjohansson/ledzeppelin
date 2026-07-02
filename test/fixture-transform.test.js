@@ -161,6 +161,73 @@ test('removeFixtureVertex on a LIFTED run keeps polyline mode at 2 points (no z-
   for (const p of inp.points) assert.equal(p[2], 0.2);    // the lift survives
 });
 
+// --- bezier mode (Phase 4) -----------------------------------------------------
+import { setFixtureShape, setBezierControl } from '../src/model/fixture-transform.js';
+
+test('setFixtureShape bar → bezier keeps the ends and seeds c at the chord midpoint', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { points: [[0.1, 0.5], [0.9, 0.5]], samples: 4 } }] };
+  show = syncShowFixtures(show);                             // starts as a bar
+  const next = setFixtureShape(show, 'f1', 'bezier');
+  const inp = next.fixtures[0].input;
+  assert.equal(inp.mode, 'bezier');
+  assert.equal(inp.points.length, 2);
+  assert.deepEqual(inp.bezier.c, [0.5, 0.5]);                // midpoint seed
+  assert.equal(inp.transform, undefined);                    // curve is canonical
+});
+
+test('setFixtureShape bezier → bar straightens back to an editable transform', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.1] }, samples: 4 } }] };
+  const next = setFixtureShape(show, 'f1', 'bar');
+  const inp = next.fixtures[0].input;
+  assert.equal(inp.mode, 'bar');
+  assert.ok(inp.transform);
+  assert.equal(inp.bezier, undefined);
+});
+
+test('setFixtureShape polyline ↔ bezier uses first/last as the ends', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.2], [0.9, 0.5]], samples: 6 } }] };
+  const next = setFixtureShape(show, 'f1', 'bezier');
+  assert.deepEqual(next.fixtures[0].input.points, [[0.1, 0.5], [0.9, 0.5]]);
+  const back = setFixtureShape(next, 'f1', 'polyline');
+  assert.equal(back.fixtures[0].input.mode, 'polyline');
+  assert.equal(back.fixtures[0].input.bezier, undefined);
+});
+
+test('syncFixtureGeometry normalizes a bezier fixture (ends + c kept, no transform)', () => {
+  const f = { id: 'f1', input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]],
+    bezier: { c: [0.5, 0.5, 0.4] }, transform: { x: 1, y: 2, w: 3 }, samples: 30 } };
+  const out = syncFixtureGeometry(f, CANVAS);
+  assert.equal(out.input.mode, 'bezier');
+  assert.deepEqual(out.input.points, [[0.1, 0.5], [0.9, 0.5]]);
+  assert.deepEqual(out.input.bezier.c, [0.5, 0.5, 0.4]);     // z on the control survives
+  assert.equal(out.input.transform, undefined);              // stale transform dropped
+  const twice = syncFixtureGeometry(out, CANVAS);
+  assert.deepEqual(twice, out);                              // idempotent
+});
+
+test('setBezierControl moves c; omitting z preserves the control\'s existing height', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.5, 0.4] }, samples: 4 } }] };
+  const moved = setBezierControl(show, 'f1', [0.4, 0.3]);
+  assert.deepEqual(moved.fixtures[0].input.bezier.c, [0.4, 0.3, 0.4]);   // z kept
+  const lifted = setBezierControl(show, 'f1', [0.5, 0.5, 0.7]);
+  assert.deepEqual(lifted.fixtures[0].input.bezier.c, [0.5, 0.5, 0.7]);
+  const flat = setBezierControl(show, 'f1', [0.5, 0.5, 0]);
+  assert.deepEqual(flat.fixtures[0].input.bezier.c, [0.5, 0.5]);         // z=0 strips (2D guard)
+});
+
+test('setFixtureZ on a bezier lifts the control point with the ends', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.1] }, samples: 4 } }] };
+  const up = setFixtureZ(show, 'f1', 0.3);
+  assert.deepEqual(up.fixtures[0].input.bezier.c, [0.5, 0.1, 0.3]);
+  for (const p of up.fixtures[0].input.points) assert.equal(p[2], 0.3);
+  const down = setFixtureZ(up, 'f1', 0);
+  assert.deepEqual(down.fixtures[0].input.bezier.c, [0.5, 0.1]);
+});
+
 // --- 3D mapping: preserve a z coordinate on 3-tuple points ---
 test('syncFixtureGeometry preserves z on a 3-tuple polyline (does not drop to 2D)', () => {
   const bent3d = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];
