@@ -609,7 +609,7 @@ export function createPreview(canvasEl, opts = {}) {
           // Bezier: the EVALUATED curve is the body; ends get square handles,
           // the control a hollow diamond tethered by faint dashed guides.
           const curve = geomOf(f);
-          poly(curve, stroke, (selected ? 1.5 : 1) * ck, dash);
+          poly(curve, stroke, (selected ? 1 : 0.6) * ck, dash);   // hairline body (selected slightly heavier)
           const cL = curve.length - 1, a0 = reversed ? curve[cL] : curve[0], a1 = reversed ? curve[cL - 1] : curve[1];
           p.push(arrowS(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke, null, ck));
           if (selected) {
@@ -622,7 +622,7 @@ export function createPreview(canvasEl, opts = {}) {
           continue;
         }
         if (isPolylineFixture(f.input)) {
-          poly(eps, stroke, ck, dash);
+          poly(eps, stroke, 0.6 * ck, dash);   // hairline body, matching the bar footprint
           if (selected) for (const e of eps) { const hx = e[0] * W, hy = e[1] * Hh, s = 4 * ck; p.push(rectS(hx - s, hy - s, s * 2, s * 2, stroke, 1.25 * ck)); }
           const L = eps.length - 1, a0 = reversed ? eps[L] : eps[0], a1 = reversed ? eps[L - 1] : eps[1];
           p.push(arrowS(a0[0] * W, a0[1] * Hh, a1[0] * W, a1[1] * Hh, stroke, null, ck));
@@ -636,7 +636,7 @@ export function createPreview(canvasEl, opts = {}) {
         const cv = show.composition?.canvas || { w: W, h: Hh };
         const ht = (thicknessOf(f, cv) / 2) * (Hh / (cv.h || Hh));
         const c1 = [ax + perpX * ht, ay + perpY * ht], c2 = [bx + perpX * ht, by + perpY * ht], c3 = [bx - perpX * ht, by - perpY * ht], c4 = [ax - perpX * ht, ay - perpY * ht];
-        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="${bodyFill}" stroke="${stroke}" stroke-width="${nz(ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+        p.push(`<polygon points="${nz(c1[0])},${nz(c1[1])} ${nz(c2[0])},${nz(c2[1])} ${nz(c3[0])},${nz(c3[1])} ${nz(c4[0])},${nz(c4[1])}" fill="${bodyFill}" stroke="${stroke}" stroke-width="${nz(0.6 * ck)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
         if (!isDmx) { if (reversed) p.push(arrowS(bx, by, ax, ay, stroke, ht, ck)); else p.push(arrowS(ax, ay, bx, by, stroke, ht, ck)); }
         const cx = (ax + bx) / 2, cy = (ay + by) / 2;
         if (selected) p.push(`<circle cx="${nz(cx)}" cy="${nz(cy)}" r="${nz((dotR + 4) * ck)}" fill="${accCss(.3)}" stroke="${stroke}" stroke-width="${nz(ck)}"/>`);
