@@ -33,7 +33,8 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
+import { updateAudio, setAudioGain, enableAudio, registerMediaElement, unregisterMediaElement } from './model/audio.js';
+import { createSettingsPanel } from './ui/settings.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
@@ -2682,7 +2683,6 @@ outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { re
 // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
 const ACCENT_KEY = 'lz.accent';
 const ACCENT_DEFAULT = '#e8a35c';
-const ACCENT_PRESETS = ['#eceef2', '#e8a35c', '#5cb8e8', '#6ee07d', '#5ce8c8', '#b98cff', '#e85c9e', '#e8d65c', '#ff6b6b'];   // first = near-white / monochrome
 const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
@@ -2800,122 +2800,46 @@ applyTips();   // on boot
 // (Mapping is now a tab of the Canvas island — embedded via iframe — so there's no
 //  separate-window opener anymore.)
 
-// Settings tab: accent colour + audio input (more preferences can join later).
-// Async because the audio device list needs enumerateDevices(); re-run whenever
-// the Settings subtab is opened so the device list (and any granted labels) refresh.
-async function buildSettings(mount) {
-  if (!mount) return;
-  mount.textContent = '';
+// Settings panel — the form itself lives in src/ui/settings.js (shared with the
+// /settings/ popout). This is the MAIN-WINDOW hook set: live show + undo stack,
+// real audio capture, live snap vars, daemon fps push, and the in-document
+// appearance appliers defined above.
+const settingsPanel = createSettingsPanel({
+  getShow: () => show,
+  // Settings owns only composition.audioDevice / composition.audioGain. `undoable`
+  // snapshots first; `defer` coalesces the gain slider's stream of saves.
+  setShow: (next, { undoable = false, defer = false } = {}) => {
+    if (undoable) snapshotForUndo(show);
+    show = next;
+    if (defer) saveShowSoon(); else saveShow(show);
+  },
+  enableAudio: (deviceId) => enableAudio('external', deviceId),   // this window owns capture
+  snap: {
+    get: () => ({ grid: SNAP_GRID, dist: SNAP_DIST }),
+    set: ({ grid, dist } = {}) => {
+      if (grid != null) SNAP_GRID = grid;
+      if (dist != null) SNAP_DIST = dist;
+      saveSnap(); redrawOverlay();
+    },
+  },
+  output: {
+    getFps: savedOutFps,
+    setFps: (n) => { try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
+  },
+  prefs: { getTips: tipsOn, setTips, getNativeCtx: nativeCtxOn, setNativeCtx: setNativeCtxMenu },
+  appearance: {
+    getBrightness: savedBright, setBrightness,
+    getTint: savedTint, setTint,
+    getContrast: savedContrast, setContrast,
+    getTranslucency: savedTranslucency, setTranslucency,
+    getScale: savedScale, setScale: setUiScale,
+    getAccent: savedAccent, setAccent,
+  },
+});
 
-  // --- Audio input (the hardware device for the "Audio External" modulator + gain) ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'audio input' }));
-  const inputs = await listInputs();
-  const curDev = show.composition?.audioDevice || 'default';
-  const sel = oel('select', { title: 'hardware input device for the Audio External modulator' });
-  const opt = (value, label, on) => { const o = oel('option', { value, textContent: label }); if (on) o.selected = true; sel.append(o); };
-  opt('default', 'System default', curDev === 'default');
-  inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, curDev === d.deviceId));
-  sel.addEventListener('change', async () => {
-    const ok = await enableAudio('external', sel.value);
-    snapshotForUndo(show);   // audio-device pick is undoable
-    show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
-    saveShow(show);
-    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input, check permissions';
-  });
-  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
-  mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
-    min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
-    onInput: (v) => { snapshotForUndo(show); show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
-  }));
-
-  // --- Composition file (visuals only — the whole rig saves with the project, ⌘S) ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'composition file' }));
-  mount.append(oel('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
-  mount.append(oel('div', { className: 'seg-hint', textContent: 'to load: drag a project or composition .json onto the window' }));
-
-  // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
-  // on/off lives on the viewport corner button (a quick toggle while placing). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'snap' }));
-  mount.append(Slider('Grid', SNAP_GRID, {
-    min: 2, max: 100, step: 1, default: 20, commit: 'live',
-    onInput: (v) => { SNAP_GRID = Math.round(v); saveSnap(); redrawOverlay(); },
-  }));
-  mount.append(Slider('Distance', SNAP_DIST, {
-    min: 1, max: 40, step: 1, default: 10, commit: 'live',
-    onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
-  }));
-
-  // --- Output: global framerate cap sent to the daemon (caps the DDP/Art-Net rate). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'output' }));
-  mount.append(Slider('Max FPS', savedOutFps(), {
-    min: 1, max: 60, step: 1, default: 42, commit: 'live',
-    onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
-  }));
-
-  // (OSC / socket control lives in the Mapping window now — it shows the canonical
-  // addresses, the socket JSON example, and the OSC :9000 endpoint there.)
-
-  // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
-  const toggleRow = (label, get, set) => {
-    const cb = oel('input', { type: 'checkbox' }); cb.checked = !!get();
-    cb.addEventListener('change', () => set(cb.checked));
-    // Checkbox FIRST so the label has the full remaining width (no truncation).
-    return oel('label', { className: 'fx-field set-toggle' }, [cb, oel('span', { textContent: label })]);
-  };
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'preferences' }));
-  const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
-  mount.append(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } }));
-  mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
-  mount.append(toggleRow('Show tooltips on hover', tipsOn, (v) => setTips(v)));
-  mount.append(toggleRow('Right-click shows the browser menu', nativeCtxOn, (v) => setNativeCtxMenu(v)));
-
-  // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
-  // "recording": it re-runs the show live, interactivity intact. MIDI enable +
-  // input lives in the Mapping window.)
-
-  // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'appearance' }));
-  mount.append(Slider('Brightness', savedBright(), {
-    min: -12, max: 20, step: 1, default: 7, commit: 'live',
-    onInput: (v) => setBrightness(Math.round(v)),
-  }));
-  mount.append(Slider('Accent tint %', savedTint(), {
-    min: 0, max: 220, step: 5, default: 100, commit: 'live',
-    onInput: (v) => setTint(Math.round(v)),
-  }));
-  mount.append(Slider('Contrast %', savedContrast(), {
-    min: 60, max: 130, step: 2, default: 100, commit: 'live',
-    onInput: (v) => setContrast(Math.round(v)),
-  }));
-  mount.append(Slider('Translucency %', savedTranslucency(), {
-    min: 0, max: 90, step: 2, default: 38, commit: 'live',
-    onInput: (v) => setTranslucency(v),
-  }));
-  mount.append(Slider('Text size %', Math.round(savedScale() * 100), {
-    min: 80, max: 140, step: 5, default: 100, commit: 'live',
-    onInput: (v) => setUiScale(v / 100),
-  }));
-
-  // --- Accent colour (least priority → last): preset swatches. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
-  const cur = savedAccent();
-  const swatches = [];
-  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
-  const row = oel('div', { className: 'accent-swatches' });
-  for (const p of ACCENT_PRESETS) {
-    const sw = oel('button', { className: 'accent-swatch', title: p });
-    sw.dataset.hex = p; sw.style.background = p;
-    sw.onclick = () => { setAccent(p); mark(p); };
-    swatches.push(sw); row.append(sw);
-  }
-  mount.append(row);
-  mark(cur);
-}
-
-// --- Settings: a floating overlay panel off the top-left gear (NOT a separate
-// window — buildSettings is wired to live app state; a cross-window settings page
-// would need a sync layer that isn't worth it). Rebuilt on every open (the audio
-// device list needs a fresh enumerate); closed by outside-click / Esc (kit). ---
+// --- Settings: a floating overlay panel off the top-left gear. Rebuilt on every
+// open (the audio device list needs a fresh enumerate); closed by outside-click /
+// Esc (kit). ---
 const settingsPop = document.getElementById('settings-pop');
 const settingsPopBody = document.getElementById('settings-pop-body');
 let settingsDismiss = null;
@@ -2928,7 +2852,7 @@ function closeSettingsPop() {
 function openSettingsPop() {
   if (!settingsPop) return;
   if (!settingsPop.hidden) { closeSettingsPop(); return; }   // gear toggles
-  buildSettings(settingsPopBody);
+  settingsPanel.build(settingsPopBody);
   settingsPop.hidden = false;
   document.getElementById('menu-settings')?.classList.add('open');
   // Park it under the gear (top-left), height-capped; the body scrolls.
@@ -3300,12 +3224,8 @@ openShowInput?.addEventListener('change', async () => {
   openShowInput.value = '';
 });
 
-// Composition file = just the visuals (canvas + layers/clips/effects), no rig.
-function saveCompositionToFile() {
-  const blob = new Blob([JSON.stringify(show.composition || {}, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'composition.json'; a.click(); URL.revokeObjectURL(a.href);
-}
+// (Composition EXPORT — "Save composition…" — lives in the Settings panel, see
+// src/ui/settings.js; it builds the file straight from getShow().composition.)
 const openCompInput = oel('input', { type: 'file', accept: '.json,application/json' });
 openCompInput.style.display = 'none'; document.body.append(openCompInput);
 openCompInput.addEventListener('change', async () => {
