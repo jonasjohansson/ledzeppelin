@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes, nextDeviceColor, DEVICE_COLORS } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes, nextDeviceColor, DEVICE_COLORS, pushTypeToFixtures } from '../src/model/show.js';
 import { normalizeComposition } from '../src/model/layers.js';
 import { flatCamera } from '../src/model/project3d.js';
 
@@ -225,4 +225,36 @@ test('syncDeviceTypes inlines a legacy typeId-only device from its model', () =>
   const d = syncDeviceTypes(show).devices[0];
   assert.equal(d.outputs, 4);          // filled from the model
   assert.equal(d.maxPerOutput, 830);
+});
+
+// --- Explicit template push (C1) -------------------------------------------------
+test('pushTypeToFixtures updates only that type\'s instances and repacks offsets', () => {
+  let s = emptyShow();
+  s = addDevice(s, { id: 'c1', name: 'A', ip: '' });
+  s.fixtureTypes = [
+    { id: 'tA', name: 'Strip A', ledsPerMeter: 60, meters: 1, pixelCount: 60, cols: 60, rows: 1, distribution: 0, colorFormat: '' },
+    { id: 'tB', name: 'Strip B', ledsPerMeter: 30, meters: 1, pixelCount: 30, cols: 30, rows: 1, distribution: 0, colorFormat: '' },
+  ];
+  const fx = (id, typeId, px, off) => ({
+    id, typeId, ledsPerMeter: 60, meters: 1, pixelCount: px, cols: px, rows: 1, distribution: 0, colorFormat: '',
+    output: { deviceId: 'c1', port: 1, pixelOffset: off, pixelCount: px },
+    input: { points: [[0, 0], [1, 1]], samples: px },
+  });
+  s.fixtures = [fx('f1', 'tA', 60, 0), fx('f2', 'tA', 60, 60), fx('f3', 'tB', 30, 120)];
+  // Edit the template: 90px now (templates are standalone — instances unchanged)…
+  s.fixtureTypes[0] = { ...s.fixtureTypes[0], ledsPerMeter: 90, pixelCount: 90, cols: 90 };
+  // …then push it explicitly.
+  const out = pushTypeToFixtures(s, 'tA');
+  const [f1, f2, f3] = out.fixtures;
+  assert.equal(f1.pixelCount, 90);
+  assert.equal(f2.pixelCount, 90);
+  assert.equal(f1.ledsPerMeter, 90);
+  assert.equal(f3.pixelCount, 30);                    // other type untouched
+  assert.equal(f3.ledsPerMeter, 60);
+  assert.equal(f1.output.pixelOffset, 0);             // offsets repacked contiguously
+  assert.equal(f2.output.pixelOffset, 90);
+  assert.equal(f3.output.pixelOffset, 180);
+  assert.equal(f1.input.samples, 90);                 // derived fields follow
+  assert.equal(f1.output.pixelCount, 90);
+  assert.equal(s.fixtures[0].pixelCount, 60);         // pure — input show untouched
 });

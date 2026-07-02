@@ -1,4 +1,4 @@
-import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount } from '../model/show.js';
+import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures } from '../model/show.js';
 import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
@@ -138,7 +138,7 @@ const stripChSuffix = (s) => String(s || '').replace(/\s*\(\d+\s*ch\)\s*$/i, '')
 // - getShow(): current show
 // - setShow(show): persist + rebuild (caller wires this to app.rebuild)
 // - returns { el, refresh() }
-export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, onDeviceAdded, getConnected = () => true }) {
+export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInstantiateFixture, onInstantiateController, onDeviceAdded, onPushType, getConnected = () => true }) {
   // This panel renders the catalog LIST only (the library of controller + fixture
   // models); the selected item's editor goes into the host's sidebar (app wires that
   // via deviceDetailEl / libraryDetailEl and re-renders it on onSelect). The live
@@ -549,7 +549,23 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
           else { delete nt.channels; nt.params = []; nt.name = stripChSuffix(nt.name); }   // leaving DMX → drop params + the (Nch) suffix
         }))),
     ];
-    if (isDmx) { dmxChannelEditor(t, upd, rows); return el('div', { className: 'fx-card fx-detail' }, rows); }
+    // Templates stay standalone (placed fixtures never auto-follow edits) — this
+    // button is the ONE explicit fan-out: overwrite the spec of every placed
+    // fixture of this type from the template (one commit → one undo step in-app).
+    // The popout passes onPushType (the main window must apply the push on ITS
+    // live fixtures — the type-merge sync would clobber a fixtures-only save).
+    const pushRow = () => {
+      const n = typeInstanceCount(show, t.id);
+      return el('button', {
+        className: 'fx-add', disabled: !n,
+        textContent: `Push to placed fixtures (${n})`,
+        title: n
+          ? `overwrite the spec (size, wiring, format, channels) of the ${n} placed fixture${n === 1 ? '' : 's'} of this type with this template`
+          : 'no placed fixtures use this type',
+        onclick: () => { if (onPushType) onPushType(t.id); else commit(pushTypeToFixtures(show, t.id)); },
+      });
+    };
+    if (isDmx) { dmxChannelEditor(t, upd, rows); rows.push(pushRow()); return el('div', { className: 'fx-card fx-detail' }, rows); }
     // Width = pixels per row (a 1-row strip's pixel count — "set pixels directly").
     rows.push(field('Width', numInputCommit(t.cols ?? t.pixelCount, (x) => upd((nt) => { nt.cols = x; }))));
     // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
@@ -577,6 +593,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => { nt.meters = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round((Number(nt.ledsPerMeter) || 0) * x)); }), 0, 20, 0.1),
     );
     // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
+    rows.push(pushRow());
     return el('div', { className: 'fx-card fx-detail' }, rows);
   }
 

@@ -1,4 +1,4 @@
-import { DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams } from './dmx.js';
+import { DMX_CHANNEL_KINDS, paramKinds, paramsToChannels, channelsToParams, isDmxType, fixtureTypeChannels } from './dmx.js';
 
 export function emptyShow() {
   return { version: 1, deviceTypes: [], devices: [], fixtureTypes: [], fixtures: [],
@@ -247,6 +247,33 @@ export function syncFixtureTypes(show) {
 // Count of placed instances referencing a given type.
 export const typeInstanceCount = (show, typeId) =>
   (show.fixtures || []).filter((f) => f.typeId === typeId).length;
+
+// EXPLICIT template push (C1): overwrite the SPEC fields of every placed fixture
+// with `typeId` from its template. Instances stay standalone (the invariant) —
+// this is the one deliberate "fan out the template" action. Copies exactly the
+// fields the instance owns per syncFixtureTypes (size/grid/format/wiring + the
+// DMX params/channels), leaves placement + patch alone, and repacks offsets
+// (pixel counts may have changed). Pure; returns a new show.
+export function pushTypeToFixtures(show, typeId) {
+  const t = (show.fixtureTypes || []).find((x) => x.id === typeId);
+  if (!t) return show;
+  const s = clone(show);
+  for (const f of s.fixtures || []) {
+    if (f.typeId !== typeId) continue;
+    f.ledsPerMeter = t.ledsPerMeter; f.meters = t.meters;
+    f.cols = t.cols; f.rows = t.rows; f.pixelCount = t.pixelCount;
+    f.distribution = t.distribution; f.colorFormat = t.colorFormat ?? '';
+    if (t.colorOrder != null) f.colorOrder = t.colorOrder;
+    if (isDmxType(t)) {
+      f.params = structuredClone(t.params || []);
+      f.channels = structuredClone(t.channels || paramsToChannels(t.params || []));
+      if (f.input?.mode === 'dmx' && f.input.dmx) f.input.dmx.channels = fixtureTypeChannels(t);
+    }
+    if (f.output) f.output.pixelCount = f.pixelCount;
+    if (f.input) f.input.samples = f.pixelCount;
+  }
+  return repackOffsets(s);
+}
 
 // Reassign every fixture's device-local pixelOffset to pack contiguously from 0,
 // in fixture-array order, per device — and mirror output.pixelCount to pixelCount.

@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -840,6 +840,16 @@ if (invBus) {
     if (e.data?.type === 'inventory-import') {
       const saved = loadShow();
       if (saved) applyImportedShow(saved);
+      return;
+    }
+    // Template "push to placed fixtures" done in the popout → apply the push on OUR
+    // live fixtures (the popout's blob has stale fixtures, so we re-run it here;
+    // rebuild makes it one undoable step). The type itself arrived just before via
+    // 'inventory-changed' (per-channel message order is guaranteed).
+    if (e.data?.type === 'inventory-push-type') {
+      rebuild(pushTypeToFixtures(show, e.data.typeId));
+      saveShow(show);
+      panel.refresh(); renderOutput(); redrawOverlay();
       return;
     }
     if (e.data?.type !== 'inventory-changed') return;

@@ -14,7 +14,7 @@
 import { createFixturePanel, loadShow, saveShow } from '../src/ui/fixtures.js';
 import { createImportPanel } from '../src/ui/import.js';
 import { syncAccent } from '../src/ui/sync-accent.js';
-import { emptyShow, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
+import { emptyShow, syncDeviceTypes, syncFixtureTypes, pushTypeToFixtures } from '../src/model/show.js';
 
 const $ = (id) => document.getElementById(id);
 const listEl = $('inv-list');
@@ -60,6 +60,16 @@ const panel = createFixturePanel({
   setShow: (next) => persistAndBroadcast(next),
   onSelect: () => mountDetail(),
   onPick: () => mountDetail(),
+  // "Push to placed fixtures": apply locally (covers the standalone case), then
+  // tell the MAIN window to apply the push on its LIVE fixtures — the ordinary
+  // 'inventory-changed' sync merges TYPE arrays only and would clobber a
+  // fixtures-only save from this window.
+  onPushType: (typeId) => {
+    show = pushTypeToFixtures(show, typeId);
+    saveShow(show);
+    bus.postMessage({ type: 'inventory-push-type', typeId });
+    panel.refresh();   // → onSelect → mountDetail() (button count/label stays fresh)
+  },
   getConnected: () => false,
 });
 
