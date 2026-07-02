@@ -2011,6 +2011,18 @@ function syncMode3d() {
   // image drawn flat would be spatially wrong under an angled viewport. It also
   // reveals the PROJECTION preset row in the stage corner.
   document.body.classList.toggle('mode-3d', is3D());
+  // The 3D scene draws ON the fixture overlay, and ALL viewport gestures (orbit/
+  // pan/select) run through its pointer handlers — so 3D REQUIRES the overlay.
+  // Enforced HERE (the one place mode is reflected) so it also covers loading a
+  // show persisted in 3D and undo/redo across the mode flip; without this the
+  // viewport loaded dead: no scene, no orbit, just the flat composite. The EDIT
+  // toggle is disabled in 3D for the same reason (hiding the overlay = hiding
+  // the viewport).
+  if (is3D() && !overlayVisible) setOverlay(true);
+  if (overlayToggleBtn) {
+    overlayToggleBtn.disabled = is3D();
+    overlayToggleBtn.title = is3D() ? 'fixture overlay is always on in 3D (it is the 3D viewport)' : 'Edit fixtures (show the fixture overlay)';
+  }
   syncProjRow();
   redrawOverlay();
 }
@@ -2018,8 +2030,7 @@ function toggleMode3d() {
   snapshotForUndo(show);              // a mode flip is an undoable edit
   show = toggleView3d(show);
   saveShow(show);
-  if (is3D() && !overlayVisible) setOverlay(true);   // the 3D scene draws on the fixture overlay
-  syncMode3d();
+  syncMode3d();                       // enforces the overlay in 3D (see above)
 }
 mode3dBtn?.addEventListener('click', toggleMode3d);
 
