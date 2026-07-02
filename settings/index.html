@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#131110">
+<title>Settings · LED Zeppelin</title>
+<link rel="icon" type="image/png" href="../icons/favicon.png">
+<link rel="stylesheet" href="../src/ui/ui.css">
+<style>
+  /* Settings window — the standalone preferences editor (opened from the main
+     window's gear, like Library/Mapping — the C2 "popups everywhere" direction).
+     Styled from the shared design tokens in ../src/ui/ui.css so it reads as the
+     same serious, near-black, mono, hairline app surface. It mounts the SAME
+     panel the main window built (createSettingsPanel) — see settings.js. */
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
+  .set-wrap { padding: var(--s5); max-width: 480px; margin: 0 auto; }
+  .set-head { display: flex; align-items: baseline; gap: var(--s5); margin-bottom: var(--s4); }
+  .set-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
+  .set-pane { border: 1px solid var(--line); border-radius: var(--radius, 4px); padding: var(--s4); background: var(--bg-2, var(--bg)); }
+  #set-body .fx-add { margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="set-wrap">
+  <div class="set-head">
+    <span class="set-title">Settings</span>
+  </div>
+  <div class="set-pane">
+    <div id="set-body"></div>
+  </div>
+</div>
+<script type="module" src="./settings.js"></script>
+</body>
+</html>
