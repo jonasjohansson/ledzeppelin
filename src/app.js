@@ -3,6 +3,8 @@ import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureT
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
+import { packVolumetrics } from './engine/fields.js';
+import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
 import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
@@ -3071,12 +3073,37 @@ function loopBody(ts) {
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
+    // VOLUMETRIC clips: an active clip whose source is a volumetric field is
+    // SKIPPED by the canvas compositor and instead blended per-LED (at each
+    // LED's world xyz) in the sampler pass. Collected in LAYER ORDER (bottom →
+    // top, the compositor's blend order) from the same resolved renderLayers,
+    // so params/animation/modulation behave exactly like 2D clips. Capped at 4
+    // (uniform budget — extras beyond the first 4 are ignored; the clip UI
+    // documents the cap). The clip's effective opacity mirrors the compositor:
+    // layer opacity × clip opacity × master. Note: volumetric clips switch
+    // instantly (no crossfade) — the fade machinery is a canvas concept.
+    let vol = null;
+    {
+      const act = [];
+      const anySoloV = renderLayers.some((l) => l && l.solo);
+      for (const L of renderLayers) {
+        if (!L || L.bypass || (anySoloV && !L.solo)) continue;
+        const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
+        if (!c || !getEntry(c.generator)?.volumetric) continue;
+        act.push({
+          generator: c.generator, params: c.params, blend: L.blend,
+          opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
+        });
+      }
+      if (act.length) vol = { ...packVolumetrics(act), time: t, trigSecs: pulseTrigSecs };
+    }
+
     // A live fixture drag flagged the sampler stale — rebuild it from the dragged
     // positions (throttled to this frame) so the lit content follows in realtime.
     if (samplerDirty) { refreshSampler(); samplerDirty = false; }
     // Sample composited canvas → RGBA8 per output pixel, ship RGB, feed preview.
     // No fixtures ⇒ no sampler; still composite to screen below (don't crash).
-    lastRGBA = sampler ? sampler.sample(compositor.tex) : null;
+    lastRGBA = sampler ? sampler.sample(compositor.tex, vol) : null;
     if (lastRGBA) {
       for (const s of hiddenSpans) lastRGBA.fill(0, s.start * 4, (s.start + s.count) * 4); // hidden → dark on the wall
       if (resolveLayerBindings()) bridge?.setRoute?.(curRoute);   // live layer-bound DMX params
@@ -3419,6 +3446,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openMenu
 // sample). Tries to play on load; if autoplay is blocked, fires on first input.
 // Pick a style / disable via localStorage 'lz.riff' (see startup-riff.js).
 armStartupRiff();
+
+// TEST HOOK (e2e): read-only access to the latest sampled output buffer + the
+// live show. Used by test/e2e/*.mjs (Playwright) to pin the sampler's bytes —
+// e.g. the "no volumetric clips ⇒ byte-identical" regression. Harmless in prod.
+window.__lz = { rgba: () => lastRGBA, show: () => show };
 
 // --- PWA: register the service worker so the editor installs as an app and runs
 // offline (cached app shell). Best-effort — needs a secure context (https or

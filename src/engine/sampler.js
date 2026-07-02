@@ -3,10 +3,80 @@ import { makeTarget, program } from './gl.js';
 // Each fragment maps its (x,y) cell to a linear LED index and samples the canvas
 // at that LED's UV. The map texture + the output target share one W×H layout, so
 // reading back row-major yields the LEDs in linear index order (i = y*W + x).
+//
+// VOLUMETRIC FIELD PASS: after the canvas sample, up to 4 active volumetric
+// clips are evaluated at this LED's WORLD xyz (uPos — see pipeline.js) and
+// blended onto the sampled colour with the clip's layer blend + opacity (the
+// same premultiplied math the compositor uses for layer blits). The field
+// functions are GLSL twins of src/engine/fields.js (the unit-tested JS
+// reference — keep them in lockstep). With uVolCount == 0 the loop body never
+// runs and the output is byte-identical to the plain sampler.
+//
+// Uniform packing per clip i (see packVolumetrics in fields.js):
+//   uVolMeta[i] = (fieldId, blendMode, opacity, 0)
+//   uVolA/B[i]  = field params   uVolColA/B[i] = colours
 const SAMPLE_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uCanvas;
 uniform sampler2D uMap;
+uniform sampler2D uPos;      // per-LED world xyz (same W×H layout as uMap)
+uniform int uVolCount;       // active volumetric clips (0 = plain pass-through)
+uniform float uT;            // seconds (noise3d drift)
+uniform float uTrigs[8];     // seconds since recent triggers (spherepulse shells)
+uniform int uTrigCount;
+uniform vec4 uVolMeta[4];
+uniform vec4 uVolA[4];
+uniform vec4 uVolB[4];
+uniform vec3 uVolColA[4];
+uniform vec3 uVolColB[4];
+
+// --- field kit (twins of fields.js) ---
+float vband(float d, float th, float so){
+  float hw = max(1e-4, th) * 0.5;
+  float inner = hw * (1.0 - clamp(so, 0.0, 1.0));
+  float t = clamp((abs(d) - inner) / max(hw - inner, 1e-5), 0.0, 1.0);
+  return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+float vaxis(vec3 p, float axis){ return axis < 0.5 ? p.x : (axis < 1.5 ? p.y : p.z); }
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float x00 = mix(vhash3(i), vhash3(i + vec3(1, 0, 0)), f.x);
+  float x10 = mix(vhash3(i + vec3(0, 1, 0)), vhash3(i + vec3(1, 1, 0)), f.x);
+  float x01 = mix(vhash3(i + vec3(0, 0, 1)), vhash3(i + vec3(1, 0, 1)), f.x);
+  float x11 = mix(vhash3(i + vec3(0, 1, 1)), vhash3(i + vec3(1, 1, 1)), f.x);
+  return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
+}
+float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
+  for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
+
+// One packed clip's field at world point p → PREMULTIPLIED rgba.
+vec4 fieldColor(int i, vec3 p){
+  int id = int(uVolMeta[i].x + 0.5);
+  if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
+    float v = vband(vaxis(p, uVolA[i].x) - uVolA[i].y, uVolA[i].z, uVolA[i].w);
+    return vec4(uVolColA[i] * v, v);
+  }
+  if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
+    float g = fract(vaxis(p, uVolA[i].x) - uVolA[i].y);
+    return vec4(mix(uVolColA[i], uVolColB[i], g), 1.0);
+  }
+  if (id == 2) {           // noise 3d: A = (scale, speed, -, -)
+    float v = clamp(vfbm3(p * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
+    return vec4(uVolColA[i] * v, v);
+  }
+  // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
+  // The static shell at A.w, plus one expanding shell per recent trigger
+  // (radius = age·speed — the same field re-evaluated, brightest wins).
+  float d = length(p - uVolA[i].xyz);
+  float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
+  for (int k = 0; k < 8; k++) {
+    if (k >= uTrigCount) break;
+    v = max(v, vband(d - uTrigs[k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
+  }
+  return vec4(uVolColA[i] * v, v);
+}
+
 void main(){
   ivec2 t = ivec2(gl_FragCoord.xy);
   vec2 suv = texelFetch(uMap, t, 0).rg;
@@ -16,8 +86,26 @@ void main(){
   // LEDs whose sample point falls OUTSIDE the composition read black, not the
   // smeared edge pixel that CLAMP_TO_EDGE would give — so a fixture pushed past
   // the canvas edge simply goes dark there (per-LED, so a half-off bar is half-lit).
-  if (c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0) { frag = vec4(0.0, 0.0, 0.0, 1.0); return; }
-  frag = texture(uCanvas, c);
+  // (No early return: volumetric fields still light off-canvas LEDs — they live
+  // in world space, not on the canvas.)
+  vec4 base = vec4(0.0, 0.0, 0.0, 1.0);
+  if (!(c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0)) base = texture(uCanvas, c);
+  vec3 rgb = base.rgb;
+  for (int i = 0; i < 4; i++) {
+    if (i >= uVolCount) break;
+    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz);
+    float op = uVolMeta[i].z;
+    vec3 src = f.rgb * op; float sa = f.a * op;
+    int mode = int(uVolMeta[i].y + 0.5);
+    // Premultiplied blends — factor-for-factor the compositor's setBlend():
+    // 0 alpha (over) · 1 add · 2 screen · 3 multiply.
+    if (mode == 0) rgb = src + rgb * (1.0 - sa);
+    else if (mode == 2) rgb = src + rgb * (1.0 - src);
+    else if (mode == 3) rgb = rgb * (src + vec3(1.0 - sa));
+    else rgb = rgb + src;
+    rgb = clamp(rgb, 0.0, 1.0);
+  }
+  frag = vec4(rgb, base.a);
 }`;
 
 // samplePositions (optional, Float32Array len 3N — xyz per LED, same order as
@@ -40,10 +128,33 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, uvs);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  // Per-LED WORLD xyz for the volumetric field pass — same W×H layout as the uv
+  // map. Padded like the uvs; a missing/short positions array reads as origin.
+  const posData = (() => {
+    const a = new Float32Array(W * H * 3);
+    if (samplePositions?.length) a.set(samplePositions.subarray(0, Math.min(samplePositions.length, a.length)));
+    return a;
+  })();
+  const posTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, posTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, posData);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, W, H);
   const prog = program(gl, SAMPLE_FS);
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
+  const locPos = gl.getUniformLocation(prog, 'uPos');
+  const locVolCount = gl.getUniformLocation(prog, 'uVolCount');
+  const locT = gl.getUniformLocation(prog, 'uT');
+  const locTrigs = gl.getUniformLocation(prog, 'uTrigs[0]');
+  const locTrigCount = gl.getUniformLocation(prog, 'uTrigCount');
+  const locVolMeta = gl.getUniformLocation(prog, 'uVolMeta[0]');
+  const locVolA = gl.getUniformLocation(prog, 'uVolA[0]');
+  const locVolB = gl.getUniformLocation(prog, 'uVolB[0]');
+  const locVolColA = gl.getUniformLocation(prog, 'uVolColA[0]');
+  const locVolColB = gl.getUniformLocation(prog, 'uVolColB[0]');
+  const TRIG_SCRATCH = new Float32Array(8);
   const byteLen = W * H * 4;
   const out = new Uint8Array(byteLen);
   const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
@@ -71,13 +182,19 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   return { n,
     dispose() {
       gl.deleteTexture(map);
+      gl.deleteTexture(posTex);
       gl.deleteTexture(target.tex);
       gl.deleteFramebuffer(target.fbo);
       gl.deleteProgram(prog);
       for (const b of pbos) gl.deleteBuffer(b);
       for (const s of fences) if (s) gl.deleteSync(s);
     },
-    sample(canvasTex) {
+    // `vol` (optional): the active volumetric clips for this frame —
+    // { count, meta, a, b, colA, colB } from packVolumetrics (fields.js) plus
+    // { time, trigSecs } for noise drift / spherepulse trigger shells. Absent
+    // or count 0 ⇒ the field loop is skipped and output is byte-identical to
+    // the plain sampler.
+    sample(canvasTex, vol) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
       gl.viewport(0, 0, W, H);
       gl.useProgram(prog);
@@ -85,6 +202,25 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
       gl.uniform1i(locCanvas, 0);
       gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, map);
       gl.uniform1i(locMap, 1);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, posTex);
+      gl.uniform1i(locPos, 2);
+      const n2 = vol?.count || 0;
+      gl.uniform1i(locVolCount, n2);
+      if (n2 > 0) {
+        gl.uniform1f(locT, vol.time || 0);
+        gl.uniform4fv(locVolMeta, vol.meta);
+        gl.uniform4fv(locVolA, vol.a);
+        gl.uniform4fv(locVolB, vol.b);
+        gl.uniform3fv(locVolColA, vol.colA);
+        gl.uniform3fv(locVolColB, vol.colB);
+        // uTrigs = seconds since each recent ⚡ trigger (compositor convention).
+        TRIG_SCRATCH.fill(1e6);
+        const trigs = vol.trigSecs || [];
+        const tn = Math.min(trigs.length, 8);
+        for (let i = 0; i < tn; i++) TRIG_SCRATCH[i] = (vol.time || 0) - trigs[trigs.length - tn + i];
+        gl.uniform1fv(locTrigs, TRIG_SCRATCH);
+        gl.uniform1i(locTrigCount, tn);
+      }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Retire the OLDEST in-flight readback if its fence has signaled. SYNC_FLUSH_-
