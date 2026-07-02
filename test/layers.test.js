@@ -14,7 +14,7 @@ import {
 // --- prefixedDefaults (unchanged) ---
 test('prefixedDefaults namespaces keys with the entry name', () => {
   assert.deepEqual(prefixedDefaults('line'),
-    { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90, 'line.speed': 1, 'line.amp': 0.5, 'line.numLines': 1 });
+    { 'line.pos': 0.5, 'line.width': 0.08, 'line.angle': 90, 'line.speed': 1, 'line.amp': 0.5, 'line.numLines': 1, 'line.color': '#ffffff' });
 });
 
 // --- migration: normalizeComposition ---

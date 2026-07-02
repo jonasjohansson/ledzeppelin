@@ -17,8 +17,18 @@ test('color params expose hex-string defaults', () => {
   assert.deepEqual([defaultParams('colorize').lowColor, defaultParams('colorize').highColor], ['#000000', '#ffffff']);
 });
 
+test('every white-only generator has a color tint param defaulting to white (C4)', () => {
+  for (const name of ['line', 'sine', 'checkers', 'grid', 'pulse', 'radial']) {
+    const p = REGISTRY[name].params.find((x) => x.key === 'color');
+    assert.ok(p, `${name} missing color param`);
+    assert.equal(p.type, 'color');
+    assert.equal(p.default, '#ffffff');                      // white ⇒ identical to the old look
+    assert.match(REGISTRY[name].src, /uniform vec3 color;/); // shader actually consumes it
+  }
+});
+
 test('defaultParams(line) returns the expected defaults', () => {
-  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.5, numLines: 1 });
+  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.5, numLines: 1, color: '#ffffff' });
 });
 
 test('defaultParams of an unknown name is empty', () => {

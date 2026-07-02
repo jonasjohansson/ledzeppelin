@@ -15,6 +15,7 @@ uniform float angle;
 uniform float uPhase;   // integrated speed·time — continuous across speed changes
 uniform float amp;
 uniform float numLines; // 1 = the classic single line; N tiles N parallel copies
+uniform vec3 color;     // tint (default white = the classic look)
 void main(){
   float a = radians(angle);
   // Signed distance from the CANVAS CENTRE along the line normal, so changing
@@ -33,7 +34,7 @@ void main(){
     d = abs(fract((coord - target) / cell + 0.5) - 0.5) * cell;
   }
   float v = smoothstep(width, 0.0, d);
-  frag = vec4(vec3(v), 1.0);
+  frag = vec4(color * v, 1.0);
 }`;
 
 // Gradient is a COLOUR ramp: two stops (colorA→colorB) along the angled axis.
@@ -76,6 +77,7 @@ const SINE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float freq; uniform float angle; uniform float phase; uniform float amp;
 uniform float modFreq; uniform float modAmt; uniform float sharp; uniform float uPhase;
+uniform vec3 color;   // tint (default white = the classic look)
 void main(){
   float a = radians(angle);
   float coord = uv.x*cos(a) + uv.y*sin(a);
@@ -83,7 +85,7 @@ void main(){
   float w = sin((coord * freq + m - uPhase) * 6.2831853 + phase * 6.2831853);
   float v = (w * 0.5 + 0.5) * amp;
   v = pow(clamp(v, 0.0, 1.0), mix(1.0, 5.0, clamp(sharp, 0.0, 1.0)));
-  frag = vec4(vec3(v), 1.0);
+  frag = vec4(color * v, 1.0);
 }`;
 
 // Checkered test source — set resolution in cols × rows (after Resolume's
@@ -92,9 +94,10 @@ void main(){
 const CHECKERS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float cols; uniform float rows;
+uniform vec3 color;   // tint (default white = the classic look)
 void main(){
   float c = floor(uv.x * max(1.0, cols)) + floor(uv.y * max(1.0, rows));
-  frag = vec4(vec3(mod(c, 2.0)), 1.0);
+  frag = vec4(color * mod(c, 2.0), 1.0);
 }`;
 
 // Grid test source — cols × rows cells outlined by lines of `thickness`. Useful
@@ -102,11 +105,12 @@ void main(){
 const GRID = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float cols; uniform float rows; uniform float thickness;
+uniform vec3 color;   // tint (default white = the classic look)
 void main(){
   vec2 g = abs(fract(uv * vec2(max(1.0, cols), max(1.0, rows))) - 0.5);
   float t = 0.5 - clamp(thickness, 0.0, 0.5);
   float line = step(t, g.x) + step(t, g.y);
-  frag = vec4(vec3(clamp(line, 0.0, 1.0)), 1.0);
+  frag = vec4(color * clamp(line, 0.0, 1.0), 1.0);
 }`;
 
 // Pulse — a triggerable beam (after Resolume's PulseBeam): a head of light that
@@ -117,6 +121,7 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform float uT; uniform float uTrigs[8]; uniform int uTrigCount;
 uniform float speed; uniform float headWidth; uniform float trailLength;
 uniform float trailSoftness; uniform float autoFire;
+uniform vec3 color;   // tint (default white = the classic look)
 // One pulse's brightness at this texel given its head progress (0..1+).
 float pulseAt(float prog){
   float d = prog - uv.x;                 // distance behind the leading edge
@@ -138,7 +143,7 @@ void main(){
       v = max(v, pulseAt(uTrigs[i] * sp));
     }
   }
-  frag = vec4(vec3(v), 1.0);
+  frag = vec4(color * v, 1.0);
 }`;
 
 // Radial — a triggerable ring that expands FROM THE CENTRE outward: the in-the-
@@ -154,6 +159,7 @@ uniform float uT; uniform float uTrigs[8]; uniform int uTrigCount;
 uniform float speed; uniform float width; uniform float softness;
 uniform float count; uniform float aspect; uniform float centerX; uniform float centerY;
 uniform float autoFire; uniform float reverse;
+uniform vec3 color;   // tint (default white = the classic look)
 float radius(){
   vec2 p = uv - vec2(centerX, centerY);
   p.x *= max(aspect, 1e-4);                       // undo canvas stretch => circular
@@ -178,7 +184,7 @@ void main(){
   // works (it used to sit in an else to autoFire, which swallowed every trigger).
   // Each trigger injects a fresh ring expanding from the centre; brightest wins.
   for (int i = 0; i < 8; i++) { if (i >= uTrigCount) break; v = max(v, ringAt(uTrigs[i] * sp, r)); }
-  frag = vec4(vec3(v), 1.0);
+  frag = vec4(color * v, 1.0);
 }`;
 
 const DISPLACE = `#version 300 es
@@ -398,6 +404,7 @@ export const REGISTRY = {
       // N evenly-spaced parallel copies of the line (1 = classic single line).
       // camelCase key so the auto-derived label reads "Num Lines".
       { key: 'numLines', type: 'float', min: 1, max: 12, default: 1, step: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   gradient: {
@@ -428,6 +435,7 @@ export const REGISTRY = {
       { key: 'modFreq', type: 'float', min: 0, max: 8, default: 0 },
       { key: 'modAmt', type: 'float', min: 0, max: 1, default: 0 },
       { key: 'sharp', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   checkers: {
@@ -435,6 +443,7 @@ export const REGISTRY = {
     params: [
       { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
       { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   grid: {
@@ -443,6 +452,7 @@ export const REGISTRY = {
       { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
       { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
       { key: 'thickness', type: 'float', min: 0, max: 0.5, default: 0.06 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   pulse: {
@@ -453,6 +463,7 @@ export const REGISTRY = {
       { key: 'trailLength', type: 'float', min: 0, max: 1, default: 0.3 },
       { key: 'trailSoftness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'autoFire', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   radial: {
@@ -466,6 +477,7 @@ export const REGISTRY = {
       { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'reverse', type: 'bool', default: false },
       { key: 'autoFire', type: 'bool', default: true },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   noise: {
