@@ -1,4 +1,4 @@
-import { emptyShow, makeFixtureType, syncDeviceTypes, syncFixtureTypes, repackOffsets } from './show.js';
+import { emptyShow, makeFixtureType, syncDeviceTypes, syncFixtureTypes, repackOffsets, DEVICE_COLORS } from './show.js';
 import { normalizeComposition } from './layers.js';
 import { fitCanvasToFixtures } from './fixture-transform.js';
 
@@ -244,12 +244,13 @@ export function importKagora(preset) {
 
   show.devices = controllers
     .filter((c) => strips.some((s) => deviceIdByStrip.get(s.id) === c.id))
-    .map((c) => ({
+    .map((c, i) => ({
       id: c.id,
       name: c.name ?? c.typeId,
       ip: '',
       port: DEFAULT_PORT,
       colorOrder: colorOrderByDevice.get(c.id) ?? DEFAULT_COLOR_ORDER,
+      color: DEVICE_COLORS[i % DEVICE_COLORS.length],   // distinct identity colour per controller
     }));
 
   // (portByStrip / runIndexByStrip are populated during the chain walk above:

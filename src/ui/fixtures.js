@@ -445,6 +445,13 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       ] : []),
       // Format = the colour byte order (physical wiring spec — the only one most rigs need).
       field('Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Identity colour — the swatch/bars in the Output list + the canvas Tint mode.
+      // Auto-assigned from the palette on creation; override it here.
+      (() => {
+        const ci = el('input', { type: 'color', value: d.color || '#888888', title: 'controller identity colour (Output list + Tint mode)' });
+        ci.addEventListener('change', () => upd({ color: ci.value }));
+        return field('Color', ci);
+      })(),
       // Output gamma calibration (daemon-side LUT) — straightens LED fades. 1 = linear.
       sliderRow('Gamma', d.gamma ?? 1, (x) => upd({ gamma: Math.round(x * 10) / 10 }), 0.5, 3, 0.1),
       patchRuler(show, d),

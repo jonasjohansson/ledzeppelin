@@ -27,12 +27,31 @@ export function runsOf(show) {
   return [...map.values()];
 }
 
-// Colour identity by CONTROLLER: each device gets a unique base hue (golden-angle
-// over its devices, sorted for stability), and each OUTPUT on that device is a
+// "#rrggbb" → [h 0..360, s 0..100, l 0..100] (null when unparseable). Used to
+// derive per-output lightness tints from a device's ASSIGNED colour below.
+function hexToHsl(hex) {
+  if (typeof hex !== 'string') return null;
+  let h6 = hex.replace('#', '').trim();
+  if (h6.length === 3) h6 = h6[0] + h6[0] + h6[1] + h6[1] + h6[2] + h6[2];
+  const n = parseInt(h6, 16);
+  if (h6.length !== 6 || Number.isNaN(n)) return null;
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  if (!d) return [0, 0, l * 100];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  h = (h * 60 + 360) % 360;
+  return [h, s * 100, l * 100];
+}
+
+// Colour identity by CONTROLLER: a device's ASSIGNED `color` (see DEVICE_COLORS /
+// nextDeviceColor in show.js) when set, else a generated base hue (golden-angle
+// over its devices, sorted for stability). Each OUTPUT on that device is a
 // lightness TINT of that hue. So fixtures read as "this controller" by hue and
 // "which output" by shade. Shared by the canvas overlay + the placement list.
 export function controllerColorMap(show) {
   const fixtures = show?.fixtures || [];
+  const assigned = new Map((show?.devices || []).filter((d) => d.color).map((d) => [d.id, d.color]));
   const devIds = [...new Set(fixtures.map((f) => f.output?.deviceId || ''))].sort();
   const hue = new Map(devIds.map((id, i) => [id, (i * 137.508) % 360]));
   const ports = new Map();   // deviceId -> Set of distinct ports in use
@@ -42,15 +61,17 @@ export function controllerColorMap(show) {
     ports.get(d).add(p);
   }
   const portList = (d) => [...(ports.get(d) || [])].sort((a, b) => a - b);
-  // 30% saturation: hues stay tellable-apart (which controller / which output)
-  // without turning the canvas into a colour chart — the UI keeps ONE accent.
+  // Generated fallback keeps 30% saturation: hues stay tellable-apart (which
+  // controller / which output) without turning the canvas into a colour chart.
   const runColor = (deviceId, port) => {
-    const h = (hue.get(deviceId) ?? 210).toFixed(1);
+    const a = hexToHsl(assigned.get(deviceId));
+    const [h, s, baseL] = a || [hue.get(deviceId) ?? 210, 30, 60];
     const ps = portList(deviceId), n = ps.length || 1, i = Math.max(0, ps.indexOf(port));
-    const l = n > 1 ? 44 + i * (32 / (n - 1)) : 60;   // ramp 44%..76% across the device's outputs
-    return `hsl(${h}, 30%, ${l.toFixed(0)}%)`;
+    const l = n > 1 ? 44 + i * (32 / (n - 1)) : baseL;   // ramp 44%..76% across the device's outputs
+    return `hsl(${h.toFixed(1)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`;
   };
-  const deviceColor = (deviceId) => `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 30%, 60%)`;
+  const deviceColor = (deviceId) =>
+    assigned.get(deviceId) || `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 30%, 60%)`;
   return { hue, runColor, deviceColor };
 }
 

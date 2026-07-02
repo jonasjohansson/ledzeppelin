@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
+import { emptyShow, addDevice, addFixture, validate, syncDeviceTypes, syncFixtureTypes, nextDeviceColor, DEVICE_COLORS } from '../src/model/show.js';
 import { normalizeComposition } from '../src/model/layers.js';
 import { flatCamera } from '../src/model/project3d.js';
 
@@ -57,6 +57,29 @@ test('non-zero starting pixel offset fails contiguity validation', () => {
   const r = validate(s);
   assert.equal(r.ok, false);
   assert.match(r.errors.join(), /must start at 0 and be contiguous/);
+});
+
+// --- Controller identity colours (C3) ------------------------------------------
+test('nextDeviceColor round-robins the palette by already-coloured count', () => {
+  let s = emptyShow();
+  assert.equal(nextDeviceColor(s), DEVICE_COLORS[0]);
+  s = addDevice(s, { id: 'c1', name: 'A', ip: '', color: DEVICE_COLORS[0] });
+  assert.equal(nextDeviceColor(s), DEVICE_COLORS[1]);
+  // Uncoloured devices don't advance the cursor (they'll be lazily coloured).
+  s = addDevice(s, { id: 'c2', name: 'B', ip: '' });
+  assert.equal(nextDeviceColor(s), DEVICE_COLORS[1]);
+});
+
+test('syncDeviceTypes lazily assigns distinct colours to devices missing one', () => {
+  let s = emptyShow();
+  s = addDevice(s, { id: 'c1', name: 'A', ip: '' });
+  s = addDevice(s, { id: 'c2', name: 'B', ip: '', color: '#123456' });   // pre-assigned survives
+  s = addDevice(s, { id: 'c3', name: 'C', ip: '' });
+  s = syncDeviceTypes(s);
+  assert.equal(s.devices[1].color, '#123456');
+  assert.equal(s.devices[0].color, DEVICE_COLORS[1]);   // 1 already coloured → next slot
+  assert.equal(s.devices[2].color, DEVICE_COLORS[2]);
+  assert.notEqual(s.devices[0].color, s.devices[2].color);
 });
 
 // --- Output protocol (DDP default | Art-Net + base universe) -------------------

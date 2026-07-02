@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -1606,6 +1606,7 @@ function addDeviceFromTemplate(template) {
   const next = structuredClone(show);
   const id = nextDeviceId(next);
   const dev = stampDevice(template, id);
+  dev.color = nextDeviceColor(next);   // distinct identity colour (round-robin palette)
   // Keep device names unique (the model name repeats across instances).
   const taken = new Set((next.devices || []).map((d) => d.name));
   if (taken.has(dev.name)) { let seq = 2; while (taken.has(`${dev.name} ${seq}`)) seq++; dev.name = `${dev.name} ${seq}`; }
@@ -1684,9 +1685,12 @@ function renderOutput() {
   };
   // A fixture row — same chrome as the Inventory list rows (.output-row + boxed
   // .fx-badge chips) so the two tabs read alike.
-  const fixtureRow = (f, i, outLabel) => {
+  const fixtureRow = (f, i, outLabel, devColor) => {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
+    // Controller identity colour: a subtle 3px left bar (CSS var; the selection
+    // accent bar overrides it — see .output-row.selected).
+    if (devColor) row.style.setProperty('--dev-color', devColor);
     // Drag a fixture row onto a device header to assign it (the whole selection drags
     // when this row is part of a multi-select).
     row.draggable = true;
@@ -1780,6 +1784,13 @@ function renderOutput() {
       // longer fold, so anchoring after the triangle silently dropped the dot).
       head.prepend(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
     }
+    // Controller identity colour swatch, just before the title (assigned in
+    // syncDeviceTypes / editable in the device editor; Tint mode uses the same colour).
+    if (gdev?.color) {
+      const sw = oel('i', { className: 'dev-swatch', title: 'controller colour' });
+      sw.style.background = gdev.color;
+      head.insertBefore(sw, head.querySelector('.insp-sec-title'));
+    }
     if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
     if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
     // The WHOLE section (header + its fixture rows) is the drop target — dropping
@@ -1788,7 +1799,7 @@ function renderOutput() {
     dropZone(sec, dg.deviceId, null);
     // Fixtures as flat rows; a multi-output controller tags each row with its output.
     const multiOut = dg.groups.length > 1;
-    for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null));
+    for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color));
     outputListEl.append(sec);
   }
 

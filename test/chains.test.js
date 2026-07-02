@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   runsOf, chainOf, chainOffset, setRunStagger, setRunAxis,
-  moveFixtureInRun, wireAfter, wireFirst, freePort, pruneChains,
+  moveFixtureInRun, wireAfter, wireFirst, freePort, pruneChains, controllerColorMap,
 } from '../src/model/chains.js';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
 
@@ -86,4 +86,26 @@ test('buildPipelineInputs bakes the run stagger into the sample UVs', () => {
   // a (index 0): u 0.2 ; b (index 1): u 0.2 + 0.1 = 0.3
   assert.ok(Math.abs(sampleUVs[0] - 0.2) < 1e-6);
   assert.ok(Math.abs(sampleUVs[2] - 0.3) < 1e-6);
+});
+
+// --- Controller identity colours (C3): assigned device.color wins ------------
+test('controllerColorMap prefers the device assigned colour over the generated one', () => {
+  const show = {
+    devices: [{ id: 'd1', color: '#ff0000' }, { id: 'd2' }],   // d2 has no assigned colour
+    fixtures: [fx('a', 'd1', 1), fx('b', 'd2', 1)],
+  };
+  const { deviceColor, runColor } = controllerColorMap(show);
+  assert.equal(deviceColor('d1'), '#ff0000');                  // assigned hex, verbatim
+  assert.match(runColor('d1', 1), /^hsl\(0\.0, 100%, 50%\)$/); // run tint derives from it
+  assert.match(deviceColor('d2'), /^hsl\(/);                   // fallback: generated hue
+});
+
+test('controllerColorMap still ramps per-output lightness for assigned colours', () => {
+  const show = {
+    devices: [{ id: 'd1', color: '#ff0000' }],
+    fixtures: [fx('a', 'd1', 1), fx('b', 'd1', 2)],
+  };
+  const { runColor } = controllerColorMap(show);
+  assert.equal(runColor('d1', 1), 'hsl(0.0, 100%, 44%)');      // 2 ports → 44%..76% ramp
+  assert.equal(runColor('d1', 2), 'hsl(0.0, 100%, 76%)');
 });

@@ -180,7 +180,12 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0;
   background: var(--panel-2); border: none; border-top: 1px solid var(--line);
   font-size: var(--fs-ctrl); cursor: pointer;
+  /* Controller identity colour (C3): a 3px bar set via --dev-color on the row;
+     transparent when unassigned. Selection overrides it (.selected below). */
+  box-shadow: inset 3px 0 0 var(--dev-color, transparent);
 }
+/* Controller colour swatch before the header title (Output list). */
+.dev-swatch { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 1px; }
 .output-row:first-child { border-top: none; }
 .output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking

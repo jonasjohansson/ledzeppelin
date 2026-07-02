@@ -6,6 +6,32 @@ export function emptyShow() {
 }
 const clone = (s) => structuredClone(s);
 export function addDevice(show, d) { const s = clone(show); s.devices.push({ port: 4048, ...d }); return s; }
+
+// --- Controller identity colours ----------------------------------------------
+// Every device carries a persistent `color` (hex) — shown as a swatch in the
+// Output list, a bar on its fixture rows, and used by the canvas Tint mode
+// (controllerColorMap prefers it). Curated 12-colour palette: visually distinct
+// hues, warm-biased to sit with the app's amber accent.
+export const DEVICE_COLORS = [
+  '#e09a4a',  // amber
+  '#d96a56',  // terracotta
+  '#c9b04f',  // honey
+  '#9baa4e',  // olive
+  '#5ba676',  // green
+  '#4fa39b',  // teal
+  '#5b93c7',  // sky
+  '#7f7ecb',  // periwinkle
+  '#a86fc5',  // violet
+  '#c56a9e',  // magenta
+  '#c95f6d',  // rose
+  '#b57e55',  // clay
+];
+// Next colour for a NEW device: round-robin over the palette by how many devices
+// already have one (so early rigs get maximally distinct colours).
+export function nextDeviceColor(show) {
+  const used = (show?.devices || []).filter((d) => d.color).length;
+  return DEVICE_COLORS[used % DEVICE_COLORS.length];
+}
 export function addFixture(show, f) { const s = clone(show); s.fixtures.push(f); return s; }
 
 // --- Controller TYPES (device models) ----------------------------------------
@@ -71,6 +97,11 @@ export function syncDeviceTypes(show) {
     const syncDelayMs = Math.max(0, Math.min(1000, Math.round(Number(d.syncDelayMs) || 0)));
     return { ...d, typeId: t.id, outputs, maxPerOutput, protocol, universe, artnetSync, syncDelayMs };
   });
+  // Lazy colour migration: devices from older shows (or imports) that lack a
+  // `color` get one here, round-robin after the already-coloured ones — persisted
+  // on the next save. Assigned colours are never touched.
+  let colored = devices.filter((d) => d.color).length;
+  for (const d of devices) if (!d.color) { d.color = DEVICE_COLORS[colored % DEVICE_COLORS.length]; colored++; }
   return { ...show, deviceTypes: types, devices };
 }
 
