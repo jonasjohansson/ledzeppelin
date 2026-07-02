@@ -106,49 +106,64 @@ through **System › Mapping** (the toolbar **MAPPING** button opens it).
 3. Back on the param, the **in/out** fields set the output range — swap them
    (in 1, out 0) to invert an axis.
 
-## The Kagora height rig (tent remap)
+## Height in 3D (Plane Sweep)
 
-The Kagora canvas is a top-down **floor plan** — no axis equals physical height —
-so a horizontal line swept by hand-height just crosses the floor. Each arch runs
-foot→crest→foot, so height along a strip is a **tent** (0 at the ends, peak at the
-middle). [`scripts/tent-remap.mjs`](scripts/tent-remap.mjs) rebuilds every
-fixture's **input sampling** into an aligned ∩ (feet on the canvas bottom, crest at
-the top) so **canvas-Y becomes height**. Sampling (input) is decoupled from wiring
-(output), so the physical dome is unchanged.
+Since the 3D update the dome stands in real space, so **height is a true axis** — no
+canvas trickery. Place the Kagora arches and light them by height:
 
-Apply it to a show JSON: `node scripts/tent-remap.mjs show.json`. The app has no
-file export, so in practice run the equivalent transform in the editor's DevTools
-console against `localStorage['ledzeppelin.show']` (it backs up to
-`ledzeppelin.show.pretent` first; restore by copying that key back and reloading).
+1. **Stand the arches up.** Enter **3D** (toolbar) — 3D always samples through the
+   fixed front-ortho camera, so lifted geometry is used automatically (no projection
+   choice). Select all fixtures → **Position → shape → Bezier** → raise **Arc Z**
+   until the dome looks right. Each strip becomes a standing arch with real per-LED z
+   (feet z=0, crest at the apex).
+2. **Add a Plane Sweep** volumetric clip (clip picker → **Volumetric** group), set
+   **axis = z**, and bind its **`pos` → `/leap/hand/y`** in the Mapping window. A
+   horizontal plane now climbs the arches as you raise your hand — evaluated at each
+   LED's real height.
 
-After it's applied, a **Lines** clip (angle 90, amp 0, `pos ← /leap/hand/y`) lights
-every arch feet→crest as you raise your hand.
+Notes:
+- **Volumetrics light the LEDs, not the canvas** — the result shows on the LED dots
+  in the 3D viewport and the wall Preview, never on the 2D canvas. Toggle the
+  **FIELDS** chip (projection row) to ghost the plane's position, and **⟲** resets
+  the orbit view if you get lost.
+- **`pos` is absolute world-z** (0 = feet/canvas plane, up to your apex ≈ Arc Z ÷
+  canvas-height-px). Park it too high and the plane floats above the dome in empty
+  air. Set the `/leap/hand/y` binding's **in = 0** (feet), **out ≈ apex z**.
+- The old flat workaround ([`scripts/tent-remap.mjs`](scripts/tent-remap.mjs) —
+  faking height by reshaping canvas sampling into a ∩) is **superseded** by real 3D;
+  it's kept only for flat / pre-3D rigs.
 
-## The Spot generator + gesture switch
+## The gesture switch (plane ⇄ ball)
 
-**Spot** is a built-in generator (added in
-[`src/engine/shaders/manifest.js`](src/engine/shaders/manifest.js)): a soft round
-ball with `centerX`/`centerY`/`radius`/`softness`, all mappable. Bind
-`centerX ← /leap/hand/x`, `centerY ← /leap/hand/y` and it rides the dome at your
-hand's position.
+Two sources, switched by the point/fist gesture:
+- **Plane Sweep** (height) — `pos ← /leap/hand/y`, as above.
+- **Sphere Pulse** (a positioned ball, the 3D cousin of the 2D **Spot** generator) —
+  bind `centerX / centerY / centerZ ← /leap/hand/x`, `/y`, `/z` so it rides the dome
+  at your hand's position.
 
-**Open hand = line, point/fist = ball** — a hard switch via momentary Layer Bypass:
+**Open hand = plane, point/fist = ball** — a hard switch via momentary Layer Bypass:
 
-- **Line layer on top**, blend **Normal (Alpha)**, 100% opacity (Alpha is what lets
-  its black *occlude* the layer below — Add/Screen would bleed the ball through).
-- **Spot layer below**, always active.
-- Bind the **Line layer's Bypass ← `/leap/hand/ball`**, mode **momentary**.
+- **Plane-sweep layer on top**, blend **Normal (Alpha)**, 100% opacity.
+- **Sphere-pulse layer below**, always active.
+- Bind the **top layer's Bypass ← `/leap/hand/ball`**, mode **momentary**.
 
-Open hand → the Line covers the Spot; point or clench → `/leap/hand/ball` = 1 →
-the Line bypasses → the Spot beneath is revealed. Momentary = a hard threshold at
-50%, so no half-and-half crossfade.
+Open hand → the top layer covers the one below; point or clench → `/leap/hand/ball`
+= 1 → the top layer bypasses → the ball is revealed. Momentary = a hard threshold at
+50% (no crossfade).
+
+**Axis direction:** LED Zeppelin's canvas Y is top-down and the Front camera's up is
+flipped, so a Leap axis can feel reversed. Fix it on the binding — set **in 1 /
+out 0** on whichever of x/y/z is backwards.
+
+(**Spot** — a flat 2D radial dot, `centerX/centerY/radius/softness` — remains in the
+generator list for non-3D rigs.)
 
 ## Debug page
 
 `http://localhost:7070/leap/` shows a hand visualiser, every channel as a live bar,
-and a per-finger line (`▮` extended / `▯` curled) with `point`, `conf`, `idxType`
-and the raw `idxDir`/`handDir` vectors — handy for diagnosing gesture detection.
-Keep **"stream to LZ" off** while the node bridge is running.
+and a per-finger line (`▮` extended / `▯` curled) with `point`, `grab` and `conf`
+— handy for diagnosing gesture detection. Keep **"stream to LZ" off** while the node
+bridge is running.
 
 ## Troubleshooting
 
