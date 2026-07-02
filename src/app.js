@@ -2065,7 +2065,8 @@ function syncProjRow() {
   if (!projRow) return;
   const cam = show.composition?.view3d?.projectionCamera;
   const cur = cam?.preset ?? (!cam || cam.mode === 'flat' ? 'flat' : null);
-  projRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.preset === cur));
+  // Only the PRESET buttons — the FIELDS ghost chip manages its own .on state.
+  projRow.querySelectorAll('button[data-preset]').forEach((b) => b.classList.toggle('on', b.dataset.preset === cur));
 }
 if (projRow) {
   projRow.append(oel('span', { className: 'proj-cap', textContent: 'Projection' }));
@@ -2085,6 +2086,25 @@ if (projRow) {
     b.dataset.preset = pr.id;
     projRow.append(b);
   }
+}
+// FIELDS ghosts: the 3D viewport draws a schematic ghost per active volumetric
+// clip (plane quad / gradient arrow / sphere rings / noise lattice — preview.js
+// drawFieldGhosts) so you can see WHERE a field sits in space, not just where
+// an LED happens to catch it. View-only chrome → a UI pref (localStorage, not
+// the show), default ON; the chip lives in the projection row (3D-only, like
+// the row itself). The render loop hands preview the packed fields only while
+// this is on (see the packVolumetrics glue in loopBody).
+let fieldGhosts = (() => { try { return localStorage.getItem('lz.fieldghosts') !== '0'; } catch { return true; } })();
+if (projRow) {
+  const fg = oel('button', { className: 'dir-btn proj-fields', textContent: 'Fields', id: 'field-ghosts-btn',
+    title: 'ghost the active volumetric fields in the viewport (plane / gradient arrow / sphere rings / noise lattice)',
+    onclick: () => {
+      fieldGhosts = !fieldGhosts;
+      try { localStorage.setItem('lz.fieldghosts', fieldGhosts ? '1' : '0'); } catch { /* private mode */ }
+      fg.classList.toggle('on', fieldGhosts);
+    } });
+  fg.classList.toggle('on', fieldGhosts);
+  projRow.append(fg);
 }
 syncMode3d();   // reflect a persisted 3D mode (and its projection preset) on load
 
@@ -3114,6 +3134,10 @@ function loopBody(ts) {
       }
       if (act.length) vol = { ...packVolumetrics(act), time: t, trigSecs: pulseTrigSecs };
     }
+    // Hand the SAME packed fields to the viewport so 3D mode can ghost each
+    // field's place in space (or nothing while the FIELDS chip is off / no
+    // volumetric clip is live). Pure viewport chrome — sampling is unaffected.
+    preview?.setVolumetrics?.(fieldGhosts ? vol : null);
 
     // A live fixture drag flagged the sampler stale — rebuild it from the dragged
     // positions (throttled to this frame) so the lit content follows in realtime.

@@ -6,6 +6,11 @@ no-volumetric byte-identical invariant verified before/after; e2e in test/e2e/vo
 Notes vs. design: positions carry real z only via the 3D projection path (Front/Front-wide —
 the Flat camera keeps z = 0, the byte-identical guarantee); volumetric clips switch without
 crossfade; sphere-pulse triggers ride the global ⚡ clock like Pulse/Radial.
+Follow-up shipped 2026-07-02: the 3D viewport draws a schematic GHOST per active field
+(plane quad / gradient arrow / sphere rings / noise-lattice dots — preview.js
+drawFieldGhosts) from the same packVolumetrics uniforms, toggled by the FIELDS chip in
+the projection row (localStorage `lz.fieldghosts`, default on); pure viewport chrome —
+sampling untouched. e2e: test/e2e/fieldghosts.e2e.mjs.
 
 ## Why
 

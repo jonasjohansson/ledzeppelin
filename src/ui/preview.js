@@ -13,6 +13,7 @@ import {
   thicknessOf, setBezierControl,
 } from '../model/fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from '../model/bezier.js';
+import { FIELD_IDS, axisGradient, noise3d } from '../engine/fields.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
 // (so draw() and hitTest() — which use different pixel scales — agree).
@@ -173,6 +174,14 @@ export function createPreview(canvasEl, opts = {}) {
     }
     return pi.samplePts3D;
   }
+  // Volumetric field GHOSTS (3D viewport only): the SAME packed fields the GPU
+  // sampler gets this frame ({ count, meta, a, b, colA, colB, time, trigSecs }
+  // from packVolumetrics — see the app.js glue), or null when the FIELDS chip
+  // is off / nothing volumetric is active. Pushed per frame by app.js so what
+  // the ghost shows IS what the LEDs get (params, colours, opacity, ≤4 cap).
+  let ghostVol = null;
+  function setVolumetrics(vol) { ghostVol = vol; }
+
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
     // The backing scales WITH zoom: the LED cells are 1-2px dots now, and CSS
@@ -399,6 +408,11 @@ export function createPreview(canvasEl, opts = {}) {
         svg.innerHTML = buildChrome3D(show, selectedIds, cam, ck);
       }
     }
+    // Volumetric field GHOSTS — schematic stand-ins for where each active field
+    // sits in space. Drawn FIRST on the lights canvas so the LED dots (below)
+    // paint over them, and the SVG chrome (a separate layer above the canvas)
+    // keeps strips/handles fully readable on top.
+    drawFieldGhosts(cam, ck);
     if (!show || !show.fixtures?.length || !rgba) return;
 
     // Lit LED dots: each fixture's PHYSICAL (3D arc-length) sample points,
@@ -431,6 +445,167 @@ export function createPreview(canvasEl, opts = {}) {
     }
     ctx.globalAlpha = 1;
     drawDragHint(ck);   // vertex-drag position/height tag, same as 2D
+  }
+
+  // --- Volumetric field ghosts ---------------------------------------------------
+  // Schematic z extent for the ghosts' vertical span (x/y plane quads, the z
+  // gradient arrow, the noise lattice) — fields are unbounded in z, so this is
+  // a legibility choice, sized to where lifted rigs actually live.
+  const GHOST_Z = 0.6;
+  // Noise lattice: ~10×7×4 probes per clip, hard-capped across clips (this is
+  // per-frame JS — the budget keeps a pathological show cheap).
+  const NLAT_X = 10, NLAT_Y = 7, NLAT_Z = 4, NLAT_BUDGET = 900;
+
+  // Draw a schematic ghost per ACTIVE volumetric clip (fields.js semantics —
+  // no math re-derived here beyond placing geometry at the packed params):
+  //   plane sweep   → translucent quad ⊥ its axis at `pos` + faint ±thickness/2 edges
+  //   axis gradient → a thick segmented colorA→colorB arrow along the axis
+  //   sphere pulse  → 3 great-circle rings at center/radius (+ expanding ⚡ shells)
+  //   noise 3d      → a sparse dot lattice tinted by the ACTUAL field value
+  // Everything projects through the same orbit camera as the strips; polyline
+  // strokes split where a point falls behind the camera (poly3's pattern) and
+  // quad fills bail to outline-only when a corner does.
+  function drawFieldGhosts(cam, ck) {
+    const gv = ghostVol;
+    if (!gv || !gv.count) return;
+    const W = BASE_W, Hh = BASE_H;
+    const P = [0, 0, 0];   // reused world point (allocation-light: no per-probe arrays)
+    const prj = (x, y, z) => {
+      P[0] = x; P[1] = y; P[2] = z;
+      const uv = project(P, cam);
+      return Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? [uv[0] * W, uv[1] * Hh] : null;
+    };
+    // Stroke a run of world points, splitting at behind-camera points.
+    const stroke3 = (pts, css, w) => {
+      ctx.strokeStyle = css; ctx.lineWidth = w;
+      ctx.beginPath();
+      let open = false;
+      for (const q3 of pts) {
+        const q = prj(q3[0], q3[1], q3[2]);
+        if (!q) { open = false; continue; }
+        if (open) ctx.lineTo(q[0], q[1]); else { ctx.moveTo(q[0], q[1]); open = true; }
+      }
+      ctx.stroke();
+    };
+    // The quad spanning the canvas extent ⊥ `axis` at coordinate v (x/y planes
+    // rise 0..GHOST_Z; the z plane covers the full canvas). Axis thresholds
+    // match fields.js axisCoord (<0.5 x, <1.5 y, else z).
+    const planeQuad = (axis, v) => (axis < 0.5
+      ? [[v, 0, 0], [v, 1, 0], [v, 1, GHOST_Z], [v, 0, GHOST_Z]]
+      : axis < 1.5
+        ? [[0, v, 0], [1, v, 0], [1, v, GHOST_Z], [0, v, GHOST_Z]]
+        : [[0, 0, v], [1, 0, v], [1, 1, v], [0, 1, v]]);
+    const quadOutline = (c, css, w) => stroke3([c[0], c[1], c[2], c[3], c[0]], css, w);
+    const quadFill = (c, css) => {
+      const q0 = prj(...c[0]), q1 = prj(...c[1]), q2 = prj(...c[2]), q3 = prj(...c[3]);
+      if (!q0 || !q1 || !q2 || !q3) return;   // a corner behind the camera → outline only
+      ctx.fillStyle = css;
+      ctx.beginPath();
+      ctx.moveTo(q0[0], q0[1]); ctx.lineTo(q1[0], q1[1]); ctx.lineTo(q2[0], q2[1]); ctx.lineTo(q3[0], q3[1]);
+      ctx.closePath(); ctx.fill();
+    };
+    // A great-circle ring around c in one of the three axis planes (0 = xy,
+    // 1 = xz, 2 = yz), 32 segments, behind-camera splits like stroke3.
+    const ring = (cx, cy, cz, r, plane, css, w) => {
+      ctx.strokeStyle = css; ctx.lineWidth = w;
+      ctx.beginPath();
+      let open = false;
+      for (let k = 0; k <= 32; k++) {
+        const a = (k / 32) * Math.PI * 2, ca = Math.cos(a) * r, sa = Math.sin(a) * r;
+        const q = plane === 0 ? prj(cx + ca, cy + sa, cz)
+          : plane === 1 ? prj(cx + ca, cy, cz + sa) : prj(cx, cy + ca, cz + sa);
+        if (!q) { open = false; continue; }
+        if (open) ctx.lineTo(q[0], q[1]); else { ctx.moveTo(q[0], q[1]); open = true; }
+      }
+      ctx.stroke();
+    };
+    const rings3 = (cx, cy, cz, r, css, w) => { for (const pl of [0, 1, 2]) ring(cx, cy, cz, r, pl, css, w); };
+
+    ctx.save();
+    const t = gv.time || 0;
+    const A = gv.a, M = gv.meta;
+    let latBudget = NLAT_BUDGET;
+    for (let i = 0; i < gv.count; i++) {
+      const o4 = i * 4, o3 = i * 3;
+      const id = M[o4], op = Math.max(0, Math.min(1, M[o4 + 2]));
+      if (op <= 0.01) continue;
+      const cr = Math.round(gv.colA[o3] * 255), cg = Math.round(gv.colA[o3 + 1] * 255), cb = Math.round(gv.colA[o3 + 2] * 255);
+      const css = (a) => `rgba(${cr},${cg},${cb},${(a).toFixed(3)})`;
+
+      if (id === FIELD_IDS.planesweep) {
+        // A = (axis, pos, thickness, softness): the plane itself as a very
+        // subtle fill + edge, and the band's ±thickness/2 bounds as fainter
+        // outlines — WHERE the band is, without hiding what's behind it.
+        const axis = A[o4], pos = A[o4 + 1], half = Math.max(1e-4, A[o4 + 2]) * 0.5;
+        const q = planeQuad(axis, pos);
+        quadFill(q, css(0.12 * op));
+        quadOutline(q, css(0.55 * op), 1.25 * ck);
+        quadOutline(planeQuad(axis, pos - half), css(0.22 * op), ck);
+        quadOutline(planeQuad(axis, pos + half), css(0.22 * op), ck);
+      } else if (id === FIELD_IDS.axisgradient) {
+        // A = (axis, scroll): a thick arrow along the axis through the canvas
+        // centre, in 8 segments coloured by the ACTUAL field (scroll included).
+        const axis = A[o4], scroll = A[o4 + 1];
+        const cA = [gv.colA[o3], gv.colA[o3 + 1], gv.colA[o3 + 2]];
+        const cB = [gv.colB[o3], gv.colB[o3 + 1], gv.colB[o3 + 2]];
+        const at = (tt) => (axis < 0.5 ? [tt, 0.5, 0] : axis < 1.5 ? [0.5, tt, 0] : [0.5, 0.5, tt * GHOST_Z]);
+        const prm = { axis, colorA: cA, colorB: cB, scroll };
+        let lastCol = null, e1 = null;
+        for (let k = 0; k < 8; k++) {
+          const p0 = at(k / 8), p1 = at((k + 1) / 8);
+          const g = axisGradient([(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2], prm);
+          lastCol = `rgba(${Math.round(g[0] * 255)},${Math.round(g[1] * 255)},${Math.round(g[2] * 255)},${(0.85 * op).toFixed(3)})`;
+          stroke3([p0, p1], lastCol, 4.5 * ck);
+          e1 = p1;
+        }
+        // Arrowhead at the increasing-coordinate end, in the last segment's colour.
+        const qTip = prj(e1[0], e1[1], e1[2]), qBack = prj(...at(0.85));
+        if (qTip && qBack) {
+          const dx = qTip[0] - qBack[0], dy = qTip[1] - qBack[1], len = Math.hypot(dx, dy) || 1;
+          const ux2 = dx / len, uy2 = dy / len, s = 8 * ck;
+          ctx.fillStyle = lastCol;
+          ctx.beginPath();
+          ctx.moveTo(qTip[0] + ux2 * s, qTip[1] + uy2 * s);
+          ctx.lineTo(qTip[0] - uy2 * s * 0.6, qTip[1] + ux2 * s * 0.6);
+          ctx.lineTo(qTip[0] + uy2 * s * 0.6, qTip[1] - ux2 * s * 0.6);
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (id === FIELD_IDS.spherepulse) {
+        // A = (cx, cy, cz, radius), B = (thickness, softness, speed): wireframe
+        // rings at the static shell, plus one ring set per EXPANDING ⚡ shell
+        // (radius = age·speed — the sampler's exact clock math: age = time −
+        // trigSec over the last 8 triggers).
+        const cx = A[o4], cy = A[o4 + 1], cz = A[o4 + 2], r = A[o4 + 3];
+        const speed = gv.b[o4 + 2];
+        if (r > 1e-3) rings3(cx, cy, cz, r, css(0.6 * op), 1.25 * ck);
+        const trigs = gv.trigSecs || [];
+        for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
+          const rr = (t - trigs[k]) * speed;
+          if (rr > 0.02 && rr < 2) rings3(cx, cy, cz, rr, css(0.4 * op), ck);
+        }
+      } else if (id === FIELD_IDS.noise3d && latBudget >= NLAT_X * NLAT_Y * NLAT_Z) {
+        // A = (scale, speed): a sparse lattice probe — evaluate the REAL field
+        // (fields.js noise3d, drift included) on a coarse grid and dot where it
+        // reads bright, so the volume's texture is visible off the strips.
+        latBudget -= NLAT_X * NLAT_Y * NLAT_Z;
+        const prm = { scale: A[o4], speed: A[o4 + 1], color: [1, 1, 1] };   // colour applied via css() below
+        const dot = Math.max(1.5, 2.4 * ck);
+        for (let zi = 0; zi < NLAT_Z; zi++) {
+          for (let yi = 0; yi < NLAT_Y; yi++) {
+            for (let xi = 0; xi < NLAT_X; xi++) {
+              P[0] = (xi + 0.5) / NLAT_X; P[1] = (yi + 0.5) / NLAT_Y; P[2] = ((zi + 0.5) / NLAT_Z) * GHOST_Z;
+              const v = noise3d(P, t, prm)[3];
+              if (v < 0.4) continue;   // small-alpha probes stay invisible → skip the draw
+              const q = prj(P[0], P[1], P[2]);
+              if (!q) continue;
+              ctx.fillStyle = css(v * op * 0.7);
+              ctx.fillRect(q[0] - dot / 2, q[1] - dot / 2, dot, dot);
+            }
+          }
+        }
+      }
+    }
+    ctx.restore();
   }
 
   // The 3D scene's vector chrome (grid / canvas plane / strips) as one SVG
@@ -696,7 +871,7 @@ export function createPreview(canvasEl, opts = {}) {
     return p.join('');
   }
 
-  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor, setLiveView };
+  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor, setLiveView, setVolumetrics };
 }
 
 // Drag-placement on the Output overlay:
@@ -934,6 +1109,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   evEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     if (ev.button !== 0) return;   // left only — middle is the hand-pan, right the context menu
+    // UI chrome parked OVER the stage (the projection preset row + FIELDS chip)
+    // needs its native clicks: capturing the pointer here retargets the click
+    // to the pasteboard and the buttons never fire.
+    if (ev.target?.closest?.('#proj-row')) return;
     const v3 = view3dOf(getShow());
     if (v3) {
       // 3D mode: a CLICK selects the strip under the cursor; a DRAG orbits the

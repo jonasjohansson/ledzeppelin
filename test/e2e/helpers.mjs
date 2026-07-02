@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 
+// Default port; scripts that run alongside others pass their own (72xx range).
 export const PORT = 7181;
 
 // A deterministic show: two 2D strips + a LIFTED ARCH in 3D mode with the
@@ -43,14 +44,14 @@ export function plainShow() {
 }
 
 // Boot the daemon (static file server + WS bridge) on PORT.
-export function startServer() {
+export function startServer(port = PORT) {
   const srv = spawn('node', ['server/index.js'], {
     cwd: new URL('../..', import.meta.url).pathname,
-    env: { ...process.env, PORT: String(PORT), OSC_PORT: '9481' },
+    env: { ...process.env, PORT: String(port), OSC_PORT: String(port + 2300) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return new Promise((resolve, reject) => {
-    const onData = (d) => { if (String(d).includes(String(PORT)) || String(d).toLowerCase().includes('listening')) resolve(srv); };
+    const onData = (d) => { if (String(d).includes(String(port)) || String(d).toLowerCase().includes('listening')) resolve(srv); };
     srv.stdout.on('data', onData); srv.stderr.on('data', onData);
     setTimeout(() => resolve(srv), 1500);   // fallback: assume up
     srv.on('error', reject);
@@ -59,7 +60,7 @@ export function startServer() {
 
 // Open the app with `show` seeded; returns { browser, page, errors }.
 // `errors` collects page errors + console errors for the no-page-errors check.
-export async function openApp(show) {
+export async function openApp(show, port = PORT) {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
   const errors = [];
@@ -70,7 +71,7 @@ export async function openApp(show) {
     localStorage.setItem('lz.riff', '0');            // no startup sound
     localStorage.setItem('lz.riff.played', '1');
   }, show);
-  await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'load' });
+  await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__lz && window.__lz.rgba() != null, null, { timeout: 15000 });
   return { browser, page, errors };
 }

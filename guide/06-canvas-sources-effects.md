@@ -107,6 +107,11 @@ projection) every LED sits at z = 0, so a z-plane sweep acts as a global fade
 as it crosses 0 while x/y fields sweep across the rig — coherent, not a bug.
 The flat canvas view shows no volumetric contribution (correct — it isn't on
 the canvas); the **3D viewport** and the wall **Preview** are where they read.
+In the 3D viewport each active field also draws a schematic **ghost** in its
+clip's colour — a translucent plane, gradient arrow, wireframe sphere rings, or
+a sparse noise lattice — so you can see *where* the field sits in space even
+where no LED catches it; the **FIELDS** chip beside the projection presets
+toggles the ghosts.
 
 Beyond the built-ins, LED Zeppelin runs **ISF** shaders (the Interactive Shader
 Format). Two ways to add one:
