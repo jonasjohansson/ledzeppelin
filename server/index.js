@@ -13,7 +13,7 @@ import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverr
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
-import { createApiHandler, readJson } from './api.js';
+import { createApiHandler, readJson, authorized, problem, statusBody, parseManifest, clipsBody, controlsBody } from './api.js';
 
 // Proxy a WLED JSON-API call (GET state, POST partial state) for the browser.
 // Always returns JSON; failures come back as { error } with a 502 so the UI can
@@ -135,7 +135,28 @@ const OUTPUT_FPS = 42, KEEPALIVE_MS = 1000;   // default cap; the editor can ove
 // the socket still open) for STALE_MS, don't keep-alive the frozen frame forever — fade it to
 // black over FADE_MS so the wall fails to a deliberate dark state, not stale garbage.
 const STALE_MS = 3000, FADE_MS = 1500;
-const wss = new WebSocketServer({ server: http, path: '/frames', perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
+// Both WS paths share the HTTP port, so upgrades are routed manually (an
+// ws-attached server would 400 the other path's handshakes): /frames = the
+// pixel/ext bridge (open, as before), /api/v1/events = the control-API event
+// stream (token-gated like the rest of /api/v1).
+const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 });
+const eventsWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+http.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url, 'http://localhost');
+  if (pathname === '/frames') {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  } else if (pathname === '/api/v1/events') {
+    if (!authorized(req, API_TOKEN)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n'
+        + JSON.stringify(problem('unauthorized', 'set header: Authorization: Bearer <LZ_API_TOKEN>')));
+      socket.destroy();
+      return;
+    }
+    eventsWss.handleUpgrade(req, socket, head, (ws) => eventsWss.emit('connection', ws, req));
+  } else {
+    socket.destroy();
+  }
+});
 let frames = 0;
 let fpsOut = 0;            // frames sent in the last 1s window (for /health)
 let lastFrameAt = 0;      // ms epoch of the last frame actually sent
@@ -171,7 +192,7 @@ wss.on('connection', (ws) => {
       // frame to black over FADE_MS instead of keep-aliving stale garbage indefinitely.
       const staleFor = lastFreshAt ? now - lastFreshAt : 0;
       if (staleFor > STALE_MS) {
-        if (!outputStale) { outputStale = true; console.warn('[ws] no fresh frames — fading to safe state'); }
+        if (!outputStale) { outputStale = true; console.warn('[ws] no fresh frames — fading to safe state'); pushApiStatus(); }
         const k = staleFor >= STALE_MS + FADE_MS ? 0 : 1 - (staleFor - STALE_MS) / FADE_MS;   // 1→0
         if (k <= 0 && now - lastSent < KEEPALIVE_MS) return;   // fully dark → keep-alive black at ~1Hz
         if (!safeBuf || safeBuf.length !== latest.length) safeBuf = Buffer.alloc(latest.length);
@@ -180,7 +201,7 @@ wss.on('connection', (ws) => {
         try { sendFrame(safeBuf, route); } catch (e) { console.error('[ws] safe send failed', e.message); }
         return;
       }
-      if (outputStale) { outputStale = false; console.log('[ws] fresh frames resumed'); }
+      if (outputStale) { outputStale = false; console.log('[ws] fresh frames resumed'); pushApiStatus(); }
       if (!dirty && now - lastSent < KEEPALIVE_MS) return;   // fresh frames at outFps; else ~1Hz keep-alive
       dirty = false; lastSent = now; frames++; lastFrameAt = now;
       try { sendFrame(latest, route); } catch (e) { console.error('[ws] sendFrame failed', e.message); }
@@ -195,7 +216,11 @@ wss.on('connection', (ws) => {
         // Optional global output framerate cap (clamped); rebuild the pacer if it changed.
         const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps) || OUTPUT_FPS)));
         if (fps !== outFps) { outFps = fps; console.log(`[ws] output fps → ${outFps}`); startTimer(); }
-        lastRoute = route; lastFps = outFps; editorWs = ws;   // only the editor sends routes → mark it (control API)
+        // Only the editor sends routes → mark it (control API); announce the
+        // editor coming online to /api/v1/events subscribers.
+        const hadEditor = editorConnected();
+        lastRoute = route; lastFps = outFps; editorWs = ws;
+        if (!hadEditor) pushApiStatus();
       }
       // External-channel ingest over the socket: any client (an app, a sensor
       // script) can send { type:'ext', channel, value } — relay it to the OTHER
@@ -205,7 +230,7 @@ wss.on('connection', (ws) => {
       // late-joining phones get it instantly); a phone asks with
       // { type:'manifest-req' } — answered from cache AND relayed to the editor
       // so it republishes fresh values.
-      else if (m.type === 'manifest') { lastManifest = data.toString(); relayRaw(lastManifest, ws); }
+      else if (m.type === 'manifest') { lastManifest = data.toString(); relayRaw(lastManifest, ws); pushApiManifest(); }
       else if (m.type === 'manifest-req') {
         if (lastManifest && ws.readyState === 1) { try { ws.send(lastManifest); } catch { /* closing */ } }
         relayRaw(data.toString(), ws);
@@ -215,7 +240,7 @@ wss.on('connection', (ws) => {
   startTimer();
   ws.on('close', () => {
     if (timer) clearInterval(timer);
-    if (editorWs === ws) editorWs = null;   // the editor left — relayed API writes now 503
+    if (editorWs === ws) { editorWs = null; pushApiStatus(); }   // the editor left — relayed API writes now 503
     console.log('[ws] client disconnected');
   });
 });
@@ -241,28 +266,47 @@ function broadcastExt(channel, value, except) {
 // --- Control API (/api/v1) ---------------------------------------------------
 // All live daemon state is passed as getters so server/api.js stays pure and
 // unit-testable. Auth: optional LZ_API_TOKEN (Bearer). Docs: docs/api.md.
+const API_TOKEN = process.env.LZ_API_TOKEN || '';
+const apiSnapshot = () => ({
+  version: VERSION,
+  uptimeSec: Math.round(process.uptime()),
+  editorConnected: editorConnected(),
+  clients: wss.clients.size,
+  fpsOut,
+  fpsCap: lastFps,
+  outputStale,
+  blackout: getBlackout(),
+  lastFrameAt,
+  osc: OSC_PORT,
+  devices: lastRoute ? lastRoute.length : null,
+});
 const handleApi = createApiHandler({
-  token: process.env.LZ_API_TOKEN || '',
-  status: () => ({
-    version: VERSION,
-    uptimeSec: Math.round(process.uptime()),
-    editorConnected: editorConnected(),
-    clients: wss.clients.size,
-    fpsOut,
-    fpsCap: lastFps,
-    outputStale,
-    blackout: getBlackout(),
-    lastFrameAt,
-    osc: OSC_PORT,
-    devices: lastRoute ? lastRoute.length : null,
-  }),
+  token: API_TOKEN,
+  status: apiSnapshot,
   route: () => lastRoute,
   manifest: () => lastManifest,
   overrides: getBrightnessOverrides,
   editorConnected,
   relay: (address, value) => broadcastExt(address, value),
-  setBlackout,
+  setBlackout: (on) => { const r = setBlackout(on); pushApiStatus(); return r; },
   setBrightness: setBrightnessOverride,
+});
+// WS /api/v1/events — status on connect + on change (editor connect/disconnect,
+// blackout, outputStale flips), manifest when the editor republishes.
+function apiEvent(obj) {
+  if (!eventsWss.clients.size) return;
+  const s = JSON.stringify(obj);
+  for (const c of eventsWss.clients) {
+    if (c.readyState === 1) { try { c.send(s); } catch { /* closing */ } }
+  }
+}
+function pushApiStatus() { apiEvent({ type: 'status', ...statusBody(apiSnapshot()) }); }
+function pushApiManifest() {
+  const data = parseManifest(lastManifest);
+  if (data) apiEvent({ type: 'manifest', ...clipsBody(data), ...controlsBody(data) });
+}
+eventsWss.on('connection', (ws) => {
+  try { ws.send(JSON.stringify({ type: 'status', ...statusBody(apiSnapshot()) })); } catch { /* closing */ }
 });
 // OSC over UDP: any address, first numeric arg → an external channel named by
 // the address. TouchOSC / TouchDesigner / oscsend point here.
