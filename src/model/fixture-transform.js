@@ -96,6 +96,34 @@ const normPts = (pts) => {
     : [num(p?.[0]), num(p?.[1])]));
 };
 
+// Carry z (height off the canvas plane) across a 2D points-recompute: bar/grid
+// points are DERIVED from the pixel transform (x/y only), so without this a
+// resync/resize/move would silently drop a lifted fixture back to the plane.
+// Re-attach the previous cache's z per-vertex (first z as the fallback when the
+// point count changes). All-2D previous points pass `next` through untouched.
+const withZOf = (prev, next) => {
+  if (!Array.isArray(prev) || !prev.some((p) => p != null && p.length > 2)) return next;
+  const z0 = num(prev.find((p) => p != null && p.length > 2)?.[2]);
+  return next.map((p, i) => [p[0], p[1], prev[i]?.length > 2 ? num(prev[i][2]) : z0]);
+};
+
+// Set a WHOLE fixture's height off the canvas plane: write z on every vertex of
+// its polyline (promoting 2-tuples), x/y and the output patch untouched. z = 0
+// strips back to clean 2-tuples — the fixture returns to a plain 2D strip (the
+// byte-identical 2D guard). Per-vertex z editing is a later phase; this is the
+// whole-fixture lift. Pure — returns a new show.
+export function setFixtureZ(show, fxId, z) {
+  const cv = show.composition?.canvas;
+  const zz = num(z);
+  return mapFixture(show, fxId, (f) => {
+    const base = normPts(
+      f.input?.points?.length ? f.input.points : pointsFromTransform(f.input?.transform, cv),
+    );
+    const points = base.map((p) => (zz === 0 ? [p[0], p[1]] : [p[0], p[1], zz]));
+    return { ...f, input: { ...f.input, points } };
+  });
+}
+
 // A fixture is POLYLINE mode (a bendable, multi-segment run) when it carries an
 // explicit mode flag or more than two points; otherwise BAR mode (a single
 // straight segment editable as a {x,y,w,h,rotation} transform). Polyline mode
@@ -184,7 +212,7 @@ export function syncFixtureGeometry(fixture, canvas) {
   // A DMX/par fixture keeps its 'dmx' mode (point fixture); a matrix keeps 'grid'
   // (rectangle footprint); everything else is a straight bar. `points` is a 2-pt cache.
   const mode = input.dmx ? 'dmx' : (input.mode === 'grid' ? 'grid' : 'bar');
-  const points = pointsFromTransform(transform, canvas, mode === 'grid');
+  const points = withZOf(input.points, pointsFromTransform(transform, canvas, mode === 'grid'));
   return { ...fixture, input: { ...input, mode, transform, points } };
 }
 
@@ -328,7 +356,7 @@ export function setFixtureTransform(show, fxId, patch) {
     fixtures: show.fixtures.map((f) => {
       if (f.id !== fxId) return f;
       const transform = normTransform({ ...(f.input?.transform || transformFromPoints(f.input?.points, canvas)), ...patch });
-      return { ...f, input: { ...f.input, transform, points: pointsFromTransform(transform, canvas, f.input?.mode === 'grid') } };
+      return { ...f, input: { ...f.input, transform, points: withZOf(f.input?.points, pointsFromTransform(transform, canvas, f.input?.mode === 'grid')) } };
     }),
   };
 }

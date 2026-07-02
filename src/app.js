@@ -23,7 +23,7 @@ import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ } from './model/fixture-transform.js';
 import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
@@ -981,6 +981,18 @@ function positionEditor(sel) {
         oel('div', { className: 'output-grid' }, [
           txField('X', tf.x - bb.w / 2, (v) => setT({ x: v + bb.w / 2 })),
           txField('Y', tf.y - bb.h / 2, (v) => setT({ y: v + bb.h / 2 })),
+          // Z — the whole fixture's height off the canvas plane (px, 0 = flat on
+          // it). Writes z on every vertex via setFixtureZ (normalized against the
+          // canvas height, the same unit the viewport renders z with). Always
+          // visible; only VISIBLE in the 3D viewport — output samples flat-front
+          // either way until the projection camera ships. Per-vertex z is Phase 3.
+          (() => {
+            const cvH = (show.composition?.canvas?.h) || 720;
+            const z0 = (Number(sel.input?.points?.find((p) => p?.length > 2)?.[2]) || 0) * cvH;
+            const fld = txField('Z', z0, (v) => apply(setFixtureZ(show, sel.id, v / cvH)));
+            fld.title = 'lift the whole fixture off the canvas plane (visible in 3D mode; output still projects flat-front)';
+            return fld;
+          })(),
           txField('Width', tf.w, (v) => setT({ w: v })),
           // Height is AUTO by default: drawn to PHYSICAL scale (10 mm strip × this
           // fixture's px-per-meter). The field shows the effective px; typing a

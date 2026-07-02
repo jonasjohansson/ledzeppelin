@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   pointsFromTransform, transformFromPoints, syncFixtureGeometry,
   syncShowFixtures, setFixtureTransform, isPolylineFixture,
-  setFixtureVertex, addFixtureVertex, removeFixtureVertex,
+  setFixtureVertex, addFixtureVertex, removeFixtureVertex, setFixtureZ,
 } from '../src/model/fixture-transform.js';
 
 const CANVAS = { w: 1000, h: 500 };
@@ -156,4 +156,46 @@ test('normPts promotes the WHOLE polyline to 3-tuples once any vertex has z', ()
   const out = syncFixtureGeometry(f, CANVAS);
   assert.deepEqual(out.input.points, [[0.1, 0.5, 0], [0.5, 0.2, 0.3], [0.9, 0.5, 0]]);
   for (const p of out.input.points) assert.equal(p.length, 3);
+});
+
+// --- whole-fixture Z (lift a strip off the canvas plane) ---------------------
+test('setFixtureZ lifts every vertex to the given z; x/y untouched', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [
+    { id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.2, 0.7], [0.9, 0.5]], samples: 6 },
+      output: { deviceId: 'c1', pixelOffset: 3, pixelCount: 6 } },
+  ] };
+  const next = setFixtureZ(show, 'f1', 0.3);
+  assert.deepEqual(next.fixtures[0].input.points, [[0.1, 0.5, 0.3], [0.5, 0.2, 0.3], [0.9, 0.5, 0.3]]);
+  assert.deepEqual(next.fixtures[0].output, show.fixtures[0].output);   // patch untouched
+  assert.deepEqual(show.fixtures[0].input.points[0], [0.1, 0.5]);       // pure — input untouched
+});
+
+test('setFixtureZ 0 returns the run to clean 2-tuples (the 2D guard)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [
+    { id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5, 0.4], [0.9, 0.5, 0.4]], samples: 6 } },
+  ] };
+  const next = setFixtureZ(show, 'f1', 0);
+  assert.deepEqual(next.fixtures[0].input.points, [[0.1, 0.5], [0.9, 0.5]]);
+});
+
+test('setFixtureZ works on a BAR (z written onto the derived 2-pt cache)', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [
+    { id: 'f1', input: { points: [[0.1, 0.5], [0.9, 0.5]], samples: 4 } },
+  ] };
+  show = syncShowFixtures(show);                       // bar with a transform + derived points
+  const next = setFixtureZ(show, 'f1', 0.25);
+  for (const p of next.fixtures[0].input.points) assert.equal(p[2], 0.25);
+});
+
+test('a lifted BAR keeps its z through syncFixtureGeometry (points recompute)', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [
+    { id: 'f1', input: { points: [[0.1, 0.5], [0.9, 0.5]], samples: 4 } },
+  ] };
+  show = syncShowFixtures(syncShowFixtures(setFixtureZ(syncShowFixtures(show), 'f1', 0.25)));
+  const pts = show.fixtures[0].input.points;
+  assert.equal(pts.length, 2);
+  for (const p of pts) assert.equal(p[2], 0.25);       // z survives the transform-derived recompute
+  // and an x/y transform edit keeps the lift too
+  const moved = setFixtureTransform(show, 'f1', { x: 300 });
+  for (const p of moved.fixtures[0].input.points) assert.equal(p[2], 0.25);
 });
