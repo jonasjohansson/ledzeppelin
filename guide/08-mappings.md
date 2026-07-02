@@ -2,7 +2,7 @@
 
 > Control LED Zeppelin live — from a MIDI controller, the keyboard, OSC, or a phone.
 
-The **Mapping** tab is where you wire external controls to the show: trigger a clip, ride a parameter, block a layer, or set the OSC listen port. Open it from the **mapping icon** in the top bar (it opens as a browser tab, like the Inventory). The editor still owns the show; the Mapping tab is just a view onto it, kept in sync.
+The **Mapping** tab is where you wire external controls to the show: trigger a clip, ride a parameter, block a layer, or set the OSC listen port. Open it from the **mapping icon** in the top bar (it opens as a browser tab, like the Library). The editor still owns the show; the Mapping tab is just a view onto it, kept in sync.
 
 ![The Mapping tab: a parameter table with an OSC address, a MIDI cell, and a Key cell per row.](img/mappings.png)
 

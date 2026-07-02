@@ -10,7 +10,7 @@ This page covers what comes across, where to trigger the import, how to assign
 controller IPs, and the two rules worth remembering — the import **replaces** your
 rig (it is not additive) and it is **undoable** with ⌘Z.
 
-![Inventory tab with the LEDger importer](img/inventory.png)
+![Library tab with the LEDger importer](img/inventory.png)
 
 ## What a LEDger preset contains
 
@@ -28,7 +28,7 @@ A preset describes the rig, not the visuals:
   layout isn't stretched.
 
 A LEDger **fixture type** is created per tube definition in use, so imported tubes
-show up in the [Inventory](05-fixtures-and-inventory.md) with their correct pixel
+show up in the [Library](05-fixtures-and-inventory.md) with their correct pixel
 counts and you can duplicate from them later.
 
 The import is **balanced and limited by what LEDger exports**. Only `strip` and
@@ -39,17 +39,17 @@ reconciles instead of silently dropping it.
 
 ## Triggering the import
 
-Import lives **inside the Inventory tab**, not on the top bar. Open Inventory
-(the grid icon in the top bar) and use **import from ledger → choose preset file**
+Import lives **inside the Library tab**, not on the top bar. Open the Library
+(the box icon in the top bar) and use **import from ledger → choose preset file**
 to pick the exported `.json`.
 
 You can also **drag the preset onto the LED Zeppelin window**. Because a LEDger
 preset is a rig (not a project or composition), dropping it doesn't load
 anything directly — it shows the hint:
 
-> That looks like a LEDger preset — import it from the Inventory tab.
+> That looks like a LEDger preset — import it from the Library tab.
 
-So either drop reminds you of, or you go straight to, the same place: the Inventory
+So either drop reminds you of, or you go straight to, the same place: the Library
 tab's importer.
 
 > Other drops behave differently: a project `.json` loads rig + visuals, a
@@ -115,7 +115,7 @@ Two things to be clear on:
 
 The import commits through the same path as any fixture edit — it saves, rebuilds
 the sampler/route/output bridge, and refreshes the panels — so the canvas overlay,
-the [Devices](04-devices-and-scanning.md) list, and the rest of the UI all update at
+the [Output](04-devices-and-scanning.md) list, and the rest of the UI all update at
 once.
 
 A successful import is a **single undoable step**: press **⌘Z** to restore your prior
@@ -125,10 +125,10 @@ rig and composition. A persistent banner confirms what landed —
 ## After import
 
 The imported devices still need to reach their controllers on the network. Head to
-the [Devices](04-devices-and-scanning.md) panel to verify each device's IP, scan,
+the [Output](04-devices-and-scanning.md) panel to verify each device's IP, scan,
 and identify, then use [Output & calibration](10-output-and-calibration.md) and the
 **Preview** wall button to confirm pixels light where you expect.
 
-_See also: [Fixtures & the Inventory](05-fixtures-and-inventory.md) ·
+_See also: [Fixtures & the Library](05-fixtures-and-inventory.md) ·
 [Devices & scanning](04-devices-and-scanning.md) ·
 [Output & calibration](10-output-and-calibration.md)._

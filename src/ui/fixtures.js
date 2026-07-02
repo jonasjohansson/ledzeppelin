@@ -334,9 +334,11 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         // #output-list re-renders + selects the new device immediately (issue #4).
         onDeviceAdded?.(id);
       };
+      // Name (truncates) · IP chip (fixed slot so rows column-align) · detail chips · add.
       return el('div', { className: 'output-row scan-row' }, [
-        el('span', { textContent: label }), el('span', { className: 'fx-badge', textContent: ip }),
-        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b })), add,
+        el('span', { textContent: label || ip, title: label || ip }),
+        el('span', { className: 'fx-badge scan-ip', textContent: ip }),
+        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b, title: b })), add,
       ]);
     };
     const res = scanState.result;

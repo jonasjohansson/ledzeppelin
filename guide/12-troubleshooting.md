@@ -16,7 +16,7 @@ No LEDs respond, even though the canvas is animating. Walk this checklist in ord
 2. **Are you on the local app, not the hosted site?** See
    [Editor opens but can't stream](#editor-opens-but-cant-stream) below — designing and
    preview work anywhere, but streaming requires the local daemon.
-3. **Is the device online?** Open the **Devices** panel and check each controller's
+3. **Is the device online?** Open the **Output** panel and check each controller's
    status. The daemon pings every device while it's live; a controller that isn't
    answering is shown as offline. Confirm its IP is correct and that it's powered and
    on the same LAN as the machine running the app.
@@ -38,7 +38,7 @@ No LEDs respond, even though the canvas is animating. Walk this checklist in ord
 
 You set red and the strip glows green (or vice versa). This is a **colour order**
 mismatch — most WS281x strips are wired **GRB**, not RGB. Open the fixture (or its
-template in the **Inventory**) and change **Colour order** to `GRB`. The default for new
+template in the **Library**) and change **Colour order** to `GRB`. The default for new
 strips is already `GRB`; if you typed a template by hand or imported odd data, that's the
 field to check. Colour order is per-fixture/per-device, so you can mix RGB and GRB strips
 on one controller.
@@ -88,7 +88,7 @@ LED Zeppelin already running is the most common cause.
 ## A scanned controller doesn't appear
 
 When you scan, live progress shows as it runs, and a controller you **Add** appears in
-the Devices list immediately. If a device never shows up at all, it didn't answer the
+the Output panel's device list immediately. If a device never shows up at all, it didn't answer the
 scan — confirm it's powered, on the same subnet, and that Local Network permission is
 granted (macOS), then scan again. See
 [Devices & scanning](04-devices-and-scanning.md).

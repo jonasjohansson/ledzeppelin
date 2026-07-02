@@ -18,7 +18,7 @@ test('color params expose hex-string defaults', () => {
 });
 
 test('defaultParams(line) returns the expected defaults', () => {
-  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.5 });
+  assert.deepEqual(defaultParams('line'), { pos: 0.5, width: 0.08, angle: 90, speed: 1, amp: 0.5, numLines: 1 });
 });
 
 test('defaultParams of an unknown name is empty', () => {

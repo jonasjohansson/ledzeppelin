@@ -7,7 +7,7 @@ canvas, and the app streams the right colours to each light in real time (~40 fp
 Think projection-mapping, but the "surfaces" are LED **fixtures** and the output is network
 pixel data, not a video signal.
 
-![The LED Zeppelin editor: top-bar tools, the Composition / clip-deck panel on the left, the canvas with its clip grid in the centre, and the Devices panel on the right.](img/overview.png)
+![The LED Zeppelin editor: top-bar tools, the Composition / clip-deck panel on the left, the canvas with its clip grid in the centre, and the Output panel on the right.](img/overview.png)
 
 ## Two halves
 
@@ -39,9 +39,10 @@ It uses **scenes** (recallable snapshots), not a cue list. The released app need
 
 A single row of icon buttons (with tiny uppercase captions), grouped left to right:
 
-- **Project** — lock (performance mode), save (⌘S), open (⌘O), new, undo/redo.
-- **Mapping** (mapping icon) and **Inventory** (grid icon) — each opens as a **browser tab**.
-  The Inventory tab also hosts *import from LEDger*.
+- **Project** — lock (performance mode), save (⌘S), open (⌘O), new (undo/redo live on
+  ⌘Z / ⇧⌘Z).
+- **Mapping** (mapping icon) and **Library** (box icon) — each opens as a **browser tab**.
+  The Library tab also hosts *import from LEDger*.
 - **Control surface** (phone remote), **align**, and **view presets** —
   Canvas / Split / Editor / Float — plus the panel toggles.
 - **Canvas tools** — edit fixtures, snap, grid, tint-by-controller, and **Preview** (the wall
@@ -57,7 +58,7 @@ There is no Import button — **drag a file onto the window**:
 - an **ISF shader** (`.fs` / `.isf` / `.frag` / `.glsl`) → a new generator clip;
 - a **LED Zeppelin project** `.json` → loads the rig *and* visuals;
 - a **composition** `.json` → loads visuals only;
-- a **LEDger preset** → you're pointed to the **Inventory** tab to import it.
+- a **LEDger preset** → you're pointed to the **Library** tab to import it.
 
 Save the whole project with ⌘S (open with ⌘O); *Save composition…* lives in **Settings**.
 

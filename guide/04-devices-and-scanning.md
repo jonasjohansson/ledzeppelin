@@ -3,14 +3,14 @@
 Finding and configuring the physical controllers that drive your LEDs. A **device** is a
 physical controller (WLED/QuinLED or a generic Art-Net node); a **fixture** is a mapped
 light shape on the canvas; a **template** is a reusable definition in the
-[Inventory](05-fixtures-and-inventory.md). This page covers the **Devices** panel, finding
+[Library](05-fixtures-and-inventory.md). This page covers the **Output** panel, finding
 controllers by scanning or adding them from a template, and the per-device settings.
 
-![The Devices panel](img/devices.png)
+![The Output panel](img/devices.png)
 
-## The Devices panel
+## The Output panel
 
-The Devices panel lists every controller as an always-expanded section, with its assigned
+The Output panel (the device list) lists every controller as an always-expanded section, with its assigned
 fixtures as rows beneath. Controllers stay open — there is no fold/collapse. A persistent
 **Unassigned** group sits at the bottom; drop a fixture there to detach it from any
 controller.
@@ -28,14 +28,14 @@ output); drag onto **Unassigned** to detach it.
 
 ### Header icons
 
-The panel header (titled **Devices**) carries three small icons — there are no large
+The panel header (titled **Output**) carries three small icons — there are no large
 "+ Fixture / + Device" buttons:
 
 - **add-fixture** — opens a template picker; pick a fixture template (or **Blank**) to place
-  a new fixture. See [Fixtures & Inventory](05-fixtures-and-inventory.md).
+  a new fixture. See [Fixtures & the Library](05-fixtures-and-inventory.md).
 - **add-device** — opens a controller-template picker; pick a controller model (shown with
   its output count, e.g. `DigQuad (4 out)`) or **Blank** to add a new controller.
-- **inventory** — opens the [Inventory](05-fixtures-and-inventory.md) tab, where the fixture
+- **library** — opens the [Library](05-fixtures-and-inventory.md) tab, where the fixture
   and controller **templates** live.
 
 ## Scanning the network
@@ -73,7 +73,7 @@ Use the **add-device** header icon when you are building a rig offline or have h
 won't answer a scan. Pick a controller model from the menu (or **Blank**, which stamps the
 always-present Generic model). The new controller is added with a unique name, selected, and
 ready to edit — set its IP afterwards. Controller models live in the
-[Inventory](05-fixtures-and-inventory.md); editing a model there propagates its output count
+[Library](05-fixtures-and-inventory.md); editing a model there propagates its output count
 and budget to every controller that uses it, but per-unit facts (name, IP, colour order,
 brightness) stay on the device.
 
@@ -89,7 +89,7 @@ Selecting a controller opens its editor in the sidebar:
 - **IP** — the controller's address. The field flags a malformed IPv4 with a red border. The
   **↗** opens the controller's own WLED web UI at `http://<ip>` (disabled until an IP is
   set).
-- **Model** — the controller model (from the Inventory). Drives the **Outputs** count, shown
+- **Model** — the controller model (from the Library). Drives the **Outputs** count, shown
   read-only as `N (from model)`.
 - **Protocol** — **DDP (WLED)** or **Art-Net**. Switching also resets the port to that
   protocol's default (4048 for DDP, 6454 for Art-Net).
@@ -134,7 +134,7 @@ online/offline state without opening each one.
 
 Every controller output has a pixel budget — the practical limit at which it can still hold
 a smooth frame rate. The default is **830 px/output ≈ 40 fps** for WS281x-family strips,
-editable per controller model in the Inventory.
+editable per controller model in the Library.
 
 The header badge totals the controller's patched pixels (e.g. `512px`). When any single
 output exceeds its budget, a **⚠** is appended to the badge and the badge is flagged. In a
@@ -145,6 +145,6 @@ load across more outputs (a QuinLED DigQuad has 4) to keep frame rate up.
 ---
 
 _See also: [Concepts](02-concepts.md), [Getting started](03-getting-started.md),
-[Fixtures & Inventory](05-fixtures-and-inventory.md),
+[Fixtures & the Library](05-fixtures-and-inventory.md),
 [Output & calibration](10-output-and-calibration.md),
 [Troubleshooting](12-troubleshooting.md)._

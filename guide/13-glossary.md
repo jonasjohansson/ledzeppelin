@@ -14,23 +14,23 @@ LEDs/m × length; on a device it's the total addressable count across the output
 
 **Device** *(controller)* — a physical box that drives LEDs: WLED, QuinLED, or a
 generic Art-Net node. Devices have a network address (IP/host), a protocol, and a
-pixel count. Managed in the **Devices** panel; see
+pixel count. Managed in the **Output** panel; see
 [Devices & scanning](04-devices-and-scanning.md).
 
 **Fixture** — a mapped light *shape* placed on the canvas: a strip, ring, matrix,
 or point with an x/y/w/h/rotation transform. A fixture samples the canvas where it
 sits and sends those pixels to a slice of a device's address space (device +
-pixel offset + pixel count). See [Fixtures & Inventory](05-fixtures-and-inventory.md).
+pixel offset + pixel count). See [Fixtures & the Library](05-fixtures-and-inventory.md).
 
 **Template** — a reusable fixture or controller *definition* living in the
-**Inventory**. Placing a template stamps out a standalone fixture/device that owns
+**Library**. Placing a template stamps out a standalone fixture/device that owns
 its own spec — editing the template afterwards never changes anything already
 placed. Duplicate a placed fixture to multiply it.
 
-**Inventory** — the library of fixture and controller templates, opened as a
-browser tab (grid icon in the top bar, or the inventory icon in the Devices
+**Library** — the catalog of fixture and controller templates, opened as a
+browser tab (box icon in the top bar, or the library icon in the Output
 header). LEDger import lives here too ("import from ledger / choose preset file").
-See [Fixtures & Inventory](05-fixtures-and-inventory.md).
+See [Fixtures & the Library](05-fixtures-and-inventory.md).
 
 **DDP** — Distributed Display Protocol. The pixel-streaming protocol LED Zeppelin
 uses to push frames to WLED/QuinLED devices over the network. Pixels map by index
@@ -91,7 +91,7 @@ There is no Import button. Bring things in by **dragging onto the window**:
 | ISF shader (`.fs` / `.isf` / `.frag` / `.glsl`) | New generator clip |
 | LED Zeppelin project `.json` | Loads the rig + visuals (same as ⌘O) |
 | Composition `.json` | Loads visuals only |
-| LEDger preset | Hints to use the Inventory tab |
+| LEDger preset | Hints to use the Library tab |
 
 **Save project** (⌘S) writes the whole project — rig + visuals. **Save
 composition…** (in Settings) writes visuals only.
@@ -125,7 +125,7 @@ you're typing in a field, and most editing keys are blocked while the show is
 | Nudge by 10 px | Shift + Arrow |
 | Clear fixture selection | Escape |
 
-> ⌘D on the **Inventory** tab duplicates the selected template instead of a placed
+> ⌘D on the **Library** tab duplicates the selected template instead of a placed
 > fixture.
 
 ### View & performance

@@ -23,28 +23,28 @@ There are two separate limits — one global, one per output.
 
 **Global cap.** Settings › *output* › **Max FPS** (default 42) caps the whole pipeline's send rate. There's no point rendering or streaming faster than the LEDs can show, so this is the ceiling for DDP and Art-Net alike. Range 1–60.
 
-**Per-output budget.** WS281x-family LEDs clock out at roughly 30 µs per pixel, so a single data line tops out near **830 pixels at 40 fps** (`1 / (40 · 30µs)`). This is the default `maxPerOutput` for QuinLED and generic controller models — it is *not* a board limit (the QuinLED outputs have no hard pixel cap; the real constraint is the ESP's framerate and RAM). It's editable per controller model in the Inventory.
+**Per-output budget.** WS281x-family LEDs clock out at roughly 30 µs per pixel, so a single data line tops out near **830 pixels at 40 fps** (`1 / (40 · 30µs)`). This is the default `maxPerOutput` for QuinLED and generic controller models — it is *not* a board limit (the QuinLED outputs have no hard pixel cap; the real constraint is the ESP's framerate and RAM). It's editable per controller model in the Library.
 
 When a single output's pixel run reaches its budget, you'll see a **⚠** badge:
 
-- In the **Devices** panel, the controller's pixel total shows `⚠` when an output is over budget.
+- In the **Output** panel, the controller's pixel total shows `⚠` when an output is over budget.
 - In a fixture's chain/patch inspector, the run shows `… / 830px ⚠ full`, and the "Output →" picker greys out — you can't daisy-chain more pixels onto a full output.
 
-The fix is to split the run across another output or another device. See [Devices & scanning](04-devices-and-scanning.md) and [Fixtures & inventory](05-fixtures-and-inventory.md).
+The fix is to split the run across another output or another device. See [Devices & scanning](04-devices-and-scanning.md) and [Fixtures & the Library](05-fixtures-and-inventory.md).
 
 ## Brightness (per-device cap)
 
 Each device carries an **output brightness** — a 0–1 cap applied per-frame to our stream, daemon-side, *before* the LEDs. Because it acts on the stream it works for Art-Net too, not just WLED (WLED's own master-brightness write is ignored during realtime streaming).
 
-Set it in the **Devices** panel: each detected WLED controller shows a **Bright** slider (0–100%). Hold Shift while dragging for coarse snapping. This is the right lever for taming a too-bright run or matching one device to another — it does not touch your composition, only what that controller emits.
+Set it in the **Output** panel: each detected WLED controller shows a **Bright** slider (0–100%). Hold Shift while dragging for coarse snapping. This is the right lever for taming a too-bright run or matching one device to another — it does not touch your composition, only what that controller emits.
 
 This is separate from the **Brightness** slider in Settings › *appearance*, which only lifts the UI surface and has nothing to do with output.
 
 ## Colour order
 
-Colour order is the physical byte order the strip is wired for (GRB, RGB, BGR, …). It's set per **device** in the Devices panel under **Format** (default GRB) — the common case, since a controller's strips are usually wired alike.
+Colour order is the physical byte order the strip is wired for (GRB, RGB, BGR, …). It's set per **device** in the Output panel under **Format** (default GRB) — the common case, since a controller's strips are usually wired alike.
 
-A single fixture can override its controller's order with its own **colour format**, including RGBW variants (set on the fixture; "From controller" inherits the device order). That lets an RGBW strip sit on the same controller as RGB ones. For RGBW/RGBWA output, White is derived as `min(R,G,B)`. See [Fixtures & inventory](05-fixtures-and-inventory.md).
+A single fixture can override its controller's order with its own **colour format**, including RGBW variants (set on the fixture; "From controller" inherits the device order). That lets an RGBW strip sit on the same controller as RGB ones. For RGBW/RGBWA output, White is derived as `min(R,G,B)`. See [Fixtures & the Library](05-fixtures-and-inventory.md).
 
 If your colours look swapped (red showing as green, etc.), the device Format is the first thing to check.
 
@@ -63,17 +63,17 @@ This is the fastest way to judge what the rig will actually show without standin
 A few related behaviours:
 
 - **Hidden fixtures** (eye toggled off) go dark on the wall too: they're still sampled to keep packet indices contiguous, but their bytes are zeroed.
-- The **identify** button (Devices panel, WLED only) flashes a controller red so you can locate it on the rig — use it with output paused or blacked out, since live DDP otherwise overrides WLED's own segments.
+- The **identify** button (Output panel, WLED only) flashes a controller red so you can locate it on the rig — use it with output paused or blacked out, since live DDP otherwise overrides WLED's own segments.
 
 ## Colour calibration — limited today
 
 Calibration is intentionally minimal right now; set expectations accordingly.
 
-- **Gamma** is the one calibration control: a per-device daemon-side LUT (Devices panel, range 0.5–3, default 1 = linear) that straightens LED fades so dims don't crush. It's applied before the LEDs, not to the Preview.
+- **Gamma** is the one calibration control: a per-device daemon-side LUT (Output panel, range 0.5–3, default 1 = linear) that straightens LED fades so dims don't crush. It's applied before the LEDs, not to the Preview.
 - There is **no per-channel white balance, no colour-temperature match, and no per-device colour correction** beyond gamma + brightness + byte order. Matching the exact colour of mixed LED batches or different strip types is not yet possible in-app.
 
 Workarounds for now: keep each run to one strip type, use per-device **Brightness** to balance levels, set **Gamma** to tame fades, and rely on the device **Format** for correct channel order. Fuller colour/output calibration is on the roadmap.
 
 ---
 
-_See also: [Devices & scanning](04-devices-and-scanning.md) · [Fixtures & inventory](05-fixtures-and-inventory.md) · [Concepts](02-concepts.md) · [Troubleshooting](12-troubleshooting.md)._
+_See also: [Devices & scanning](04-devices-and-scanning.md) · [Fixtures & the Library](05-fixtures-and-inventory.md) · [Concepts](02-concepts.md) · [Troubleshooting](12-troubleshooting.md)._

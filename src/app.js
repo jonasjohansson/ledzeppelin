@@ -17,6 +17,7 @@ import { activateTabs } from './ui/kit/tabs.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, setCompositionOpacity, addISFClip, addISFEffect,
+  copyName,
 } from './model/layers.js';
 import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
@@ -167,11 +168,6 @@ const undoStack = [];
 const redoStack = [];
 let undoLastAt = 0;
 let undoSuppress = false;
-// Grey the top-bar undo/redo icons when their stack is empty.
-function updateUndoButtons() {
-  document.getElementById('menu-undo')?.toggleAttribute('disabled', !undoStack.length);
-  document.getElementById('menu-redo')?.toggleAttribute('disabled', !redoStack.length);
-}
 function snapshotForUndo(prev) {
   if (undoSuppress || !prev) return;
   const now = performance.now();
@@ -180,7 +176,6 @@ function snapshotForUndo(prev) {
   if (undoStack.length > 120) undoStack.shift();
   redoStack.length = 0;          // a fresh edit invalidates redo
   undoLastAt = now;
-  updateUndoButtons();
 }
 function restoreShow(s) {
   undoSuppress = true;
@@ -198,7 +193,6 @@ function restoreShow(s) {
   panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
   undoSuppress = false;
   undoLastAt = 0;
-  updateUndoButtons();
 }
 function undo() { if (undoStack.length) { redoStack.push(show); restoreShow(undoStack.pop()); } }
 function redo() { if (redoStack.length) { undoStack.push(show); restoreShow(redoStack.pop()); } }
@@ -700,7 +694,7 @@ if (previewCanvas) {
     onEdit: (next) => { if (!dragOrig) dragOrig = show; show = next; samplerDirty = true; redrawOverlay(); },
     onCommit: (next) => {
       snapGuides = [];
-      if (dragOrig) { undoStack.push(dragOrig); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; dragOrig = null; updateUndoButtons(); }
+      if (dragOrig) { undoStack.push(dragOrig); if (undoStack.length > 120) undoStack.shift(); redoStack.length = 0; dragOrig = null; }
       undoSuppress = true; saveShow(next); rebuild(next); undoSuppress = false;   // rebuild must NOT snapshot the post-drag show
       panel.refresh(); renderOutput();
     },
@@ -1051,7 +1045,7 @@ function dmxEditor(sel) {
       // Per-instance only: WHICH definition + WHERE it sits. The channel LAYOUT is
       // owned by the type (edit it in Inventory → applies to every placed copy).
       const head = ptype
-        ? fld('Type', oel('span', { className: 'fx-readonly', textContent: ptype.name || ptype.id, title: 'edit this fixture’s channels in Inventory' }))
+        ? fld('Type', oel('span', { className: 'fx-readonly', textContent: ptype.name || ptype.id, title: 'edit this fixture’s channels in the Library' }))
         : fld('Profile', sel2(DMX_PROFILES.map((p) => ({ value: p.id, label: p.name })), cfg.profileId, (id) => {
           if (id === 'generic') setDmx({ profileId: 'generic', channels: cfg.channels?.length ? cfg.channels : [{ kind: 'fixed', value: 0 }] });
           else setDmx({ profileId: id, channels: undefined });
@@ -1508,7 +1502,7 @@ function updateInspector() {
   // selected fixture(s)/device editor.
   if (outputTab === 'library') {
     detail = panel.libraryDetailEl?.();
-    title = panel.librarySelection?.()?.name || 'Inventory';
+    title = panel.librarySelection?.()?.name || 'Library';
   } else if (selectedFixtureIds.size === 1) {
     const f = (show.fixtures || []).find((x) => x.id === [...selectedFixtureIds][0]);
     if (f) { detail = isDmxFixture(f) ? dmxEditor(f) : positionEditor(f); title = fxName(f); }
@@ -2207,7 +2201,7 @@ function placeDeviceCopy(srcDev) {
   if (!srcDev) return;
   const next = structuredClone(show);
   let k = next.devices.length + 1, id; do { id = `c${k}`; k++; } while (next.devices.some((d) => d.id === id));
-  next.devices.push({ ...structuredClone(srcDev), id, name: `${srcDev.name || srcDev.id} copy` });
+  next.devices.push({ ...structuredClone(srcDev), id, name: copyName(srcDev.name || srcDev.id, (next.devices || []).map((d) => d.name || '')) });
   selectedFixtureIds.clear(); selectedDeviceId = id; panel.setDevice?.(id); expandedDevices.add(id);
   saveShow(next); rebuild(next); panel.refresh(); renderOutput(); redrawOverlay();
 }
@@ -3059,7 +3053,7 @@ window.addEventListener('drop', async (e) => {
       const data = JSON.parse(await f.text());
       if (data && Array.isArray(data.fixtures) && data.composition) applyFullShow(normalizeComposition(data));
       else if (data && (data.layers || data.canvas)) applyComposition(data);
-      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Inventory tab.');
+      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Library tab.');
       else window.alert('Unrecognised .json — expected a LED Zeppelin project or composition.');
     } catch (err) { window.alert('Load failed: ' + err.message); }
   }
@@ -3121,8 +3115,8 @@ document.getElementById('menu-install')?.addEventListener('click', () => window.
 // tooltip still carries the full description). One label per known button id.
 const TOPBAR_CAPTIONS = {
   'menu-lock': 'Lock', 'menu-save': 'Save', 'menu-open': 'Open', 'menu-new': 'New',
-  'menu-undo': 'Undo', 'menu-redo': 'Redo', 'menu-guide': 'Guide',
-  'menu-mapping': 'Mapping', 'menu-inventory': 'Inventory', 'menu-remote': 'Remote', 'menu-align': 'Align',
+  'menu-guide': 'Guide',
+  'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
   'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
   'menu-health': 'Daemon', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
@@ -3148,9 +3142,6 @@ document.getElementById('menu-refresh')?.addEventListener('click', async () => {
 });
 document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
 document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
-document.getElementById('menu-undo')?.addEventListener('click', () => undo());
-document.getElementById('menu-redo')?.addEventListener('click', () => redo());
-updateUndoButtons();   // initial greyed state (both stacks empty at boot)
 // Health icon → opens the daemon's /health JSON; enabled only while the daemon is live.
 const healthBtn = document.getElementById('menu-health');
 healthBtn?.addEventListener('click', () => { if (!healthBtn.disabled) window.open('/health', '_blank', 'noopener'); });

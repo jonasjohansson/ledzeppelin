@@ -73,7 +73,7 @@ the key to the interface:
 |------|-----------|--------------------|
 | **Device** | A physical controller on your network (WLED/QuinLED/Art-Net node). Has an IP, outputs, a colour order. | The power/data box on the wall. |
 | **Fixture** | A light *shape* on the canvas, with a pixel count and a position. It **samples** the canvas and is **patched** to a device's output. | A specific strip, hung in a specific place. |
-| **Template** | A reusable definition you stamp new fixtures/devices from (e.g. "2 m strip, 120 px, GRB"). Lives in the **Inventory**. Editing a template never changes lights you've already placed. | A cut-list spec you build many identical strips from. |
+| **Template** | A reusable definition you stamp new fixtures/devices from (e.g. "2 m strip, 120 px, GRB"). Lives in the **Library**. Editing a template never changes lights you've already placed. | A cut-list spec you build many identical strips from. |
 
 A typical flow: define a **template** once → **stamp** several standalone **fixtures** from
 it → place each fixture on the canvas → **patch** each to an output on a **device**. Once
@@ -94,7 +94,7 @@ out the addresses.
 - **Pixel count** — how many pixels a fixture has.
 - **Device / controller** — the hardware that drives pixels (WLED/QuinLED/Art-Net node).
 - **Fixture** — a mapped light shape on the canvas.
-- **Template** — a reusable fixture/device definition in the Inventory.
+- **Template** — a reusable fixture/device definition in the Library.
 - **DDP / Art-Net** — protocols for sending pixel data.
 - **Universe** — a 512-channel block in Art-Net (~170 RGB pixels).
 - **Colour order** — the byte order a strip expects (RGB, GRB, RGBW…).

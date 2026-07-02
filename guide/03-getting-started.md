@@ -18,7 +18,7 @@ From [Releases](https://github.com/jonasjohansson/ledzeppelin/releases):
 - **From source** *(developers)* — `npm install && npm start`.
 
 The app opens in your browser: a **top bar** of tools, the **canvas** and **clip grid** in the
-centre, the **Devices** panel on the right. The browser tab title shows the version
+centre, the **Output** panel on the right. The browser tab title shows the version
 (`LED Zeppelin v1.0.x`). The daemon runs with the app — confirm via the **Daemon icon** in the
 top bar (reads "offline" until it's up). The **Guide** (book icon) reopens these pages.
 
@@ -27,11 +27,11 @@ top bar (reads "offline" until it's up). The **Guide** (book icon) reopens these
 
 ## 2. Add your controller (device)
 
-A **device** is a physical controller (WLED / QuinLED / Art-Net). Work in the **Devices** panel
-on the right. Its header — the title **Devices** — carries three small icons: **add-fixture**,
-**add-device**, and **inventory**.
+A **device** is a physical controller (WLED / QuinLED / Art-Net). Work in the **Output** panel
+(the device list) on the right. Its header — the title **Output** — carries three small icons:
+**add-fixture**, **add-device**, and **library**.
 
-![The Devices panel: the Devices header with its add-fixture / add-device / inventory icons, the controller list, and the scan button below it.](img/devices.png)
+![The Output panel: the Output header with its add-fixture / add-device / library icons, the controller list, and the scan button below it.](img/devices.png)
 
 - **Scan (recommended)** — click **⌖ scan** (under the list). It finds WLED + Art-Net
   controllers and shows live progress; click **ADD** on a result and that controller appears in
@@ -46,7 +46,7 @@ which. Controllers in the list are **always expanded** — there's no fold.
 ## 3. Add a fixture
 
 A **fixture** is a mapped light shape on the canvas. Click the **add-fixture** icon in the
-Devices header and pick a **template** (or **Blank**); templates carry a size, shown in
+Output header and pick a **template** (or **Blank**); templates carry a size, shown in
 parentheses. The fixture lands under **Unassigned**, selected, on the canvas.
 
 Fixtures are **standalone** — each owns its own spec. Editing a template later never changes
@@ -100,14 +100,14 @@ More in [Troubleshooting](12-troubleshooting.md).
   **composition** `.json` (visuals only), or an **ISF shader** (`.fs` / `.isf` / `.frag` / `.glsl`) → a new
   generator clip. There's no Import button — it's all drag-and-drop.
 - **Save composition…** (visuals only) lives in **Settings**.
-- A **LEDger** preset isn't dropped here — open the **Inventory** tab (grid icon in the top bar,
-  or the inventory icon in the Devices header) and use **import from LEDger / choose preset
-  file**. Inventory and **Mapping** (mapping icon) open as browser tabs.
+- A **LEDger** preset isn't dropped here — open the **Library** tab (box icon in the top bar,
+  or the library icon in the Output header) and use **import from LEDger / choose preset
+  file**. The Library and **Mapping** (mapping icon) open as browser tabs.
 
 Capture a look to recall later with [Scenes](07-scenes.md).
 
 ---
 
 **The core loop:** add device → add fixture → patch → trigger a clip → output. Everything else
-builds on it. Next: [Fixtures & the Inventory](05-fixtures-and-inventory.md),
+builds on it. Next: [Fixtures & the Library](05-fixtures-and-inventory.md),
 [The canvas](06-canvas-sources-effects.md).

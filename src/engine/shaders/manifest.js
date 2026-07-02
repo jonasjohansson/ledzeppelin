@@ -14,6 +14,7 @@ uniform float width;
 uniform float angle;
 uniform float uPhase;   // integrated speed·time — continuous across speed changes
 uniform float amp;
+uniform float numLines; // 1 = the classic single line; N tiles N parallel copies
 void main(){
   float a = radians(angle);
   // Signed distance from the CANVAS CENTRE along the line normal, so changing
@@ -21,7 +22,16 @@ void main(){
   float coord = (uv.x - 0.5) * cos(a) + (uv.y - 0.5) * sin(a);
   // pos is the BASE position (0.5 = centre); the line sweeps ±amp around it.
   float target = (pos - 0.5) + amp * sin(uPhase);
-  float d = abs(coord - target);
+  float n = max(1.0, floor(numLines + 0.5));
+  float d;
+  if (n <= 1.0) {
+    d = abs(coord - target);   // single line — unchanged from the original
+  } else {
+    // N parallel copies, evenly spaced 1/N apart along the axis (fract wraps the
+    // distance into the repeating cell, so the whole sweep moves as one grille).
+    float cell = 1.0 / n;
+    d = abs(fract((coord - target) / cell + 0.5) - 0.5) * cell;
+  }
   float v = smoothstep(width, 0.0, d);
   frag = vec4(vec3(v), 1.0);
 }`;
@@ -385,6 +395,9 @@ export const REGISTRY = {
       // at angle 90); the half-width spills slightly past the edge at the extremes,
       // which is wanted so the edge LEDs fully light.
       { key: 'amp', type: 'float', min: 0, max: 0.5, default: 0.5 },
+      // N evenly-spaced parallel copies of the line (1 = classic single line).
+      // camelCase key so the auto-derived label reads "Num Lines".
+      { key: 'numLines', type: 'float', min: 1, max: 12, default: 1, step: 1 },
     ],
   },
   gradient: {

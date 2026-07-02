@@ -121,6 +121,23 @@ export function prefixedDefaults(name) {
 
 // --- id generation -----------------------------------------------------------
 
+// Name for a duplicate: strip any trailing " N" / " copy" run from the base, then
+// return the first free "Base N" (N from 2) against `existing` names — so copies
+// read "Name 2", "Name 3", … instead of "Name copy copy".
+export function copyName(base, existing) {
+  const taken = new Set([...existing].map((s) => String(s || '').toLowerCase()));
+  let core = String(base || '').trim();
+  for (;;) {
+    const next = core.replace(/\s+(copy|\d+)$/i, '');
+    if (next === core) break;
+    core = next;
+  }
+  if (!core) core = 'Untitled';
+  let n = 2; let name = `${core} ${n}`;
+  while (taken.has(name.toLowerCase())) name = `${core} ${++n}`;
+  return name;
+}
+
 // Generate an id with `prefix` that is not already in `used` (a Set/array of ids).
 function uniqueId(prefix, used) {
   const set = used instanceof Set ? used : new Set(used);
@@ -374,8 +391,8 @@ export function removeClip(show, layerId, clipId) {
   });
 }
 
-// Duplicate a clip: a deep-ish copy (new id, "<name> copy") inserted right after
-// the original in the same layer. Returns the new clip id via the 2nd arg holder.
+// Duplicate a clip: a deep-ish copy (new id, numbered "<name> 2") inserted right
+// after the original in the same layer. Returns the new clip id via the 2nd arg holder.
 export function duplicateClip(show, layerId, clipId) {
   return updateLayer(show, layerId, (layer) => {
     const clips = layer.clips || [];
@@ -384,7 +401,7 @@ export function duplicateClip(show, layerId, clipId) {
     const src = clips[idx];
     const newId = uniqueId('c', allClipIds(show.composition?.layers || []));
     const copy = {
-      ...src, id: newId, name: `${src.name || src.id} copy`,
+      ...src, id: newId, name: copyName(src.name || src.id, clips.map((c) => c?.name || '')),
       params: { ...(src.params || {}) }, effects: [...(src.effects || [])],
       ...(src.anim ? { anim: { ...src.anim } } : {}),
       ...(src.transform ? { transform: { ...src.transform } } : {}),

@@ -804,6 +804,10 @@ body.gui-hidden #show-ui-pill { display: block; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
 .scan-block { display: flex; flex-direction: column; gap: 3px; }
 .scan-row .ctrl-btn { margin-left: auto; }
+/* Scan result chips: tabular digits + a fixed IP slot so the rows column-align;
+   long Art-Net names truncate instead of pushing the add button around. */
+.scan-row .fx-badge { font-variant-numeric: tabular-nums; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-row .scan-ip { min-width: 96px; text-align: right; }
 /* Scan in progress — a quiet status block while the two probes resolve, so SCAN
    never looks frozen. Each probe row flips done (✓, accent mark) as its leg lands. */
 .scan-progress { gap: 4px; margin-top: 4px; }
@@ -833,7 +837,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Fixed label column so the name stays readable (text/number inputs otherwise
    claim their intrinsic width and squeeze the label down to an ellipsis). */
 .fx-field > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fx-field > input, .fx-field > select { flex: 1 1 0; min-width: 0; width: auto; }
+.fx-field > input, .fx-field > select { flex: 1 1 0; min-width: 0; width: auto; text-align: right; }   /* values right-align against the label column */
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
   border-radius: var(--radius); height: var(--ctrl-h); padding: 0 7px; font: var(--fs-ctrl) var(--mono); width: 100%; box-sizing: border-box;

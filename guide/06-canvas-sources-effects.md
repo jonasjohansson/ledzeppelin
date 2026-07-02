@@ -200,9 +200,9 @@ There is no Import button — bring things in by **dragging files onto the windo
 - a **LED Zeppelin project** `.json` (has both fixtures and a composition) → loads
   the whole show (rig + visuals);
 - a **composition** `.json` → loads the visuals only;
-- a **LEDger preset** → you'll be told to import it from the **Inventory** tab.
+- a **LEDger preset** → you'll be told to import it from the **Library** tab.
 
 To save: **Save composition…** is in **Settings** (visuals only); **⌘S** saves the
 whole project and **⌘O** opens one (or just drop a `.json` in).
 
-_See also: [Concepts: pixel mapping](02-concepts.md) · [Fixtures & the Inventory](05-fixtures-and-inventory.md) · [Mappings](08-mappings.md) · [Scenes](07-scenes.md) · [Output & calibration](10-output-and-calibration.md)._
+_See also: [Concepts: pixel mapping](02-concepts.md) · [Fixtures & the Library](05-fixtures-and-inventory.md) · [Mappings](08-mappings.md) · [Scenes](07-scenes.md) · [Output & calibration](10-output-and-calibration.md)._

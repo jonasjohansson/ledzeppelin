@@ -261,8 +261,8 @@ When something drops, work outward from the server:
   this is for a manual kick.
 - **Restart the daemon (desktop app):** quit and relaunch the binary / `.app`.
 - **After a controller reboot:** a power-cycled WLED/QuinLED may come back on a new IP
-  (DHCP). Open the [Devices](04-devices-and-scanning.md) panel and **rescan** (the
-  add-device icon in the Devices header); a scanned controller shows live progress and
+  (DHCP). Open the [Output](04-devices-and-scanning.md) panel and **rescan** (the
+  add-device icon in the Output header); a scanned controller shows live progress and
   appears in the list immediately. If a device keeps moving, give it a DHCP reservation
   on the router so its IP is stable across reboots. Devices are always shown expanded,
   so a reconnected controller's outputs are visible right away.

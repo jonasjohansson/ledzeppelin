@@ -1,4 +1,4 @@
-# Fixtures & the Inventory
+# Fixtures & the Library
 
 The heart of patching: turning physical strips and panels into shapes on the
 canvas, and keeping a reusable catalog of the gear you own. Builds on
@@ -10,18 +10,18 @@ Three terms, used consistently throughout the guide:
 
 - **Device** — a physical controller (WLED / QuinLED / Art-Net node).
 - **Fixture** — a mapped light shape placed on the canvas.
-- **Template** — a reusable definition in the **Inventory** (a fixture *type* or a
+- **Template** — a reusable definition in the **Library** (a fixture *type* or a
   controller *model*).
 
 A template is a starting point, not a live link. When you add a fixture from a
 template, the template's spec — pixel count, colour order, grid size, DMX channel
 map — is **inlined onto a fresh standalone instance**. The instance keeps a
-reference back to the template it came from (so the Inventory can count how many
+reference back to the template it came from (so the Library can count how many
 copies exist), but every spec field now lives on the fixture itself.
 
 The consequence matters in practice: **editing a template never changes fixtures
 you've already placed.** Change a strip type from 60 to 144 LEDs/m in the
-Inventory and your existing strips keep their pixel counts; only the *next*
+Library and your existing strips keep their pixel counts; only the *next*
 fixture you stamp from that type picks up the new value. The same rule holds for
 devices: a controller instance owns its own outputs / per-output budget and falls
 back to the model only for fields it genuinely lacks.
@@ -29,10 +29,10 @@ back to the model only for fields it genuinely lacks.
 This is deliberate. A show is a record of the real rig — once a fixture is on the
 wall, its definition shouldn't shift under you because you tidied the catalog.
 
-## The Inventory tab
+## The Library tab
 
-The Inventory is a browser **tab** (the grid icon in the top bar, captioned
-INVENTORY), not a popup. It's the template library — where you define the gear you
+The Library is a browser **tab** (the box icon in the top bar, captioned
+LIBRARY), not a popup. It's the template library — where you define the gear you
 own so you can stamp it repeatedly:
 
 - **Controller models** — a board's physical output count and per-output pixel
@@ -47,21 +47,21 @@ own so you can stamp it repeatedly:
     block like `RGB`, or a function like Dimmer / Strobe), which expand into a
     flat **DMX channel map**. A generic **Generic** fixture type is always present.
 
-![The Inventory tab: the template library of controller models and fixture types, with the model editor and LEDger import.](img/inventory.png)
+![The Library tab: the template library of controller models and fixture types, with the model editor and LEDger import.](img/inventory.png)
 
-The Inventory tab also hosts **LEDger import** — *import from ledger / choose
+The Library tab also hosts **LEDger import** — *import from ledger / choose
 preset file* — which brings a whole rig (controllers + fixtures + layout) in at
 once. There is no separate LEDger button in the top bar; the import flow lives
 here. See [Importing from LEDger](09-importing-from-ledger.md).
 
-> The Inventory authors *templates only* — there's no canvas in this tab. Placing
+> The Library authors *templates only* — there's no canvas in this tab. Placing
 > and patching fixtures happens in the main window (next section). Edits sync
-> live between the Inventory tab and the main app.
+> live between the Library tab and the main app.
 
 ## Adding fixtures and devices
 
-In the main window, the **Devices** panel header (titled "Devices") carries three
-small icons — **add-fixture**, **add-device**, and **inventory**. There are no big
+In the main window, the **Output** panel header (titled "Output") carries three
+small icons — **add-fixture**, **add-device**, and **library**. There are no big
 "+ Fixture / + Device" buttons.
 
 Click **add-fixture** and a menu drops down listing your fixture types by name
@@ -117,7 +117,7 @@ name is in the title bar.
 ### DMX-profile fixtures
 
 A DMX fixture gets a different editor. **Fixture** shows its type (its channel
-layout is owned by the type — edit it in the Inventory) and the on-canvas
+layout is owned by the type — edit it in the Library) and the on-canvas
 footprint (X/Y/W/H — the box is where it *samples* colour, independent of the
 channel layout). **Patch** sets the **Controller**, **Universe**, and **Address**,
 and shows a footprint badge (`Nch · U{universe}.{address}`).
@@ -155,10 +155,10 @@ array.
 
 This re-packs whenever a fixture's device, port, count, or membership changes — so
 assigning a fixture to a device (via the Patch picker, or by **dragging** its row
-onto a controller header in the Devices panel) can't leave gaps or overlaps. The
+onto a controller header in the Output panel) can't leave gaps or overlaps. The
 read-only **Pixels** range you see is the result of this packing.
 
-Controllers in the Devices panel are **always expanded** — fixtures appear nested
+Controllers in the Output panel are **always expanded** — fixtures appear nested
 under their controller, with an *Unassigned* group for any not yet patched.
 
 ---
