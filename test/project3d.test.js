@@ -26,3 +26,16 @@ test('ortho: a point on the camera axis lands at centre UV', () => {
   const [u, v] = project([0.5, 0.5, 0], cam);
   assert.ok(Math.abs(u - 0.5) < 1e-9 && Math.abs(v - 0.5) < 1e-9);
 });
+
+test('perspective aspect 2: horizontal offsets halve, vertical unchanged', () => {
+  // A wide (aspect 2) frame fits TWICE the world width for the same fov, so an
+  // x offset lands half as far from centre; the vertical scale is untouched.
+  const wide = perspectiveCamera({ pos: [0.5, 0.5, 1], target: [0.5, 0.5, 0], fov: 90, aspect: 2 });
+  const sq = perspectiveCamera({ pos: [0.5, 0.5, 1], target: [0.5, 0.5, 0], fov: 90, aspect: 1 });
+  const [uw] = project([1.0, 0.5, 0], wide);   // +0.5 world x at depth 1
+  const [us] = project([1.0, 0.5, 0], sq);
+  assert.ok(Math.abs((uw - 0.5) - (us - 0.5) / 2) < 1e-9);   // half the offset
+  const [, vw] = project([0.5, 0.0, 0], wide); // −0.5 world y at depth 1
+  const [, vs] = project([0.5, 0.0, 0], sq);
+  assert.ok(Math.abs(vw - vs) < 1e-9);         // vertical scale identical
+});

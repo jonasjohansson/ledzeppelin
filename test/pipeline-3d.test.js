@@ -124,3 +124,27 @@ test('3D perspective projection foreshortens an arc bending away in depth', () =
   assert.ok(fSpacing(0) / fSpacing(mid) > 0.98,
     'flat 2D path should sample the arc with near-uniform spacing');
 });
+
+// BEHIND-CAMERA LEDs must go BLACK: projectFramed returns [NaN, NaN] for a point
+// at/behind the camera plane; the pipeline substitutes the out-of-range sentinel
+// [-1, -1], which the GPU sampler's bounds check already reads as "outside the
+// canvas → black". Other LEDs on the same fixture stay normal.
+test('a point behind the camera yields the [-1,-1] sentinel; others project normally', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  // Two-point strip: first ON the canvas plane (in front of the camera at z=1),
+  // second at z=2 (BEHIND the camera). samples=2 ⇒ the LEDs are exactly the ends.
+  s = addFixture(s, { id: 'f', name: 'f', pixelCount: 2, colorOrder: 'GRB',
+    output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 2 },
+    input: { mode: 'polyline', points: [[0.5, 0.5, 0], [0.5, 0.5, 2]], samples: 2 } });
+  s.composition.view3d = {
+    mode: '3d',
+    projectionCamera: perspectiveCamera({ pos: [0.5, 0.5, 1], target: [0.5, 0.5, 0], fov: 90, aspect: 1 }),
+  };
+  const { sampleUVs, spans } = buildPipelineInputs(s);
+  const sp = spans.find((x) => x.id === 'f');
+  const led0 = [sampleUVs[sp.start * 2], sampleUVs[sp.start * 2 + 1]];
+  const led1 = [sampleUVs[(sp.start + 1) * 2], sampleUVs[(sp.start + 1) * 2 + 1]];
+  assert.ok(Math.abs(led0[0] - 0.5) < 1e-6 && Math.abs(led0[1] - 0.5) < 1e-6);  // on-axis → centre
+  assert.deepEqual(led1, [-1, -1]);   // behind the camera → the sampler blackens it
+  for (const v of sampleUVs) assert.ok(Number.isFinite(v), 'no NaN may reach the sampler');
+});

@@ -27,3 +27,11 @@ test('samplePoints3D: right-angle path splits by true 3D length', () => {
   const pts = samplePoints3D([[0,0,0],[0,0,2],[0,2,2]], 5); // total length 4 → step 1
   assert.deepEqual(pts[2], [0,0,2]); // midpoint sits at the corner
 });
+
+test('samplePoints3D tolerates mixed 2-/3-tuples (missing z reads as 0)', () => {
+  // A 2-tuple in a 3D run (e.g. a freshly inserted 2D midpoint) must not poison
+  // the arc-length walk with NaN — missing z is the canvas plane (z = 0).
+  const pts = samplePoints3D([[0, 0], [0, 0, 2]], 3);
+  assert.deepEqual(pts, [[0, 0, 0], [0, 0, 1], [0, 0, 2]]);
+  for (const p of pts) for (const c of p) assert.ok(Number.isFinite(c));
+});

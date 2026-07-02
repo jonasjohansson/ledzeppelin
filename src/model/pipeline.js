@@ -26,7 +26,14 @@ function fixtureSampleUVs(f, canvas, cam) {
   }
   const basePts = f.input.reversed ? [...f.input.points].reverse() : f.input.points;
   if (cam && cam.mode !== 'flat' && pointsAre3D(f.input.points)) {
-    return samplePoints3D(basePts, f.input.samples).map((p) => project(p, cam));
+    return samplePoints3D(basePts, f.input.samples).map((p) => {
+      const uv = project(p, cam);
+      // A point at/behind the camera projects to [NaN, NaN] (see projectFramed).
+      // Substitute the out-of-range sentinel: the GPU sampler's bounds check
+      // reads it as "outside the canvas" → that LED goes black (per-LED, no
+      // NaNs ever reach the sampler texture).
+      return Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? uv : [-1, -1];
+    });
   }
   return samplePoints(basePts, f.input.samples);
 }

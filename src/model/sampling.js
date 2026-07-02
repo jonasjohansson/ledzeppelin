@@ -25,6 +25,10 @@ export function samplePoints(points, n) {
 // Resample a 3D polyline into n points evenly spaced by true 3D arc length.
 export function samplePoints3D(points, n) {
   if (!Array.isArray(points) || !points.length) return [];   // nothing to sample (guards points[-1])
+  // Normalize mixed 2-/3-tuples ONCE up front (a 2-tuple in a 3D run — e.g. a
+  // freshly inserted 2D midpoint — reads missing z as 0). Done here, not per
+  // iteration, so the hot interpolation loop below stays branch-free.
+  if (points.some((p) => p.length < 3)) points = points.map((p) => [p[0], p[1], p[2] ?? 0]);
   if (n === 1 || points.length === 1) return [points[0].slice()];
   const seg = [];
   let total = 0;

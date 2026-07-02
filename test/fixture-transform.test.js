@@ -147,3 +147,13 @@ test('syncShowFixtures recomputes points when the canvas changes', () => {
   // same pixel centre (500) on a 2000-wide canvas → u 0.25
   assert.ok(Math.abs(out.fixtures[0].input.points[0][0] - (500 - 400) / 2000) < 1e-9);
 });
+
+test('normPts promotes the WHOLE polyline to 3-tuples once any vertex has z', () => {
+  // Mixed dimensionality (a 2D midpoint inserted into a 3D run) must normalize to
+  // consistent 3-tuples (missing z → 0), not a per-point 2/3 split.
+  const mixed = [[0.1, 0.5], [0.5, 0.2, 0.3], [0.9, 0.5]];
+  const f = { id: 'f1', input: { mode: 'polyline', points: mixed, samples: 9 } };
+  const out = syncFixtureGeometry(f, CANVAS);
+  assert.deepEqual(out.input.points, [[0.1, 0.5, 0], [0.5, 0.2, 0.3], [0.9, 0.5, 0]]);
+  for (const p of out.input.points) assert.equal(p.length, 3);
+});
