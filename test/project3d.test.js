@@ -41,7 +41,7 @@ test('perspective aspect 2: horizontal offsets halve, vertical unchanged', () =>
 });
 
 // --- the 2D/3D mode toggle (pure state helper behind the top-bar button) ----
-import { toggleView3d, DEFAULT_ORBIT } from '../src/model/project3d.js';
+import { toggleView3d, DEFAULT_ORBIT, resetOrbit } from '../src/model/project3d.js';
 
 test('toggleView3d: first entry initializes the default orbit (no projection camera stored)', () => {
   const show = { composition: { canvas: { w: 100, h: 100 } } };
@@ -75,6 +75,21 @@ test('toggleView3d: a projectionCamera left by an old save is carried through un
   const next = toggleView3d(in2d);
   assert.equal(next.composition.view3d.mode, '3d');
   assert.deepEqual(next.composition.view3d.projectionCamera, legacy);
+});
+
+test('resetOrbit: snaps the orbit back to default + drops the pan target', () => {
+  const orbit = { az: 45, el: 30, dist: 2.2, target: [0.9, 0.1, 0.3] };
+  const in3d = { composition: { view3d: { mode: '3d', orbit } } };
+  const next = resetOrbit(in3d);
+  assert.deepEqual(next.composition.view3d.orbit, DEFAULT_ORBIT);   // az/el/dist reset, no target
+  assert.equal(next.composition.view3d.mode, '3d');                 // still 3D
+  assert.notEqual(next, in3d);                                      // pure
+  assert.deepEqual(in3d.composition.view3d.orbit, orbit);          // input untouched
+});
+
+test('resetOrbit: a no-op (same ref) when not in 3D', () => {
+  const show = { composition: { canvas: { w: 100, h: 100 } } };
+  assert.equal(resetOrbit(show), show);
 });
 
 // --- orbit camera (the VIEW-ONLY inspect camera of the 3D viewport) ----------
