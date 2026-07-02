@@ -94,6 +94,8 @@ name is in the title bar.
 ### Position
 
 - **X / Y** — the bounding box's top-left corner (Figma-style), in canvas pixels.
+- **Z** — the whole fixture's height off the canvas plane, in pixels (`0` = flat on
+  it). Only *visible* in **3D mode** (below); the output is not affected yet.
 - **Width** — the run length on the canvas.
 - **Height** — **auto** by default: drawn to physical scale (a 10 mm strip at this
   fixture's pixels-per-metre). The field shows the effective pixels; type a value
@@ -113,6 +115,24 @@ name is in the title bar.
 > **Chains.** If fixtures are daisy-chained on one output, the run's device and
 > output are set by the **head** (first) fixture; downstream members inherit them
 > and their pickers are locked. Moving the head moves the whole run together.
+
+## 3D mode (beta)
+
+The **3D** cube in the top bar switches the stage to a 3D viewport: a ground grid
+with the canvas rectangle on it (the plane the visuals live on), every fixture as
+a projected strip, and its live LED colours. Set a fixture's **Z** and it lifts
+off the plane.
+
+- **Drag** orbits the view, **Shift-drag** pans, the **wheel** dollies in/out.
+  The view is remembered but never enters undo history — it's a camera, not an edit.
+- **Click** a strip to select it. 2D editing gestures (move/resize/rotate/vertices)
+  are disabled while in 3D — arrange in 2D, inspect in 3D, for now.
+
+**Honest limits today:** 3D mode is a *viewport*. The output still samples the
+composition **flat-front** — exactly as in 2D — so toggling modes (or setting Z)
+changes nothing on the LEDs yet. Per-vertex 3D editing, bezier arches and a
+placeable projection camera (which will make depth affect the mapping) are the
+next phases.
 
 ### DMX-profile fixtures
 
