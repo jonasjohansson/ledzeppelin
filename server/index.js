@@ -13,16 +13,7 @@ import { sendFrame, suppressOutput } from './output.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
-
-// Read a request's JSON body (small payloads only).
-function readJson(req) {
-  return new Promise((resolve) => {
-    let buf = '';
-    req.on('data', (c) => { buf += c; if (buf.length > 1e6) req.destroy(); });
-    req.on('end', () => { try { resolve(JSON.parse(buf || '{}')); } catch { resolve({}); } });
-    req.on('error', () => resolve({}));
-  });
-}
+import { createApiHandler, readJson } from './api.js';
 
 // Proxy a WLED JSON-API call (GET state, POST partial state) for the browser.
 // Always returns JSON; failures come back as { error } with a 502 so the UI can
@@ -130,6 +121,9 @@ const http = createServer(async (req, res) => {
     catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
     return;
   }
+  // Control API — versioned surface for external clients (scripts, Home
+  // Assistant, later an MCP wrapper). See server/api.js + docs/api.md.
+  if (url.pathname === '/api/v1' || url.pathname.startsWith('/api/v1/')) return handleApi(req, res, url);
   if (await serveStatic(ROOT, req, res)) return;
   res.writeHead(404); res.end('not found');
 });
@@ -149,6 +143,14 @@ let lastFreshAt = 0;      // ms epoch of the last FRESH frame received from a cl
 let outputStale = false;  // watchdog tripped (faded to safe state) — surfaced in /health
 let safeBuf = null;       // reused buffer for the faded/black safe state
 let lastManifest = null;   // cache the editor's latest companion manifest, so a phone gets the show the moment it connects
+// Hoisted for the control API (/api/v1): the latest route from any connection
+// (only the editor sends routes), its fps cap, and WHICH socket is the editor —
+// so /devices answers from cache and relayed writes can 503 honestly when no
+// editor is connected to apply them.
+let lastRoute = null;
+let lastFps = OUTPUT_FPS;
+let editorWs = null;
+const editorConnected = () => !!editorWs && editorWs.readyState === 1;
 wss.on('connection', (ws) => {
   console.log('[ws] client connected');
   if (lastManifest) { try { ws.send(lastManifest); } catch { /* closing */ } }   // hand a new phone the last known show
@@ -193,6 +195,7 @@ wss.on('connection', (ws) => {
         // Optional global output framerate cap (clamped); rebuild the pacer if it changed.
         const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps) || OUTPUT_FPS)));
         if (fps !== outFps) { outFps = fps; console.log(`[ws] output fps → ${outFps}`); startTimer(); }
+        lastRoute = route; lastFps = outFps; editorWs = ws;   // only the editor sends routes → mark it (control API)
       }
       // External-channel ingest over the socket: any client (an app, a sensor
       // script) can send { type:'ext', channel, value } — relay it to the OTHER
@@ -210,7 +213,11 @@ wss.on('connection', (ws) => {
     } catch (e) { console.error('[ws] bad message', e.message); }
   });
   startTimer();
-  ws.on('close', () => { if (timer) clearInterval(timer); console.log('[ws] client disconnected'); });
+  ws.on('close', () => {
+    if (timer) clearInterval(timer);
+    if (editorWs === ws) editorWs = null;   // the editor left — relayed API writes now 503
+    console.log('[ws] client disconnected');
+  });
 });
 setInterval(() => { fpsOut = frames; if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
 
@@ -231,6 +238,28 @@ function broadcastExt(channel, value, except) {
     if (c !== except && c.readyState === 1) { try { c.send(msg); } catch { /* closing */ } }
   }
 }
+// --- Control API (/api/v1) ---------------------------------------------------
+// All live daemon state is passed as getters so server/api.js stays pure and
+// unit-testable. Auth: optional LZ_API_TOKEN (Bearer). Docs: docs/api.md.
+const handleApi = createApiHandler({
+  token: process.env.LZ_API_TOKEN || '',
+  status: () => ({
+    version: VERSION,
+    uptimeSec: Math.round(process.uptime()),
+    editorConnected: editorConnected(),
+    clients: wss.clients.size,
+    fpsOut,
+    fpsCap: lastFps,
+    outputStale,
+    blackout: false,
+    lastFrameAt,
+    osc: OSC_PORT,
+    devices: lastRoute ? lastRoute.length : null,
+  }),
+  route: () => lastRoute,
+  manifest: () => lastManifest,
+  overrides: () => ({}),
+});
 // OSC over UDP: any address, first numeric arg → an external channel named by
 // the address. TouchOSC / TouchDesigner / oscsend point here.
 // Bindable so the listen PORT can be changed live (Mapping window → POST
