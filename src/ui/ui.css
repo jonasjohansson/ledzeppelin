@@ -1605,6 +1605,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   position: fixed; z-index: 50; min-width: 190px; max-height: 60vh; overflow-y: auto;
   background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: var(--radius);
   padding: 4px; display: flex; flex-direction: column; gap: 1px; box-shadow: 0 8px 22px rgba(0,0,0,.55);
+  /* Long option names scroll inside the popover (per-group, below) instead of
+     widening it past the window edge. */
+  max-width: min(300px, calc(100vw - 16px));
 }
 .pick-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 7px; border-radius: var(--radius-sm);
@@ -1615,7 +1618,10 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Grouped source picker: full-width tiled rows under each category header (matches
    the app's list language — no gaps, no half-width cards). */
 .pick-pop.pick-grouped { width: 240px; }
-.pick-grid { display: flex; flex-direction: column; gap: 0; }
+/* Each option group scrolls horizontally when a name is longer than the popover. */
+.pick-grid { display: flex; flex-direction: column; gap: 0; overflow-x: auto; }
+.pick-grid .pick-item { width: max-content; min-width: 100%; box-sizing: border-box; }
+.pick-grid .lib-label { overflow: visible; text-overflow: clip; }
 .pick-group { font: var(--fw-med) var(--fs-micro)/var(--lh-tight) var(--sans); letter-spacing: var(--ls-caps);
   text-transform: uppercase; color: var(--faint); padding: 7px 7px 3px; }
 .pick-group:first-child { padding-top: 2px; }
