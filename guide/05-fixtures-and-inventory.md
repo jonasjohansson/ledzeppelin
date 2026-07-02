@@ -93,14 +93,26 @@ name is in the title bar.
 
 ### Position
 
+A shape row on top picks what the fixture *is*: **Bar** (a straight strip),
+**Polyline** (a bendable multi-segment run) or **Bezier** (a quadratic arch —
+two ends + one control point). Conversions keep the endpoints.
+
+For a **Bar**:
+
 - **X / Y** — the bounding box's top-left corner (Figma-style), in canvas pixels.
-- **Z** — the whole fixture's height off the canvas plane, in pixels (`0` = flat on
-  it). Only *visible* in **3D mode** (below); the output is not affected yet.
+- **Z** — the whole fixture's height off the canvas plane, in pixels (`0` = flat
+  on it). Visible in **3D mode** (below); with a non-flat **Projection** preset
+  it also shifts where the fixture samples.
 - **Width** — the run length on the canvas.
 - **Height** — **auto** by default: drawn to physical scale (a 10 mm strip at this
   fixture's pixels-per-metre). The field shows the effective pixels; type a value
   to override, or set `0` (or clear it) to return to auto.
 - **Rotation°** — with inline ±90° steppers.
+
+A **Polyline** shows a compact per-vertex **X/Y/Z** table instead (one row per
+vertex); a **Bezier** shows its two ends and the **C**(ontrol) row — raise C's Z
+to pull the middle up into a standing arch.
+
 - **Reverse direction** — not a transform flip; it reverses *which end of the strip
   is pixel 0* (the canvas arrow points at pixel 0).
 
@@ -125,14 +137,33 @@ off the plane.
 
 - **Drag** orbits the view, **Shift-drag** pans, the **wheel** dollies in/out.
   The view is remembered but never enters undo history — it's a camera, not an edit.
-- **Click** a strip to select it. 2D editing gestures (move/resize/rotate/vertices)
-  are disabled while in 3D — arrange in 2D, inspect in 3D, for now.
+- **Click** a strip to select it.
+- **Edit in 3D:** a polyline's vertex handles (and a bezier's ends + diamond
+  control) are draggable — a plain drag slides the point on the horizontal plane
+  at its current height; **Alt-drag** moves it vertically (Z only). Double-click
+  a polyline segment to insert a vertex on the run; right-click a vertex to
+  remove it. Every edit is undoable. Bar move/resize/rotate stays a 2D gesture —
+  arrange bars in 2D, lift them with the Z field.
+- **Bezier arch:** switch a strip to **Bezier** in the editor, then Alt-drag the
+  diamond control upward — the flat strip bows into a standing arch, its LEDs
+  spaced evenly along the *3D* curve.
 
-**Honest limits today:** 3D mode is a *viewport*. The output still samples the
-composition **flat-front** — exactly as in 2D — so toggling modes (or setting Z)
-changes nothing on the LEDs yet. Per-vertex 3D editing, bezier arches and a
-placeable projection camera (which will make depth affect the mapping) are the
-next phases.
+**Projection.** The row in the stage's top-left picks the camera the *output*
+samples through (drawn as a small frustum gizmo):
+
+- **Flat (2D)** — the default: depth is ignored, output is exactly the 2D
+  mapping. Toggling 3D mode alone never changes the LEDs.
+- **Front** — an orthographic front camera. Honest default: fixtures at Z = 0
+  keep sampling *exactly* where 2D put them; lifted shapes resample by their
+  true 3D length (an arch bunches toward its steep ends).
+- **Front wide** — a wide-angle perspective front camera: real foreshortening,
+  so lifted geometry compresses toward the centre — a line travelling down the
+  canvas now moves through an arch the way a projected image would.
+
+**Honest limits today:** the projection camera is preset-only (front axis,
+fixed position) — dragging the gizmo freely, other angles and multiple cameras
+are future work. The daemon/output path is unchanged; 3D only decides *where
+each LED reads* the 2D composition.
 
 ### DMX-profile fixtures
 

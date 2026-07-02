@@ -174,6 +174,62 @@ test('a mid-lift arch under the FLAT camera keeps a symmetric UV distribution ab
   }
 });
 
+// --- projection presets (Phase 5): 3D placement finally SHAPES the sampling ---
+import { projectionPreset } from '../src/model/project3d.js';
+
+// THE PAYOFF — the user's original ask: "a line travels through an arc
+// differently". A standing arch's physically-even LEDs must NOT sample evenly
+// once a real projection camera is placed:
+//  • Front (ORTHO): the 3D arc-length resample projects DENSER near the ENDS
+//    (where the arch climbs steeply in z, x barely advances) — while every
+//    z = 0 fixture keeps sampling exactly where it did in 2D.
+//  • Front wide (PERSPECTIVE): the apex is FARTHER from the camera, so on top
+//    of the resample the whole crown compresses — UVs near the apex end up
+//    DENSER than the same arc under Flat.
+test('an arched bezier under Front wide samples DENSER near the apex than under Flat', () => {
+  const flat = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5]));
+  const wide = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5],
+    { mode: '3d', projectionCamera: projectionPreset('frontwide') }));
+  const spacingAt = (r, i) => {
+    const uv = uvsOf(r, 'arc');
+    return Math.hypot(uv[i + 1][0] - uv[i][0], uv[i + 1][1] - uv[i][1]);
+  };
+  const mid = Math.floor(29 / 2);            // 30 samples → apex ≈ segment 14
+  const apexFlat = spacingAt(flat, mid);
+  const apexWide = spacingAt(wide, mid);
+  assert.ok(apexWide / apexFlat < 0.95,
+    `apex spacing wide/flat = ${apexWide / apexFlat} — must be meaningfully denser`);
+});
+
+test('an arched bezier under Front (ortho) bunches toward the ENDS (physical resample)', () => {
+  const front = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5],
+    { mode: '3d', projectionCamera: projectionPreset('front') }));
+  const uv = uvsOf(front, 'arc');
+  const sp = (i) => Math.hypot(uv[i + 1][0] - uv[i][0], uv[i + 1][1] - uv[i][1]);
+  const mid = Math.floor(29 / 2);
+  assert.ok(sp(0) / sp(mid) < 0.9,
+    `end/apex spacing ${sp(0) / sp(mid)} — the steep ends must compress on screen`);
+  // …and it differs from the flat sampling (UVs actually CHANGED).
+  const flatUv = uvsOf(buildPipelineInputs(bezierShow([0.5, 0.5, 0.5])), 'arc');
+  assert.ok(uv.some(([u], i) => Math.abs(u - flatUv[i][0]) > 1e-4));
+});
+
+test('all-z=0 fixtures under Front (ortho) sample where 2D put them (identity at the plane)', () => {
+  const mk = (view3d) => {
+    let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+    s = addFixture(s, { id: 'flat', name: 'flat', pixelCount: 8, colorOrder: 'GRB',
+      output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 8 },
+      input: { mode: 'polyline', points: [[0.1, 0.2, 0], [0.6, 0.4, 0], [0.9, 0.9, 0]], samples: 8 } });
+    if (view3d) s.composition.view3d = view3d;
+    return buildPipelineInputs(s);
+  };
+  const twoD = mk(null);
+  const front = mk({ mode: '3d', projectionCamera: projectionPreset('front') });
+  for (let i = 0; i < twoD.sampleUVs.length; i++) {
+    assert.ok(Math.abs(front.sampleUVs[i] - twoD.sampleUVs[i]) < 1e-6, `uv[${i}]`);
+  }
+});
+
 // BEHIND-CAMERA LEDs must go BLACK: projectFramed returns [NaN, NaN] for a point
 // at/behind the camera plane; the pipeline substitutes the out-of-range sentinel
 // [-1, -1], which the GPU sampler's bounds check already reads as "outside the

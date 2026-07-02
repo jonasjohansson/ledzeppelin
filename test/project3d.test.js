@@ -149,3 +149,50 @@ test('cameraBasis returns unit right/up/forward for pan gestures', () => {
   const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   assert.ok(Math.abs(dot(r, f)) < 1e-9 && Math.abs(dot(u, f)) < 1e-9 && Math.abs(dot(r, u)) < 1e-9);
 });
+
+// --- projection presets (Phase 5: the placeable projection camera) ----------
+import { projectionPreset, setProjectionPreset, PROJECTION_PRESETS } from '../src/model/project3d.js';
+
+test('projectionPreset front (ORTHO): z=0 projects EXACTLY to identity; z is dropped', () => {
+  const cam = projectionPreset('front');
+  assert.equal(cam.mode, 'ortho');
+  assert.equal(cam.preset, 'front');
+  for (const [x, y] of [[0, 0], [1, 1], [0.2265625, 0.5555555555555556], [0.5, 0.5]]) {
+    const [u, v] = project([x, y, 0], cam);
+    assert.ok(Math.abs(u - x) < 1e-12 && Math.abs(v - y) < 1e-12, `(${x},${y})`);
+    // Ortho: a LIFTED point keeps its x/y too — only the arc-length resampling
+    // (not the per-point projection) changes for z ≠ 0.
+    const [u2, v2] = project([x, y, 0.4], cam);
+    assert.ok(Math.abs(u2 - x) < 1e-12 && Math.abs(v2 - y) < 1e-12);
+  }
+});
+
+test('projectionPreset frontwide (PERSPECTIVE): z=0 ≈ identity; lifted points pull toward centre', () => {
+  const cam = projectionPreset('frontwide');
+  assert.equal(cam.mode, 'perspective');
+  for (const [x, y] of [[0, 0], [1, 1], [0.25, 0.75]]) {
+    const [u, v] = project([x, y, 0], cam);
+    assert.ok(Math.abs(u - x) < 1e-3 && Math.abs(v - y) < 1e-3, `(${x},${y})`);   // frames the canvas exactly
+  }
+  // The camera sits on the −z side, so +z (lifted toward the audience/orbit
+  // viewer) is FARTHER from it → offsets shrink toward the canvas centre.
+  const [uFlat] = project([0.9, 0.5, 0], cam);
+  const [uLift] = project([0.9, 0.5, 0.5], cam);
+  assert.ok(Math.abs(uLift - 0.5) < Math.abs(uFlat - 0.5));
+});
+
+test('projectionPreset flat + unknown fall back to the flat camera', () => {
+  assert.equal(projectionPreset('flat').mode, 'flat');
+  assert.equal(projectionPreset('bogus').mode, 'flat');
+  assert.deepEqual(PROJECTION_PRESETS.map((p) => p.id), ['flat', 'front', 'frontwide']);
+});
+
+test('setProjectionPreset writes view3d.projectionCamera (pure, 3D mode only)', () => {
+  const in3d = toggleView3d({ composition: {} });
+  const next = setProjectionPreset(in3d, 'front');
+  assert.equal(next.composition.view3d.projectionCamera.preset, 'front');
+  assert.equal(next.composition.view3d.mode, '3d');           // rest of view3d kept
+  assert.equal(in3d.composition.view3d.projectionCamera.mode, 'flat');   // input untouched
+  const in2d = { composition: { view3d: { mode: '2d' } } };
+  assert.equal(setProjectionPreset(in2d, 'front'), in2d);     // no-op outside 3D
+});

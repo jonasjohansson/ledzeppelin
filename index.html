@@ -115,7 +115,7 @@ canvas{display:block}</style>
     <button id="grid-btn" class="g-icon" title="show/hide the alignment grid"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
     <button id="color-btn" class="g-icon" title="tint fixtures by controller colour"><svg class="ic" aria-hidden="true"><use href="#ic-colour"/></svg></button>
     <button id="wall-btn" class="g-icon" title="output preview — dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
-    <button id="mode3d-btn" class="g-icon" title="3D mode — arrange &amp; view the rig in 3D (output still projects flat-front)"><svg class="ic" aria-hidden="true"><use href="#ic-3d"/></svg></button>
+    <button id="mode3d-btn" class="g-icon" title="3D mode — arrange &amp; view the rig in 3D; pick a Projection preset to shape the output sampling"><svg class="ic" aria-hidden="true"><use href="#ic-3d"/></svg></button>
   </div>
   <!-- Far-right cluster: help + bug report + install/update. -->
   <div class="corner-row" id="corner-right">
@@ -172,6 +172,10 @@ canvas{display:block}</style>
                hit-testing. -->
           <svg id="ovl" viewBox="0 0 1280 720" preserveAspectRatio="none"></svg>
         </div>
+        <!-- PROJECTION preset row (3D mode only, CSS-gated by body.mode-3d):
+             which camera the OUTPUT samples through. Buttons built by app.js
+             from PROJECTION_PRESETS. -->
+        <div id="proj-row"></div>
       </div>
     </section>
     <!-- The clip/layer deck. No title — the curtain on its top edge resizes it

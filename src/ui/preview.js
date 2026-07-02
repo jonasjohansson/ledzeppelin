@@ -75,9 +75,9 @@ let dragHint = null;
 
 // The composition's 3D view state when 3D mode is ON (else null). Shared by
 // createPreview's draw() and enableDragPlacement's gesture routing so both
-// switch together. NOTE: 3D mode only changes the VIEWPORT — the sampled
-// output still projects flat-front (view3d.projectionCamera stays flat until
-// the camera-placement phase), so the LEDs get identical colours in both modes.
+// switch together. The sampled output projects through the chosen PROJECTION
+// preset (view3d.projectionCamera; 'Flat (2D)' by default keeps the LEDs
+// byte-identical with 2D — see project3d.js PROJECTION_PRESETS).
 const view3dOf = (show) => {
   const v = show?.composition?.view3d;
   return v && v.mode === '3d' ? v : null;
@@ -463,6 +463,21 @@ export function createPreview(canvasEl, opts = {}) {
     }
     // The canvas rectangle — the z=0 composition plane the visuals project onto.
     poly3([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]], 'rgba(170,176,186,.55)', 1.25 * ck);
+
+    // PROJECTION-camera frustum gizmo: a marker at the camera position + a line
+    // to each canvas-plane corner it frames, so the chosen preset's placement is
+    // legible while orbiting. Ortho is drawn the same way (schematic — its rays
+    // are really parallel). Flat = no camera object → no gizmo. NOT draggable in
+    // v1: placement is preset-only; free placement is future work.
+    const pcam = view3dOf(show)?.projectionCamera;
+    if (pcam && pcam.mode !== 'flat' && Array.isArray(pcam.pos)) {
+      for (const corner of [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]]) poly3([pcam.pos, corner], accCss(.35), ck, DASH);
+      const q = prj(pcam.pos[0], pcam.pos[1], pcam.pos[2] || 0);
+      if (finite(q)) {
+        p.push(rectS(q[0] - 3.5 * ck, q[1] - 3.5 * ck, 7 * ck, 7 * ck, accCss(.9), 1.25 * ck));
+        p.push(labelS('PROJ', q[0], q[1] - 9 * ck, false, ck));
+      }
+    }
 
     if (show && show.fixtures?.length) {
       const { fixtureOrder, chainColors } = pipelineFor(show);

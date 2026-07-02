@@ -64,6 +64,50 @@ export function orthoCamera({ pos, target, up = [0, 1, 0], orthoHeight, aspect =
   return { mode: 'ortho', pos, target, up, orthoHeight, aspect };
 }
 
+// --- Projection presets (Phase 5) --------------------------------------------
+// The PROJECTION camera decides where each LED reads the 2D composition from.
+// v1 offers three fixed presets (free placement + multi-camera are future work):
+//   flat      — the 2D special case: z dropped, byte-identical with today.
+//   front     — an ORTHO camera on the −z side framing the canvas exactly.
+//               At z = 0 it is EXACTLY the identity (the safe default: a flat
+//               rig keeps sampling precisely where 2D put it); a LIFTED shape
+//               changes its sampling through the 3D arc-length resample (a
+//               standing arch bunches toward its steep ends).
+//   frontwide — the same axis with a 90° PERSPECTIVE camera (the canvas still
+//               fills the frame exactly at z = 0: D = 0.5/tan(fov/2)): real
+//               depth foreshortening — lifted geometry, farther from the
+//               camera, compresses toward the centre. More drama, sub-1e-3
+//               float deviation at the plane.
+// World z is the height OFF the canvas toward the viewer (+z = the orbit
+// camera's side), so both cameras look from BEHIND the canvas (−z) — lifted
+// geometry recedes from them, which is what makes an arch foreshorten.
+export const PROJECTION_PRESETS = [
+  { id: 'flat', label: 'Flat (2D)' },
+  { id: 'front', label: 'Front' },
+  { id: 'frontwide', label: 'Front wide' },
+];
+
+export function projectionPreset(id) {
+  if (id === 'front') {
+    return { ...orthoCamera({ pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1 }), preset: 'front' };
+  }
+  if (id === 'frontwide') {
+    // D = 0.5/tan(fov/2) puts the canvas plane exactly full-frame at z = 0.
+    return { ...perspectiveCamera({ pos: [0.5, 0.5, -0.5], target: [0.5, 0.5, 0], up: [0, -1, 0], fov: 90, aspect: 1 }), preset: 'frontwide' };
+  }
+  return { ...flatCamera(), preset: 'flat' };
+}
+
+// setProjectionPreset(show, id): choose the projection camera (pure). Only
+// meaningful while the composition is in 3D mode — a 2D show always projects
+// flat, so this is a no-op there.
+export function setProjectionPreset(show, id) {
+  const comp = show.composition || {};
+  const v3 = comp.view3d;
+  if (!v3 || v3.mode !== '3d') return show;
+  return { ...show, composition: { ...comp, view3d: { ...v3, projectionCamera: projectionPreset(id) } } };
+}
+
 // project(P, cam): map a world point [x, y, z] to a 2D sample point [x, y].
 // Flat (or absent) camera returns [P[0], P[1]] exactly — no math, no drift.
 export function project(P, cam) {

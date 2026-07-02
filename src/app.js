@@ -25,7 +25,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl } from './model/fixture-transform.js';
 import { isBezierFixture } from './model/bezier.js';
-import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
+import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, PROJECTION_PRESETS, setProjectionPreset } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
@@ -718,7 +718,8 @@ if (previewCanvas) {
     onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
     // 3D orbit/pan (view-only): swap the show in and save DEBOUNCED without undo
     // — like zoom/pan, moving the inspect camera is not an edit. No sampler
-    // rebuild either: the projection camera is flat, so UVs are unchanged.
+    // rebuild either: sampling reads the PROJECTION camera (a preset, not the
+    // orbit), so orbiting never changes the UVs.
     onView: (next) => { show = next; saveShowSoon(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
   }, {
@@ -1991,10 +1992,11 @@ setWallView(wallView);
 // --- 3D mode (corner cube): view the rig in 3D through an orbit camera. -------
 // Phase 2 is a VIEWPORT: the projection camera stays FLAT, so the SAMPLED OUTPUT
 // (what the LEDs get) is IDENTICAL in both modes — 3D mode currently views the
-// rig in 3D; output still projects flat-front (the projection-camera placement
-// UI is a later phase). The mode lives in composition.view3d (persisted with the
-// show; flips are undoable). The orbit az/el/dist is view-only state — orbit
-// drags save WITHOUT entering undo history (like zoom/pan, it's not an edit).
+// rig in 3D; the OUTPUT samples through the chosen PROJECTION preset (below) —
+// "Flat (2D)" by default, so entering 3D changes nothing until you pick a
+// camera. The mode lives in composition.view3d (persisted with the show; flips
+// are undoable). The orbit az/el/dist is view-only state — orbit drags save
+// WITHOUT entering undo history (like zoom/pan, it's not an edit).
 const mode3dBtn = document.getElementById('mode3d-btn');
 const is3D = () => show.composition?.view3d?.mode === '3d';
 // Reflect the CURRENT show's mode on the button + overlay (also called after
@@ -2002,8 +2004,10 @@ const is3D = () => show.composition?.view3d?.mode === '3d';
 function syncMode3d() {
   mode3dBtn?.classList.toggle('on', is3D());
   // body.mode-3d dims the flat composite behind the 3D scene (ui.css) — the
-  // image drawn flat would be spatially wrong under an angled viewport.
+  // image drawn flat would be spatially wrong under an angled viewport. It also
+  // reveals the PROJECTION preset row in the stage corner.
   document.body.classList.toggle('mode-3d', is3D());
+  syncProjRow();
   redrawOverlay();
 }
 function toggleMode3d() {
@@ -2014,7 +2018,41 @@ function toggleMode3d() {
   syncMode3d();
 }
 mode3dBtn?.addEventListener('click', toggleMode3d);
-syncMode3d();   // reflect a persisted 3D mode on load
+
+// --- PROJECTION presets (Phase 5): in 3D the OUTPUT samples through
+// view3d.projectionCamera. "Flat (2D)" keeps the 2D mapping exactly; "Front"
+// (ortho) is identity at z=0 but resamples lifted geometry by 3D arc length;
+// "Front wide" adds real perspective foreshortening. Changing it REBUILDS the
+// sampler (the UVs change) and is undoable + persisted like any edit. The
+// camera renders as a frustum gizmo in the viewport (preview.js). Presets only
+// in v1 — free camera placement (dragging the gizmo) is future work.
+const projRow = document.getElementById('proj-row');
+function syncProjRow() {
+  if (!projRow) return;
+  const cam = show.composition?.view3d?.projectionCamera;
+  const cur = cam?.preset ?? (!cam || cam.mode === 'flat' ? 'flat' : null);
+  projRow.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.preset === cur));
+}
+if (projRow) {
+  projRow.append(oel('span', { className: 'proj-cap', textContent: 'Projection' }));
+  const tips = {
+    flat: 'sample flat (exactly the 2D mapping — depth ignored)',
+    front: 'orthographic front camera: flat fixtures unchanged; lifted shapes resample by their true 3D length',
+    frontwide: 'wide perspective front camera: real foreshortening — lifted shapes compress toward the centre',
+  };
+  for (const pr of PROJECTION_PRESETS) {
+    const b = oel('button', { className: 'dir-btn', textContent: pr.label, title: tips[pr.id] || pr.label,
+      onclick: () => {
+        const next = setProjectionPreset(show, pr.id);
+        if (next === show) return;
+        saveShow(next); rebuild(next);            // rebuild snapshots undo + rebuilds the sampler (UVs change)
+        renderOutput(); redrawOverlay(); syncProjRow();
+      } });
+    b.dataset.preset = pr.id;
+    projRow.append(b);
+  }
+}
+syncMode3d();   // reflect a persisted 3D mode (and its projection preset) on load
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed
 // to its aspect, never cropped (CSS) — then you zoom/pan freely on top. The ⤢ pill
