@@ -100,10 +100,10 @@ More in [Troubleshooting](12-troubleshooting.md).
 - **Drag a file onto the window** to load: a LED Zeppelin **project** `.json` (rig + visuals), a
   **composition** `.json` (visuals only), or an **ISF shader** (`.fs` / `.isf` / `.frag` / `.glsl`) → a new
   generator clip. There's no Import button — it's all drag-and-drop.
-- **Save composition…** (visuals only) lives in **Settings**.
-- A **LEDger** preset isn't dropped here — open the **Library** tab (box icon in the top bar,
-  or the library icon in the Output header) and use **import from LEDger / choose preset
-  file**. The Library and **Mapping** (mapping icon) open as browser tabs.
+- **Save composition…** (visuals only) lives in **Settings** (the gear at the top-left).
+- A **LEDger** preset isn't dropped here — open the **Library** window (box icon in the top
+  bar, or the library icon in the Output header) and use **import from LEDger / choose preset
+  file**. The Library and **Mapping** (mapping icon) open as popup windows.
 
 Capture a look to recall later with [Scenes](07-scenes.md).
 

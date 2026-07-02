@@ -87,12 +87,13 @@ canvas{display:block}</style>
   <!-- Window menus as icon buttons. (Hide UI lives on the 'H' key now;
        Control/Settings/Mapping are tabs of the Canvas island.) -->
   <div class="corner-row" id="corner-menus">
+    <button id="menu-settings" class="g-icon" title="Settings — audio input, snap, output, appearance"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
     <button id="menu-lock" class="g-icon" title="Lock editing (performance mode)  (L)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-lock-open"/></svg></button>
     <button id="menu-save" class="g-icon" title="Save project  (⌘S)"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg></button>
     <button id="menu-open" class="g-icon" title="Open project  (⌘O)"><svg class="ic" aria-hidden="true"><use href="#ic-open"/></svg></button>
     <button id="menu-new" class="g-icon" title="New project"><svg class="ic" aria-hidden="true"><use href="#ic-new"/></svg></button>
-    <button id="menu-mapping" class="g-icon" title="MIDI / keyboard / OSC mapping (opens a tab)"><svg class="ic" aria-hidden="true"><use href="#ic-mapping"/></svg></button>
-    <button id="menu-inventory" class="g-icon" title="Library — fixture &amp; controller templates (opens a tab)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
+    <button id="menu-mapping" class="g-icon" title="MIDI / keyboard / OSC mapping (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-mapping"/></svg></button>
+    <button id="menu-inventory" class="g-icon" title="Library — fixture &amp; controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
     <button id="menu-remote" class="g-icon" title="Control surface (phone remote)"><svg class="ic" aria-hidden="true"><use href="#ic-remote"/></svg><span class="tab-dot" id="control-subdot" title="companion / daemon status"></span></button>
     <button id="menu-align" class="g-icon" title="align / distribute the selected fixtures" disabled><svg class="ic" aria-hidden="true"><use href="#ic-align"/></svg></button>
   </div>
@@ -133,12 +134,11 @@ canvas{display:block}</style>
      Fixtures · Inventory. Splitters between islands and columns resize neighbours;
      everything is visible at once (no section switching). -->
 <div id="dock">
-  <!-- LEFT COLUMN: the selected item's properties as TABS (Composition · Layer · Clip)
-       plus a small icon-only Settings tab. -->
+  <!-- LEFT COLUMN: the selected item's properties as TABS (Composition · Layer · Clip).
+       (Settings is a floating panel off the top-left gear now.) -->
   <div id="dock-left" class="dock-col">
     <section class="island" id="grp-props">
       <header class="island-head island-tabs" id="props-tabs">
-        <button class="island-tab island-tab-icon" data-itab="settings" title="Settings"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
         <button class="island-tab is-on" data-itab="composition">Composition</button>
         <button class="island-tab" data-itab="layer">Layer</button>
         <button class="island-tab" data-itab="clip">Clip</button>
@@ -150,7 +150,6 @@ canvas{display:block}</style>
           <div id="comp-settings"></div>
           <div id="insp-compfx"></div>
         </div>
-        <div id="system-settings" hidden></div>
       </div>
     </section>
     <!-- legacy sources/effects shelf — kept mounted (createLayerPanel contract) but hidden. -->
@@ -189,7 +188,7 @@ canvas{display:block}</style>
         <span class="island-acts">
           <button id="devices-add-fixture" class="island-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
           <button id="devices-add-device" class="island-act" title="Add a device"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
-          <button id="devices-inventory" class="island-act" title="Library — fixture & controller templates (opens a tab)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
+          <button id="devices-inventory" class="island-act" title="Library — fixture & controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
         </span>
       </header>
       <div class="island-body">
@@ -206,6 +205,13 @@ canvas{display:block}</style>
 <!-- No heading — the editor's own Name field identifies the selection. -->
 <section id="device-pop" class="island" hidden>
   <div class="island-body"><div id="fxinsp-body"></div></div>
+</section>
+
+<!-- Settings: a floating overlay island opened from the top-left gear (built by
+     buildSettings on each open; closed by outside-click / Esc). -->
+<section id="settings-pop" class="island" hidden>
+  <header class="island-head"><span class="island-title">Settings</span></header>
+  <div class="island-body"><div id="settings-pop-body"></div></div>
 </section>
 
 <!-- The companion control surface opens in its own window (the top-bar remote icon).

@@ -2377,16 +2377,15 @@ document.addEventListener('keydown', (e) => {
   window.addEventListener('pointercancel', endPan);
 })();
 
-// Left-column tabs: Composition | Layer | Clip | Settings (one pane shown at a time).
-// The Settings tab builds its pane on activation (the audio device list needs a fresh
-// enumerate each time).
+// Left-column tabs: Composition | Layer | Clip (one pane shown at a time).
+// (Settings moved to a floating overlay panel off the top-left gear — see
+// openSettingsPop; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
-  const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip', settings: 'system-settings' };
+  const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip' };
   if (!panes[which]) which = 'composition';
   for (const [k, id] of Object.entries(panes)) { const el = document.getElementById(id); if (el) el.hidden = k !== which; }
   const tabs = document.getElementById('props-tabs');
   if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.itab === which);
-  if (which === 'settings') buildSettings(systemSettingsEl);
   try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
 }
 document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
@@ -2406,7 +2405,6 @@ function setOutputTab(which) {
 function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }
 
 const systemControlEl = document.getElementById('system-control');
-const systemSettingsEl = document.getElementById('system-settings');
 // The Control surface URL. Prefer the daemon's LAN IP (a phone can't use localhost);
 // fall back to this page's origin.
 let companionUrl = `${location.origin}/control/`;
@@ -2427,13 +2425,16 @@ controlPanel = createControlPanel({
 // Mapping opens its breakout window; the Control (remote) icon jumps straight to the
 // companion control surface in its own window — enabled only while the daemon is up
 // (otherwise the button is disabled). No in-app popup.
-// Open as a browser TAB (no window-features string → a tab, not a popup). The named
-// target reuses the same tab on repeat clicks; the page is a responsive full route.
-function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings'); } catch { return null; } }
+// Open as a SIZED POPUP WINDOW (the features string makes it a popup, not a tab —
+// minimal chrome; truly chromeless in the installed app). The named target reuses
+// the same window on repeat clicks; the page is a responsive full route.
+const POPUP_FEATURES = 'width=860,height=920';
+function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', POPUP_FEATURES); } catch { return null; } }
 document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
-// Inventory opens the standalone TEMPLATE-LIBRARY editor in its own window (returns
-// null if a popup blocker fires). Live type-merge sync runs over 'lz-inventory' (below).
-function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory'); } catch { return null; } }
+// Library opens the standalone TEMPLATE-LIBRARY editor in its own popup window
+// (returns null if a popup blocker fires). Live type-merge sync runs over
+// 'lz-inventory' (below).
+function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', POPUP_FEATURES); } catch { return null; } }
 document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
@@ -2676,6 +2677,45 @@ async function buildSettings(mount) {
   mount.append(row);
   mark(cur);
 }
+
+// --- Settings: a floating overlay panel off the top-left gear (NOT a separate
+// window — buildSettings is wired to live app state; a cross-window settings page
+// would need a sync layer that isn't worth it). Rebuilt on every open (the audio
+// device list needs a fresh enumerate); closed by outside-click / Esc (kit). ---
+const settingsPop = document.getElementById('settings-pop');
+const settingsPopBody = document.getElementById('settings-pop-body');
+let settingsDismiss = null;
+function closeSettingsPop() {
+  if (!settingsPop || settingsPop.hidden) return;
+  settingsPop.hidden = true;
+  document.getElementById('menu-settings')?.classList.remove('open');
+  if (settingsDismiss) { settingsDismiss(); settingsDismiss = null; }
+}
+function openSettingsPop() {
+  if (!settingsPop) return;
+  if (!settingsPop.hidden) { closeSettingsPop(); return; }   // gear toggles
+  buildSettings(settingsPopBody);
+  settingsPop.hidden = false;
+  document.getElementById('menu-settings')?.classList.add('open');
+  // Park it under the gear (top-left), height-capped; the body scrolls.
+  const gear = document.getElementById('menu-settings');
+  const r = gear?.getBoundingClientRect();
+  settingsPop.style.top = `${Math.round((r?.bottom ?? 34) + 6)}px`;
+  settingsPop.style.left = `${Math.round(Math.max(8, r?.left ?? 8))}px`;
+  // Outside-click + Esc dismissal, hand-rolled (not the kit's dismissOnOutside):
+  // the GEAR must count as "inside", or its capture-phase close would race the
+  // button's own click and the gear could never toggle the panel shut.
+  const onClick = (ev) => { if (!settingsPop.contains(ev.target) && !ev.target.closest?.('#menu-settings')) closeSettingsPop(); };
+  const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeSettingsPop(); } };
+  setTimeout(() => document.addEventListener('click', onClick, true), 0);
+  document.addEventListener('keydown', onKey, true);
+  settingsDismiss = () => {
+    document.removeEventListener('click', onClick, true);
+    document.removeEventListener('keydown', onKey, true);
+  };
+}
+document.getElementById('menu-settings')?.addEventListener('click', openSettingsPop);
+
 // Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
 setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');
 
@@ -3075,7 +3115,7 @@ window.addEventListener('drop', async (e) => {
       const data = JSON.parse(await f.text());
       if (data && Array.isArray(data.fixtures) && data.composition) applyFullShow(normalizeComposition(data));
       else if (data && (data.layers || data.canvas)) applyComposition(data);
-      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Library tab.');
+      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Library window.');
       else window.alert('Unrecognised .json — expected a LED Zeppelin project or composition.');
     } catch (err) { window.alert('Load failed: ' + err.message); }
   }
@@ -3136,6 +3176,7 @@ document.getElementById('menu-install')?.addEventListener('click', () => window.
 // Tiny uppercase caption under each top-bar icon (what it does at a glance; the title
 // tooltip still carries the full description). One label per known button id.
 const TOPBAR_CAPTIONS = {
+  'menu-settings': 'Settings',
   'menu-lock': 'Lock', 'menu-save': 'Save', 'menu-open': 'Open', 'menu-new': 'New',
   'menu-guide': 'Guide',
   'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',

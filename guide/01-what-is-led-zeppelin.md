@@ -39,10 +39,12 @@ It uses **scenes** (recallable snapshots), not a cue list. The released app need
 
 A single row of icon buttons (with tiny uppercase captions), grouped left to right:
 
+- **Settings** (gear, far left) — opens the settings panel (audio input, snap, output,
+  appearance) as a floating overlay.
 - **Project** — lock (performance mode), save (⌘S), open (⌘O), new (undo/redo live on
   ⌘Z / ⇧⌘Z).
-- **Mapping** (mapping icon) and **Library** (box icon) — each opens as a **browser tab**.
-  The Library tab also hosts *import from LEDger*.
+- **Mapping** (mapping icon) and **Library** (box icon) — each opens as a **popup window**.
+  The Library window also hosts *import from LEDger*.
 - **Control surface** (phone remote), **align**, and **view presets** —
   Canvas / Split / Editor / Float — plus the panel toggles.
 - **Canvas tools** — edit fixtures, snap, grid, tint-by-controller, and **Preview** (the wall
@@ -58,9 +60,10 @@ There is no Import button — **drag a file onto the window**:
 - an **ISF shader** (`.fs` / `.isf` / `.frag` / `.glsl`) → a new generator clip;
 - a **LED Zeppelin project** `.json` → loads the rig *and* visuals;
 - a **composition** `.json` → loads visuals only;
-- a **LEDger preset** → you're pointed to the **Library** tab to import it.
+- a **LEDger preset** → you're pointed to the **Library** window to import it.
 
-Save the whole project with ⌘S (open with ⌘O); *Save composition…* lives in **Settings**.
+Save the whole project with ⌘S (open with ⌘O); *Save composition…* lives in **Settings**
+(the gear at the top-left).
 
 New to LED terms? Read [LED control concepts](02-concepts.md). Otherwise jump to
 [Getting started](03-getting-started.md).

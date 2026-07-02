@@ -29,10 +29,10 @@ back to the model only for fields it genuinely lacks.
 This is deliberate. A show is a record of the real rig — once a fixture is on the
 wall, its definition shouldn't shift under you because you tidied the catalog.
 
-## The Library tab
+## The Library window
 
-The Library is a browser **tab** (the box icon in the top bar, captioned
-LIBRARY), not a popup. It's the template library — where you define the gear you
+The Library opens as its own **popup window** (the box icon in the top bar,
+captioned LIBRARY). It's the template library — where you define the gear you
 own so you can stamp it repeatedly:
 
 - **Controller models** — a board's physical output count and per-output pixel

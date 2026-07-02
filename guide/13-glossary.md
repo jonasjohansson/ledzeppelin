@@ -28,7 +28,7 @@ its own spec — editing the template afterwards never changes anything already
 placed. Duplicate a placed fixture to multiply it.
 
 **Library** — the catalog of fixture and controller templates, opened as a
-browser tab (box icon in the top bar, or the library icon in the Output
+popup window (box icon in the top bar, or the library icon in the Output
 header). LEDger import lives here too ("import from ledger / choose preset file").
 See [Fixtures & the Library](05-fixtures-and-inventory.md).
 
@@ -54,7 +54,7 @@ fixtures over the canvas so the visual lands on the right lights. (Distinct from
 **Mappings** below.)
 
 **Mappings** — input bindings: MIDI, keyboard, and OSC controls wired to app
-parameters. Opened as a browser tab (mapping icon in the top bar). See
+parameters. Opened as a popup window (mapping icon in the top bar). See
 [Mappings](08-mappings.md).
 
 **Scene** — a saved snapshot of the composition state you can recall later. See

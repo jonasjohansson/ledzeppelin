@@ -10,7 +10,7 @@ This page covers what comes across, where to trigger the import, how to assign
 controller IPs, and the two rules worth remembering — the import **replaces** your
 rig (it is not additive) and it is **undoable** with ⌘Z.
 
-![Library tab with the LEDger importer](img/inventory.png)
+![Library window with the LEDger importer](img/inventory.png)
 
 ## What a LEDger preset contains
 
@@ -39,18 +39,18 @@ reconciles instead of silently dropping it.
 
 ## Triggering the import
 
-Import lives **inside the Library tab**, not on the top bar. Open the Library
-(the box icon in the top bar) and use **import from ledger → choose preset file**
-to pick the exported `.json`.
+Import lives **inside the Library window**, not on the top bar. Open the Library
+(the box icon in the top bar — it opens as a popup window) and use **import from
+ledger → choose preset file** to pick the exported `.json`.
 
 You can also **drag the preset onto the LED Zeppelin window**. Because a LEDger
 preset is a rig (not a project or composition), dropping it doesn't load
 anything directly — it shows the hint:
 
-> That looks like a LEDger preset — import it from the Library tab.
+> That looks like a LEDger preset — import it from the Library window.
 
 So either drop reminds you of, or you go straight to, the same place: the Library
-tab's importer.
+window's importer.
 
 > Other drops behave differently: a project `.json` loads rig + visuals, a
 > composition `.json` loads visuals only, and an ISF shader (`.fs`/`.isf`/`.frag`/`.glsl`)
