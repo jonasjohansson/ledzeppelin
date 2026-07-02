@@ -47,16 +47,17 @@ function fixtureSampleUVs(f, canvas, cam) {
 //
 // The bridge sends ONE flat RGB buffer = the concatenation of every fixture's
 // sampled pixels. The daemon slices each device's bytes via byteStart/byteEnd.
-// Fixture pixel offsets (output.pixelOffset) are DEVICE-LOCAL: they reset to 0
-// per controller. So byteStart CANNOT come from the local offset — two devices
-// would both start at 0 and read overlapping slices. Instead we assign each
-// device a GLOBAL base into the flat buffer by walking devices in array order
-// and maintaining a running global pixel cursor.
+// Fixture pixel offsets (output.pixelOffset) are OUTPUT-LOCAL: they reset to 0
+// per (device, port) — each output's chain addresses from 0. So byteStart CANNOT
+// come from the local offset; we assign each device a GLOBAL base into the flat
+// buffer by walking devices in array order with a running global pixel cursor,
+// and within a device we concatenate PORTS in ascending order (then offset order
+// inside a port) — which reproduces the exact wire bytes the old device-local
+// stacking produced.
 //
 // Layout: device order (show.devices) → within each device, fixtures ordered by
-// output.pixelOffset ascending → append samplePoints(input.points, input.samples).
-// validate() enforces per-device contiguity-from-0, so within a device the local
-// offsets are 0..total; the GLOBAL base is what we add on top.
+// (port, pixelOffset) → append samplePoints(input.points, input.samples).
+// validate() enforces per-output contiguity-from-0.
 //
 // The per-device DDP offset stays 0-based and is handled by buildPackets in
 // server/output.js: each device's slice is sent starting at DDP offset 0,
@@ -75,7 +76,7 @@ export function buildPipelineInputs(show) {
   for (const d of show.devices) {
     const mine = show.fixtures.filter((f) => f.output?.deviceId === d.id);
     const fs = mine.filter((f) => !isDmxFixture(f))
-      .sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
+      .sort((a, b) => ((a.output?.port ?? 1) - (b.output?.port ?? 1)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
     const dmxFs = mine.filter(isDmxFixture);
     if (!fs.length && !dmxFs.length) continue;
 

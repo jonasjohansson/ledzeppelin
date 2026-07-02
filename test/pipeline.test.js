@@ -140,3 +140,23 @@ test('a grid fixture samples cols*rows pixels in wiring order', () => {
   const expect = [0.25, 0.25, 0.75, 0.25, 0.25, 0.75, 0.75, 0.75];
   expect.forEach((v, i) => assert.ok(Math.abs(got[i] - v) < 1e-9, `uv[${i}] ${got[i]} ≈ ${v}`));
 });
+
+// Offsets are OUTPUT-LOCAL (each port's chain addresses from 0); the wire layout
+// concatenates ports in ascending order, identical bytes to the old stacking.
+test('per-output offsets: ports concatenate in order, each port from 0', () => {
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
+  s = addFixture(s, { id: 'p2', name: 'p2', pixelCount: 2, colorOrder: 'GRB',
+    output: { deviceId: 'c1', port: 2, pixelOffset: 0, pixelCount: 2 },
+    input: { points: [[0, 0], [0, 1]], samples: 2 } });
+  s = addFixture(s, { id: 'p1', name: 'p1', pixelCount: 2, colorOrder: 'GRB',
+    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 2 },
+    input: { points: [[1, 0], [1, 1]], samples: 2 } });
+  const { spans, fixtureOrder, route } = buildPipelineInputs(s);
+  // Port 1 first on the wire even though both offsets are 0.
+  assert.deepEqual(fixtureOrder.map((f) => f.id), ['p1', 'p2']);
+  assert.deepEqual(spans, [
+    { id: 'p1', start: 0, count: 2, hidden: false },
+    { id: 'p2', start: 2, count: 2, hidden: false },
+  ]);
+  assert.equal(route[0].byteEnd, 4 * 3);   // one dense device slice: 4 px
+});

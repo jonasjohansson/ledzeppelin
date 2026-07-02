@@ -293,8 +293,16 @@ export function repackOffsets(show) {
   const offsetByIndex = {};
   for (const dev in order) {
     order[dev].sort((a, b) => ((fixtures[a].output?.port ?? 1) - (fixtures[b].output?.port ?? 1)) || (a - b));
-    let cursor = 0;
-    for (const i of order[dev]) { offsetByIndex[i] = cursor; cursor += fixtures[i].pixelCount || 0; }
+    // Offsets are OUTPUT-LOCAL: the counter resets per port, so every output's
+    // chain addresses from 0 (out 1: 0–240, out 2: 0–240 — they don't stack).
+    // The wire layout is unchanged: pipeline.js concatenates ports in ascending
+    // order at send time, so the device buffer bytes are identical.
+    let cursor = 0, lastPort = null;
+    for (const i of order[dev]) {
+      const port = fixtures[i].output?.port ?? 1;
+      if (port !== lastPort) { cursor = 0; lastPort = port; }
+      offsetByIndex[i] = cursor; cursor += fixtures[i].pixelCount || 0;
+    }
   }
   return {
     ...show,
@@ -316,20 +324,27 @@ export function validate(show) {
     if ((f.input?.points?.length ?? 0) < 2) errors.push(`fixture ${f.id}: input needs ≥2 points`);
   }
 
-  // Per-device pixel ranges must start at 0 and be contiguous (no gaps/overlaps),
-  // since the flat sampler buffer is dense 0-based (see pipeline.js INVARIANT).
+  // Per-OUTPUT pixel ranges must start at 0 and be contiguous (no gaps/overlaps) —
+  // offsets are output-local (each port's chain addresses from 0). The flat sampler
+  // buffer stays dense because pipeline.js concatenates ports in ascending order.
   for (const d of show.devices) {
-    const fs = show.fixtures
-      .filter((f) => f.output?.deviceId === d.id)
-      .sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
-    if (!fs.length) continue;
-    let expected = 0;
-    for (const f of fs) {
-      if ((f.output?.pixelOffset ?? 0) !== expected) {
-        errors.push(`device ${d.id}: fixture pixel offsets must start at 0 and be contiguous`);
-        break;
+    const byPort = new Map();
+    for (const f of show.fixtures) {
+      if (f.output?.deviceId !== d.id) continue;
+      const p = f.output?.port ?? 1;
+      if (!byPort.has(p)) byPort.set(p, []);
+      byPort.get(p).push(f);
+    }
+    for (const [p, fs] of byPort) {
+      fs.sort((a, b) => (a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0));
+      let expected = 0;
+      for (const f of fs) {
+        if ((f.output?.pixelOffset ?? 0) !== expected) {
+          errors.push(`device ${d.id} output ${p}: fixture pixel offsets must start at 0 and be contiguous`);
+          break;
+        }
+        expected += f.output?.pixelCount ?? 0;
       }
-      expected += f.output?.pixelCount ?? 0;
     }
   }
 

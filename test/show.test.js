@@ -258,3 +258,22 @@ test('pushTypeToFixtures updates only that type\'s instances and repacks offsets
   assert.equal(f1.output.pixelCount, 90);
   assert.equal(s.fixtures[0].pixelCount, 60);         // pure — input show untouched
 });
+
+// Pixel offsets are OUTPUT-LOCAL: each output's chain addresses from 0 — two
+// strips on different outputs do NOT stack (out 1: 0–240, out 2: 0–240).
+test('repackOffsets resets the counter per output', async () => {
+  const { emptyShow, addDevice, addFixture, repackOffsets, validate } = await import('../src/model/show.js');
+  let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '', colorOrder: 'GRB' });
+  const strip = (id, port) => ({ id, pixelCount: 240, colorOrder: 'GRB',
+    output: { deviceId: 'c1', port, pixelOffset: 999, pixelCount: 240 },
+    input: { points: [[0, 0], [0, 1]], samples: 240 } });
+  s = addFixture(s, strip('a1', 1));
+  s = addFixture(s, strip('a2', 1));   // second on out 1 → chains after a1
+  s = addFixture(s, strip('b1', 2));   // out 2 → back to 0, no stacking
+  s = repackOffsets(s);
+  const off = (id) => s.fixtures.find((f) => f.id === id).output.pixelOffset;
+  assert.equal(off('a1'), 0);
+  assert.equal(off('a2'), 240);
+  assert.equal(off('b1'), 0);          // NOT 480 — output-local
+  assert.equal(validate(s).ok, true);  // per-output contiguity passes
+});

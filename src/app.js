@@ -100,14 +100,18 @@ function initialShow() {
   const loaded = loadShow();
   if (!loaded) return defaultShow();
   try {
-    const v = validate(loaded);
+    // Repack BEFORE validating: offsets are derived (never authored), and older
+    // saves stacked outputs per-device — the rule is per-OUTPUT now. Without the
+    // repack, a perfectly good old rig would fail validation and be discarded.
+    const packed = repackOffsets(loaded);
+    const v = validate(packed);
     if (!v.ok) {
       console.warn('Loaded show failed validation, using default:', v.errors.join(' · '));
       return defaultShow();
     }
     // Upgrade persisted OLD-shape compositions to the clip schema on load
     // (idempotent — new-shape shows pass through unchanged).
-    return normalizeComposition(loaded);
+    return normalizeComposition(packed);
   } catch (e) {
     console.warn('Loaded show is invalid, using default:', e.message);
     return defaultShow();
