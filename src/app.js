@@ -33,14 +33,13 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, registerMediaElement, unregisterMediaElement } from './model/audio.js';
-import { createSettingsPanel } from './ui/settings.js';
+import { updateAudio, setAudioGain, enableAudio, audioEnabled, registerMediaElement, unregisterMediaElement } from './model/audio.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 import { armStartupRiff } from './ui/startup-riff.js';
 import { VERSION } from './version.js';
-import { confirmDelete, confirmDeletesOn, setConfirmDeletes } from './ui/confirm.js';
+import { confirmDelete } from './ui/confirm.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -2613,8 +2612,8 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // Left-column tabs: Composition | Layer | Clip (one pane shown at a time).
-// (Settings moved to a floating overlay panel off the top-left gear — see
-// openSettingsPop; a stored 'settings' itab from older builds falls back here.)
+// (Settings moved to its own popup window off the top-left gear — see
+// openSettingsWindow; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
   const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip' };
   if (!panes[which]) which = 'composition';
@@ -2715,16 +2714,13 @@ function applyAccent(hex) {
   preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
 }
 const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
-function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); broadcastManifest(true); }
 // --- Appearance (Settings › Appearance): UI brightness (surface lift, can go negative
 // = darker than base), accent tint, text contrast, text size. Persisted; live. ---
 const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
 const BRIGHT_KEY = 'lz.brightness';
 const savedBright = () => num(BRIGHT_KEY, 0, -12, 20);
-function setBrightness(v) { try { localStorage.setItem(BRIGHT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
 const TINT_KEY = 'lz.tint.amt';
 const savedTint = () => num(TINT_KEY, 100, 0, 220);
-function setTint(v) { try { localStorage.setItem(TINT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
 const CONTRAST_KEY = 'lz.contrast';
 const savedContrast = () => num(CONTRAST_KEY, 130, 60, 130);
 function applyContrast() {
@@ -2735,7 +2731,6 @@ function applyContrast() {
   s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
   s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
 }
-function setContrast(v) { try { localStorage.setItem(CONTRAST_KEY, String(v)); } catch { /* private */ } applyContrast(); }
 const SCALE_KEY = 'lz.uiscale';
 const savedScale = () => num(SCALE_KEY, 1, 0.8, 1.4);
 function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.documentElement.style.setProperty('--ui-scale', String(c)); try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* private */ } }
@@ -2792,7 +2787,6 @@ function applyTips() {
   tipObserver.disconnect();
   tipObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
 }
-function setTips(on) { try { localStorage.setItem(TIPS_KEY, on ? '1' : '0'); } catch { /* private */ } applyTips(); }
 applyTips();   // on boot
 
 // The mapping surface lives in its own window (a named target → one reused
@@ -2800,79 +2794,68 @@ applyTips();   // on boot
 // (Mapping is now a tab of the Canvas island — embedded via iframe — so there's no
 //  separate-window opener anymore.)
 
-// Settings panel — the form itself lives in src/ui/settings.js (shared with the
-// /settings/ popout). This is the MAIN-WINDOW hook set: live show + undo stack,
-// real audio capture, live snap vars, daemon fps push, and the in-document
-// appearance appliers defined above.
-const settingsPanel = createSettingsPanel({
-  getShow: () => show,
-  // Settings owns only composition.audioDevice / composition.audioGain. `undoable`
-  // snapshots first; `defer` coalesces the gain slider's stream of saves.
-  setShow: (next, { undoable = false, defer = false } = {}) => {
-    if (undoable) snapshotForUndo(show);
-    show = next;
-    if (defer) saveShowSoon(); else saveShow(show);
-  },
-  enableAudio: (deviceId) => enableAudio('external', deviceId),   // this window owns capture
-  snap: {
-    get: () => ({ grid: SNAP_GRID, dist: SNAP_DIST }),
-    set: ({ grid, dist } = {}) => {
-      if (grid != null) SNAP_GRID = grid;
-      if (dist != null) SNAP_DIST = dist;
-      saveSnap(); redrawOverlay();
-    },
-  },
-  output: {
-    getFps: savedOutFps,
-    setFps: (n) => { try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
-  },
-  prefs: { getTips: tipsOn, setTips, getNativeCtx: nativeCtxOn, setNativeCtx: setNativeCtxMenu },
-  appearance: {
-    getBrightness: savedBright, setBrightness,
-    getTint: savedTint, setTint,
-    getContrast: savedContrast, setContrast,
-    getTranslucency: savedTranslucency, setTranslucency,
-    getScale: savedScale, setScale: setUiScale,
-    getAccent: savedAccent, setAccent,
-  },
-});
+// --- Settings: a real popup window (settings/), like Library and Mapping (C2 —
+// popups everywhere). The gear opens it; the page mounts the SAME form
+// (src/ui/settings.js createSettingsPanel) with popout hooks and broadcasts
+// every edit as { type: 'settings-changed' } on BroadcastChannel('lz-settings').
+function openSettingsWindow() { try { return window.open('settings/', 'lz-settings', 'width=560,height=860'); } catch { return null; } }
+document.getElementById('menu-settings')?.addEventListener('click', openSettingsWindow);
 
-// --- Settings: a floating overlay panel off the top-left gear. Rebuilt on every
-// open (the audio device list needs a fresh enumerate); closed by outside-click /
-// Esc (kit). ---
-const settingsPop = document.getElementById('settings-pop');
-const settingsPopBody = document.getElementById('settings-pop-body');
-let settingsDismiss = null;
-function closeSettingsPop() {
-  if (!settingsPop || settingsPop.hidden) return;
-  settingsPop.hidden = true;
-  document.getElementById('menu-settings')?.classList.remove('open');
-  if (settingsDismiss) { settingsDismiss(); settingsDismiss = null; }
-}
-function openSettingsPop() {
-  if (!settingsPop) return;
-  if (!settingsPop.hidden) { closeSettingsPop(); return; }   // gear toggles
-  settingsPanel.build(settingsPopBody);
-  settingsPop.hidden = false;
-  document.getElementById('menu-settings')?.classList.add('open');
-  // Park it under the gear (top-left), height-capped; the body scrolls.
-  const gear = document.getElementById('menu-settings');
-  const r = gear?.getBoundingClientRect();
-  settingsPop.style.top = `${Math.round((r?.bottom ?? 34) + 6)}px`;
-  settingsPop.style.left = `${Math.round(Math.max(8, r?.left ?? 8))}px`;
-  // Outside-click + Esc dismissal, hand-rolled (not the kit's dismissOnOutside):
-  // the GEAR must count as "inside", or its capture-phase close would race the
-  // button's own click and the gear could never toggle the panel shut.
-  const onClick = (ev) => { if (!settingsPop.contains(ev.target) && !ev.target.closest?.('#menu-settings')) closeSettingsPop(); };
-  const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeSettingsPop(); } };
-  setTimeout(() => document.addEventListener('click', onClick, true), 0);
-  document.addEventListener('keydown', onKey, true);
-  settingsDismiss = () => {
-    document.removeEventListener('click', onClick, true);
-    document.removeEventListener('keydown', onKey, true);
+// Adopt the popout's edits. Two ownership domains:
+//   · show-owned fields — Settings edits ONLY composition.audioDevice and
+//     composition.audioGain. The popout's saved blob carries a STALE copy of
+//     layers/fixtures/etc, so (mirroring the 'inventory-changed' targeted merge)
+//     we take just those two fields into the live show, then re-persist it.
+//   · localStorage-owned prefs — snap grid/dist (lz.snap), output fps cap
+//     (lz.outfps), tooltips (lz.tips), native right-click (lz.ctxmenu) and the
+//     appearance keys. The popout already wrote the keys; we re-read + re-run
+//     this window's side effects (snap vars + overlay, daemon fps push, title
+//     pass, body class, CSS vars).
+// Adopted edits are NOT undoable here — same rule as inventory merges: the undo
+// stack is main-window-local, and the popout streams micro-edits (a gain drag
+// would flood it). ⌘Z keeps working on composition edits made in this window.
+let setBus = null;
+try { setBus = new BroadcastChannel('lz-settings'); } catch { /* unsupported */ }
+let lastAdoptedAccent = savedAccent();   // only re-broadcast the remote manifest on a real accent change
+if (setBus) {
+  setBus.onmessage = (e) => {
+    if (e.data?.type !== 'settings-changed') return;
+    // Show-owned fields (targeted merge — never adopt the whole saved show).
+    const saved = loadShow();
+    if (saved) {
+      const dev = saved.composition?.audioDevice;
+      const gain = saved.composition?.audioGain;
+      const devChanged = dev != null && dev !== (show.composition?.audioDevice || 'default');
+      if (devChanged || (gain != null && gain !== show.composition?.audioGain)) {
+        show = { ...show, composition: { ...show.composition,
+          ...(dev != null ? { audioDevice: dev } : {}),
+          ...(gain != null ? { audioGain: gain } : {}),
+        } };
+        saveShow(show);   // re-persist the LIVE show (the popout's blob has stale layers)
+        // Re-open the input on the new device only if capture is already running —
+        // never start the microphone from a broadcast. (The loop applies gain each
+        // frame via setAudioGain(show.composition.audioGain), so gain needs no push.)
+        if (devChanged && audioEnabled('external')) enableAudio('external', dev);
+      }
+    }
+    // Snap: re-read lz.snap into the live vars (+ corner-button state) and redraw.
+    try {
+      const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
+      if (s) { SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; setSnapEnabled(!!s.on); }
+    } catch { /* ignore */ }
+    // Output fps cap → push to the daemon.
+    bridge?.setOutputFps?.(savedOutFps());
+    // Tooltips + native context menu (both idempotent appliers).
+    applyTips();
+    setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
+    // Appearance: re-apply every CSS-var applier from the (just-written) keys.
+    applyAccent(savedAccent()); applyContrast();
+    setUiScale(savedScale()); setTranslucency(savedTranslucency());
+    redrawOverlay();
+    const acc = savedAccent();
+    if (acc !== lastAdoptedAccent) { lastAdoptedAccent = acc; broadcastManifest(true); }   // remote surface follows the accent
   };
 }
-document.getElementById('menu-settings')?.addEventListener('click', openSettingsPop);
 
 // Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
 setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');

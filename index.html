@@ -87,9 +87,9 @@ canvas{display:block}</style>
      keeps working; the zoom pill is still appended at runtime to #corner-toggles. -->
 <div id="topbar">
   <!-- Window menus as icon buttons. (Hide UI lives on the 'H' key now;
-       Control/Settings/Mapping are tabs of the Canvas island.) -->
+       Settings/Mapping/Library/Control each open their own popup window.) -->
   <div class="corner-row" id="corner-menus">
-    <button id="menu-settings" class="g-icon" title="Settings — audio input, snap, output, appearance"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
+    <button id="menu-settings" class="g-icon" title="Settings — audio input, snap, output, appearance (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg></button>
     <button id="menu-lock" class="g-icon" title="Lock editing (performance mode)  (L)" aria-pressed="false"><svg class="ic" aria-hidden="true"><use href="#ic-lock-open"/></svg></button>
     <button id="menu-save" class="g-icon" title="Save project  (⌘S)"><svg class="ic" aria-hidden="true"><use href="#ic-save"/></svg></button>
     <button id="menu-open" class="g-icon" title="Open project  (⌘O)"><svg class="ic" aria-hidden="true"><use href="#ic-open"/></svg></button>
@@ -214,12 +214,7 @@ canvas{display:block}</style>
   <div class="island-body"><div id="fxinsp-body"></div></div>
 </section>
 
-<!-- Settings: a floating overlay island opened from the top-left gear (built by
-     buildSettings on each open; closed by outside-click / Esc). -->
-<section id="settings-pop" class="island" hidden>
-  <header class="island-head"><span class="island-title">Settings</span></header>
-  <div class="island-body"><div id="settings-pop-body"></div></div>
-</section>
+<!-- (Settings opens as its own popup window — settings/ — from the top-left gear.) -->
 
 <!-- The companion control surface opens in its own window (the top-bar remote icon).
      #system-control is a hidden mount that keeps the manifest/bridge wiring intact. -->

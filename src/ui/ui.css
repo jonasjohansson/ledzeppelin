@@ -567,17 +567,7 @@ body.view-overlay .island:not(#stage-island) .island-body { background: color-mi
 #device-pop .island-body { flex: 0 0 auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
 #device-pop .island-head { background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 7%), transparent); }
 
-/* Settings: a floating overlay island off the top-left GEAR (same chrome as
-   #device-pop; positioned under the gear in JS). The body scrolls. */
-#settings-pop {
-  position: fixed; z-index: 60; width: min(320px, calc(100vw - 16px));
-  max-height: calc(100vh - 56px); display: flex; flex-direction: column;
-  background: var(--panel-solid);
-  border: 1px solid var(--line-2); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
-}
-#settings-pop[hidden] { display: none; }
-#settings-pop .island-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* (Settings opens as its own popup window — settings/ — from the top-left gear.) */
 
 /* CURTAIN: a drag strip on the Timeline's top edge to resize it against the Canvas.
    No visible bar — the ns-resize cursor is the only affordance. */
@@ -593,7 +583,7 @@ body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-sele
 /* Dashboard knob disabled until something links to it. */
 .dash-cell.is-unlinked { opacity: .35; pointer-events: none; }
 
-/* (Settings lives in the floating #settings-pop island off the top-left gear;
+/* (Settings lives in its own popup window — settings/;
    #system-control is a hidden manifest mount.) */
 
 /* OVERLAY (the Control surface popup). */
@@ -669,7 +659,7 @@ body.gui-hidden #stage-island { border: none; }
 body.gui-hidden #stage-island .island-head { display: none; }
 /* Full-bleed shows the CANVAS regardless of which canvas-tab was active. */
 body.gui-hidden #stagewrap { display: flex !important; }
-body.gui-hidden #settings-pop, body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !important; }
+body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !important; }
 
 /* Menu-style button (window menus in the top bar). */
 .g-btn {
@@ -1752,7 +1742,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .accent-swatch:hover { opacity: .75; }
 .accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
-#settings-pop-body .fx-add { margin-top: 8px; }
 
 /* --- UPPERCASE chrome (C6) --------------------------------------------------
    App-authored text reads uppercase (System85's lowercase looks odd in chrome);
