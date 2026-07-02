@@ -210,10 +210,10 @@ function rebuild(next) {
   //    out to all its placed copies), 2) auto-pack pixel offsets contiguous per
   //    device, 3) sync derived sample points to transforms + canvas.
   show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
-  const { sampleUVs, route, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, route, spans } = buildPipelineInputs(show);
   curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
@@ -229,9 +229,9 @@ function rebuild(next) {
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
-  const { sampleUVs, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, spans } = buildPipelineInputs(show);
   sampler?.dispose?.();
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
   lastSpans = spans; recomputeHiddenSpans();
 }
 

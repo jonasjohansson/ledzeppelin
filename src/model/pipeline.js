@@ -12,18 +12,29 @@ function pointsAre3D(points) {
   return Array.isArray(points) && points.some((p) => p && p[2] !== undefined);
 }
 
-// The normalized sample UVs for one fixture, in LED-index order. A matrix (grid)
-// fixture samples a cols×rows block in its wiring order; a strip resamples its
-// polyline evenly. `reversed` flips which physical end is pixel 0 for both.
+// Lift 2D sample points to world positions on the canvas plane (z = 0).
+const flatPositions = (pts) => pts.map(([x, y]) => [x, y, 0]);
+
+// The normalized sample UVs — AND world positions — for one fixture, in
+// LED-index order. A matrix (grid) fixture samples a cols×rows block in its
+// wiring order; a strip resamples its polyline evenly. `reversed` flips which
+// physical end is pixel 0 for both.
 //
 // `cam` is the composition's projection camera. In 2D mode it's the flat camera
 // (mode === 'flat') and the strip path is byte-identical with today. In 3D mode,
 // when the fixture's points are 3D, resample by TRUE 3D arc length and project
 // each sample through the camera to get its 2D UV (perspective foreshortening).
-function fixtureSampleUVs(f, canvas, cam) {
+//
+// Returns { uvs, pos }: uvs = [u, v] canvas sample points, pos = [x, y, z]
+// WORLD positions per LED (same order) — the volumetric field pass evaluates at
+// pos. Only the 3D strip path carries real z (the samplePoints3D output BEFORE
+// projection); every 2D/flat path is the 2D points on the canvas plane (z = 0),
+// matching the design's "2D mode evaluates fields on the z = 0 plane".
+function fixtureSamples(f, canvas, cam) {
   if (isGridFixture(f)) {
     const pts = gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, canvas);
-    return f.input?.reversed ? pts.reverse() : pts;
+    const uvs = f.input?.reversed ? pts.reverse() : pts;
+    return { uvs, pos: flatPositions(uvs) };
   }
   // A bezier's sampled centreline is its EVALUATED curve, not the control
   // triangle — after evaluation it flows through the same resample/project
@@ -31,7 +42,8 @@ function fixtureSampleUVs(f, canvas, cam) {
   const geomPts = isBezierFixture(f.input) ? bezierToPoints(f.input) : f.input.points;
   const basePts = f.input.reversed ? [...geomPts].reverse() : geomPts;
   if (cam && cam.mode !== 'flat' && pointsAre3D(geomPts)) {
-    return samplePoints3D(basePts, f.input.samples).map((p) => {
+    const pos = samplePoints3D(basePts, f.input.samples);
+    const uvs = pos.map((p) => {
       const uv = project(p, cam);
       // A point at/behind the camera projects to [NaN, NaN] (see projectFramed).
       // Substitute the out-of-range sentinel: the GPU sampler's bounds check
@@ -39,8 +51,10 @@ function fixtureSampleUVs(f, canvas, cam) {
       // NaNs ever reach the sampler texture).
       return Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? uv : [-1, -1];
     });
+    return { uvs, pos };
   }
-  return samplePoints(basePts, f.input.samples);
+  const uvs = samplePoints(basePts, f.input.samples);
+  return { uvs, pos: flatPositions(uvs) };
 }
 
 // Pure: derive the flat sampler UVs + daemon route from a show.
@@ -64,6 +78,11 @@ function fixtureSampleUVs(f, canvas, cam) {
 // regardless of byteStart. server/output.js needs no change.
 export function buildPipelineInputs(show) {
   const uvs = [];
+  // World xyz per LED, same order as the uv pairs (3 floats per LED). Fields
+  // (volumetric sources) evaluate here. NOTE: chain stagger shifts the SAMPLE
+  // UV (a time-delay trick) but never the world position — fields see the
+  // fixture where it physically stands.
+  const poss = [];
   const spans = [];
   const fixtureOrder = [];
   const route = [];
@@ -86,13 +105,14 @@ export function buildPipelineInputs(show) {
     for (const f of fs) {
       // FLIP = reverse pixel direction (which physical end is pixel 0). Applied
       // at sample time so the canonical input.points stay put (no double-reverse).
-      const pts = fixtureSampleUVs(f, canvas, cam);
+      const { uvs: pts, pos } = fixtureSamples(f, canvas, cam);
       // Chain stagger: shift this fixture's sample position by its chain offset so
       // a travelling source cascades across the run (no-op when not chained).
       const [ox, oy] = chainOffset(show, f.id);
       spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
+      for (const [x, y, z] of pos) { poss.push(x, y, z); }
       // Colour format per segment: a fixture's own colorFormat WINS when set (so an
       // RGBW strip can sit on the same controller as RGB ones); otherwise inherit
       // the controller's colour order (the common case — its strips are wired alike).
@@ -114,6 +134,7 @@ export function buildPipelineInputs(show) {
       spans.push({ id: f.id, start: cursor, count: 1, hidden: !!f.hidden });
       fixtureOrder.push(f);
       uvs.push(u + ox, v + oy);
+      poss.push(u, v, 0);   // DMX fixture: its centre, on the canvas plane
       const cfg = f.input.dmx;
       // `fixed` is COPIED (not referenced) so a per-frame layer-binding update can
       // mutate the route's overrides without touching the saved show. `bind` maps a
@@ -151,13 +172,14 @@ export function buildPipelineInputs(show) {
   const deviceIds = new Set(show.devices.map((d) => d.id));
   for (const f of show.fixtures) {
     if (deviceIds.has(f.output?.deviceId)) continue;   // already routed above
-    const pts = fixtureSampleUVs(f, canvas, cam);
+    const { uvs: pts, pos } = fixtureSamples(f, canvas, cam);
     const [ox, oy] = chainOffset(show, f.id);
     spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
     fixtureOrder.push(f);
     for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
+    for (const [x, y, z] of pos) { poss.push(x, y, z); }
     cursor += pts.length;
   }
 
-  return { sampleUVs: new Float32Array(uvs), route, fixtureOrder, spans };
+  return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), route, fixtureOrder, spans };
 }

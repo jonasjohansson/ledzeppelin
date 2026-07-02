@@ -20,7 +20,11 @@ void main(){
   frag = texture(uCanvas, c);
 }`;
 
-export function makeSampler(gl, sampleUVs /* Float32Array len 2N */) {
+// samplePositions (optional, Float32Array len 3N — xyz per LED, same order as
+// the uv pairs) feeds the volumetric field pass; absent/empty falls back to a
+// canvas-plane position derived from nothing (all zeros) and volumetric clips
+// simply read the origin — callers should always pass it (see pipeline.js).
+export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions) {
   const n = sampleUVs.length / 2;
   // Wrap the LED list into a 2D grid so very large rigs don't blow past the GPU's
   // max texture WIDTH (a 1-row n-wide texture fails once n exceeds it). Width is
