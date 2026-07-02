@@ -1052,14 +1052,18 @@ function positionEditor(sel) {
       endRow(pts.length - 1, '2'),
     ], 'the arch: two ends + the C(ontrol) in canvas px — raise C’s Z to pull the middle up into a standing arch');
   };
-  // SHAPE row — Bar (straight box) | Polyline (bendable run) | Bezier (arch).
-  // Conversions keep the ends; entering bezier seeds the control at the chord
-  // midpoint. Matrices keep their grid footprint (no shape row).
+  // SHAPE row — Bar (straight box) | Bezier (arch). Conversions keep the ends;
+  // entering bezier seeds the control at the chord midpoint. Matrices keep their
+  // grid footprint (no shape row). POLYLINE is no longer offered as a manual
+  // conversion (per feedback) but stays a first-class mode under the hood:
+  // imported LEDger runs with bends are polylines, and double-clicking a bar's
+  // segment still inserts a bend vertex — a polyline fixture shows its chip here
+  // so its state stays legible.
   const shapeRow = () => {
     const cur = isBezierFixture(sel.input) ? 'bezier' : isPolylineFixture(sel.input) ? 'polyline' : 'bar';
     return oel('div', { className: 'dir-btns shape-row' }, [
       ['bar', 'Bar', 'straight strip — an x/y/w/h/rotation box'],
-      ['polyline', 'Polyline', 'bendable multi-segment run (double-click the run to add bends)'],
+      ...(cur === 'polyline' ? [['polyline', 'Polyline', 'bendable multi-segment run (double-click the run to add bends)']] : []),
       ['bezier', 'Bezier', 'quadratic arch — drag the diamond control; in 3D, Alt-drag it up into a standing arch'],
     ].map(([m, label, tip]) => oel('button', {
       className: 'dir-btn' + (m === cur ? ' on' : ''), textContent: label, title: tip,
@@ -1345,7 +1349,7 @@ function multiPositionEditor(ids) {
   // midpoint), applied per fixture in ONE undoable commit.
   const multiShapeRow = () => oel('div', { className: 'dir-btns shape-row' }, [
     ['bar', 'Bar', 'straighten every selected strip into an x/y/w/h/rotation box'],
-    ['polyline', 'Polyline', 'make every selected strip a bendable multi-segment run'],
+    // (Polyline is not offered as a bulk conversion — see the single editor note.)
     ['bezier', 'Bezier', 'make every selected strip a quadratic arch (then raise Arc Z to stand them all up)'],
   ].map(([m, label, tip]) => oel('button', {
     className: 'dir-btn' + (m === curShape ? ' on' : ''), textContent: label, title: tip,
