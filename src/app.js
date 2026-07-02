@@ -2867,6 +2867,7 @@ function loopBody(ts) {
     document.getElementById('control-subdot')?.classList.toggle('on', !!live);
     // The remote icon jumps to the control surface only while the daemon is up.
     if (remoteBtn) { remoteBtn.disabled = !live; remoteBtn.title = live ? 'Open the control surface (phone remote)' : 'Control surface — start the daemon to enable'; }
+    updateHealthBtn(!!live);   // offline chip (belt & braces beside onStatus — covers "bridge never constructed")
     // Daemon came up / went down → refresh the Output list + the scan icon's gate.
     if (!!live !== lastLive) { lastLive = !!live; if (outputTab === 'fixtures') renderOutput(); }   // daemon up/down → refresh scan button state
     frames = 0; last = ts;
@@ -3119,7 +3120,7 @@ const TOPBAR_CAPTIONS = {
   'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
   'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
-  'menu-health': 'Daemon', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
+  'daemon-chip': 'Offline', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
 };
 for (const [id, label] of Object.entries(TOPBAR_CAPTIONS)) {
   const btn = document.getElementById(id);
@@ -3142,10 +3143,12 @@ document.getElementById('menu-refresh')?.addEventListener('click', async () => {
 });
 document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
 document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
-// Health icon → opens the daemon's /health JSON; enabled only while the daemon is live.
-const healthBtn = document.getElementById('menu-health');
-healthBtn?.addEventListener('click', () => { if (!healthBtn.disabled) window.open('/health', '_blank', 'noopener'); });
-function updateHealthBtn(live) { if (healthBtn) { healthBtn.disabled = !live; healthBtn.title = live ? 'Daemon health — open /health ↗' : 'Daemon health (offline)'; } }
+// Offline chip: shown ONLY while the daemon/bridge is disconnected (on the hosted
+// site — no daemon ever — it stays up as a "no LED output" notice). Clicking opens
+// /health, the old health icon's diagnostic (shows the failure directly when down).
+const daemonChip = document.getElementById('daemon-chip');
+daemonChip?.addEventListener('click', () => window.open('/health', '_blank', 'noopener'));
+function updateHealthBtn(live) { if (daemonChip) daemonChip.hidden = !!live; }
 document.title = `LED Zeppelin v${VERSION}`;   // build version in the tab title so it's always visible
 document.getElementById('menu-bug')?.addEventListener('click', () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener'));
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest

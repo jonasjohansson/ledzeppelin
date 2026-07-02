@@ -19,8 +19,9 @@ From [Releases](https://github.com/jonasjohansson/ledzeppelin/releases):
 
 The app opens in your browser: a **top bar** of tools, the **canvas** and **clip grid** in the
 centre, the **Output** panel on the right. The browser tab title shows the version
-(`LED Zeppelin v1.0.x`). The daemon runs with the app — confirm via the **Daemon icon** in the
-top bar (reads "offline" until it's up). The **Guide** (book icon) reopens these pages.
+(`LED Zeppelin v1.0.x`). The daemon runs with the app — when it's reachable the top bar shows
+nothing; a red **OFFLINE** chip appears only if it's down. The **Guide** (book icon) reopens
+these pages.
 
 > **macOS:** click **Allow** on the Local Network prompt the first time it scans/streams, or
 > nothing works.

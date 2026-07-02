@@ -115,7 +115,9 @@ canvas{display:block}</style>
   </div>
   <!-- Far-right cluster: help + bug report + install/update. -->
   <div class="corner-row" id="corner-right">
-    <button id="menu-health" class="g-icon" title="Daemon health (offline)" disabled><svg class="ic" aria-hidden="true"><use href="#ic-health"/></svg></button>
+    <!-- Offline chip: hidden while the daemon is reachable; appears only when the
+         output bridge is down (incl. the hosted site, which never has a daemon). -->
+    <button id="daemon-chip" class="g-icon" title="Daemon offline — no LED output. Click to open /health." hidden><svg class="ic" aria-hidden="true"><use href="#ic-health"/></svg></button>
     <button id="menu-refresh" class="g-icon" title="Force update — clear cached app files & reload (keeps your saved project)"><svg class="ic" aria-hidden="true"><use href="#ic-rotate"/></svg></button>
     <button id="menu-guide" class="g-icon" title="User guide (opens a tab)"><svg class="ic" aria-hidden="true"><use href="#ic-guide"/></svg></button>
     <button id="menu-bug" class="g-icon" title="Report a bug"><svg class="ic" aria-hidden="true"><use href="#ic-bug"/></svg></button>

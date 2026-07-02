@@ -75,8 +75,8 @@ together produce the canvas image. Saved on its own via **Save composition…** 
 Settings; loading a composition `.json` restores visuals only (not the rig).
 
 **Daemon** — the local helper process that proxies the device JSON-API and streams
-pixels. Its health is shown by the **Daemon** icon in the top bar (opens
-`/health`); disabled when offline.
+pixels. When it's unreachable a red **OFFLINE** chip appears in the top bar
+(clicking it opens `/health`); no chip means the daemon is live.
 
 **Preview** — the **Preview** (wall) toggle dims the canvas composite and lights
 *only* each fixture's sampled pixels, so you see exactly what the rig will show.

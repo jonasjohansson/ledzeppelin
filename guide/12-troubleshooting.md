@@ -8,10 +8,9 @@ reports come down to one of the first few checks.
 No LEDs respond, even though the canvas is animating. Walk this checklist in order:
 
 1. **Is the daemon running?** Streaming needs the local app (the small Node daemon
-   that sends the UDP a browser can't). Look at the **Daemon** icon in the top bar —
-   it is the health indicator. When the daemon is live the icon is enabled and clicking
-   it opens `/health` in a new tab; when the daemon is offline the icon is **disabled**
-   (its tooltip reads "Daemon health (offline)"). If it's offline, start the app
+   that sends the UDP a browser can't). When the daemon is live the top bar shows no
+   indicator; when it's unreachable a red **OFFLINE** chip appears (clicking it opens
+   `/health`, which shows the failure directly). If the chip is showing, start the app
    (`npm start`, or launch the packaged build) and reload at `http://localhost:7070`.
 2. **Are you on the local app, not the hosted site?** See
    [Editor opens but can't stream](#editor-opens-but-cant-stream) below — designing and

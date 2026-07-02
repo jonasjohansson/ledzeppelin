@@ -390,6 +390,11 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 .ic-flip { transform: scaleX(-1); }   /* mirror for the opposite rotation direction */
 /* Companion/daemon status dot tucked into the remote button's corner (no layout shift). */
 #menu-remote .tab-dot { position: absolute; top: 4px; right: 2px; margin: 0; }
+/* Daemon OFFLINE chip — only in the DOM flow while the bridge is down (danger-tinted
+   warning). button# selectors outrank the generic `#topbar button` colour. */
+#topbar button#daemon-chip, #topbar button#daemon-chip:hover { color: var(--danger); }
+#daemon-chip .g-label { color: var(--danger); font-weight: var(--fw-med); }
+#daemon-chip[hidden] { display: none; }
 
 /* DOCK: three columns under the top bar, on the dark dock background. Gutters pass
    pointer events through; the islands re-enable them. */
