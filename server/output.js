@@ -26,13 +26,48 @@ function udpSend(pkt, port, ip) {
 }
 const artSeq = new Map();   // `${ip}:${port}` → last ArtDmx sequence (rolls 1..255, never 0)
 
+// --- Control-API overrides (daemon-native, default OFF — docs/api.md) --------
+// Blackout: while set, sendFrame ships zeros instead of the incoming frame
+// (packets keep flowing so WLED stays in realtime mode — a deliberate dark
+// state, not a dead stream). Survives editor reconnects; cleared only via the
+// API. Edges fade over BLACKOUT_FADE_MS instead of hard-cutting.
+export const BLACKOUT_FADE_MS = 300;
+let blackout = false, blackoutAt = 0;
+export function setBlackout(on) {
+  on = !!on;
+  if (on !== blackout) { blackout = on; blackoutAt = Date.now(); }
+  return blackout;
+}
+export function getBlackout() { return blackout; }
+// Output gain 0..1 implied by the blackout state at `now` (1 = normal, 0 =
+// dark; ramps across the fade window). Exported for tests.
+export function blackoutGain(now = Date.now()) {
+  const t = Math.min(1, (now - blackoutAt) / BLACKOUT_FADE_MS);
+  return blackout ? 1 - t : t;
+}
+
+// Per-device brightness OVERRIDE multiplier (ip → 0..1), applied on top of the
+// route's own brightness in the calibration LUT. An override, not an edit —
+// the editor's route resends can't clobber it, and it doesn't persist.
+const brightnessOverride = new Map();
+export function setBrightnessOverride(ip, v) {
+  if (v == null) { brightnessOverride.delete(ip); return null; }
+  const x = Math.max(0, Math.min(1, Number(v)));
+  brightnessOverride.set(ip, x);
+  return x;
+}
+export function getBrightnessOverrides() { return Object.fromEntries(brightnessOverride); }
+
 // Cache calibration LUTs by (gamma|brightness) so we don't rebuild per frame.
+// The API's brightness override multiplies the route's brightness and is folded
+// into the same cache key.
 const lutCache = new Map();
 function deviceLut(d) {
-  if (isIdentity(d.gamma, d.brightness)) return null;
-  const key = `${d.gamma ?? 1}|${d.brightness ?? 1}`;
+  const bri = (d.brightness ?? 1) * (brightnessOverride.get(d.ip) ?? 1);
+  if (isIdentity(d.gamma, bri)) return null;
+  const key = `${d.gamma ?? 1}|${bri}`;
   let lut = lutCache.get(key);
-  if (!lut) { lut = buildLut(d.gamma ?? 1, d.brightness ?? 1); lutCache.set(key, lut); }
+  if (!lut) { lut = buildLut(d.gamma ?? 1, bri); lutCache.set(key, lut); }
   return lut;
 }
 
@@ -82,9 +117,19 @@ export function suppressOutput(ip, ms = 6000) { suppressUntil.set(ip, Date.now()
 // delayMs (optional) holds a device's packets back by N ms to time-align it with
 // the rest of the rig (e.g. against video/projection); bytes are built NOW so the
 // delayed send still ships THIS frame.
+let blackBuf = null;   // reused buffer for the blackout-faded frame
 export function sendFrame(rgb, devices) {
   seq = (seq + 1) & 0x0f;
   const now = Date.now();
+  // API blackout: substitute a scaled/zero copy of THIS frame (fresh buffer per
+  // frame semantics preserved for in-flight sends via buildDeviceBytes below).
+  const gain = blackoutGain(now);
+  if (gain < 1) {
+    if (!blackBuf || blackBuf.length !== rgb.length) blackBuf = Buffer.alloc(rgb.length);
+    if (gain <= 0) blackBuf.fill(0);
+    else for (let i = 0; i < rgb.length; i++) blackBuf[i] = Math.round(rgb[i] * gain);
+    rgb = blackBuf;
+  }
   let syncPort = 0, syncAfter = -1;   // ArtSync wanted? track the latest send delay
   for (const d of devices) {
     const until = suppressUntil.get(d.ip);

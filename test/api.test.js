@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   authorized, problem, statusBody, devicesBody, parseManifest, clipsBody, controlsBody,
-  createApiHandler,
+  triggerAddress, createApiHandler,
 } from '../server/api.js';
 
 // --- pure body-builders -------------------------------------------------------
@@ -172,4 +172,87 @@ test('handler: unknown path → 404 problem-json', async () => {
   await createApiHandler(baseCtx)(req('GET', '/api/v1/nope'), res, u('/api/v1/nope'));
   assert.equal(res.code, 404);
   assert.equal(res.json().type, 'not-found');
+});
+
+// --- actions -------------------------------------------------------------------
+
+test('triggerAddress: canonical 1-based address; rejects 0/non-int', () => {
+  assert.equal(triggerAddress(1, 2), '/layer/1/clip/2/trigger');
+  assert.equal(triggerAddress(0, 1), null);
+  assert.equal(triggerAddress(1, 0), null);
+  assert.equal(triggerAddress(1.5, 1), null);
+});
+
+// A fake POST req whose body readJson can consume.
+function postReq(path, body, headers = {}) {
+  return {
+    method: 'POST', headers, url: path,
+    on(ev, fn) {
+      if (ev === 'data' && body !== undefined) fn(JSON.stringify(body));
+      if (ev === 'end') fn();
+    },
+  };
+}
+const post = async (ctx, path, body, headers) => {
+  const res = fakeRes();
+  await createApiHandler(ctx)(postReq(path, body, headers), res, u(path));
+  return res;
+};
+
+test('POST /blackout: {on:bool} required; toggles via ctx', async () => {
+  const calls = [];
+  const ctx = { ...baseCtx, setBlackout: (on) => { calls.push(on); return on; } };
+  let res = await post(ctx, '/api/v1/blackout', { on: 'yes' });
+  assert.equal(res.code, 400);
+  assert.equal(res.json().type, 'bad-request');
+  res = await post(ctx, '/api/v1/blackout', { on: true });
+  assert.equal(res.code, 200);
+  assert.deepEqual(res.json(), { blackout: true });
+  assert.deepEqual(calls, [true]);
+});
+
+test('POST /devices/:ip/brightness: 0..1 or null, override echoed back', async () => {
+  const calls = [];
+  const ctx = { ...baseCtx, setBrightness: (ip, v) => { calls.push([ip, v]); return v; } };
+  let res = await post(ctx, '/api/v1/devices/10.0.0.21/brightness', { value: 1.5 });
+  assert.equal(res.code, 400);
+  res = await post(ctx, '/api/v1/devices/10.0.0.21/brightness', { value: 0.4 });
+  assert.equal(res.code, 200);
+  assert.deepEqual(res.json(), { ip: '10.0.0.21', brightnessOverride: 0.4 });
+  res = await post(ctx, '/api/v1/devices/10.0.0.21/brightness', { value: null });
+  assert.equal(res.code, 200);
+  assert.equal(res.json().brightnessOverride, null);
+  assert.deepEqual(calls, [['10.0.0.21', 0.4], ['10.0.0.21', null]]);
+});
+
+test('POST trigger: 503 no-editor without an editor, 202 + canonical relay with one', async () => {
+  let res = await post({ ...baseCtx, editorConnected: () => false }, '/api/v1/clips/1/2/trigger');
+  assert.equal(res.code, 503);
+  assert.equal(res.json().type, 'no-editor');
+  const relayed = [];
+  const ctx = { ...baseCtx, editorConnected: () => true, relay: (a, v) => relayed.push([a, v]) };
+  res = await post(ctx, '/api/v1/clips/1/2/trigger');
+  assert.equal(res.code, 202);
+  assert.deepEqual(res.json(), { relayed: true, address: '/layer/1/clip/2/trigger' });
+  assert.deepEqual(relayed, [['/layer/1/clip/2/trigger', 1]]);
+  // 0 is not a valid 1-based index
+  res = await post(ctx, '/api/v1/clips/0/2/trigger');
+  assert.equal(res.code, 400);
+});
+
+test('POST /params: validates address + value, relays as-is (non-canonical falls through editor-side)', async () => {
+  const relayed = [];
+  const ctx = { ...baseCtx, editorConnected: () => true, relay: (a, v) => relayed.push([a, v]) };
+  let res = await post(ctx, '/api/v1/params', { address: 'layer/1/opacity', value: 0.5 });
+  assert.equal(res.code, 400);
+  assert.equal(res.json().type, 'bad-address');
+  res = await post(ctx, '/api/v1/params', { address: '/layer/1/opacity', value: 'high' });
+  assert.equal(res.code, 400);
+  assert.equal(res.json().type, 'bad-request');
+  res = await post(ctx, '/api/v1/params', { address: '/layer/1/opacity', value: 0.5 });
+  assert.equal(res.code, 202);
+  assert.deepEqual(relayed, [['/layer/1/opacity', 0.5]]);
+  res = await post({ ...baseCtx, editorConnected: () => false }, '/api/v1/params', { address: '/layer/1/opacity', value: 0.5 });
+  assert.equal(res.code, 503);
+  assert.equal(res.json().type, 'no-editor');
 });

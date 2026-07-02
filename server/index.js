@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
-import { sendFrame, suppressOutput } from './output.js';
+import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides } from './output.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig } from './wled.js';
@@ -251,14 +251,18 @@ const handleApi = createApiHandler({
     fpsOut,
     fpsCap: lastFps,
     outputStale,
-    blackout: false,
+    blackout: getBlackout(),
     lastFrameAt,
     osc: OSC_PORT,
     devices: lastRoute ? lastRoute.length : null,
   }),
   route: () => lastRoute,
   manifest: () => lastManifest,
-  overrides: () => ({}),
+  overrides: getBrightnessOverrides,
+  editorConnected,
+  relay: (address, value) => broadcastExt(address, value),
+  setBlackout,
+  setBrightness: setBrightnessOverride,
 });
 // OSC over UDP: any address, first numeric arg → an external channel named by
 // the address. TouchOSC / TouchDesigner / oscsend point here.

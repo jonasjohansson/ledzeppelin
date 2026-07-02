@@ -98,9 +98,18 @@ export function controlsBody(data) {
   };
 }
 
-// ctx: { token, status(), route(), manifest(), overrides() } — index.js supplies
-// live daemon state. Returns an async (req, res, url) that fully answers any
-// /api/v1/* request (caller routes on the path prefix).
+// Canonical clip-trigger address (osc-map.js scheme, 1-based indices) — null if
+// the indices aren't integers ≥ 1.
+export function triggerAddress(layer, index) {
+  const n = Number(layer), m = Number(index);
+  if (!Number.isInteger(n) || !Number.isInteger(m) || n < 1 || m < 1) return null;
+  return `/layer/${n}/clip/${m}/trigger`;
+}
+
+// ctx: { token, status(), route(), manifest(), overrides(), editorConnected(),
+// relay(address, value), setBlackout(on), setBrightness(ip, v|null) } —
+// index.js supplies live daemon state. Returns an async (req, res, url) that
+// fully answers any /api/v1/* request (caller routes on the path prefix).
 export function createApiHandler(ctx) {
   const send = (res, code, body) => { res.writeHead(code); res.end(JSON.stringify(body)); };
   return async function handleApi(req, res, url) {
@@ -127,6 +136,48 @@ export function createApiHandler(ctx) {
         const data = parseManifest(ctx.manifest());
         if (!data) return send(res, 503, problem('no-manifest', 'no editor has published a manifest yet'));
         return send(res, 200, p === '/api/v1/clips' ? clipsBody(data) : controlsBody(data));
+      }
+    }
+    if (req.method === 'POST') {
+      // Daemon-native: output-layer kill — works with no browser tab open.
+      if (p === '/api/v1/blackout') {
+        const body = await readJson(req);
+        if (typeof body.on !== 'boolean') return send(res, 400, problem('bad-request', 'body must be { "on": true|false }'));
+        return send(res, 200, { blackout: ctx.setBlackout(body.on) });
+      }
+      // Daemon-native: per-device brightness override multiplier (null clears).
+      const mb = p.match(/^\/api\/v1\/devices\/([^/]+)\/brightness$/);
+      if (mb) {
+        const ip = decodeURIComponent(mb[1]);
+        const body = await readJson(req);
+        const v = body.value;
+        if (!(v == null || (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1))) {
+          return send(res, 400, problem('bad-request', 'body must be { "value": 0..1 } (null clears the override)'));
+        }
+        return send(res, 200, { ip, brightnessOverride: ctx.setBrightness(ip, v ?? null) });
+      }
+      // Relayed: same broadcastExt channel as OSC and the phone remote; the
+      // editor applies it via routeOsc. 202 = "relayed", not "applied" —
+      // delivery is at-most-once with no ack.
+      const mt = p.match(/^\/api\/v1\/clips\/(\d+)\/(\d+)\/trigger$/);
+      if (mt) {
+        const address = triggerAddress(mt[1], mt[2]);
+        if (!address) return send(res, 400, problem('bad-request', 'layer and clip indices are 1-based integers'));
+        if (!ctx.editorConnected()) return send(res, 503, problem('no-editor', 'no editor connected; command not delivered'));
+        ctx.relay(address, 1);
+        return send(res, 202, { relayed: true, address });
+      }
+      if (p === '/api/v1/params') {
+        const body = await readJson(req);
+        if (typeof body.address !== 'string' || body.address[0] !== '/') {
+          return send(res, 400, problem('bad-address', 'address must be a string starting with "/" (canonical: /layer/<n>/…)'));
+        }
+        if (!Number.isFinite(Number(body.value))) {
+          return send(res, 400, problem('bad-request', 'value must be a number (canonical addresses expect 0..1)'));
+        }
+        if (!ctx.editorConnected()) return send(res, 503, problem('no-editor', 'no editor connected; command not delivered'));
+        ctx.relay(body.address, Number(body.value));
+        return send(res, 202, { relayed: true, address: body.address });
       }
     }
     return send(res, 404, problem('not-found', `no such endpoint: ${req.method} ${p}`));
