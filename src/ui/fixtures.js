@@ -482,6 +482,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         c.addEventListener('change', () => upd((nt) => { nt.artnetSync = c.checked; }));
         return c;
       })()),
+      ...(t.id !== 'generic' ? [deleteEntryBtn('Delete controller model…')] : []),
     ]);
   }
 
@@ -592,6 +593,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => { nt.ledsPerMeter = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round(x * (Number(nt.meters) || 0))); }), 0, 200, 1),
       sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => { nt.meters = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round((Number(nt.ledsPerMeter) || 0) * x)); }), 0, 20, 0.1),
     );
+    if (t.id !== 'generic') rows.push(deleteEntryBtn('Delete fixture type…'));
     // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
     rows.push(pushRow());
     return el('div', { className: 'fx-card fx-detail' }, rows);
@@ -716,6 +718,55 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
 
   render();
   mounted = true;
+  // Delete the last-clicked device / controller model / fixture definition (shared
+  // by the panel's ⌫ path AND the visible Delete buttons in the Library detail
+  // editors). A controller model still in use is NOT deleted; deleting a fixture
+  // definition removes its placed fixtures too (after a confirm).
+  function deleteSelectedItem() {
+    const show = getShow();
+    if (lastSel === 'device' && selDeviceId && (show.devices || []).some((d) => d.id === selDeviceId)) {
+      const dev = show.devices.find((d) => d.id === selDeviceId);
+      const used = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === selDeviceId).length;
+      const msg = `Delete device “${dev?.name || selDeviceId}”?`
+        + (used ? `\n\n${used} fixture${used === 1 ? '' : 's'} routed to it will be unrouted.` : '');
+      if (!confirmDelete(msg)) return false;
+      const next = structuredClone(show);
+      next.devices = next.devices.filter((d) => d.id !== selDeviceId);
+      selDeviceId = null; commit(next); return true;
+    }
+    if (lastSel === 'devtype' && selDevTypeId && selDevTypeId !== 'generic') {
+      const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
+      const used = deviceTypeInstanceCount(show, selDevTypeId);
+      // In use → explain rather than silently doing nothing.
+      if (used) { window.alert(`“${t?.name || selDevTypeId}” is in use by ${used} device${used === 1 ? '' : 's'} — remove those first.`); return false; }
+      if (!confirmDelete(`Delete controller model “${t?.name || selDevTypeId}”?`)) return false;
+      const next = structuredClone(show);
+      next.deviceTypes = (next.deviceTypes || []).filter((t) => t.id !== selDevTypeId);
+      selDevTypeId = null; commit(next); return true;
+    }
+    if (lastSel === 'type' && selTypeId && selTypeId !== 'generic') {
+      const used = typeInstanceCount(show, selTypeId);
+      const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
+      // Always confirm; if in use, warn that placed fixtures go too.
+      const msg = used
+        ? `Delete “${t?.name || selTypeId}”?\n\n${used} placed fixture${used === 1 ? '' : 's'} will also be removed.`
+        : `Delete fixture type “${t?.name || selTypeId}”?`;
+      if (!confirmDelete(msg)) return false;
+      const next = structuredClone(show);
+      next.fixtureTypes = (next.fixtureTypes || []).filter((x) => x.id !== selTypeId);
+      next.fixtures = (next.fixtures || []).filter((f) => f.typeId !== selTypeId);
+      selTypeId = null; commit(next); return true;
+    }
+    return false;
+  }
+
+  // Danger button for the Library detail editors — the ⌫ shortcut only exists in
+  // the main app's keydown, so the Library window needs a visible affordance.
+  const deleteEntryBtn = (label) => el('button', {
+    className: 'fx-add fx-delete', textContent: label,
+    title: 'delete this library entry', onclick: () => deleteSelectedItem(),
+  });
+
   return {
     libraryEl: libraryBox, refresh: render,
     // Device health for the app's Output list (renderOutput paints the status dot):
@@ -765,44 +816,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     },
     // ⌫ deletes the last-clicked device (Devices tab) or model/definition
     // (Library tab). A model/definition still IN USE is NOT deleted. Returns
-    // true if it deleted.
-    deleteSelected: () => {
-      const show = getShow();
-      if (lastSel === 'device' && selDeviceId && (show.devices || []).some((d) => d.id === selDeviceId)) {
-        const dev = show.devices.find((d) => d.id === selDeviceId);
-        const used = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === selDeviceId).length;
-        const msg = `Delete device “${dev?.name || selDeviceId}”?`
-          + (used ? `\n\n${used} fixture${used === 1 ? '' : 's'} routed to it will be unrouted.` : '');
-        if (!confirmDelete(msg)) return false;
-        const next = structuredClone(show);
-        next.devices = next.devices.filter((d) => d.id !== selDeviceId);
-        selDeviceId = null; commit(next); return true;
-      }
-      if (lastSel === 'devtype' && selDevTypeId && selDevTypeId !== 'generic') {
-        const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
-        const used = deviceTypeInstanceCount(show, selDevTypeId);
-        // In use → explain rather than silently doing nothing.
-        if (used) { window.alert(`“${t?.name || selDevTypeId}” is in use by ${used} device${used === 1 ? '' : 's'} — remove those first.`); return false; }
-        if (!confirmDelete(`Delete controller model “${t?.name || selDevTypeId}”?`)) return false;
-        const next = structuredClone(show);
-        next.deviceTypes = (next.deviceTypes || []).filter((t) => t.id !== selDevTypeId);
-        selDevTypeId = null; commit(next); return true;
-      }
-      if (lastSel === 'type' && selTypeId && selTypeId !== 'generic') {
-        const used = typeInstanceCount(show, selTypeId);
-        const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
-        // Always confirm; if in use, warn that placed fixtures go too.
-        const msg = used
-          ? `Delete “${t?.name || selTypeId}”?\n\n${used} placed fixture${used === 1 ? '' : 's'} will also be removed.`
-          : `Delete fixture type “${t?.name || selTypeId}”?`;
-        if (!confirmDelete(msg)) return false;
-        const next = structuredClone(show);
-        next.fixtureTypes = (next.fixtureTypes || []).filter((x) => x.id !== selTypeId);
-        next.fixtures = (next.fixtures || []).filter((f) => f.typeId !== selTypeId);
-        selTypeId = null; commit(next); return true;
-      }
-      return false;
-    },
+    // true if it deleted. (Also reachable via the visible Delete button in the
+    // Library detail editors — the Library window has no ⌫ wiring of its own.)
+    deleteSelected: deleteSelectedItem,
     // ⌘D duplicates the selected Inventory item — a controller MODEL or a fixture
     // DEFINITION — as an independent copy ("… copy"), then selects it. The copy is a
     // new definition only; no placed instances are created. Returns true if it copied.

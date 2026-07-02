@@ -24,7 +24,7 @@ import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
-import { toggleView3d } from './model/project3d.js';
+import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
@@ -715,6 +715,10 @@ if (previewCanvas) {
       redrawOverlay();
     },
     onMarqueeEnd: () => { marqueeRect = null; renderOutput(); redrawOverlay(); },
+    // 3D orbit/pan (view-only): swap the show in and save DEBOUNCED without undo
+    // — like zoom/pan, moving the inspect camera is not an edit. No sampler
+    // rebuild either: the projection camera is flat, so UVs are unchanged.
+    onView: (next) => { show = next; saveShowSoon(); redrawOverlay(); },
     enabled: false, // gated by view state below; default tab is Composition
   }, {
     // opts (3rd arg). Hit-test/drag over the whole stage (incl. the pasteboard
@@ -1922,6 +1926,9 @@ const is3D = () => show.composition?.view3d?.mode === '3d';
 // undo/redo/open, where the mode may change without a click).
 function syncMode3d() {
   mode3dBtn?.classList.toggle('on', is3D());
+  // body.mode-3d dims the flat composite behind the 3D scene (ui.css) — the
+  // image drawn flat would be spatially wrong under an angled viewport.
+  document.body.classList.toggle('mode-3d', is3D());
   redrawOverlay();
 }
 function toggleMode3d() {
@@ -2365,6 +2372,18 @@ document.addEventListener('keydown', (e) => {
     // Shift = pan instead of zoom — both axes (deltaX from a trackpad; a plain mouse
     // wheel only has deltaY, which pans vertically).
     if (e.shiftKey) { panX -= e.deltaX; panY -= e.deltaY; apply(); return; }
+    // 3D mode: the wheel DOLLIES the orbit camera instead of CSS-zooming the
+    // stage (the scene has real depth now). View-only — saved debounced, no undo.
+    if (is3D() && overlayVisible) {
+      const v3 = show.composition.view3d;
+      const clampD = (v) => Math.max(ORBIT_DIST_MIN, Math.min(ORBIT_DIST_MAX, v));
+      const d0 = clampD(Number(v3.orbit?.dist) || 1.6);
+      const dist = clampD(d0 * Math.exp(e.deltaY * 0.0015));
+      if (dist === d0) return;
+      show = { ...show, composition: { ...show.composition, view3d: { ...v3, orbit: { ...v3.orbit, dist } } } };
+      saveShowSoon(); redrawOverlay();
+      return;
+    }
     const z2 = clamp(z * Math.exp(-e.deltaY * 0.0015));
     if (z2 === z) return;
     const rect = inner.getBoundingClientRect();

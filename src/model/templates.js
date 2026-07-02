@@ -32,9 +32,13 @@ export function stampFixture(template, id) {
   const distribution = Math.max(0, Math.round(Number(t.distribution) || 0));
   const isGrid = rows > 1;
   const cv = DEFAULT_CANVAS;
+  // A strip stamps HORIZONTAL (length = width, auto thickness) — matching the
+  // Library's model, where LEDs/m × Length set a strip's WIDTH. It used to stamp
+  // upright (w:10 × h:px), so a template that read "wider than long" in the
+  // Library landed "longer than wide" on the canvas.
   const transform = isGrid
     ? { x: cv.w / 2, y: cv.h / 2, w: cols * 16, h: rows * 16, rotation: 0 }
-    : { x: cv.w / 2, y: cv.h / 2, w: 10, h: pixelCount, rotation: 0 };
+    : { x: cv.w / 2, y: cv.h / 2, w: pixelCount, h: 10, rotation: 0 };
   const points = pointsFromTransform(transform, cv, isGrid);
   const fx = {
     id,

@@ -104,6 +104,16 @@ const importPanel = createImportPanel({
 importEl.append(importPanel.el);
 importPickBtn.addEventListener('click', () => importPanel.trigger?.());
 
+// ⌫ deletes the selected library entry — same rule as the main app's keydown
+// (which this window doesn't share; this was the bug: the Library window had no
+// delete path at all). The detail editors also carry a visible Delete button.
+// Skipped while typing in a field.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+  if (/^(input|textarea|select)$/i.test(e.target?.tagName || '')) return;
+  if (panel.deleteSelected?.()) { e.preventDefault(); mountDetail(); }
+});
+
 // Receive: another window changed the show → reload + re-render so we stay in sync.
 // A main-window "Import from LEDger…" click also reaches us as 'open-import' →
 // open the file picker so the import flow starts here.

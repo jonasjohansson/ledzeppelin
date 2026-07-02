@@ -71,6 +71,39 @@ export function project(P, cam) {
   return projectFramed(P, cam);
 }
 
+// --- Orbit (view-only) camera for the 3D viewport ---------------------------
+// Gesture clamps shared by the viewport and its pointer/wheel handlers.
+export const ORBIT_EL_MIN = -5, ORBIT_EL_MAX = 85;
+export const ORBIT_DIST_MIN = 0.5, ORBIT_DIST_MAX = 5;
+
+// orbitCamera(orbit, aspect): the INSPECT camera the 3D viewport renders
+// through, built from { az, el, dist, target } around a point on the canvas
+// plane (default the canvas centre [0.5, 0.5, 0]). In the viewport, world z is
+// "up" — strips lift off the z=0 ground/canvas plane — so the camera's up is
+// +z; azimuth 0 looks from beyond the canvas top edge, elevation tilts down
+// onto the plane. This camera is NEVER used for sampling (the projection
+// camera is separate — see cameraFromView3d); it only draws the scene.
+export function orbitCamera(orbit = {}, aspect = 1) {
+  const az = ((Number(orbit.az) || 0) * Math.PI) / 180;
+  const elDeg = Math.max(ORBIT_EL_MIN, Math.min(ORBIT_EL_MAX, Number(orbit.el) || 0));
+  const el = (elDeg * Math.PI) / 180;
+  const dist = Math.max(ORBIT_DIST_MIN, Math.min(ORBIT_DIST_MAX, Number(orbit.dist) || 1.6));
+  const t = Array.isArray(orbit.target) ? orbit.target : [0.5, 0.5, 0];
+  const tz = Number(t[2]) || 0;
+  const c = Math.cos(el), s = Math.sin(el);
+  const pos = [t[0] + dist * c * Math.sin(az), t[1] - dist * c * Math.cos(az), tz + dist * s];
+  return perspectiveCamera({ pos, target: [t[0], t[1], tz], up: [0, 0, 1], fov: 50, aspect });
+}
+
+// cameraBasis(cam): the camera's unit right / up / forward vectors in world
+// space — what a screen-space pan gesture needs to move the orbit target.
+export function cameraBasis(cam) {
+  const f = normalize(sub(cam.target, cam.pos));
+  const r = normalize(cross(f, cam.up));
+  const u = cross(r, f);
+  return { r, u, f };
+}
+
 // Vector helpers (3-component arrays).
 function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }

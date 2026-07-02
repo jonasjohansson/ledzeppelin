@@ -1,5 +1,9 @@
-import { samplePoints } from '../model/sampling.js';
+import { samplePoints, samplePoints3D } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
+import {
+  orbitCamera, cameraBasis, project,
+  ORBIT_EL_MIN, ORBIT_EL_MAX, ORBIT_DIST_MIN, ORBIT_DIST_MAX,
+} from '../model/project3d.js';
 import { gridPoints, isGridFixture } from '../model/grid.js';
 import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains.js';
 import { isDmxFixture } from '../model/dmx.js';
@@ -65,6 +69,18 @@ function groupHandles(gb) {
 // Transient value tag shown at the cursor during a drag/rotate/scale — set by
 // enableDragPlacement, read by createPreview's draw(). {nx,ny} normalized 0..1.
 let dragHint = null;
+
+// The composition's 3D view state when 3D mode is ON (else null). Shared by
+// createPreview's draw() and enableDragPlacement's gesture routing so both
+// switch together. NOTE: 3D mode only changes the VIEWPORT — the sampled
+// output still projects flat-front (view3d.projectionCamera stays flat until
+// the camera-placement phase), so the LEDs get identical colours in both modes.
+const view3dOf = (show) => {
+  const v = show?.composition?.view3d;
+  return v && v.mode === '3d' ? v : null;
+};
+// A polyline as clean 3-tuples for viewport projection (missing z = 0).
+const pts3Of = (pts) => (pts || []).map((p) => [p?.[0] || 0, p?.[1] || 0, p?.[2] || 0]);
 
 export function createPreview(canvasEl, opts = {}) {
   const ctx = canvasEl.getContext('2d');
@@ -136,8 +152,20 @@ export function createPreview(canvasEl, opts = {}) {
     const { runColor } = controllerColorMap(show);
     const chainColors = {};
     for (const r of runsOf(show)) chainColors[r.key] = runColor(r.deviceId, r.port);
-    piCache = { show, fixtureOrder, spans, samplePts, chainColors };
+    piCache = { show, fixtureOrder, spans, samplePts, chainColors, samplePts3D: null };
     return piCache;
+  }
+  // PHYSICAL (3D arc-length) sample positions per fixture, for the 3D viewport's
+  // LED dots. Computed lazily on first 3D draw and cached with the pipeline (2D
+  // mode never pays for it); grids sit on the canvas plane at z = 0.
+  function samplePts3DFor(show) {
+    const pi = pipelineFor(show);
+    if (!pi.samplePts3D) {
+      pi.samplePts3D = pi.fixtureOrder.map((f) => (isGridFixture(f)
+        ? gridPoints(f.input?.transform, f.cols, f.rows, f.distribution, show.composition?.canvas).map((p) => [p[0], p[1], 0])
+        : samplePoints3D(pts3Of(f.input.points), f.input.samples)));
+    }
+    return pi.samplePts3D;
   }
   function setRenderScale(zoom) {
     viewZoom = Math.max(0.25, Number(zoom) || 1);
@@ -157,6 +185,10 @@ export function createPreview(canvasEl, opts = {}) {
   const isSelected = (sel, id) => sel && (sel.has ? sel.has(id) : sel === id);
 
   function draw(show, rgba, selectedIds = null, snapGrid = 0, guides = null, marquee = null) {
+    // 3D mode → render the scene through the ORBIT camera instead of the flat
+    // 2D footprints (snap grid / guides / marquee are 2D-editing chrome — none
+    // apply while the viewport is an angled 3D scene).
+    if (view3dOf(show)) { draw3D(show, rgba, selectedIds); return; }
     const W = BASE_W, Hh = BASE_H;                 // logical drawing space
     // Chrome scale — constant SCREEN size at zoom ≤ 1, receding when zoomed in so a
     // dense rig doesn't crowd. Used by the SVG chrome layer (and the canvas drag-tag).
@@ -328,6 +360,126 @@ export function createPreview(canvasEl, opts = {}) {
     }
   }
 
+  // --- 3D viewport --------------------------------------------------------------
+  // Renders the SCENE through the orbit (view-only) camera: a ground grid on the
+  // z=0 canvas plane, the canvas rectangle (where the composition lives), every
+  // fixture's polyline projected to screen, and its lit LED dots. The flat
+  // composite is dimmed via body.mode-3d CSS (app.js): drawn flat behind an
+  // angled scene it would be spatially wrong, but a faint ghost keeps context of
+  // what's playing at zero cost — this is a MAPPING view, not the wall.
+  function draw3D(show, rgba, selectedIds) {
+    const W = BASE_W, Hh = BASE_H;
+    const ck = viewZoom <= 1 ? 1 / viewZoom : 1 / Math.pow(viewZoom, 1.35);
+    ctx.setTransform(canvasEl.width / BASE_W, 0, 0, canvasEl.height / BASE_H, 0, 0);
+    ctx.clearRect(0, 0, W, Hh);
+    const v3 = view3dOf(show);
+    const cam = orbitCamera(v3.orbit, W / Hh);
+
+    // SVG chrome — rebuilt when the show ref changes (any orbit move produces a
+    // new show object, so the scene follows the camera) or selection/zoom change.
+    if (svg) {
+      const selKey = selectedIds ? [...selectedIds].join(',') : '';
+      const key = `3d|${selKey}|${viewZoom}`;
+      if (show !== chromeShow || key !== chromeKey) {
+        chromeShow = show; chromeKey = key;
+        svg.innerHTML = buildChrome3D(show, selectedIds, cam, ck);
+      }
+    }
+    if (!show || !show.fixtures?.length || !rgba) return;
+
+    // Lit LED dots: each fixture's PHYSICAL (3D arc-length) sample points,
+    // projected through the orbit camera, one small square per LED coloured
+    // from the sampled composite — same selection/live alpha logic as 2D.
+    // (Chain offsets shift WHERE a fixture samples, not where it physically
+    // sits, so they don't move the dots here.)
+    const { fixtureOrder, spans } = pipelineFor(show);
+    const pts3 = samplePts3DFor(show);
+    for (let fi = 0; fi < fixtureOrder.length; fi++) {
+      const f = fixtureOrder[fi];
+      if (f.hidden) continue;
+      const span = spans[fi];
+      const pts = pts3[fi];
+      const count = pts.length;
+      const reversed = !!f.input.reversed;
+      ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
+      const cell = Math.max(1.5, 2.5 * ck);
+      let last = '';
+      for (let i = 0; i < count; i++) {
+        const [u, v] = project(pts[i], cam);
+        if (!Number.isFinite(u) || !Number.isFinite(v)) continue;   // behind the orbit camera
+        const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
+        let r = 0, g = 0, b = 0;
+        if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
+        const css = `rgb(${r},${g},${b})`;
+        if (css !== last) { ctx.fillStyle = css; last = css; }
+        ctx.fillRect(u * W - cell / 2, v * Hh - cell / 2, cell, cell);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // The 3D scene's vector chrome (grid / canvas plane / strips) as one SVG
+  // markup string — the 3D counterpart of buildChrome, same colour logic
+  // (controller Tint, selection accent, hidden ghosts).
+  function buildChrome3D(show, selectedIds, cam, ck) {
+    const W = BASE_W, Hh = BASE_H;
+    const p = [];
+    const prj = (x, y, z) => { const uv = project([x, y, z], cam); return [uv[0] * W, uv[1] * Hh]; };
+    const finite = (q) => Number.isFinite(q[0]) && Number.isFinite(q[1]);
+    // A 3D polyline → one or more <polyline> strings (split where points fall
+    // behind the orbit camera rather than drawing a degenerate segment).
+    const poly3 = (pts3, stroke, w, dash) => {
+      let run = [];
+      const flush = () => {
+        if (run.length >= 2) p.push(`<polyline points="${run.map((q) => `${nz(q[0])},${nz(q[1])}`).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${nz(w)}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`);
+        run = [];
+      };
+      for (const pt of pts3) { const q = prj(pt[0], pt[1], pt[2] || 0); if (finite(q)) run.push(q); else flush(); }
+      flush();
+    };
+    const du = viewZoom <= 1 ? 1 / viewZoom : 1 / Math.pow(viewZoom, 0.6);
+    const DASH = `${nz(9 * du)} ${nz(5 * du)}`;
+
+    // Ground grid: 10×10 cells on the z=0 plane over the canvas extent (subtle).
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      poly3([[t, 0, 0], [t, 1, 0]], 'rgba(255,255,255,.09)', ck);
+      poly3([[0, t, 0], [1, t, 0]], 'rgba(255,255,255,.09)', ck);
+    }
+    // The canvas rectangle — the z=0 composition plane the visuals project onto.
+    poly3([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]], 'rgba(170,176,186,.55)', 1.25 * ck);
+
+    if (show && show.fixtures?.length) {
+      const { fixtureOrder, chainColors } = pipelineFor(show);
+      const routed = new Set(fixtureOrder.map((f) => f.id));
+      const drawList = fixtureOrder.concat(show.fixtures.filter((f) => !routed.has(f.id)));
+      const dim = (c) => (colorTint ? c : accCss(.9));
+      for (const f of drawList) {
+        const eps = f.input.points; if (!eps || !eps.length) continue;
+        const pts3 = pts3Of(eps);
+        const selected = isSelected(selectedIds, f.id);
+        if (f.hidden) {                                  // faint ghost outline
+          poly3(pts3, selected ? accCss(.55) : 'rgba(150,156,166,.28)', 1.25 * ck, DASH);
+          continue;
+        }
+        const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
+        poly3(pts3, stroke, (selected ? 2 : 1.25) * ck);
+        if (selected) {
+          // View-only vertex markers (dragging them is Phase 3) + the label.
+          for (const pt of pts3) {
+            const q = prj(pt[0], pt[1], pt[2]);
+            if (finite(q)) p.push(rectS(q[0] - 3 * ck, q[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.25 * ck));
+          }
+          if (showLabels) {
+            const q = prj(pts3[0][0], pts3[0][1], pts3[0][2]);
+            if (finite(q)) p.push(labelS(fixtureLabel(f, show.fixtures.indexOf(f)), q[0], q[1] - 10 * ck, true, ck));
+          }
+        }
+      }
+    }
+    return p.join('');
+  }
+
   // --- SVG chrome string builders (same 0..BASE coords as the lights canvas) ----
   const nz = (n) => Math.round(n * 100) / 100;                 // trim coordinate noise
   const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -491,7 +643,7 @@ export function createPreview(canvasEl, opts = {}) {
 //   • double-click a segment → insert a vertex (a bar becomes a bendable run)
 //   • right-click a vertex → remove it
 // Edits derive a new show and call onEdit(next) per move; onCommit on release.
-export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap, onMarqueeStart, onMarquee, onMarqueeEnd }, opts = {}) {
+export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSelect, getSelected, snap, onMarqueeStart, onMarquee, onMarqueeEnd, onView }, opts = {}) {
   const hitR = opts.hitRadius ?? 26;      // body click tolerance (bigger = easier to grab a thin strip)
   const vtxR = opts.vertexRadius ?? 12;   // handle grab radius
   let dragState = null;
@@ -534,8 +686,36 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     return 'default';
   }
 
+  // 3D viewport hit-test: project each fixture's polyline through the orbit
+  // camera and test screen distance to its segments (same segDist ≤ hitR rule
+  // as 2D). SELECTION only — vertex/resize/rotate editing is disabled in 3D
+  // (per-vertex 3D drag is Phase 3). Returns { fxId } or null.
+  function hitTest3D(ev, v3) {
+    const show = getShow();
+    const [px, py, rw, rh] = localPx(ev);
+    const cam = orbitCamera(v3.orbit, rw / rh);
+    let best = null;
+    const fixtures = show.fixtures ?? [];
+    for (let i = fixtures.length - 1; i >= 0; i--) {
+      const f = fixtures[i];
+      const eps = f.input?.points; if (!eps || eps.length < 2) continue;
+      let prev = null;
+      for (const e of eps) {
+        const uv = project([e?.[0] || 0, e?.[1] || 0, e?.[2] || 0], cam);
+        const q = Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? [uv[0] * rw, uv[1] * rh] : null;
+        if (prev && q) {
+          const d = segDist(px, py, prev[0], prev[1], q[0], q[1]);
+          if (d <= hitR && (!best || d < best.dist)) best = { fxId: f.id, dist: d };
+        }
+        prev = q;
+      }
+    }
+    return best ? { fxId: best.fxId } : null;
+  }
+
   function hitTest(ev) {
     const show = getShow();
+    if (view3dOf(show)) return null;   // 3D mode: 2D handles/bodies don't exist on screen
     const [px, py, rw, rh] = localPx(ev);
     const fixtures = show.fixtures ?? [];
     // Rotate knob (a single selected bar) wins over everything — test it first.
@@ -649,6 +829,23 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   evEl.addEventListener('pointerdown', (ev) => {
     if (!enabled) return;
     if (ev.button !== 0) return;   // left only — middle is the hand-pan, right the context menu
+    const v3 = view3dOf(getShow());
+    if (v3) {
+      // 3D mode: a CLICK selects the strip under the cursor; a DRAG orbits the
+      // view (Shift = pan the target). All 2D editing gestures are disabled.
+      // Orbit/pan changes flow through onView — view-only state that must save
+      // WITHOUT entering undo history (like zoom/pan, it isn't an edit).
+      const hit3 = hitTest3D(ev, v3);
+      if (hit3) onSelect?.(hit3.fxId, ev);
+      const o = v3.orbit || {};
+      dragState = ev.shiftKey
+        ? { kind: 'orbitpan', x0: ev.clientX, y0: ev.clientY, target0: (Array.isArray(o.target) ? o.target : [0.5, 0.5, 0]).slice() }
+        : { kind: 'orbit', x0: ev.clientX, y0: ev.clientY, az0: Number(o.az) || 0, el0: Number(o.el) || 0, hitFx: hit3?.fxId ?? null };
+      dragState.cursor = 'grabbing';
+      evEl.style.cursor = 'grabbing';
+      evEl.setPointerCapture(ev.pointerId); ev.preventDefault();
+      return;
+    }
     const hit = hitTest(ev);
     if (!hit) {
       // Empty canvas → rubber-band marquee select (Shift = add to selection).
@@ -758,8 +955,43 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   evEl.addEventListener('pointermove', (ev) => {
     if (!enabled) return;
-    if (!dragState) { evEl.style.cursor = cursorFor(hitTest(ev)); return; }   // hover feedback (resize/move cursors)
+    if (!dragState) {   // hover feedback (resize/move cursors; 3D: grab/pointer)
+      const v3h = view3dOf(getShow());
+      evEl.style.cursor = v3h ? (hitTest3D(ev, v3h) ? 'pointer' : 'grab') : cursorFor(hitTest(ev));
+      return;
+    }
     if (dragState.cursor) evEl.style.cursor = dragState.cursor;               // hold it through the drag
+    if (dragState.kind === 'orbit' || dragState.kind === 'orbitpan') {
+      const show = getShow();
+      const v3 = view3dOf(show); if (!v3) return;   // mode flipped mid-drag — ignore
+      const dx = ev.clientX - dragState.x0, dy = ev.clientY - dragState.y0;
+      // A small dead zone keeps a click a CLICK (select/deselect), not a 0.4° orbit.
+      if (!dragState.moved && Math.hypot(dx, dy) < 3) return;
+      dragState.moved = true;
+      let orbit;
+      if (dragState.kind === 'orbit') {
+        orbit = { ...v3.orbit,
+          az: dragState.az0 + dx * 0.4,
+          el: Math.max(ORBIT_EL_MIN, Math.min(ORBIT_EL_MAX, dragState.el0 + dy * 0.4)) };
+      } else {
+        // Pan the TARGET in the camera's screen plane: world units per pixel at
+        // the target's depth (vertical fov over the viewport height). The basis
+        // is translation-invariant, so reusing the live orbit's camera is stable.
+        const [, , , rh] = localPx(ev);
+        const cam = orbitCamera(v3.orbit, 1);
+        const { r, u } = cameraBasis(cam);
+        const dist = Math.max(ORBIT_DIST_MIN, Math.min(ORBIT_DIST_MAX, Number(v3.orbit?.dist) || 1.6));
+        const ps = (2 * dist * Math.tan((cam.fov * Math.PI / 180) / 2)) / (rh || 1);
+        const t0 = dragState.target0;
+        orbit = { ...v3.orbit, target: [
+          t0[0] - r[0] * dx * ps + u[0] * dy * ps,
+          t0[1] - r[1] * dx * ps + u[1] * dy * ps,
+          (t0[2] || 0) - r[2] * dx * ps + u[2] * dy * ps,
+        ] };
+      }
+      onView?.({ ...show, composition: { ...show.composition, view3d: { ...v3, orbit } } });
+      return;
+    }
     if (dragState.kind === 'marquee') {
       const [nx, ny] = norm(ev);
       onMarquee?.({
@@ -868,10 +1100,19 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   function end(ev) {
     if (!dragState) return;
     const wasMarquee = dragState.kind === 'marquee';
+    const wasOrbit = dragState.kind === 'orbit' || dragState.kind === 'orbitpan';
+    // An orbit CLICK (no movement) on empty space deselects — the 3D twin of the
+    // 2D empty-click/marquee clear.
+    const emptyOrbitClick = dragState.kind === 'orbit' && !dragState.moved && dragState.hitFx == null;
     const moved = dragState.moved;
     dragState = null; dragHint = null;
-    evEl.style.cursor = cursorFor(hitTest(ev));   // back to hover feedback
+    const v3 = view3dOf(getShow());   // back to hover feedback
+    evEl.style.cursor = v3 ? (hitTest3D(ev, v3) ? 'pointer' : 'grab') : cursorFor(hitTest(ev));
     try { evEl.releasePointerCapture(ev.pointerId); } catch { /* not captured */ }
+    if (wasOrbit) {   // view-only — no commit/rebuild; onView already saved (debounced)
+      if (emptyOrbitClick) onSelect?.(null, ev);
+      return;
+    }
     // Only COMMIT (which rebuilds the sampler — a one-frame flash) when the drag
     // actually moved something. A plain click just SELECTS; committing it would
     // pointlessly rebuild and flicker the lit cells.
