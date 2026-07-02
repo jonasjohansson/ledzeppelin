@@ -27,7 +27,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl, setBezierArcZ } from './model/fixture-transform.js';
 import { isBezierFixture } from './model/bezier.js';
-import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, PROJECTION_PRESETS, setProjectionPreset } from './model/project3d.js';
+import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, PROJECTION_PRESETS, setProjectionPreset, resetOrbit } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
@@ -2152,6 +2152,17 @@ if (projRow) {
     } });
   fg.classList.toggle('on', fieldGhosts);
   projRow.append(fg);
+}
+// RESET VIEW — snap the orbit camera back to the default framing (angle + zoom +
+// centre). The projection preset is untouched; this only moves the viewpoint.
+if (projRow) {
+  const rv = oel('button', { className: 'dir-btn proj-reset', textContent: '⟲', title: 'reset the 3D view — orbit angle, zoom & centre' });
+  rv.addEventListener('click', () => {
+    const next = resetOrbit(show);
+    if (next === show) return;
+    show = next; saveShow(show); redrawOverlay();
+  });
+  projRow.append(rv);
 }
 syncMode3d();   // reflect a persisted 3D mode (and its projection preset) on load
 

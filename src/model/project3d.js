@@ -50,6 +50,17 @@ export function toggleView3d(show) {
   return { ...show, composition: { ...comp, view3d } };
 }
 
+// resetOrbit(show): snap the view-only orbit camera back to DEFAULT_ORBIT
+// (az/el/dist) and RECENTRE — dropping any pan `target` so the rig is framed
+// again. Pure; a no-op (same show reference) when not in 3D. The projection
+// preset (sampling camera) is left untouched — this only moves the viewpoint.
+export function resetOrbit(show) {
+  const comp = show.composition || {};
+  const v3 = comp.view3d;
+  if (!v3 || v3.mode !== '3d') return show;
+  return { ...show, composition: { ...comp, view3d: { ...v3, orbit: { ...DEFAULT_ORBIT } } } };
+}
+
 // perspectiveCamera: a pinhole camera framing the world with a vertical FOV.
 // pos: eye position, target: look-at point, up: world up (default +y),
 // fov: vertical field of view in degrees, aspect: width/height (default 1).
