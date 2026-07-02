@@ -587,6 +587,12 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         }
       }
     }
+    // Body hits: gather EVERY fixture within tolerance and pick the one whose
+    // centreline is NEAREST the cursor — with overlapping/parallel strips the
+    // topmost used to win even when another strip was visibly closer. Vertex
+    // handles (precise) still win over any body.
+    let best = null;   // { hit, dist }
+    const consider = (hit, dist) => { if (!best || dist < best.dist) best = { hit, dist }; };
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
       const pts = f.input.points;
@@ -595,7 +601,8 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
           if (Math.hypot(px - pts[v][0] * rw, py - pts[v][1] * rh) <= vtxR) return { fxId: f.id, vertex: v };
         }
         for (let v = 0; v < pts.length - 1; v++) {        // then any segment (body)
-          if (segDist(px, py, pts[v][0] * rw, pts[v][1] * rh, pts[v + 1][0] * rw, pts[v + 1][1] * rh) <= hitR) return { fxId: f.id, seg: v };
+          const d = segDist(px, py, pts[v][0] * rw, pts[v][1] * rh, pts[v + 1][0] * rw, pts[v + 1][1] * rh);
+          if (d <= hitR) consider({ fxId: f.id, seg: v }, d);
         }
       } else {
         const ax = pts[0][0] * rw, ay = pts[0][1] * rh;
@@ -609,10 +616,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const t = ((px - ax) * dx + (py - ay) * dy) / len2;
         const tc = Math.max(0, Math.min(1, t));
         const perp = Math.hypot(px - (ax + tc * dx), py - (ay + tc * dy));
-        if (perp <= half && t >= -hitR / Math.sqrt(len2) && t <= 1 + hitR / Math.sqrt(len2)) return { fxId: f.id, seg: 0 };
+        if (perp <= half && t >= -hitR / Math.sqrt(len2) && t <= 1 + hitR / Math.sqrt(len2)) consider({ fxId: f.id, seg: 0 }, perp);
       }
     }
-    return null;
+    return best ? best.hit : null;
   }
 
   const canvasPx = (ev, cv) => {

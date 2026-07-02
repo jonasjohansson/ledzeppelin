@@ -177,7 +177,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    1px hairline SEPARATOR between rows. The first row sits flush under the section
    header (no doubled border between the group and its first item). */
 .output-row {
-  display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0;
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0;
   background: var(--panel-2); border: none; border-top: 1px solid var(--line);
   font-size: var(--fs-ctrl); cursor: pointer;
 }
@@ -783,7 +783,8 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
-.out-sec .insp-sec-head { border-bottom: none; }   /* no hairline under controller headers */
+.out-sec .insp-sec-head { border-bottom: none; height: 28px; }   /* no hairline; a taller hit target */
+.insp-sec-head.out-unassigned { height: 28px; }
 .out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); box-shadow: inset 3px 0 0 var(--accent); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the

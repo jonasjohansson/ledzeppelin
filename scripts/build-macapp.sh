@@ -18,7 +18,17 @@ APP="dist/LEDZeppelin.app"; C="$APP/Contents"
 rm -rf "$APP"; mkdir -p "$C/MacOS" "$C/Resources"
 
 echo "→ compiling daemon ($TARGET)…"
-bun build server/index.js --compile --minify --target "$TARGET" --outfile "$C/MacOS/ledzeppelin"
+# The daemon is an AUXILIARY binary (ledzeppelin-daemon); the bundle's main
+# executable is a tiny Swift launcher that pumps a real NSApplication event loop —
+# a bare server binary as CFBundleExecutable never talks to the window server, so
+# the Dock showed "Application Not Responding".
+bun build server/index.js --compile --minify --target "$TARGET" --outfile "$C/MacOS/ledzeppelin-daemon"
+chmod +x "$C/MacOS/ledzeppelin-daemon"
+
+echo "→ compiling launcher stub (swiftc)…"
+command -v swiftc >/dev/null || { echo "swiftc not found — install the Xcode Command Line Tools"; exit 1; }
+SWIFT_TARGET=$([ "$ARCH" = "x64" ] && echo "x86_64-apple-macos11" || echo "arm64-apple-macos11")
+swiftc -O -target "$SWIFT_TARGET" scripts/launcher.swift -o "$C/MacOS/ledzeppelin"
 chmod +x "$C/MacOS/ledzeppelin"
 
 echo "→ staging web assets into Resources…"
@@ -83,9 +93,12 @@ if [ -n "${SIGN_ID:-}" ]; then
   <key>com.apple.security.cs.disable-library-validation</key><true/>
 </dict></plist>
 ENTPLIST
-  # Single self-contained binary, no nested frameworks → sign the bundle directly
-  # (no --deep; Apple deprecates it and it's unreliable for notarisation).
-  codesign --force --options runtime --timestamp --entitlements "$ENTFILE" --sign "$SIGN_ID" "$APP"
+  # Sign inside-out (no --deep; Apple deprecates it): first the auxiliary Bun daemon
+  # (the JavaScriptCore binary that needs the JIT entitlements), then the bundle —
+  # which signs the Swift launcher as the main executable (hardened runtime, no
+  # special entitlements needed).
+  codesign --force --options runtime --timestamp --entitlements "$ENTFILE" --sign "$SIGN_ID" "$C/MacOS/ledzeppelin-daemon"
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP"
   codesign --verify --strict --verbose=2 "$APP"
   rm -rf "$ENT"
   if [ -n "${NOTARY_PROFILE:-}" ]; then

@@ -1682,7 +1682,9 @@ function renderOutput() {
   // them to `deviceId` (+ `port` when given; deviceId '' = unassign).
   const dropZone = (el, deviceId, port) => {
     el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop-hover'); });
-    el.addEventListener('dragleave', () => el.classList.remove('drop-hover'));
+    // dragleave fires when entering a CHILD too — only clear when truly leaving,
+    // so the hover doesn't flicker while dragging across the section's rows.
+    el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-hover'); });
     el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
     return el;
   };
@@ -1780,11 +1782,16 @@ function renderOutput() {
         : (panel.isPinging?.(gdev.id) || !st) ? 'check'
         : st.ok ? 'online' : 'offline';
       const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
-      head.querySelector('.insp-tri')?.after(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
+      // Dot sits before the title (the old .insp-tri anchor is gone — headers no
+      // longer fold, so anchoring after the triangle silently dropped the dot).
+      head.prepend(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
     }
     if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
     if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
-    dropZone(head, dg.deviceId, null);   // drop a fixture on a controller → assign it there
+    // The WHOLE section (header + its fixture rows) is the drop target — dropping
+    // anywhere on a controller group assigns there; the 24px header alone was too
+    // small a target to hit while dragging.
+    dropZone(sec, dg.deviceId, null);
     // Fixtures as flat rows; a multi-output controller tags each row with its output.
     const multiOut = dg.groups.length > 1;
     for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null));

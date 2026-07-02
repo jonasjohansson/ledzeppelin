@@ -558,15 +558,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     // A pixel strip/matrix has no extra channels — that's a DMX fixture (switch the
     // Layout to "DMX channels" to define a channel list). So no Parameters here.
 
-    // Physical size (optional) — only drives true-scale strip THICKNESS on the
-    // canvas, and offers density×length as a convenience to set a strip's Width.
-    const phys = el('details', { className: 'fx-advanced' });
-    phys.append(el('summary', { textContent: 'Physical size' }));
-    phys.append(
+    // Physical size — drives true-scale strip THICKNESS on the canvas, and offers
+    // density×length as a convenience to set a strip's Width. Plain always-open rows
+    // (was a <details> fold, but every edit re-rendered it CLOSED — the fold ate the
+    // click you'd just made; the editor keeps everything visible anyway).
+    rows.push(el('div', { className: 'fx-pts', textContent: 'physical size' }));
+    rows.push(
       sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => { nt.ledsPerMeter = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round(x * (Number(nt.meters) || 0))); }), 0, 200, 1),
       sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => { nt.meters = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round((Number(nt.ledsPerMeter) || 0) * x)); }), 0, 20, 0.1),
     );
-    rows.push(phys);
     // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
     return el('div', { className: 'fx-card fx-detail' }, rows);
   }
