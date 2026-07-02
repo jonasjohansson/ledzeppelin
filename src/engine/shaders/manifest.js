@@ -388,6 +388,74 @@ void main(){
   frag = vec4(mix(vec3(1.0), hue(h), clamp(sat,0.0,1.0)), 1.0);
 }`;
 
+// --- VOLUMETRIC sources ------------------------------------------------------
+// Fields f(x, y, z, t) → rgba evaluated at each LED's WORLD position by the GPU
+// sampler (src/engine/sampler.js — GLSL twins of src/engine/fields.js). They do
+// NOT draw on the 2D canvas: the compositor SKIPS `volumetric: true` entries.
+// The `src` below is a THUMBNAIL-ONLY preview shader (used by thumbs.js and the
+// picker): it evaluates the field over p = (uv.x, uv.y, uv.y) — z mapped down
+// the thumbnail — so z-axis fields still read as a picture.
+const VOL_BAND = `
+float vband(float d, float th, float so){
+  float hw = max(1e-4, th) * 0.5;
+  float inner = hw * (1.0 - clamp(so, 0.0, 1.0));
+  float t = clamp((abs(d) - inner) / max(hw - inner, 1e-5), 0.0, 1.0);
+  return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+float vaxis(vec3 p, float axis){ return axis < 0.5 ? p.x : (axis < 1.5 ? p.y : p.z); }`;
+
+const PLANESWEEP_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float pos; uniform float thickness; uniform float softness;
+uniform vec3 color;
+${VOL_BAND}
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float v = vband(vaxis(p, axis) - pos, thickness, softness);
+  frag = vec4(color * v, 1.0);
+}`;
+
+const AXISGRADIENT_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float scroll; uniform vec3 colorA; uniform vec3 colorB;
+${VOL_BAND}
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float g = fract(vaxis(p, axis) - scroll);
+  frag = vec4(mix(colorA, colorB, g), 1.0);
+}`;
+
+const NOISE3D_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float speed; uniform float uT; uniform vec3 color;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float x00 = mix(vhash3(i), vhash3(i + vec3(1, 0, 0)), f.x);
+  float x10 = mix(vhash3(i + vec3(0, 1, 0)), vhash3(i + vec3(1, 1, 0)), f.x);
+  float x01 = mix(vhash3(i + vec3(0, 0, 1)), vhash3(i + vec3(1, 0, 1)), f.x);
+  float x11 = mix(vhash3(i + vec3(0, 1, 1)), vhash3(i + vec3(1, 1, 1)), f.x);
+  return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
+}
+float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
+  for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float v = clamp(vfbm3(p * scale + vec3(uT * speed)), 0.0, 1.0);
+  frag = vec4(color * v, 1.0);
+}`;
+
+const SPHEREPULSE_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float centerX; uniform float centerY; uniform float centerZ;
+uniform float radius; uniform float thickness; uniform float softness; uniform vec3 color;
+${VOL_BAND}
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float v = vband(length(p - vec3(centerX, centerY, centerZ)) - radius, thickness, softness);
+  frag = vec4(color * v, 1.0);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -497,6 +565,48 @@ export const REGISTRY = {
       { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
       { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
+    ],
+  },
+  // Volumetric fields (per-LED, evaluated in the sampler; max 4 active at once).
+  // `axis`: 0 = x, 1 = y, 2 = z (z = height off the canvas plane).
+  planesweep: {
+    name: 'planesweep', type: 'generator', volumetric: true, src: PLANESWEEP_THUMB,
+    params: [
+      { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
+      { key: 'pos', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.25 },
+      { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  axisgradient: {
+    name: 'axisgradient', type: 'generator', volumetric: true, src: AXISGRADIENT_THUMB,
+    params: [
+      { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
+      { key: 'scroll', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
+    ],
+  },
+  noise3d: {
+    name: 'noise3d', type: 'generator', volumetric: true, src: NOISE3D_THUMB,
+    params: [
+      { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  spherepulse: {
+    name: 'spherepulse', type: 'generator', volumetric: true, src: SPHEREPULSE_THUMB, triggerable: true,
+    params: [
+      { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'centerZ', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'radius', type: 'float', min: 0, max: 1.5, default: 0.35 },
+      { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.15 },
+      { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   displace: {
@@ -609,6 +719,7 @@ export function hexToRgb(hex) {
 const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
+  planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
@@ -630,5 +741,9 @@ export function defaultParams(name) {
 
 export const generatorNames = () =>
   Object.values(REGISTRY).filter((e) => e.type === 'generator').map((e) => e.name);
+// Volumetric sources (per-LED fields — skipped by the 2D compositor, evaluated
+// in the sampler pass). A subset of generatorNames().
+export const volumetricNames = () =>
+  Object.values(REGISTRY).filter((e) => e.volumetric).map((e) => e.name);
 export const effectNames = () =>
   Object.values(REGISTRY).filter((e) => e.type === 'effect').map((e) => e.name);

@@ -1423,6 +1423,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     ['Pattern', ['grid', 'checkers', 'spectrum']],
     ['Motion', ['sine', 'pulse', 'radial']],
     ['Organic', ['noise']],
+    // Per-LED 3D fields (evaluated at each LED's world xyz in the sampler pass,
+    // not drawn on the canvas). Max 4 active at once.
+    ['Volumetric', ['planesweep', 'axisgradient', 'noise3d', 'spherepulse']],
   ];
   function openPicker(anchor, kind, onPick, opts = {}) {
     closePicker();

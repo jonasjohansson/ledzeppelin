@@ -316,6 +316,10 @@ export function makeCompositor(gl, w, h) {
     } else {
       const gen = getEntry(clip.generator);
       if (!gen || gen.type !== 'generator') return false;
+      // VOLUMETRIC sources never draw on the 2D canvas — they're evaluated
+      // per-LED in the sampler pass (their manifest `src` is thumbnail-only).
+      // Skipping here keeps the composite byte-identical to a no-clip layer.
+      if (gen.volumetric) return false;
       runEntry(gen, clip.params, cur, null, timeSec, clip.id);
     }
     (clip.effects || []).forEach((item, i) => {
