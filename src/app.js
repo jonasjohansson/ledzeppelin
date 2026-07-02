@@ -662,11 +662,26 @@ function selectDevice(id, ev) {
   openDevicePop((ev && (ev.clientX || ev.clientY)) ? ev : (outputListEl?.querySelector('.insp-sec-head.is-sel') || null));
 }
 
+let selectionAnchorId = null;   // last plainly-clicked fixture — a LIST shift-click ranges from here
+
 function selectFixture(fxId, ev, opts = {}) {
   selectedDeviceId = null;   // picking (or clearing) fixtures ends any device edit
+  const toggleOne = () => { if (selectedFixtureIds.has(fxId)) selectedFixtureIds.delete(fxId); else selectedFixtureIds.add(fxId); };
   if (ev && ev.shiftKey) {
     if (fxId == null) return;
-    if (selectedFixtureIds.has(fxId)) selectedFixtureIds.delete(fxId); else selectedFixtureIds.add(fxId);
+    // LIST shift-click = RANGE select (file-manager convention): everything
+    // between the anchor row (last plain click) and this row, in visual list
+    // order — read from the rendered rows so it matches exactly what's on
+    // screen (devices → outputs → chain order). Canvas shift-click stays an
+    // additive TOGGLE (the marquee is the canvas range tool); ⌘-click toggles
+    // an individual row in the list too.
+    const order = opts.isolate ? [...(outputListEl?.querySelectorAll('[data-fxid]') || [])].map((el) => el.dataset.fxid) : [];
+    const a = order.indexOf(selectionAnchorId), b = order.indexOf(fxId);
+    if (opts.isolate && selectionAnchorId && a !== -1 && b !== -1) {
+      selectedFixtureIds = new Set(order.slice(Math.min(a, b), Math.max(a, b) + 1));
+    } else toggleOne();
+  } else if (ev && (ev.metaKey || ev.ctrlKey) && fxId != null && opts.isolate) {
+    toggleOne();               // ⌘-click in the list = add/remove one row
   } else if (fxId == null) {
     selectedFixtureIds.clear();
   } else if (opts.isolate || !selectedFixtureIds.has(fxId)) {
@@ -674,10 +689,12 @@ function selectFixture(fxId, ev, opts = {}) {
     // part of a multi-selection. (On the CANVAS, clicking an already-selected
     // fixture keeps the group so it can be dragged together.)
     selectedFixtureIds = new Set([fxId]);
+    selectionAnchorId = fxId;  // the range anchor for a following shift-click
   }
-  // Picking a single fixture (not a shift multi-select / empty click) points the
+  // Picking a single fixture (not a shift/⌘ multi-select / empty click) points the
   // right column at the Fixtures patch; its editor shows in the Fixture group.
-  if (fxId != null && !(ev && ev.shiftKey)) {
+  const multiMod = !!(ev && (ev.shiftKey || ((ev.metaKey || ev.ctrlKey) && opts.isolate)));
+  if (fxId != null && !multiMod) {
     outputTab = 'fixtures';
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
     if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
@@ -686,7 +703,7 @@ function selectFixture(fxId, ev, opts = {}) {
   renderOutput(); redrawOverlay();
   // Pop the editor group up at the click; an empty click clears + dismisses it.
   if (fxId == null) closeDevicePop();
-  else if (!(ev && ev.shiftKey)) openDevicePop(ev);
+  else if (!multiMod) openDevicePop(ev);
   // Scroll the picked fixture's row into view in the placement list.
   if (fxId != null) outputListEl?.querySelector(`[data-fxid="${fxId}"]`)?.scrollIntoView({ block: 'nearest' });
 }
