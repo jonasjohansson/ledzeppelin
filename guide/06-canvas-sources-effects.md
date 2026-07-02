@@ -84,7 +84,29 @@ the **↺** in the section header resets all source params at once.
 and a prominent **⚡ trigger** button at the top of the inspector — press it to
 fire a beam/ring.
 
-### ISF shaders
+### Volumetric sources
+
+The picker's **Volumetric** group holds four sources that don't draw on the
+canvas at all — they're 3D **fields** evaluated at each LED's world position
+(x, y across the canvas, z = height off the canvas plane) in the sampler pass,
+then blended onto the sampled colour with the layer's blend mode + opacity:
+
+| Source | What it lights |
+| --- | --- |
+| **Plane Sweep** | A coloured band around a plane ⊥ a chosen axis (x/y/z) at `pos` — animate `pos` on z and the band climbs a standing arch. |
+| **Axis Gradient** | A two-colour ramp along an axis, scrollable (wraps). |
+| **Noise 3D** | fbm value noise in space — organic volume shimmer. |
+| **Sphere Pulse** | A radial shell from a point in space; *triggerable* — each ⚡ fires an expanding shell. |
+
+They live in the deck like any clip (same triggering, params, animation,
+MIDI/OSC mapping) and show a **3D** badge on their thumbnail. Honest limits in
+v1: at most **4** volumetric clips can be active at once (extras are ignored),
+they have **no effect chain**, and they switch instantly (no crossfade). The
+`axis` param is numeric: 0 = x, 1 = y, 2 = z. In a 2D show (or with the Flat
+projection) every LED sits at z = 0, so a z-plane sweep acts as a global fade
+as it crosses 0 while x/y fields sweep across the rig — coherent, not a bug.
+The flat canvas view shows no volumetric contribution (correct — it isn't on
+the canvas); the **3D viewport** and the wall **Preview** are where they read.
 
 Beyond the built-ins, LED Zeppelin runs **ISF** shaders (the Interactive Shader
 Format). Two ways to add one:

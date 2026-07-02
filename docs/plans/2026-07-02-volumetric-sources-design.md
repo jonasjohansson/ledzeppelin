@@ -1,7 +1,11 @@
 # Volumetric sources — z-aware light fields (design)
 
 **Date:** 2026-07-02
-**Status:** approved (UI + blending decided by interview) — ready for implementation
+**Status:** SHIPPED 2026-07-02 — fields.js kit + sampler field pass + clips-in-deck UI;
+no-volumetric byte-identical invariant verified before/after; e2e in test/e2e/volumetric.e2e.mjs.
+Notes vs. design: positions carry real z only via the 3D projection path (Front/Front-wide —
+the Flat camera keeps z = 0, the byte-identical guarantee); volumetric clips switch without
+crossfade; sphere-pulse triggers ride the global ⚡ clock like Pulse/Radial.
 
 ## Why
 

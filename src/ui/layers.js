@@ -875,9 +875,12 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       // things look selected at once. `.clip-active` (the live/playing outline)
       // is independent and stays.
       const isSelected = deckSel === 'clip' && clip.id === selectedClipId;
+      const isVol = !!getEntry(clip.generator)?.volumetric;
       const cell = el('div', {
         className: 'clip-cell' + (isActive ? ' clip-active' : '') + (isSelected ? ' clip-selected' : ''),
-        title: 'click to select · double-click to trigger · drag to reorder / move',
+        title: isVol
+          ? 'volumetric source — lights each LED at its 3D position (not drawn on the canvas) · max 4 active at once · click to select · double-click to trigger'
+          : 'click to select · double-click to trigger · drag to reorder / move',
         'data-clip': clip.id,
       });
       // Click = SELECT (edit in inspector) without activating; double-click = trigger.
@@ -905,6 +908,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           selectThis();
           commit(changeClipGenerator(show(), id, clip.id, payload.name));
         } else if (payload.kind === 'effect') {
+          // Volumetric clips have no effect chain in v1 (fields aren't canvas
+          // images — nothing for a 2D effect to read). Ignore the drop.
+          if (isVol) return;
           selectThis();   // dropping an effect also selects the clip you dropped on
           commit(addClipEffect(show(), id, clip.id, payload.name));
         }
@@ -915,6 +921,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       if (thumb) thumbWrap.append(el('img', { className: 'clip-thumb', src: thumb, alt: '', draggable: false }));
       // Triggerable source (e.g. Pulse) → a ⚡ badge so you know it fires.
       if (getEntry(clip.generator)?.triggerable) thumbWrap.append(el('div', { className: 'clip-trig', textContent: '⚡', title: 'triggerable, fire from the Clip inspector' }));
+      // Volumetric source → a "3D" badge: it lights LEDs at their world xyz and
+      // never draws on the canvas (the thumbnail is a z-slice preview).
+      if (isVol) thumbWrap.append(el('div', { className: 'clip-vol', textContent: '3D', title: 'volumetric — evaluated per LED in 3D space · max 4 active at once' }));
       // A video clip whose file didn't survive a reload (object URLs are
       // session-only) — flag it instead of showing a silent black clip.
       if (clip.videoMissing) thumbWrap.append(el('div', { className: 'clip-missing', textContent: '⚠ video', title: 'video file lost on reload, drop a new source onto this clip' }));
@@ -1301,6 +1310,25 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
           }));
         }
       }));
+    }
+
+    // VOLUMETRIC clip: no canvas placement (transform) and no effect chain in
+    // v1 — the field lights each LED at its world xyz. Keep OPACITY (it scales
+    // the per-LED blend, animatable like any param) and stop here.
+    if (gen?.volumetric) {
+      box.append(Section('Blend', 'transform', (b) => {
+        b.append(el('div', { className: 'ly-hint', textContent: 'volumetric — lights each LED at its 3D position (z = height off the canvas); not drawn on the canvas. Max 4 volumetric clips active at once; no effect chain in v1.' }));
+        b.append(animatableParam({
+          key: 'tf.opacity', p: { key: 'opacity', type: 'float', min: 0, max: 1, default: 1 },
+          value: clip.opacity ?? 1, anim: clip.anim?.['tf.opacity'],
+          oscAddress: addressFor({ kind: 'tf', layerIndex, clipIndex, key: 'opacity' }),
+          onValue: (v) => commitLive(setClipOpacity(show(), id, clip.id, v)),
+          onAnim: (spec) => commit(setClipAnim(show(), id, clip.id, 'tf.opacity', spec)),
+          onAnimLive: (spec) => commitLive(setClipAnim(show(), id, clip.id, 'tf.opacity', spec)),
+        }));
+      }, () => commit(resetClipTransform(show(), id, clip.id)), undefined,
+      () => Math.abs(Number((liveClip(clip.id) ?? clip).opacity ?? 1) - 1) > 1e-6));
+      return box;
     }
 
     // Transform + opacity (the clip's placement on the canvas) — all animatable
