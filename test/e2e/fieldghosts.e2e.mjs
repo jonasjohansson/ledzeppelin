@@ -79,8 +79,14 @@ try {
 
   // --- 2. FIELDS chip toggles the ghost off/on (and persists) -----------------
   const chip = lo.page.locator('#field-ghosts-btn');
-  if (await chip.isVisible()) ok('FIELDS chip visible in the 3D projection row');
+  if (await chip.isVisible()) ok('FIELDS chip visible in the 3D corner row');
   else fail('FIELDS chip not visible in 3D mode');
+  // The projection preset buttons are GONE — the row holds only the FIELDS chip
+  // (3D always samples front-ortho; there is no projection choice).
+  const rowBtns = await lo.page.locator('#proj-row button').count();
+  const presetBtns = await lo.page.locator('#proj-row button[data-preset]').count();
+  if (rowBtns === 1 && presetBtns === 0) ok('no projection preset buttons — the row is just the FIELDS chip');
+  else fail(`unexpected #proj-row buttons (total ${rowBtns}, presets ${presetBtns})`);
   await chip.click(); await lo.page.waitForTimeout(250);
   const offPx = await ghostPixels(lo.page, 'green');
   if (offPx.n < lo.px.n * 0.2) ok(`FIELDS off hides the ghost (${lo.px.n} → ${offPx.n} px)`);

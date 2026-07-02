@@ -8,10 +8,11 @@ import { chromium } from 'playwright';
 // Default port; scripts that run alongside others pass their own (72xx range).
 export const PORT = 7181;
 
-// A deterministic show: two 2D strips + a LIFTED ARCH in 3D mode with the
-// 'front' ortho projection (so the arch samples through real 3D geometry and
-// its world z is carried to the sampler). Sources are STATIC (solid, gradient)
-// so the sampled bytes are frame-stable — comparable across runs and commits.
+// A deterministic show: two 2D strips + a LIFTED ARCH in 3D mode (3D always
+// samples through the fixed front-ortho camera, so the arch samples through
+// real 3D geometry and its world z is carried to the sampler). Sources are
+// STATIC (solid, gradient) so the sampled bytes are frame-stable — comparable
+// across runs and commits.
 export function plainShow() {
   return {
     version: 1, deviceTypes: [], devices: [], fixtureTypes: [],
@@ -28,7 +29,6 @@ export function plainShow() {
       blendV2: true, opacityV2: true, opacity: 1,
       view3d: {
         mode: '3d',
-        projectionCamera: { mode: 'ortho', pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1, preset: 'front' },
         orbit: { az: -30, el: 20, dist: 1.6 },
       },
       layers: [{

@@ -43,28 +43,38 @@ test('perspective aspect 2: horizontal offsets halve, vertical unchanged', () =>
 // --- the 2D/3D mode toggle (pure state helper behind the top-bar button) ----
 import { toggleView3d, DEFAULT_ORBIT } from '../src/model/project3d.js';
 
-test('toggleView3d: first entry initializes a FLAT projection camera + default orbit', () => {
+test('toggleView3d: first entry initializes the default orbit (no projection camera stored)', () => {
   const show = { composition: { canvas: { w: 100, h: 100 } } };
   const next = toggleView3d(show);
   const v = next.composition.view3d;
   assert.equal(v.mode, '3d');
-  // Phase 2 is a VIEWPORT: the projection camera stays FLAT so the sampled
-  // output is identical in both modes (camera placement UI is Phase 5).
-  assert.equal(v.projectionCamera.mode, 'flat');
+  // The projection is not a stored choice: 3D always samples through the fixed
+  // front-ortho camera (cameraFromView3d) — nothing to seed.
+  assert.equal(v.projectionCamera, undefined);
   assert.deepEqual(v.orbit, DEFAULT_ORBIT);
   assert.notEqual(next, show);                      // pure — new object
   assert.equal(show.composition.view3d, undefined); // input untouched
 });
 
-test('toggleView3d: leaving 3D sets mode 2d but keeps camera + orbit for re-entry', () => {
+test('toggleView3d: leaving 3D sets mode 2d but keeps orbit for re-entry', () => {
   const orbit = { az: 45, el: 30, dist: 2.2, target: [0.5, 0.5, 0] };
-  const in3d = { composition: { view3d: { mode: '3d', projectionCamera: flatCamera(), orbit } } };
+  const in3d = { composition: { view3d: { mode: '3d', orbit } } };
   const back = toggleView3d(in3d);
   assert.equal(back.composition.view3d.mode, '2d');
   assert.deepEqual(back.composition.view3d.orbit, orbit);   // orbit survives
   const again = toggleView3d(back);
   assert.equal(again.composition.view3d.mode, '3d');
   assert.deepEqual(again.composition.view3d.orbit, orbit);  // re-entry restores the view
+});
+
+test('toggleView3d: a projectionCamera left by an old save is carried through untouched', () => {
+  // Old shows persisted a preset camera; it is IGNORED for sampling but must
+  // not be stripped (saves stay loadable/round-trippable).
+  const legacy = { mode: 'ortho', pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1, preset: 'front' };
+  const in2d = { composition: { view3d: { mode: '2d', projectionCamera: legacy } } };
+  const next = toggleView3d(in2d);
+  assert.equal(next.composition.view3d.mode, '3d');
+  assert.deepEqual(next.composition.view3d.projectionCamera, legacy);
 });
 
 // --- orbit camera (the VIEW-ONLY inspect camera of the 3D viewport) ----------
@@ -150,13 +160,12 @@ test('cameraBasis returns unit right/up/forward for pan gestures', () => {
   assert.ok(Math.abs(dot(r, f)) < 1e-9 && Math.abs(dot(u, f)) < 1e-9 && Math.abs(dot(r, u)) < 1e-9);
 });
 
-// --- projection presets (Phase 5: the placeable projection camera) ----------
-import { projectionPreset, setProjectionPreset, PROJECTION_PRESETS } from '../src/model/project3d.js';
+// --- the fixed 3D projection camera (front ortho) ----------------------------
+import { frontCamera, cameraFromView3d } from '../src/model/project3d.js';
 
-test('projectionPreset front (ORTHO): z=0 projects EXACTLY to identity; z is dropped', () => {
-  const cam = projectionPreset('front');
+test('frontCamera (ORTHO): z=0 projects EXACTLY to identity; z is dropped', () => {
+  const cam = frontCamera();
   assert.equal(cam.mode, 'ortho');
-  assert.equal(cam.preset, 'front');
   for (const [x, y] of [[0, 0], [1, 1], [0.2265625, 0.5555555555555556], [0.5, 0.5]]) {
     const [u, v] = project([x, y, 0], cam);
     assert.ok(Math.abs(u - x) < 1e-12 && Math.abs(v - y) < 1e-12, `(${x},${y})`);
@@ -167,32 +176,15 @@ test('projectionPreset front (ORTHO): z=0 projects EXACTLY to identity; z is dro
   }
 });
 
-test('projectionPreset frontwide (PERSPECTIVE): z=0 ≈ identity; lifted points pull toward centre', () => {
-  const cam = projectionPreset('frontwide');
-  assert.equal(cam.mode, 'perspective');
-  for (const [x, y] of [[0, 0], [1, 1], [0.25, 0.75]]) {
-    const [u, v] = project([x, y, 0], cam);
-    assert.ok(Math.abs(u - x) < 1e-3 && Math.abs(v - y) < 1e-3, `(${x},${y})`);   // frames the canvas exactly
-  }
-  // The camera sits on the −z side, so +z (lifted toward the audience/orbit
-  // viewer) is FARTHER from it → offsets shrink toward the canvas centre.
-  const [uFlat] = project([0.9, 0.5, 0], cam);
-  const [uLift] = project([0.9, 0.5, 0.5], cam);
-  assert.ok(Math.abs(uLift - 0.5) < Math.abs(uFlat - 0.5));
-});
-
-test('projectionPreset flat + unknown fall back to the flat camera', () => {
-  assert.equal(projectionPreset('flat').mode, 'flat');
-  assert.equal(projectionPreset('bogus').mode, 'flat');
-  assert.deepEqual(PROJECTION_PRESETS.map((p) => p.id), ['flat', 'front', 'frontwide']);
-});
-
-test('setProjectionPreset writes view3d.projectionCamera (pure, 3D mode only)', () => {
-  const in3d = toggleView3d({ composition: {} });
-  const next = setProjectionPreset(in3d, 'front');
-  assert.equal(next.composition.view3d.projectionCamera.preset, 'front');
-  assert.equal(next.composition.view3d.mode, '3d');           // rest of view3d kept
-  assert.equal(in3d.composition.view3d.projectionCamera.mode, 'flat');   // input untouched
-  const in2d = { composition: { view3d: { mode: '2d' } } };
-  assert.equal(setProjectionPreset(in2d, 'front'), in2d);     // no-op outside 3D
+test('cameraFromView3d: 2D → flat; 3D → front ortho ALWAYS (persisted camera ignored)', () => {
+  assert.equal(cameraFromView3d(undefined).mode, 'flat');
+  assert.equal(cameraFromView3d({ mode: '2d' }).mode, 'flat');
+  assert.deepEqual(cameraFromView3d({ mode: '3d' }), frontCamera());
+  // A persisted preset camera (old saves) no longer steers the projection —
+  // not even the flat one: 3D always samples front-ortho.
+  assert.deepEqual(cameraFromView3d({ mode: '3d', projectionCamera: flatCamera() }), frontCamera());
+  assert.deepEqual(cameraFromView3d({
+    mode: '3d',
+    projectionCamera: perspectiveCamera({ pos: [0.5, 0.5, -0.5], target: [0.5, 0.5, 0], up: [0, -1, 0], fov: 90, aspect: 1 }),
+  }), frontCamera());
 });

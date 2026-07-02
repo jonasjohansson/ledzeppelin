@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { emptyShow, addDevice, addFixture } from '../src/model/show.js';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
 import { samplePoints3D } from '../src/model/sampling.js';
-import { orthoCamera } from '../src/model/project3d.js';
 
 // samplePositions: per-LED WORLD xyz alongside sampleUVs — the volumetric field
 // pass evaluates fields at these. Layout invariant: 3 floats per LED, exactly
@@ -37,10 +36,7 @@ test('samplePositions parallels sampleUVs: count×3 vs count×2, same LED order'
 test('a lifted arch in 3D carries real z (samplePoints3D before projection)', () => {
   const pts = [[0.2, 0.8, 0], [0.5, 0.8, 0.5], [0.8, 0.8, 0]];   // lifted midpoint
   const s = baseShow([strip('arc', pts, 7)]);
-  s.composition.view3d = {
-    mode: '3d',
-    projectionCamera: orthoCamera({ pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1 }),
-  };
+  s.composition.view3d = { mode: '3d' };   // 3D mode = the fixed front-ortho camera
   const { sampleUVs, samplePositions, spans } = buildPipelineInputs(s);
   const sp = spans.find((x) => x.id === 'arc');
   assert.equal(sp.count, 7);

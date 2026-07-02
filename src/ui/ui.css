@@ -225,14 +225,13 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    the top. */
 .output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 .output-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
-/* PROJECTION preset row (3D mode): which camera the OUTPUT samples through.
-   Parked in the stage's top-left corner (the bottom is where the layer deck
-   floats); hidden outside 3D mode. */
+/* Stage-corner chip row (3D mode): holds the FIELDS ghost toggle. Parked in
+   the stage's top-left corner (the bottom is where the layer deck floats);
+   hidden outside 3D mode. */
 #proj-row { position: absolute; left: 10px; top: 10px; z-index: 5; display: none; align-items: center; gap: 2px; pointer-events: auto; }
 body.mode-3d #proj-row { display: flex; }
-#proj-row .proj-cap { font: var(--fw-med) var(--fs-micro) var(--sans); color: var(--faint); letter-spacing: var(--ls-caps); text-transform: uppercase; margin-right: 6px; }
-/* FIELDS chip (volumetric field ghosts on/off) — set apart from the presets. */
-#proj-row .proj-fields { margin-left: 8px; text-transform: uppercase; }
+/* FIELDS chip (volumetric field ghosts on/off). */
+#proj-row .proj-fields { text-transform: uppercase; }
 
 /* Fixture SHAPE row (Bar | Polyline | Bezier): equal-width segment buttons. */
 .shape-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin-bottom: var(--s2); }

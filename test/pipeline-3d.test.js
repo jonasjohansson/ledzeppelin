@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { emptyShow, addDevice, addFixture } from '../src/model/show.js';
 import { buildPipelineInputs } from '../src/model/pipeline.js';
 import { samplePoints } from '../src/model/sampling.js';
-import { perspectiveCamera, flatCamera } from '../src/model/project3d.js';
+import { frontCamera } from '../src/model/project3d.js';
 
 // REGRESSION (critical): a normal 2D show (no composition.view3d) must produce
 // UVs byte-identical to today — i.e. exactly samplePoints(input.points, samples)
@@ -33,14 +33,13 @@ test('2D show UVs are unchanged (equal to raw samplePoints)', () => {
   }
 });
 
-// BACKWARD-COMPAT: an EXPLICIT 3D view whose camera frames the z=0 plane 1:1
-// must reproduce the 2D result exactly. The simplest such camera is the flat
-// camera (project drops z, returns [x,y] unchanged). So a show in `mode:'3d'`
-// with `projectionCamera: flatCamera()` and all points at z=0 produces UVs
-// byte-identical to the same show WITHOUT any view3d (the pure 2D path). This
-// proves "3D mode collapses to 2D at z=0" and that view3d survives into the
-// pipeline (it isn't stripped before cameraFromView3d sees it).
-test('3D mode with a flat camera at z=0 equals the 2D show exactly', () => {
+// 3D COLLAPSES TO 2D AT THE PLANE: 3D mode always samples through the fixed
+// front-ortho camera, which is EXACTLY the identity at z = 0 — so a show in
+// `mode:'3d'` whose points all sit at z=0 produces UVs byte-identical to the
+// same show WITHOUT any view3d (the pure 2D path), even though the 3D path
+// resamples by 3D arc length and projects every point. This also proves view3d
+// survives into the pipeline (it isn't stripped before cameraFromView3d sees it).
+test('3D mode (front-ortho) at z=0 equals the 2D show byte-exactly', () => {
   const aPts = [[0, 0, 0], [0, 0.5, 0], [0, 1, 0]];
   const bPts = [[1, 0, 0], [0.5, 0.5, 0], [0, 1, 0]];
   let base = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
@@ -54,9 +53,9 @@ test('3D mode with a flat camera at z=0 equals the 2D show exactly', () => {
   // 2D show (no view3d) — the reference.
   const twoD = buildPipelineInputs(base);
 
-  // Same show, but with an explicit 3D view using the flat camera.
+  // Same show in 3D mode — no camera to configure; front-ortho is implied.
   const threeD = structuredClone(base);
-  threeD.composition.view3d = { mode: '3d', projectionCamera: flatCamera() };
+  threeD.composition.view3d = { mode: '3d' };
   const projected = buildPipelineInputs(threeD);
 
   assert.equal(projected.sampleUVs.length, twoD.sampleUVs.length);
@@ -65,21 +64,22 @@ test('3D mode with a flat camera at z=0 equals the 2D show exactly', () => {
   }
 });
 
-// FORESHORTENING: a strip tracing a semicircle in the X–Z plane, bulging toward
-// −z away from the camera. The physically-even samples DON'T project to even
-// screen spacing: where the arc curves INTO depth (its ends, tangent along ±z)
-// it foreshortens to almost nothing on screen, while at the apex (tangent across
-// screen, along x) it projects at full width. That end-vs-apex spacing contrast
-// is the perspective signature — the flat 2D path gives uniform spacing.
-test('3D perspective projection foreshortens an arc bending away in depth', () => {
-  // Semicircle in X–Z plane: y fixed at 0.5, x sweeps 0→1, z dips to −0.5 at apex.
+// PHYSICAL RESAMPLING: a strip tracing a semicircle in the X–Z plane — a
+// standing arch lifting toward the viewer (+z). In 3D mode the physically-even
+// samples (true 3D arc length) project front-on (ortho drops z): where the arch
+// climbs steeply (its ends, tangent along ±z) the x advance per LED shrinks to
+// almost nothing on screen, while at the apex (tangent along x) it projects at
+// full width. That end-vs-apex spacing contrast is the physical-spacing
+// signature — the flat 2D path gives uniform spacing.
+test('3D mode resamples a standing arch by 3D arc length (ends compress on screen)', () => {
+  // Semicircle in X–Z plane: y fixed at 0.5, x sweeps 0→1, z peaks at 0.5.
   // Parametrize by angle so points are physically even along the arc.
   const N = 41;
   const pts = [];
   for (let k = 0; k < N; k++) {
     const ang = Math.PI * (k / (N - 1)); // 0..π
     const x = 0.5 - 0.5 * Math.cos(ang); // 0..1
-    const z = -0.5 * Math.sin(ang);      // 0 → -0.5 (apex) → 0
+    const z = 0.5 * Math.sin(ang);       // 0 → 0.5 (apex) → 0
     pts.push([x, 0.5, z]);
   }
 
@@ -88,32 +88,29 @@ test('3D perspective projection foreshortens an arc bending away in depth', () =
     output: { deviceId: 'c1', pixelOffset: 0, pixelCount: N },
     input: { mode: 'polyline', points: pts, samples: N } });
   s.composition = s.composition || {};
-  s.composition.view3d = {
-    mode: '3d',
-    projectionCamera: perspectiveCamera({ pos: [0.5, 0.5, 1.5], target: [0.5, 0.5, 0], fov: 90, aspect: 1 }),
-  };
+  s.composition.view3d = { mode: '3d' };   // front-ortho, always
 
   const { sampleUVs, spans } = buildPipelineInputs(s);
   const sp = spans.find((x) => x.id === 'arc');
   const uv = [];
   for (let i = sp.start; i < sp.start + sp.count; i++) uv.push([sampleUVs[i * 2], sampleUVs[i * 2 + 1]]);
 
-  // All projected points must be finite (none behind the camera).
+  // All projected points must be finite (ortho: nothing falls behind the camera).
   for (const [u, v] of uv) assert.ok(Number.isFinite(u) && Number.isFinite(v));
 
   const spacing = (i) => Math.hypot(uv[i + 1][0] - uv[i][0], uv[i + 1][1] - uv[i][1]);
-  // End spacing (first segment — the arc plunging into depth) vs apex spacing
-  // (middle — running across the screen). Real perspective foreshortening ⇒ the
-  // end is MEANINGFULLY compressed relative to the apex. The flat 2D path gives
-  // uniform spacing (ratio ≈ 1), so a clear drop proves depth is being projected.
+  // End spacing (first segment — the arch climbing in z) vs apex spacing
+  // (middle — running across the screen). Physical 3D spacing ⇒ the end is
+  // MEANINGFULLY compressed relative to the apex. The flat 2D path gives
+  // uniform spacing (ratio ≈ 1), so a clear drop proves the 3D resample runs.
   const endSpacing = spacing(0);
   const mid = Math.floor((N - 1) / 2);
   const apexSpacing = spacing(mid);
   assert.ok(endSpacing / apexSpacing < 0.9,
-    `end/apex spacing ratio ${endSpacing / apexSpacing} should be well below 1 (foreshortened into depth)`);
+    `end/apex spacing ratio ${endSpacing / apexSpacing} should be well below 1 (steep ends bunch up)`);
 
   // Sanity: the same fixture WITHOUT the 3D view (flat path) samples uniformly —
-  // proving the contrast above comes from projection, not the arc geometry alone.
+  // proving the contrast above comes from the 3D resample, not the arc geometry alone.
   const flat = structuredClone(s);
   delete flat.composition.view3d;
   const fr = buildPipelineInputs(flat);
@@ -152,8 +149,8 @@ test('validate() accepts a bezier fixture (2 end points)', () => {
 });
 
 test('bezier UVs = the projected 3D-arc-length resample of the EVALUATED curve', () => {
-  const cam = perspectiveCamera({ pos: [0.5, 0.5, -0.5], target: [0.5, 0.5, 0], up: [0, -1, 0], fov: 90, aspect: 1 });
-  const s = bezierShow([0.5, 0.5, 0.5], { mode: '3d', projectionCamera: cam });
+  const s = bezierShow([0.5, 0.5, 0.5], { mode: '3d' });   // 3D mode ⇒ the fixed front-ortho camera
+  const cam = frontCamera();
   const got = uvsOf(buildPipelineInputs(s), 'arc');
   const expect = samplePoints3D(bezierToPoints(s.fixtures[0].input), 30)
     .map((p) => { const uv = project(p, cam); return Number.isFinite(uv[0]) ? uv : [-1, -1]; })
@@ -174,36 +171,15 @@ test('a mid-lift arch under the FLAT camera keeps a symmetric UV distribution ab
   }
 });
 
-// --- projection presets (Phase 5): 3D placement finally SHAPES the sampling ---
-import { projectionPreset } from '../src/model/project3d.js';
+// --- 3D mode SHAPES the sampling (front-ortho, always) ------------------------
 
 // THE PAYOFF — the user's original ask: "a line travels through an arc
 // differently". A standing arch's physically-even LEDs must NOT sample evenly
-// once a real projection camera is placed:
-//  • Front (ORTHO): the 3D arc-length resample projects DENSER near the ENDS
-//    (where the arch climbs steeply in z, x barely advances) — while every
-//    z = 0 fixture keeps sampling exactly where it did in 2D.
-//  • Front wide (PERSPECTIVE): the apex is FARTHER from the camera, so on top
-//    of the resample the whole crown compresses — UVs near the apex end up
-//    DENSER than the same arc under Flat.
-test('an arched bezier under Front wide samples DENSER near the apex than under Flat', () => {
-  const flat = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5]));
-  const wide = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5],
-    { mode: '3d', projectionCamera: projectionPreset('frontwide') }));
-  const spacingAt = (r, i) => {
-    const uv = uvsOf(r, 'arc');
-    return Math.hypot(uv[i + 1][0] - uv[i][0], uv[i + 1][1] - uv[i][1]);
-  };
-  const mid = Math.floor(29 / 2);            // 30 samples → apex ≈ segment 14
-  const apexFlat = spacingAt(flat, mid);
-  const apexWide = spacingAt(wide, mid);
-  assert.ok(apexWide / apexFlat < 0.95,
-    `apex spacing wide/flat = ${apexWide / apexFlat} — must be meaningfully denser`);
-});
-
-test('an arched bezier under Front (ortho) bunches toward the ENDS (physical resample)', () => {
-  const front = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5],
-    { mode: '3d', projectionCamera: projectionPreset('front') }));
+// in 3D mode: the 3D arc-length resample projects DENSER near the ENDS (where
+// the arch climbs steeply in z, x barely advances) — while every z = 0 fixture
+// keeps sampling exactly where it did in 2D.
+test('an arched bezier in 3D mode bunches toward the ENDS (physical resample; UVs differ from flat)', () => {
+  const front = buildPipelineInputs(bezierShow([0.5, 0.5, 0.5], { mode: '3d' }));
   const uv = uvsOf(front, 'arc');
   const sp = (i) => Math.hypot(uv[i + 1][0] - uv[i][0], uv[i + 1][1] - uv[i][1]);
   const mid = Math.floor(29 / 2);
@@ -214,7 +190,7 @@ test('an arched bezier under Front (ortho) bunches toward the ENDS (physical res
   assert.ok(uv.some(([u], i) => Math.abs(u - flatUv[i][0]) > 1e-4));
 });
 
-test('all-z=0 fixtures under Front (ortho) sample where 2D put them (identity at the plane)', () => {
+test('all-z=0 fixtures in 3D mode sample byte-identically to 2D (identity at the plane)', () => {
   const mk = (view3d) => {
     let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
     s = addFixture(s, { id: 'flat', name: 'flat', pixelCount: 8, colorOrder: 'GRB',
@@ -224,9 +200,9 @@ test('all-z=0 fixtures under Front (ortho) sample where 2D put them (identity at
     return buildPipelineInputs(s);
   };
   const twoD = mk(null);
-  const front = mk({ mode: '3d', projectionCamera: projectionPreset('front') });
+  const front = mk({ mode: '3d' });
   for (let i = 0; i < twoD.sampleUVs.length; i++) {
-    assert.ok(Math.abs(front.sampleUVs[i] - twoD.sampleUVs[i]) < 1e-6, `uv[${i}]`);
+    assert.equal(front.sampleUVs[i], twoD.sampleUVs[i], `uv[${i}] must match the 2D result exactly`);
   }
 });
 
@@ -236,15 +212,13 @@ test('all-z=0 fixtures under Front (ortho) sample where 2D put them (identity at
 // canvas → black". Other LEDs on the same fixture stay normal.
 test('a point behind the camera yields the [-1,-1] sentinel; others project normally', () => {
   let s = addDevice(emptyShow(), { id: 'c1', name: 'DQ1', ip: '10.0.0.11', colorOrder: 'GRB' });
-  // Two-point strip: first ON the canvas plane (in front of the camera at z=1),
-  // second at z=2 (BEHIND the camera). samples=2 ⇒ the LEDs are exactly the ends.
+  // Two-point strip: first ON the canvas plane, second at z=-2 — BEHIND the
+  // front-ortho camera (which sits at z=-1 looking toward +z). samples=2 ⇒ the
+  // LEDs are exactly the ends.
   s = addFixture(s, { id: 'f', name: 'f', pixelCount: 2, colorOrder: 'GRB',
     output: { deviceId: 'c1', pixelOffset: 0, pixelCount: 2 },
-    input: { mode: 'polyline', points: [[0.5, 0.5, 0], [0.5, 0.5, 2]], samples: 2 } });
-  s.composition.view3d = {
-    mode: '3d',
-    projectionCamera: perspectiveCamera({ pos: [0.5, 0.5, 1], target: [0.5, 0.5, 0], fov: 90, aspect: 1 }),
-  };
+    input: { mode: 'polyline', points: [[0.5, 0.5, 0], [0.5, 0.5, -2]], samples: 2 } });
+  s.composition.view3d = { mode: '3d' };
   const { sampleUVs, spans } = buildPipelineInputs(s);
   const sp = spans.find((x) => x.id === 'f');
   const led0 = [sampleUVs[sp.start * 2], sampleUVs[sp.start * 2 + 1]];

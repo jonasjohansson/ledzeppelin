@@ -15,14 +15,13 @@ export function flatCamera() {
 
 // cameraFromView3d(view3d): resolve the projection camera for a composition's
 // view3d state. In 2D mode (absent view3d, or mode !== '3d') return the flat
-// camera so projection is a no-op (byte-identical with today). In 3D mode use
-// the view's projectionCamera when it looks like a valid camera; otherwise fall
-// back to flat so a half-configured 3D view can't crash the pipeline.
+// camera so projection is a no-op (byte-identical with today). In 3D mode the
+// output ALWAYS samples through the fixed front-ortho camera (see frontCamera)
+// — there is no projection choice. A persisted view3d.projectionCamera (saved
+// by the retired preset UI) is ignored, not stripped: old saves load fine.
 export function cameraFromView3d(view3d) {
   if (!view3d || view3d.mode !== '3d') return flatCamera();
-  const cam = view3d.projectionCamera;
-  if (cam && typeof cam === 'object' && typeof cam.mode === 'string') return cam;
-  return flatCamera();
+  return frontCamera();
 }
 
 // Default ORBIT (view-only inspect camera) for a fresh 3D view: a gentle
@@ -31,21 +30,18 @@ export const DEFAULT_ORBIT = { az: -30, el: 20, dist: 1.6 };
 
 // toggleView3d(show): flip composition.view3d.mode between '2d' and '3d' (pure —
 // returns a new show). Entering 3D initializes (or reuses) the view state:
-//   • projectionCamera: FLAT — Phase 2's 3D mode is a VIEWPORT (arrange/inspect
-//     the rig in 3D); the OUTPUT still projects flat-front, so the sampled UVs
-//     are byte-identical in both modes. The projection-camera placement UI is a
-//     later phase (then this default changes to a placeable front-ortho camera).
 //   • orbit: az/el/dist of the view-only inspect camera (persisted so the view
 //     survives a mode round-trip and a reload).
-// Leaving 3D keeps the camera + orbit so re-entering restores the same view.
+// The PROJECTION camera is not stored: 3D always samples front-ortho (see
+// cameraFromView3d). A projectionCamera left in an old save is carried through
+// the spread untouched — and ignored.
+// Leaving 3D keeps the orbit so re-entering restores the same view.
 export function toggleView3d(show) {
   const comp = show.composition || {};
   const cur = comp.view3d;
   const entering = !cur || cur.mode !== '3d';
   const view3d = entering
-    ? { ...cur, mode: '3d',
-        projectionCamera: cur?.projectionCamera ?? flatCamera(),
-        orbit: cur?.orbit ?? { ...DEFAULT_ORBIT } }
+    ? { ...cur, mode: '3d', orbit: cur?.orbit ?? { ...DEFAULT_ORBIT } }
     : { ...cur, mode: '2d' };
   return { ...show, composition: { ...comp, view3d } };
 }
@@ -64,48 +60,20 @@ export function orthoCamera({ pos, target, up = [0, 1, 0], orthoHeight, aspect =
   return { mode: 'ortho', pos, target, up, orthoHeight, aspect };
 }
 
-// --- Projection presets (Phase 5) --------------------------------------------
+// --- The 3D projection camera (fixed) -----------------------------------------
 // The PROJECTION camera decides where each LED reads the 2D composition from.
-// v1 offers three fixed presets (free placement + multi-camera are future work):
-//   flat      — the 2D special case: z dropped, byte-identical with today.
-//   front     — an ORTHO camera on the −z side framing the canvas exactly.
-//               At z = 0 it is EXACTLY the identity (the safe default: a flat
-//               rig keeps sampling precisely where 2D put it); a LIFTED shape
-//               changes its sampling through the 3D arc-length resample (a
-//               standing arch bunches toward its steep ends).
-//   frontwide — the same axis with a 90° PERSPECTIVE camera (the canvas still
-//               fills the frame exactly at z = 0: D = 0.5/tan(fov/2)): real
-//               depth foreshortening — lifted geometry, farther from the
-//               camera, compresses toward the centre. More drama, sub-1e-3
-//               float deviation at the plane.
+// 3D mode has exactly ONE: a front ORTHO camera on the −z side framing the
+// canvas exactly (the Phase-5 'Front' construction). At z = 0 it is EXACTLY the
+// identity — a flat rig keeps sampling precisely where 2D put it — while a
+// LIFTED shape changes its sampling through the 3D arc-length resample (a
+// standing arch bunches toward its steep ends). The one-time projection-preset
+// row (Flat/Front/Front wide) was retired: volumetric fields superseded the
+// perspective preset, and "front-on with physical spacing" is the honest
+// default that needs no choosing.
 // World z is the height OFF the canvas toward the viewer (+z = the orbit
-// camera's side), so both cameras look from BEHIND the canvas (−z) — lifted
-// geometry recedes from them, which is what makes an arch foreshorten.
-export const PROJECTION_PRESETS = [
-  { id: 'flat', label: 'Flat (2D)' },
-  { id: 'front', label: 'Front' },
-  { id: 'frontwide', label: 'Front wide' },
-];
-
-export function projectionPreset(id) {
-  if (id === 'front') {
-    return { ...orthoCamera({ pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1 }), preset: 'front' };
-  }
-  if (id === 'frontwide') {
-    // D = 0.5/tan(fov/2) puts the canvas plane exactly full-frame at z = 0.
-    return { ...perspectiveCamera({ pos: [0.5, 0.5, -0.5], target: [0.5, 0.5, 0], up: [0, -1, 0], fov: 90, aspect: 1 }), preset: 'frontwide' };
-  }
-  return { ...flatCamera(), preset: 'flat' };
-}
-
-// setProjectionPreset(show, id): choose the projection camera (pure). Only
-// meaningful while the composition is in 3D mode — a 2D show always projects
-// flat, so this is a no-op there.
-export function setProjectionPreset(show, id) {
-  const comp = show.composition || {};
-  const v3 = comp.view3d;
-  if (!v3 || v3.mode !== '3d') return show;
-  return { ...show, composition: { ...comp, view3d: { ...v3, projectionCamera: projectionPreset(id) } } };
+// camera's side), so the camera looks from BEHIND the canvas (−z).
+export function frontCamera() {
+  return orthoCamera({ pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1 });
 }
 
 // project(P, cam): map a world point [x, y, z] to a 2D sample point [x, y].

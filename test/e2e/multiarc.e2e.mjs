@@ -39,7 +39,6 @@ function threeStrips() {
       blendV2: true, opacityV2: true, opacity: 1,
       view3d: {
         mode: '3d',
-        projectionCamera: { mode: 'ortho', pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1, preset: 'front' },
         orbit: { az: -30, el: 20, dist: 1.6 },
       },
       layers: [{

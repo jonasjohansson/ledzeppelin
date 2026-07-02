@@ -101,8 +101,9 @@ For a **Bar**:
 
 - **X / Y** — the bounding box's top-left corner (Figma-style), in canvas pixels.
 - **Z** — the whole fixture's height off the canvas plane, in pixels (`0` = flat
-  on it). Visible in **3D mode** (below); with a non-flat **Projection** preset
-  it also shifts where the fixture samples.
+  on it). Visible in **3D mode** (below). Lifting a whole bar doesn't change
+  where it samples (3D projects front-on); sampling shifts when the height
+  *varies* along a run — an arch, a tilted polyline.
 - **Width** — the run length on the canvas.
 - **Height** — **auto** by default: drawn to physical scale (a 10 mm strip at this
   fixture's pixels-per-metre). The field shows the effective pixels; type a value
@@ -150,22 +151,16 @@ off the plane.
 - **Bulk arc:** select several strips, click **Bezier** in the multi editor, then
   type one **Arc Z** — every selected strip stands up as an arch of that height.
 
-**Projection.** The row in the stage's top-left picks the camera the *output*
-samples through (drawn as a small frustum gizmo):
+**How 3D samples.** In 3D mode the output samples the composition *front-on*,
+with physical spacing on lifted geometry: fixtures at Z = 0 keep sampling
+*exactly* where 2D put them, and a lifted shape spaces its LEDs evenly along
+its true 3D length (an arch bunches toward its steep ends on the canvas).
+There's nothing to configure — no camera to pick. For light that moves *through
+space* (up an arch, across the room), use the **Volumetric** sources
+(see the sources chapter).
 
-- **Flat (2D)** — the default: depth is ignored, output is exactly the 2D
-  mapping. Toggling 3D mode alone never changes the LEDs.
-- **Front** — an orthographic front camera. Honest default: fixtures at Z = 0
-  keep sampling *exactly* where 2D put them; lifted shapes resample by their
-  true 3D length (an arch bunches toward its steep ends).
-- **Front wide** — a wide-angle perspective front camera: real foreshortening,
-  so lifted geometry compresses toward the centre — a line travelling down the
-  canvas now moves through an arch the way a projected image would.
-
-**Honest limits today:** the projection camera is preset-only (front axis,
-fixed position) — dragging the gizmo freely, other angles and multiple cameras
-are future work. The daemon/output path is unchanged; 3D only decides *where
-each LED reads* the 2D composition.
+The daemon/output path is unchanged; 3D only decides *where each LED reads*
+the 2D composition.
 
 ### DMX-profile fixtures
 
