@@ -262,6 +262,23 @@ export function setBezierControl(show, fxId, c) {
   });
 }
 
+// Set a BEZIER fixture's ARC HEIGHT: the control point's z ALONE (c.x/c.y and
+// the two ends untouched) — so one shared value stands a whole multi-selection
+// up as arches. A missing control seeds at the chord midpoint (the same seed
+// setFixtureShape uses); z = 0 strips c back to a 2-tuple (the 2D guard).
+// Non-bezier fixtures pass through untouched — safe across a mixed selection.
+// Pure — returns a new show.
+export function setBezierArcZ(show, fxId, z) {
+  const zz = num(z);
+  return mapFixture(show, fxId, (f) => {
+    if (!isBezierFixture(f.input)) return f;
+    const pts = normPts(f.input.points);
+    const prev = Array.isArray(f.input.bezier?.c) ? f.input.bezier.c : midOf(pts[0], pts[pts.length - 1]);
+    const c = zz !== 0 ? [num(prev[0]), num(prev[1]), zz] : [num(prev[0]), num(prev[1])];
+    return { ...f, input: { ...f.input, bezier: { ...f.input.bezier, c } } };
+  });
+}
+
 // Switch a fixture's SHAPE: 'bar' (straight transform) | 'polyline' (bendable
 // run) | 'bezier' (quadratic arch). Ends carry over; entering bezier seeds the
 // control at the chord midpoint; leaving bezier drops it. Pure.

@@ -147,6 +147,8 @@ off the plane.
 - **Bezier arch:** switch a strip to **Bezier** in the editor, then Alt-drag the
   diamond control upward — the flat strip bows into a standing arch, its LEDs
   spaced evenly along the *3D* curve.
+- **Bulk arc:** select several strips, click **Bezier** in the multi editor, then
+  type one **Arc Z** — every selected strip stands up as an arch of that height.
 
 **Projection.** The row in the stage's top-left picks the camera the *output*
 samples through (drawn as a small frustum gizmo):

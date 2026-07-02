@@ -218,6 +218,49 @@ test('setBezierControl moves c; omitting z preserves the control\'s existing hei
   assert.deepEqual(flat.fixtures[0].input.bezier.c, [0.5, 0.5]);         // z=0 strips (2D guard)
 });
 
+// --- setBezierArcZ (bulk "arc height" for multi-select) --------------------------
+import { setBezierArcZ } from '../src/model/fixture-transform.js';
+import { bezierToPoints } from '../src/model/bezier.js';
+
+test('setBezierArcZ raises ONLY the control\'s z — c.x/c.y and the two ends untouched', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.4, 0.3] }, samples: 4 } }] };
+  const up = setBezierArcZ(show, 'f1', 0.35);
+  const inp = up.fixtures[0].input;
+  assert.deepEqual(inp.bezier.c, [0.4, 0.3, 0.35]);
+  assert.deepEqual(inp.points, [[0.1, 0.5], [0.9, 0.5]]);      // endpoints untouched
+});
+
+test('setBezierArcZ arcs symmetrically: endpoints stay grounded, apex z = c.z / 2', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.5] }, samples: 4 } }] };
+  const pts = bezierToPoints(setBezierArcZ(show, 'f1', 0.4).fixtures[0].input, 8);
+  assert.equal(pts[0][2], 0);                                   // ends on the floor
+  assert.equal(pts[pts.length - 1][2], 0);
+  assert.equal(pts[4][2], 0.2);                                 // apex: B_z(0.5) = c.z/2
+  assert.equal(pts[2][2], pts[6][2]);                           // symmetric about the middle
+});
+
+test('setBezierArcZ z=0 strips c back to a 2-tuple (the 2D guard)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.2, 0.6] }, samples: 4 } }] };
+  assert.deepEqual(setBezierArcZ(show, 'f1', 0).fixtures[0].input.bezier.c, [0.5, 0.2]);
+});
+
+test('setBezierArcZ leaves a NON-bezier fixture untouched (safe across a mixed selection)', () => {
+  let show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { points: [[0.1, 0.5], [0.9, 0.5]], samples: 4 } }] };
+  show = syncShowFixtures(show);                                // a plain bar
+  const next = setBezierArcZ(show, 'f1', 0.35);
+  assert.deepEqual(next.fixtures[0], show.fixtures[0]);
+  assert.equal(next.fixtures[0].input.bezier, undefined);
+});
+
+test('setBezierArcZ seeds a missing control at the chord midpoint (like setFixtureShape)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
+    input: { mode: 'bezier', points: [[0.1, 0.4], [0.9, 0.6]], samples: 4 } }] };
+  assert.deepEqual(setBezierArcZ(show, 'f1', 0.35).fixtures[0].input.bezier.c, [0.5, 0.5, 0.35]);
+});
+
 test('setFixtureZ on a bezier lifts the control point with the ends', () => {
   const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1',
     input: { mode: 'bezier', points: [[0.1, 0.5], [0.9, 0.5]], bezier: { c: [0.5, 0.1] }, samples: 4 } }] };

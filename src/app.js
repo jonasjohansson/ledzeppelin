@@ -25,7 +25,7 @@ import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl, setBezierArcZ } from './model/fixture-transform.js';
 import { isBezierFixture } from './model/bezier.js';
 import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, PROJECTION_PRESETS, setProjectionPreset } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
@@ -1326,6 +1326,31 @@ function multiPositionEditor(ids) {
   const list = selList();
   const stripList = list.filter((f) => !isDmxFixture(f));
   const dmxList = list.filter((f) => isDmxFixture(f));
+
+  // --- Z + SHAPE + ARC Z (bulk 3D) -----------------------------------------
+  // Shared value across a subset, or null (= "— mixed —") when they differ.
+  const sharedOf = (arr, fn) => { if (!arr.length) return null; const v0 = fn(arr[0]); return arr.every((f) => Math.abs(fn(f) - v0) < 0.5) ? v0 : null; };
+  const cvH = (show.composition?.canvas?.h) || 720;
+  // A fixture's z = its points' shared z (first 3-tuple's z — the same readback
+  // the single editor uses), or 0 when flat on the canvas plane.
+  const zPxOf = (f) => (Number(f?.input?.points?.find((p) => p?.length > 2)?.[2]) || 0) * cvH;
+  const shapeOf = (f) => (isBezierFixture(f.input) ? 'bezier' : isPolylineFixture(f.input) ? 'polyline' : 'bar');
+  // Shape applies to strips only: a matrix keeps its grid footprint (the single
+  // editor hides the shape row for grids too) and DMX fixtures have no shape.
+  const shapeList = stripList.filter((f) => f.input?.mode !== 'grid');
+  const curShape = shapeList.length && shapeList.every((f) => shapeOf(f) === shapeOf(shapeList[0])) ? shapeOf(shapeList[0]) : null;
+  const bezList = stripList.filter((f) => isBezierFixture(f.input));
+  // SHAPE row — converts EVERY selected strip; highlights the shared mode, none
+  // when mixed. Same conversions as the single editor (bezier seeds c = chord
+  // midpoint), applied per fixture in ONE undoable commit.
+  const multiShapeRow = () => oel('div', { className: 'dir-btns shape-row' }, [
+    ['bar', 'Bar', 'straighten every selected strip into an x/y/w/h/rotation box'],
+    ['polyline', 'Polyline', 'make every selected strip a bendable multi-segment run'],
+    ['bezier', 'Bezier', 'make every selected strip a quadratic arch (then raise Arc Z to stand them all up)'],
+  ].map(([m, label, tip]) => oel('button', {
+    className: 'dir-btn' + (m === curShape ? ' on' : ''), textContent: label, title: tip,
+    onclick: () => { if (m !== curShape) applyAll((nx, id) => { const f = fxOf(id, nx); return (!f || isDmxFixture(f) || f.input?.mode === 'grid') ? nx : setFixtureShape(nx, id, m); }); },
+  })));
   // Write a (dotted) field to every selected fixture matching `filter`, via the
   // tested applyField helper, then commit through the normal show pipeline.
   // (Device/port/offset are derived by repackOffsets on rebuild, so reassigning
@@ -1348,10 +1373,19 @@ function multiPositionEditor(ids) {
 
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
+      if (shapeList.length) body.append(multiShapeRow());
       body.append(
         oel('div', { className: 'output-grid' }, [
           txFieldMulti('X', sharedFn(leftOf), (v) => setEachLeft(v)),
           txFieldMulti('Y', sharedFn(topOf), (v) => setEachTop(v)),
+          // Z — each STRIP's whole-fixture height off the canvas plane (px, same
+          // unit as the single editor); DMX fixtures in the selection are skipped.
+          ...(stripList.length ? [(() => {
+            const fld = txFieldMulti('Z', sharedOf(stripList, zPxOf),
+              (v) => applyAll((nx, id) => { const f = fxOf(id, nx); return (!f || isDmxFixture(f)) ? nx : setFixtureZ(nx, id, v / cvH); }));
+            fld.title = 'lift every selected strip off the canvas plane (visible in 3D mode)';
+            return fld;
+          })()] : []),
           txFieldMulti('Width', shared('w'), (v) => setEachT({ w: v })),
           txFieldMulti('Height', hVal, (v) => setEachT({ h: v > 0 ? v : 0 })),   // 0 = auto
           (() => {
@@ -1362,6 +1396,15 @@ function multiPositionEditor(ids) {
             );
             return fld;
           })(),
+          // ARC Z — the shared "arc height": every selected BEZIER's control-point
+          // z (px; c.x/c.y untouched, non-beziers skipped by setBezierArcZ). One
+          // value stands the whole selection up as arches.
+          ...(bezList.length ? [(() => {
+            const fld = txFieldMulti('Arc Z', sharedOf(bezList, (f) => (Number(f.input?.bezier?.c?.[2]) || 0) * cvH),
+              (v) => applyAll((nx, id) => setBezierArcZ(nx, id, v / cvH)));
+            fld.title = 'arc height — the bezier control point’s Z (px): one value stands every selected bezier up as an arch';
+            return fld;
+          })()] : []),
         ]),
         oel('div', { className: 'dir-btns out-transform' }, [
           oel('button', { className: 'dir-btn' + (allRev ? ' on' : ''), textContent: '⇄ Reverse direction',
