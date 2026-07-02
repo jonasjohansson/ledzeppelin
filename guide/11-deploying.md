@@ -248,6 +248,20 @@ Notes:
   prompt — click Allow. The first UDP bind may also pop the **firewall** dialog; signed
   apps are remembered. Ports 7070 / 4048 / 6454 / 9000 must be free.
 
+### Control API
+
+The daemon also serves a versioned HTTP + WebSocket **control API at `/api/v1`** —
+status, devices, clips, blackout, per-device brightness, clip triggers and param
+sets from anything on the LAN (shell scripts, Home Assistant, cron). It rides the
+same port as the UI; set `LZ_API_TOKEN` in the service environment to require a
+Bearer token. Full endpoint reference with curl examples:
+[`docs/api.md`](../docs/api.md).
+
+```bash
+curl -s http://ledzeppelin.local/api/v1/status
+curl -s -X POST http://ledzeppelin.local/api/v1/blackout -d '{"on":true}'
+```
+
 ## Recovery
 
 When something drops, work outward from the server:

@@ -1,6 +1,6 @@
 # HTTP control API on the daemon (D1) — design
 
-Status: design only (no code). Backlog: D1 (#22) in `2026-07-02-feedback-backlog.md` — REST/WS first, MCP wrapper later.
+Status: **implemented (v1)** — `server/api.js` + wiring in `server/index.js` / `server/output.js`; endpoint reference with curl examples in [`docs/api.md`](../api.md); tests in `test/api.test.js`, `test/output-overrides.test.js`, `test/api-integration.test.js`. v2 items (scenes, `/fixtures`, command acks, MCP wrapper) remain open. Backlog: D1 (#22) in `2026-07-02-feedback-backlog.md`.
 
 ## Goals / non-goals
 
