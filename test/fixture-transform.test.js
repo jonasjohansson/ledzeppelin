@@ -120,6 +120,47 @@ test('removeFixtureVertex drops a bend; at two points it reverts to a bar', () =
   assert.ok(next.fixtures[0].input.transform);           // bar transform restored
 });
 
+// --- per-vertex XYZ (Phase 3: edit vertices in the 3D viewport) ---------------
+test('setFixtureVertex with z writes a 3-tuple vertex', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.5], [0.9, 0.5]], samples: 6 } }] };
+  const next = setFixtureVertex(show, 'f1', 1, 0.5, 0.5, 0.4);
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.5, 0.5, 0.4]);
+});
+
+test('setFixtureVertex without z PRESERVES the vertex\'s existing z (2D drag on a lifted run)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5, 0.3], [0.5, 0.5, 0.3], [0.9, 0.5, 0.3]], samples: 6 } }] };
+  const next = setFixtureVertex(show, 'f1', 1, 0.4, 0.2);
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.4, 0.2, 0.3]);   // z survives an x/y move
+});
+
+test('setFixtureVertex z=0 on an otherwise-flat run strips back to 2-tuples (the 2D guard)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5], [0.5, 0.5, 0.4], [0.9, 0.5]], samples: 6 } }] };
+  const next = setFixtureVertex(show, 'f1', 1, 0.5, 0.5, 0);
+  assert.deepEqual(next.fixtures[0].input.points, [[0.1, 0.5], [0.5, 0.5], [0.9, 0.5]]);
+  for (const p of next.fixtures[0].input.points) assert.equal(p.length, 2);
+});
+
+test('addFixtureVertex default midpoint interpolates z on a 3D run', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5, 0], [0.9, 0.5, 0.4], [0.9, 0.9, 0.4]], samples: 6 } }] };
+  const next = addFixtureVertex(show, 'f1', 0);
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.5, 0.5, 0.2]);   // z = midpoint of 0 and 0.4
+});
+
+test('addFixtureVertex accepts a 3-tuple `at` (3D dblclick insertion)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5, 0.1], [0.9, 0.5, 0.3], [0.9, 0.9, 0.3]], samples: 6 } }] };
+  const next = addFixtureVertex(show, 'f1', 0, [0.3, 0.5, 0.15]);
+  assert.deepEqual(next.fixtures[0].input.points[1], [0.3, 0.5, 0.15]);
+});
+
+test('removeFixtureVertex on a LIFTED run keeps polyline mode at 2 points (no z-dropping bar collapse)', () => {
+  const show = { composition: { canvas: CANVAS }, fixtures: [{ id: 'f1', input: { mode: 'polyline', points: [[0.1, 0.5, 0.2], [0.5, 0.2, 0.2], [0.9, 0.5, 0.2]], samples: 6 } }] };
+  const next = removeFixtureVertex(show, 'f1', 1);
+  const inp = next.fixtures[0].input;
+  assert.equal(inp.points.length, 2);
+  assert.equal(inp.mode, 'polyline');                     // NOT a bar — a bar transform would drop z
+  for (const p of inp.points) assert.equal(p[2], 0.2);    // the lift survives
+});
+
 // --- 3D mapping: preserve a z coordinate on 3-tuple points ---
 test('syncFixtureGeometry preserves z on a 3-tuple polyline (does not drop to 2D)', () => {
   const bent3d = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]];

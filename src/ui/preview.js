@@ -1,7 +1,7 @@
 import { samplePoints, samplePoints3D } from '../model/sampling.js';
 import { buildPipelineInputs } from '../model/pipeline.js';
 import {
-  orbitCamera, cameraBasis, project,
+  orbitCamera, cameraBasis, project, unproject, rayPlaneZ,
   ORBIT_EL_MIN, ORBIT_EL_MAX, ORBIT_DIST_MIN, ORBIT_DIST_MAX,
 } from '../model/project3d.js';
 import { gridPoints, isGridFixture } from '../model/grid.js';
@@ -341,23 +341,28 @@ export function createPreview(canvasEl, opts = {}) {
     // (Fixture footprints, handles, arrows, labels, chain wiring, snap grid/guides
     //  and the marquee are all drawn on the SVG chrome layer — see buildChrome.)
 
-    // Numeric value tag at the cursor while dragging/rotating/scaling — so you read
-    // the value where you're working, not in a sidebar.
-    if (dragHint) {
-      const fs = 11 * ck;
-      ctx.save();
-      ctx.font = `${fs}px "Spline Sans Mono", ui-monospace, Menlo, monospace`;
-      ctx.textBaseline = 'middle';
-      const tw = ctx.measureText(dragHint.text).width;
-      const padX = 5 * ck, bh = 16 * ck;
-      let bx = dragHint.nx * W + 12 * ck, by = dragHint.ny * Hh - 14 * ck;
-      bx = Math.max(2, Math.min(W - tw - padX * 2 - 2, bx));
-      by = Math.max(bh / 2 + 2, Math.min(Hh - bh / 2 - 2, by));
-      ctx.fillStyle = 'rgba(13,14,18,.92)'; ctx.fillRect(bx, by - bh / 2, tw + padX * 2, bh);
-      ctx.strokeStyle = 'rgba(60,65,75,.95)'; ctx.lineWidth = ck; ctx.strokeRect(bx, by - bh / 2, tw + padX * 2, bh);
-      ctx.fillStyle = '#f4f5f7'; ctx.fillText(dragHint.text, bx + padX, by);
-      ctx.restore();
-    }
+    drawDragHint(ck);
+  }
+
+  // Numeric value tag at the cursor while dragging/rotating/scaling — so you read
+  // the value where you're working, not in a sidebar. Shared by the 2D draw and
+  // the 3D viewport (a vertex drag in 3D shows its position/height the same way).
+  function drawDragHint(ck) {
+    if (!dragHint) return;
+    const W = BASE_W, Hh = BASE_H;
+    const fs = 11 * ck;
+    ctx.save();
+    ctx.font = `${fs}px "Spline Sans Mono", ui-monospace, Menlo, monospace`;
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(dragHint.text).width;
+    const padX = 5 * ck, bh = 16 * ck;
+    let bx = dragHint.nx * W + 12 * ck, by = dragHint.ny * Hh - 14 * ck;
+    bx = Math.max(2, Math.min(W - tw - padX * 2 - 2, bx));
+    by = Math.max(bh / 2 + 2, Math.min(Hh - bh / 2 - 2, by));
+    ctx.fillStyle = 'rgba(13,14,18,.92)'; ctx.fillRect(bx, by - bh / 2, tw + padX * 2, bh);
+    ctx.strokeStyle = 'rgba(60,65,75,.95)'; ctx.lineWidth = ck; ctx.strokeRect(bx, by - bh / 2, tw + padX * 2, bh);
+    ctx.fillStyle = '#f4f5f7'; ctx.fillText(dragHint.text, bx + padX, by);
+    ctx.restore();
   }
 
   // --- 3D viewport --------------------------------------------------------------
@@ -416,6 +421,7 @@ export function createPreview(canvasEl, opts = {}) {
       }
     }
     ctx.globalAlpha = 1;
+    drawDragHint(ck);   // vertex-drag position/height tag, same as 2D
   }
 
   // The 3D scene's vector chrome (grid / canvas plane / strips) as one SVG
@@ -465,10 +471,13 @@ export function createPreview(canvasEl, opts = {}) {
         const stroke = selected ? accCss(1) : dim(chainColors[runKey(f)] || accCss(.9));
         poly3(pts3, stroke, (selected ? 2 : 1.25) * ck);
         if (selected) {
-          // View-only vertex markers (dragging them is Phase 3) + the label.
+          // Vertex handles + the label. Polyline vertices are DRAGGABLE in 3D
+          // (ground-plane move; Alt = vertical) so they get the same 8px chrome
+          // as 2D; bar/grid endpoints are view-only markers (smaller).
+          const hs = isPolylineFixture(f.input) ? 4 * ck : 3 * ck;
           for (const pt of pts3) {
             const q = prj(pt[0], pt[1], pt[2]);
-            if (finite(q)) p.push(rectS(q[0] - 3 * ck, q[1] - 3 * ck, 6 * ck, 6 * ck, stroke, 1.25 * ck));
+            if (finite(q)) p.push(rectS(q[0] - hs, q[1] - hs, hs * 2, hs * 2, stroke, 1.25 * ck));
           }
           if (showLabels) {
             const q = prj(pts3[0][0], pts3[0][1], pts3[0][2]);
@@ -687,30 +696,48 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   }
 
   // 3D viewport hit-test: project each fixture's polyline through the orbit
-  // camera and test screen distance to its segments (same segDist ≤ hitR rule
-  // as 2D). SELECTION only — vertex/resize/rotate editing is disabled in 3D
-  // (per-vertex 3D drag is Phase 3). Returns { fxId } or null.
+  // camera and test in screen space (same tolerances as 2D). Precedence mirrors
+  // 2D: POLYLINE vertex handles first (precise, ≤ vtxR), then the nearest body
+  // segment (≤ hitR). Returns { fxId, vertex } for a vertex grab, or
+  // { fxId, seg, t } for a body hit — `t` is the parametric position along the
+  // hit segment (screen space) so a dblclick can insert a vertex ON the run,
+  // z interpolated. Bars/grids are select-only in 3D (their shape is a 2D
+  // transform; lift them with the editor's Z field).
   function hitTest3D(ev, v3) {
     const show = getShow();
     const [px, py, rw, rh] = localPx(ev);
     const cam = orbitCamera(v3.orbit, rw / rh);
-    let best = null;
     const fixtures = show.fixtures ?? [];
+    const screenPts = (f) => pts3Of(f.input?.points || []).map((e) => {
+      const uv = project(e, cam);
+      return Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? [uv[0] * rw, uv[1] * rh] : null;
+    });
+    // Vertex handles first (topmost wins) — polyline fixtures only.
     for (let i = fixtures.length - 1; i >= 0; i--) {
       const f = fixtures[i];
-      const eps = f.input?.points; if (!eps || eps.length < 2) continue;
-      let prev = null;
-      for (const e of eps) {
-        const uv = project([e?.[0] || 0, e?.[1] || 0, e?.[2] || 0], cam);
-        const q = Number.isFinite(uv[0]) && Number.isFinite(uv[1]) ? [uv[0] * rw, uv[1] * rh] : null;
-        if (prev && q) {
-          const d = segDist(px, py, prev[0], prev[1], q[0], q[1]);
-          if (d <= hitR && (!best || d < best.dist)) best = { fxId: f.id, dist: d };
-        }
-        prev = q;
+      if (!isPolylineFixture(f.input)) continue;
+      const q = screenPts(f);
+      for (let v = 0; v < q.length; v++) {
+        if (q[v] && Math.hypot(px - q[v][0], py - q[v][1]) <= vtxR) return { fxId: f.id, vertex: v };
       }
     }
-    return best ? { fxId: best.fxId } : null;
+    // Then bodies — the NEAREST segment across all fixtures wins (as in 2D).
+    let best = null;
+    for (let i = fixtures.length - 1; i >= 0; i--) {
+      const f = fixtures[i];
+      const q = screenPts(f);
+      for (let s = 0; s < q.length - 1; s++) {
+        const a = q[s], b = q[s + 1];
+        if (!a || !b) continue;
+        const d = segDist(px, py, a[0], a[1], b[0], b[1]);
+        if (d <= hitR && (!best || d < best.dist)) {
+          const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / len2)) : 0;
+          best = { fxId: f.id, seg: s, t, dist: d };
+        }
+      }
+    }
+    return best ? { fxId: best.fxId, seg: best.seg, t: best.t } : null;
   }
 
   function hitTest(ev) {
@@ -832,17 +859,25 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     const v3 = view3dOf(getShow());
     if (v3) {
       // 3D mode: a CLICK selects the strip under the cursor; a DRAG orbits the
-      // view (Shift = pan the target). All 2D editing gestures are disabled.
+      // view (Shift = pan the target) — EXCEPT on a polyline vertex handle,
+      // which drags that vertex in world space: on the HORIZONTAL plane through
+      // its current z by default, or VERTICALLY (z only) while Alt is held.
+      // (Alt, not Shift — Shift already pans the orbit target in 3D.)
       // Orbit/pan changes flow through onView — view-only state that must save
       // WITHOUT entering undo history (like zoom/pan, it isn't an edit).
       const hit3 = hitTest3D(ev, v3);
       if (hit3) onSelect?.(hit3.fxId, ev);
-      const o = v3.orbit || {};
-      dragState = ev.shiftKey
-        ? { kind: 'orbitpan', x0: ev.clientX, y0: ev.clientY, target0: (Array.isArray(o.target) ? o.target : [0.5, 0.5, 0]).slice() }
-        : { kind: 'orbit', x0: ev.clientX, y0: ev.clientY, az0: Number(o.az) || 0, el0: Number(o.el) || 0, hitFx: hit3?.fxId ?? null };
-      dragState.cursor = 'grabbing';
-      evEl.style.cursor = 'grabbing';
+      if (hit3 && hit3.vertex != null) {
+        dragState = { kind: 'vertex3d', id: hit3.fxId, index: hit3.vertex,
+          lastY: ev.clientY, cursor: 'move' };
+      } else {
+        const o = v3.orbit || {};
+        dragState = ev.shiftKey
+          ? { kind: 'orbitpan', x0: ev.clientX, y0: ev.clientY, target0: (Array.isArray(o.target) ? o.target : [0.5, 0.5, 0]).slice() }
+          : { kind: 'orbit', x0: ev.clientX, y0: ev.clientY, az0: Number(o.az) || 0, el0: Number(o.el) || 0, hitFx: hit3?.fxId ?? null };
+        dragState.cursor = 'grabbing';
+      }
+      evEl.style.cursor = dragState.cursor;
       evEl.setPointerCapture(ev.pointerId); ev.preventDefault();
       return;
     }
@@ -955,12 +990,52 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
 
   evEl.addEventListener('pointermove', (ev) => {
     if (!enabled) return;
-    if (!dragState) {   // hover feedback (resize/move cursors; 3D: grab/pointer)
+    if (!dragState) {   // hover feedback (resize/move cursors; 3D: move/grab/pointer)
       const v3h = view3dOf(getShow());
-      evEl.style.cursor = v3h ? (hitTest3D(ev, v3h) ? 'pointer' : 'grab') : cursorFor(hitTest(ev));
+      if (v3h) {
+        const h3 = hitTest3D(ev, v3h);
+        evEl.style.cursor = h3 ? (h3.vertex != null ? 'move' : 'pointer') : 'grab';
+      } else evEl.style.cursor = cursorFor(hitTest(ev));
       return;
     }
     if (dragState.cursor) evEl.style.cursor = dragState.cursor;               // hold it through the drag
+    if (dragState.kind === 'vertex3d') {
+      // Per-vertex 3D drag. Default: move on the HORIZONTAL plane at the
+      // vertex's current z (unproject the pointer → intersect that plane).
+      // Alt: VERTICAL — keep x/y, map pointer Δy → Δz scaled to world units at
+      // the vertex's distance from the camera. (The axis-drag mapping, chosen
+      // over a vertical-plane intersection: it stays stable at any camera
+      // angle, where a facing-plane ray goes degenerate near top-down views.)
+      // Alt is read LIVE, so one drag can slide then lift without re-grabbing.
+      const show3 = getShow();
+      const v3d = view3dOf(show3); if (!v3d) return;   // mode flipped mid-drag
+      const f = (show3.fixtures || []).find((x) => x.id === dragState.id);
+      const cur = pts3Of(f?.input?.points || [])[dragState.index];
+      if (!cur) return;
+      const [px3, py3, rw3, rh3] = localPx(ev);
+      const cam3 = orbitCamera(v3d.orbit, rw3 / rh3);
+      const cvH3 = (show3.composition?.canvas?.h) || 720;
+      let next3 = show3, hint3 = null;
+      if (ev.altKey) {
+        const camDist = Math.hypot(cur[0] - cam3.pos[0], cur[1] - cam3.pos[1], cur[2] - cam3.pos[2]);
+        const wpp = (2 * camDist * Math.tan((cam3.fov * Math.PI / 180) / 2)) / (rh3 || 1);
+        const z = cur[2] - (ev.clientY - dragState.lastY) * wpp;   // drag up → +z
+        next3 = setFixtureVertex(show3, dragState.id, dragState.index, cur[0], cur[1], z);
+        hint3 = `z ${Math.round(z * cvH3)} px`;
+      } else {
+        const hit = rayPlaneZ(unproject(px3 / rw3, py3 / rh3, cam3), cur[2]);
+        if (hit) {
+          next3 = setFixtureVertex(show3, dragState.id, dragState.index, hit[0], hit[1], cur[2]);
+          const cvW3 = (show3.composition?.canvas?.w) || 1280;
+          hint3 = `${Math.round(hit[0] * cvW3)}, ${Math.round(hit[1] * cvH3)}`;
+        }
+      }
+      dragState.lastY = ev.clientY;
+      dragHint = hint3 ? { nx: (px3 / rw3), ny: (py3 / rh3), text: hint3 } : null;
+      dragState.moved = true;
+      onEdit?.(next3);
+      return;
+    }
     if (dragState.kind === 'orbit' || dragState.kind === 'orbitpan') {
       const show = getShow();
       const v3 = view3dOf(show); if (!v3) return;   // mode flipped mid-drag — ignore
@@ -1124,8 +1199,25 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   evEl.addEventListener('pointerleave', () => { if (!dragState) evEl.style.cursor = 'default'; });
 
   // Double-click a fixture body → insert a vertex there (bend / segment the run).
+  // In 3D the vertex is inserted ON the run at the clicked spot — the hit's
+  // parametric t interpolates all three components, so the new bend sits at the
+  // run's height, not on the floor.
   evEl.addEventListener('dblclick', (ev) => {
     if (!enabled) return;
+    const v3 = view3dOf(getShow());
+    if (v3) {
+      const hit3 = hitTest3D(ev, v3);
+      if (!hit3 || hit3.vertex != null || hit3.seg == null) return;
+      const f = (getShow().fixtures || []).find((x) => x.id === hit3.fxId);
+      const pts3 = pts3Of(f?.input?.points || []);
+      const a = pts3[hit3.seg], b = pts3[hit3.seg + 1];
+      if (!a || !b) return;
+      const t = hit3.t ?? 0.5;
+      const at = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      onCommit?.(addFixtureVertex(getShow(), hit3.fxId, hit3.seg, at));
+      ev.preventDefault();
+      return;
+    }
     const hit = hitTest(ev);
     if (!hit || hit.vertex != null) return;
     const [nx, ny] = norm(ev);
@@ -1134,10 +1226,11 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     ev.preventDefault();
   });
 
-  // Right-click a vertex → remove it.
+  // Right-click a vertex → remove it (2D and 3D alike).
   evEl.addEventListener('contextmenu', (ev) => {
     if (!enabled || document.body.classList.contains('native-ctx')) return;
-    const hit = hitTest(ev);
+    const v3 = view3dOf(getShow());
+    const hit = v3 ? hitTest3D(ev, v3) : hitTest(ev);
     if (hit && hit.vertex != null) {
       ev.preventDefault();
       onCommit?.(removeFixtureVertex(getShow(), hit.fxId, hit.vertex));

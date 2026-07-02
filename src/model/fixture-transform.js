@@ -229,12 +229,19 @@ export function setFixturePoints(show, fxId, points) {
 }
 
 // Move ONE vertex of a polyline fixture to an absolute normalized position.
-export function setFixtureVertex(show, fxId, index, nx, ny) {
+// `nz` is optional: omitted → the vertex KEEPS its current z (a 2D drag on a
+// lifted run must not flatten it); given → the vertex moves to that height.
+// When the whole run ends up flat (every z = 0) the points strip back to clean
+// 2-tuples — the byte-identical 2D guard.
+export function setFixtureVertex(show, fxId, index, nx, ny, nz) {
   return mapFixture(show, fxId, (f) => {
     const pts = normPts(f.input?.points);
     if (!(index >= 0 && index < pts.length)) return f;
-    pts[index] = [num(nx), num(ny)];
-    return { ...f, input: { ...f.input, mode: 'polyline', points: pts } };
+    const z = nz != null ? num(nz) : num(pts[index][2]);
+    pts[index] = [num(nx), num(ny), z];
+    const flat = pts.every((p) => !p[2]);
+    return { ...f, input: { ...f.input, mode: 'polyline',
+      points: flat ? pts.map((p) => [p[0], p[1]]) : normPts(pts) } };
   });
 }
 
@@ -248,10 +255,15 @@ export function addFixtureVertex(show, fxId, afterIndex, at, canvas) {
     );
     if (base.length < 2) return f;
     const i = Math.max(0, Math.min(afterIndex, base.length - 2));
+    // `at` may be [nx, ny] (2D) or [nx, ny, nz] (3D viewport insertion); the
+    // default midpoint interpolates EVERY component, so a vertex inserted into a
+    // lifted run lands ON the run (z included), not on the floor.
+    const is3 = base[i].length > 2;
     const mid = at
-      ? [num(at[0]), num(at[1])]
-      : [(base[i][0] + base[i + 1][0]) / 2, (base[i][1] + base[i + 1][1]) / 2];
-    const points = [...base.slice(0, i + 1), mid, ...base.slice(i + 1)];
+      ? (at.length > 2 ? [num(at[0]), num(at[1]), num(at[2])] : [num(at[0]), num(at[1])])
+      : [(base[i][0] + base[i + 1][0]) / 2, (base[i][1] + base[i + 1][1]) / 2,
+        ...(is3 ? [(base[i][2] + base[i + 1][2]) / 2] : [])];
+    const points = normPts([...base.slice(0, i + 1), mid, ...base.slice(i + 1)]);
     const { transform, ...rest } = f.input || {};
     return { ...f, input: { ...rest, mode: 'polyline', points } };
   });
@@ -264,7 +276,11 @@ export function removeFixtureVertex(show, fxId, index, canvas) {
     const pts = normPts(f.input?.points);
     if (pts.length <= 2 || !(index >= 0 && index < pts.length)) return f;
     pts.splice(index, 1);
-    if (pts.length > 2) return { ...f, input: { ...f.input, mode: 'polyline', points: pts } };
+    // A LIFTED run (any z) stays a polyline even at 2 points — collapsing to a
+    // bar would derive a 2D transform and silently drop the z placement.
+    if (pts.length > 2 || pts.some((p) => p.length > 2 && p[2] !== 0)) {
+      return { ...f, input: { ...f.input, mode: 'polyline', points: pts } };
+    }
     // Back to a single segment → restore an editable bar transform.
     const transform = transformFromPoints(pts, cv);
     return { ...f, input: { ...f.input, mode: 'bar', transform, points: pointsFromTransform(transform, cv) } };

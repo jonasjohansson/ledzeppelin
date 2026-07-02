@@ -23,7 +23,7 @@ import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
-import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ } from './model/fixture-transform.js';
+import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex } from './model/fixture-transform.js';
 import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
@@ -973,8 +973,49 @@ function positionEditor(sel) {
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
   // (The fixture's name is shown by the editor dock's title bar.)
+  // Reverse-direction toggle (shared by the bar and polyline Position groups).
+  // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
+  // (the canvas arrow points at pixel 0).
+  const reverseRow = () => oel('div', { className: 'dir-btns out-transform' }, [
+    (() => {
+      const b = oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''),
+        title: 'reverse the LED strip direction (which end is pixel 0)',
+        onclick: () => apply(flipFixture(show, sel.id)) });
+      b.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-reverse"/></svg> Reverse direction';
+      return b;
+    })(),
+  ]);
+  // POLYLINE: the geometry IS its vertices, so Position is a compact per-vertex
+  // XYZ table (px; Z = height off the canvas plane, visible in 3D mode). The
+  // bar's transform fields don't apply — writing a transform would straighten
+  // the run. Values commit through setFixtureVertex (undoable via rebuild).
+  const vertexTable = () => {
+    const cv = show.composition?.canvas || { w: 1280, h: 720 };
+    const grid = oel('div', { className: 'vtx-grid' });
+    for (const h of ['#', 'X', 'Y', 'Z']) grid.append(oel('span', { className: 'vtx-h', textContent: h }));
+    const setV = (i, axis, v) => {
+      const p = ((show.fixtures.find((f) => f.id === sel.id)?.input?.points) || [])[i];
+      if (!p) return;
+      const n = [Number(p[0]) || 0, Number(p[1]) || 0, Number(p[2]) || 0];
+      n[axis] = axis === 0 ? v / cv.w : v / cv.h;   // x normalizes by width; y/z by height
+      apply(setFixtureVertex(show, sel.id, i, n[0], n[1], n[2]));
+    };
+    (sel.input.points || []).forEach((p, i) => {
+      grid.append(oel('span', { className: 'vtx-idx', textContent: String(i + 1) }));
+      [((Number(p[0]) || 0) * cv.w), ((Number(p[1]) || 0) * cv.h), ((Number(p[2]) || 0) * cv.h)].forEach((val, axis) => {
+        const inp = oel('input', { type: 'number', step: '1', value: String(Math.round(val)) });
+        // data-vtx keys focus restoration across the inspector rebuild (see updateInspector).
+        inp.dataset.vtx = `${i}:${axis}`;
+        inp.addEventListener('change', () => setV(i, axis, inp.value === '' ? 0 : Number(inp.value)));
+        grid.append(inp);
+      });
+    });
+    grid.title = 'vertex positions in canvas px — Z lifts a vertex off the canvas plane (edit in 3D mode with Alt-drag too)';
+    return grid;
+  };
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
+      if (isPolylineFixture(sel.input)) { body.append(vertexTable(), reverseRow()); return; }
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
@@ -1017,17 +1058,7 @@ function positionEditor(sel) {
             return fld;
           })(),
         ]),
-        // Not a transform flip — it reverses which end of the LED STRIP is pixel 0
-        // (the canvas arrow points at pixel 0).
-        oel('div', { className: 'dir-btns out-transform' }, [
-          (() => {
-            const b = oel('button', { className: 'dir-btn' + (sel.input?.reversed ? ' on' : ''),
-              title: 'reverse the LED strip direction (which end is pixel 0)',
-              onclick: () => apply(flipFixture(show, sel.id)) });
-            b.innerHTML = '<svg class="ic-sm" aria-hidden="true"><use href="#ic-reverse"/></svg> Reverse direction';
-            return b;
-          })(),
-        ]),
+        reverseRow(),
       );
     }),
     flatGroup('Patch', 'routing', (body) => {
@@ -1555,17 +1586,18 @@ function updateInspector() {
   // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
   // a re-click). Re-focus the same field's input by its label after re-appending.
   const ae = document.activeElement;
-  let focusKey = null, selStart = null, selEnd = null;
+  let focusKey = null, vtxKey = null, selStart = null, selEnd = null;
   if (ae && ae.tagName === 'INPUT' && fxBodyEl.contains(ae)) {
     focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
+    vtxKey = ae.dataset?.vtx || null;   // per-vertex XYZ table cells key by "row:axis"
     try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
   }
   fxBodyEl.textContent = '';
   if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
   else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
-  if (focusKey) {
-    const fld = [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
-    const inp = fld?.querySelector('input');
+  if (focusKey || vtxKey) {
+    const fld = focusKey && [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
+    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`) : fld?.querySelector('input');
     if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number input */ } }
   }
   updateStageInsets();

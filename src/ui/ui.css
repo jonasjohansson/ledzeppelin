@@ -225,6 +225,17 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    the top. */
 .output-edit:first-child { margin-top: 0; border-top: none; padding-top: 0; }
 .output-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+/* Per-vertex XYZ table (polyline fixture editor): vertex # + X/Y/Z px columns.
+   Inputs match the .fx-field chrome; Z is height off the canvas plane (3D). */
+.vtx-grid { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 2px 4px; align-items: center; margin-bottom: var(--s2); }
+.vtx-grid .vtx-h { font: var(--fw-med) var(--fs-micro) var(--sans); color: var(--faint); text-transform: uppercase; letter-spacing: var(--ls-caps); text-align: right; padding-right: 3px; }
+.vtx-grid .vtx-h:first-child { text-align: left; }
+.vtx-grid .vtx-idx { font: var(--fs-micro) var(--mono); color: var(--faint); padding-right: 3px; }
+.vtx-grid input {
+  min-width: 0; width: 100%; box-sizing: border-box; text-align: right;
+  background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
+  border-radius: var(--radius); height: var(--ctrl-h); padding: 0 5px; font: var(--fs-ctrl) var(--mono);
+}
 /* Fixtures inputs reuse the shared .fx-field input chrome (same as Design) — no
    override here, so the two panels match. Hide number-input spinner arrows so a
    number field reads like the Design readouts (clean, no native chrome). */

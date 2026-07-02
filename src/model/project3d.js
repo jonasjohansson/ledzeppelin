@@ -104,6 +104,52 @@ export function cameraBasis(cam) {
   return { r, u, f };
 }
 
+// unproject(u, v, cam): the world-space RAY through the screen point (u, v) —
+// the inverse of projectFramed, for dragging vertices in the 3D viewport.
+// Returns { origin, dir } (dir unit length). Perspective: origin = the eye,
+// dir through the film point. Ortho: origin = the film point on the camera
+// plane, dir = forward (parallel rays). The FLAT camera is not a viewport
+// camera (it has no eye), so it returns null — 2D mode never unprojects.
+export function unproject(u, v, cam) {
+  if (!cam || cam.mode === 'flat') return null;
+  const f = normalize(sub(cam.target, cam.pos)); // forward
+  const r = normalize(cross(f, cam.up));          // right
+  const up = cross(r, f);                          // true up (unit)
+  const ndcx = u * 2 - 1;
+  const ndcy = 1 - v * 2;                          // v grows downward on screen
+  if (cam.mode === 'ortho') {
+    const ox = ndcx * (cam.orthoHeight * cam.aspect) / 2;
+    const oy = ndcy * cam.orthoHeight / 2;
+    return {
+      origin: [cam.pos[0] + r[0] * ox + up[0] * oy,
+        cam.pos[1] + r[1] * ox + up[1] * oy,
+        cam.pos[2] + r[2] * ox + up[2] * oy],
+      dir: f,
+    };
+  }
+  const t = Math.tan((cam.fov * Math.PI / 180) / 2);
+  const dx = ndcx * t * cam.aspect, dy = ndcy * t;
+  return {
+    origin: [cam.pos[0], cam.pos[1], cam.pos[2]],
+    dir: normalize([f[0] + r[0] * dx + up[0] * dy,
+      f[1] + r[1] * dx + up[1] * dy,
+      f[2] + r[2] * dx + up[2] * dy]),
+  };
+}
+
+// rayPlaneZ(ray, z): intersect a ray with the HORIZONTAL plane at height z
+// (world z = height off the canvas plane). Returns [x, y, z] with z exact, or
+// null when the ray is parallel to the plane or the hit is behind the origin —
+// so a drag can simply keep the previous position on a degenerate frame.
+export function rayPlaneZ(ray, z) {
+  if (!ray) return null;
+  const dz = ray.dir[2];
+  if (Math.abs(dz) < 1e-9) return null;              // parallel — no hit
+  const t = (z - ray.origin[2]) / dz;
+  if (t <= 0) return null;                           // behind the ray origin
+  return [ray.origin[0] + ray.dir[0] * t, ray.origin[1] + ray.dir[1] * t, z];
+}
+
 // Vector helpers (3-component arrays).
 function sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }

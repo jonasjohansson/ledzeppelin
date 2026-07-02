@@ -94,6 +94,54 @@ test('orbitCamera clamps elevation and distance to the orbit limits', () => {
   assert.ok(Math.hypot(near.pos[0] - 0.5, near.pos[1] - 0.5, near.pos[2]) > 0.49);
 });
 
+// --- unproject + rayPlaneZ (Phase 3: dragging vertices in the 3D viewport) ----
+import { unproject, rayPlaneZ } from '../src/model/project3d.js';
+
+test('unproject round-trips project through the orbit camera (perspective)', () => {
+  // Project a known world point, unproject the resulting UV, and intersect the
+  // ray with the horizontal plane at the point's z → recovers the point.
+  const cam = orbitCamera({ az: -30, el: 20, dist: 1.6 }, 1);
+  for (const P of [[0.3, 0.7, 0.25], [0.5, 0.5, 0], [0.9, 0.1, 0.6]]) {
+    const [u, v] = project(P, cam);
+    const ray = unproject(u, v, cam);
+    const hit = rayPlaneZ(ray, P[2]);
+    assert.ok(hit, `plane hit exists for ${JSON.stringify(P)}`);
+    for (let i = 0; i < 3; i++) assert.ok(Math.abs(hit[i] - P[i]) < 1e-6, `${JSON.stringify(P)}[${i}] → ${hit[i]}`);
+  }
+});
+
+test('unproject round-trips through an ortho camera too', () => {
+  const cam = orthoCamera({ pos: [0.5, 0.5, -1], target: [0.5, 0.5, 0], up: [0, -1, 0], orthoHeight: 1, aspect: 1 });
+  const P = [0.2, 0.8, 0.3];
+  const [u, v] = project(P, cam);
+  const hit = rayPlaneZ(unproject(u, v, cam), P[2]);
+  assert.ok(hit);
+  for (let i = 0; i < 3; i++) assert.ok(Math.abs(hit[i] - P[i]) < 1e-6);
+});
+
+test('unproject respects aspect (non-square viewport)', () => {
+  const cam = orbitCamera({ az: 40, el: 35, dist: 2 }, 16 / 9);
+  const P = [0.6, 0.4, 0.15];
+  const [u, v] = project(P, cam);
+  const hit = rayPlaneZ(unproject(u, v, cam), P[2]);
+  assert.ok(hit);
+  for (let i = 0; i < 3; i++) assert.ok(Math.abs(hit[i] - P[i]) < 1e-6);
+});
+
+test('rayPlaneZ: parallel ray → null; hit behind the origin → null', () => {
+  // Parallel: a ray running horizontally never meets a z-plane above/below it.
+  assert.equal(rayPlaneZ({ origin: [0, 0, 0.5], dir: [1, 0, 0] }, 0), null);
+  // Behind: the orbit camera looks DOWN at the plane; a plane far above the
+  // camera is behind the ray (t < 0).
+  const cam = orbitCamera({ az: 0, el: 30, dist: 1.6 }, 1);
+  const ray = unproject(0.5, 0.5, cam);
+  assert.equal(rayPlaneZ(ray, 10), null);
+});
+
+test('unproject of the flat camera is null (2D mode has no viewport ray)', () => {
+  assert.equal(unproject(0.5, 0.5, flatCamera()), null);
+});
+
 test('cameraBasis returns unit right/up/forward for pan gestures', () => {
   const { r, u, f } = cameraBasis(orbitCamera({ az: -30, el: 20, dist: 1.6 }, 1));
   const len = (a) => Math.hypot(a[0], a[1], a[2]);
