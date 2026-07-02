@@ -24,6 +24,7 @@ import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness } from './model/fixture-transform.js';
+import { toggleView3d } from './model/project3d.js';
 import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
@@ -191,6 +192,7 @@ function restoreShow(s) {
   rebuild(s);
   saveShow(show);   // persist the reverted state — else a reload resurrects the pre-undo show
   panel?.refresh?.(); layerPanel?.refresh?.(); renderOutput(); redrawOverlay();
+  syncMode3d?.();   // an undone/redone 2D↔3D flip must re-sync the corner button (hoisted fn)
   undoSuppress = false;
   undoLastAt = 0;
 }
@@ -1907,6 +1909,31 @@ wallBtn?.addEventListener('click', () => setWallView(!wallView));
 
 setWallView(wallView);
 
+// --- 3D mode (corner cube): view the rig in 3D through an orbit camera. -------
+// Phase 2 is a VIEWPORT: the projection camera stays FLAT, so the SAMPLED OUTPUT
+// (what the LEDs get) is IDENTICAL in both modes — 3D mode currently views the
+// rig in 3D; output still projects flat-front (the projection-camera placement
+// UI is a later phase). The mode lives in composition.view3d (persisted with the
+// show; flips are undoable). The orbit az/el/dist is view-only state — orbit
+// drags save WITHOUT entering undo history (like zoom/pan, it's not an edit).
+const mode3dBtn = document.getElementById('mode3d-btn');
+const is3D = () => show.composition?.view3d?.mode === '3d';
+// Reflect the CURRENT show's mode on the button + overlay (also called after
+// undo/redo/open, where the mode may change without a click).
+function syncMode3d() {
+  mode3dBtn?.classList.toggle('on', is3D());
+  redrawOverlay();
+}
+function toggleMode3d() {
+  snapshotForUndo(show);              // a mode flip is an undoable edit
+  show = toggleView3d(show);
+  saveShow(show);
+  if (is3D() && !overlayVisible) setOverlay(true);   // the 3D scene draws on the fixture overlay
+  syncMode3d();
+}
+mode3dBtn?.addEventListener('click', toggleMode3d);
+syncMode3d();   // reflect a persisted 3D mode on load
+
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed
 // to its aspect, never cropped (CSS) — then you zoom/pan freely on top. The ⤢ pill
 // resets back to that fitted view. No fit-mode toggle.)
@@ -3182,6 +3209,7 @@ const TOPBAR_CAPTIONS = {
   'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
   'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
+  'mode3d-btn': '3D',
   'daemon-chip': 'Offline', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
 };
 for (const [id, label] of Object.entries(TOPBAR_CAPTIONS)) {

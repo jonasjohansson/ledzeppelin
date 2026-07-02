@@ -39,3 +39,30 @@ test('perspective aspect 2: horizontal offsets halve, vertical unchanged', () =>
   const [, vs] = project([0.5, 0.0, 0], sq);
   assert.ok(Math.abs(vw - vs) < 1e-9);         // vertical scale identical
 });
+
+// --- the 2D/3D mode toggle (pure state helper behind the top-bar button) ----
+import { toggleView3d, DEFAULT_ORBIT } from '../src/model/project3d.js';
+
+test('toggleView3d: first entry initializes a FLAT projection camera + default orbit', () => {
+  const show = { composition: { canvas: { w: 100, h: 100 } } };
+  const next = toggleView3d(show);
+  const v = next.composition.view3d;
+  assert.equal(v.mode, '3d');
+  // Phase 2 is a VIEWPORT: the projection camera stays FLAT so the sampled
+  // output is identical in both modes (camera placement UI is Phase 5).
+  assert.equal(v.projectionCamera.mode, 'flat');
+  assert.deepEqual(v.orbit, DEFAULT_ORBIT);
+  assert.notEqual(next, show);                      // pure — new object
+  assert.equal(show.composition.view3d, undefined); // input untouched
+});
+
+test('toggleView3d: leaving 3D sets mode 2d but keeps camera + orbit for re-entry', () => {
+  const orbit = { az: 45, el: 30, dist: 2.2, target: [0.5, 0.5, 0] };
+  const in3d = { composition: { view3d: { mode: '3d', projectionCamera: flatCamera(), orbit } } };
+  const back = toggleView3d(in3d);
+  assert.equal(back.composition.view3d.mode, '2d');
+  assert.deepEqual(back.composition.view3d.orbit, orbit);   // orbit survives
+  const again = toggleView3d(back);
+  assert.equal(again.composition.view3d.mode, '3d');
+  assert.deepEqual(again.composition.view3d.orbit, orbit);  // re-entry restores the view
+});

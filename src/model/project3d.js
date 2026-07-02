@@ -25,6 +25,31 @@ export function cameraFromView3d(view3d) {
   return flatCamera();
 }
 
+// Default ORBIT (view-only inspect camera) for a fresh 3D view: a gentle
+// over-the-shoulder three-quarter view of the canvas plane.
+export const DEFAULT_ORBIT = { az: -30, el: 20, dist: 1.6 };
+
+// toggleView3d(show): flip composition.view3d.mode between '2d' and '3d' (pure —
+// returns a new show). Entering 3D initializes (or reuses) the view state:
+//   • projectionCamera: FLAT — Phase 2's 3D mode is a VIEWPORT (arrange/inspect
+//     the rig in 3D); the OUTPUT still projects flat-front, so the sampled UVs
+//     are byte-identical in both modes. The projection-camera placement UI is a
+//     later phase (then this default changes to a placeable front-ortho camera).
+//   • orbit: az/el/dist of the view-only inspect camera (persisted so the view
+//     survives a mode round-trip and a reload).
+// Leaving 3D keeps the camera + orbit so re-entering restores the same view.
+export function toggleView3d(show) {
+  const comp = show.composition || {};
+  const cur = comp.view3d;
+  const entering = !cur || cur.mode !== '3d';
+  const view3d = entering
+    ? { ...cur, mode: '3d',
+        projectionCamera: cur?.projectionCamera ?? flatCamera(),
+        orbit: cur?.orbit ?? { ...DEFAULT_ORBIT } }
+    : { ...cur, mode: '2d' };
+  return { ...show, composition: { ...comp, view3d } };
+}
+
 // perspectiveCamera: a pinhole camera framing the world with a vertical FOV.
 // pos: eye position, target: look-at point, up: world up (default +y),
 // fov: vertical field of view in degrees, aspect: width/height (default 1).

@@ -79,6 +79,8 @@ canvas{display:block}</style>
   <symbol id="ic-panel-bottom" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 14h12v3H6z"/></symbol>
   <symbol id="ic-rotate" viewBox="0 0 24 24"><path d="M16 4h2v6h-2zm-2-2h2v2h-2zm0 2h2v8h-2zM4 8H2v5h2z"/><path d="M2 6h18v2H2zm6 14H6v-6h2zm2 2H8v-2h2zm0-2H8v-8h2zm10-4h2v-5h-2z"/><path d="M22 18H4v-2h18z"/></symbol>
   <symbol id="ic-scan" viewBox="0 0 24 24"><path d="M22 22h-2v-2h2v2Zm-2-2h-2v-2h2v2Zm-6-2H6v-2h8v2Zm4 0h-2v-2h2v2ZM6 16H4v-2h2v2Zm10 0h-2v-2h2v2ZM4 14H2V6h2v8Zm14 0h-2V6h2v8ZM6 6H4V4h2v2Zm10 0h-2V4h2v2Zm-2-2H6V2h8v2Z"/></symbol>
+  <!-- Pixel cube (axonometric box) — the 2D/3D mode toggle. -->
+  <symbol id="ic-3d" viewBox="0 0 24 24"><path d="M4 8h12v2H4zM4 10h2v8H4zM4 18h12v2H4zM14 10h2v8h-2zM8 2h12v2H8zM6 4h2v2H6zM4 6h2v2H4zM18 4h2v12h-2zM16 6h2v2h-2zM16 16h2v2h-2z"/></symbol>
 </svg>
 <!-- TOP BAR: a full-width strip of window/settings controls. Button ids are kept
      identical to the old corner cluster so every handler (wired by id in app.js)
@@ -113,6 +115,7 @@ canvas{display:block}</style>
     <button id="grid-btn" class="g-icon" title="show/hide the alignment grid"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
     <button id="color-btn" class="g-icon" title="tint fixtures by controller colour"><svg class="ic" aria-hidden="true"><use href="#ic-colour"/></svg></button>
     <button id="wall-btn" class="g-icon" title="output preview — dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
+    <button id="mode3d-btn" class="g-icon" title="3D mode — arrange &amp; view the rig in 3D (output still projects flat-front)"><svg class="ic" aria-hidden="true"><use href="#ic-3d"/></svg></button>
   </div>
   <!-- Far-right cluster: help + bug report + install/update. -->
   <div class="corner-row" id="corner-right">
