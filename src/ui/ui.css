@@ -1700,3 +1700,15 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .accent-swatch:hover { opacity: .75; }
 .accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
 #system-settings .fx-add { margin-top: 8px; }
+
+/* --- UPPERCASE chrome (C6) --------------------------------------------------
+   App-authored text reads uppercase (System85's lowercase looks odd in chrome);
+   user-entered names stay as typed. Tabs, section titles, group labels and the
+   top-bar captions are already uppercase above — this covers the rest. */
+button { text-transform: uppercase; }              /* all app-authored button labels */
+.fx-menu-item { text-transform: none; }            /* EXCEPT preset menus — user-authored names */
+.lr-name { text-transform: none; }                 /* fixture/clip display names — user-authored */
+.menu-item { text-transform: uppercase; }          /* dropdown menu entries */
+.fx-field > span:first-child { text-transform: uppercase; }   /* parameter labels */
+.fx-badge { text-transform: uppercase; }           /* count/range badges ('px' → 'PX' is fine) */
+.knob-label { text-transform: uppercase; }         /* dashboard knob captions ('Link 1' …) */
