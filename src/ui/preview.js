@@ -1492,6 +1492,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       if (!hit3 || hit3.vertex != null || hit3.control || hit3.seg == null) return;
       const f = (getShow().fixtures || []).find((x) => x.id === hit3.fxId);
       if (isBezierFixture(f?.input)) return;   // a quadratic has no insertable vertices
+      // Only EXISTING polylines take new vertices — a dblclick no longer converts
+      // a bar (polyline isn't offered anymore; arcs are bezier's job, and the rig's
+      // runs are straight). Legacy/imported polylines stay fully editable.
+      if (!isPolylineFixture(f?.input)) return;
       const pts3 = pts3Of(f?.input?.points || []);
       const a = pts3[hit3.seg], b = pts3[hit3.seg + 1];
       if (!a || !b) return;
@@ -1503,6 +1507,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     }
     const hit = hitTest(ev);
     if (!hit || hit.vertex != null || hit.control || hit.bez) return;
+    // Same rule as 3D: dblclick adds vertices to EXISTING polylines only — it no
+    // longer converts a bar into one.
+    const f2 = (getShow().fixtures || []).find((x) => x.id === hit.fxId);
+    if (!isPolylineFixture(f2?.input)) return;
     const [nx, ny] = norm(ev);
     const next = addFixtureVertex(getShow(), hit.fxId, hit.seg ?? 0, [nx, ny]);
     onCommit?.(next);
