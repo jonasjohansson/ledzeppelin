@@ -774,7 +774,7 @@ const expandedDevices = new Set();   // controllers the user has OPENED (default
 // The returned appliers are re-run by the lz-settings bus handler below when the
 // Settings popout writes new keys. Snap + grid stay here: their state is read
 // per-frame by redrawOverlay and mutated by the drag machinery + settings bus.
-const prefs = initPrefs({ preview, renderOutput, redrawOverlay });
+const prefs = initPrefs({ preview, redrawOverlay });
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');

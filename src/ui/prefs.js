@@ -4,7 +4,7 @@
 // appliers. Extracted verbatim (no behavior change) behind the same hooks
 // pattern as createSettingsPanel: everything window-specific arrives explicitly.
 //
-//   initPrefs({ preview, renderOutput, redrawOverlay }) → {
+//   initPrefs({ preview, redrawOverlay }) → {
 //     applyAccent, savedAccent, applyContrast,
 //     setUiScale, savedScale, setTranslucency, savedTranslucency,
 //     applyTips, setNativeCtxMenu,
@@ -16,9 +16,11 @@
 // showGrid) is read per-frame by the overlay redraw and mutated by drag
 // machinery + the settings bus — it lives with that code in app.js.
 
-export function initPrefs({ preview, renderOutput, redrawOverlay }) {
-  // Controller-colour tint for the UI (preview chrome + placement-list swatches).
-  // Toggled from the corner "▢ color" button; persisted. Default ON.
+export function initPrefs({ preview, redrawOverlay }) {
+  // Controller-colour tint for the fixture CHROME on the preview canvas. (The Output
+  // list's controller dots/swatches always show gdev.color regardless of this toggle,
+  // so only the preview redraws.) Toggled from the corner "▢ color" button; persisted.
+  // Default ON.
   let controllerTint = (() => { try { return localStorage.getItem('lz.tint') !== '0'; } catch { return true; } })();
   const colorBtn = document.getElementById('color-btn');
   function setControllerTint(on) {
@@ -26,10 +28,10 @@ export function initPrefs({ preview, renderOutput, redrawOverlay }) {
     try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
     if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
     preview?.setColorTint?.(controllerTint);
-    renderOutput(); redrawOverlay();
+    redrawOverlay();   // tint only affects the preview chrome, not the Output list
   }
   colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
-  // Initial sync (preview exists; the startup renderOutput reads controllerTint).
+  // Initial sync (preview pushes the persisted tint into its chrome).
   if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
   preview?.setColorTint?.(controllerTint);
 
