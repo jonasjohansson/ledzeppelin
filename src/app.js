@@ -789,6 +789,26 @@ colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
 // Initial sync (preview exists; the startup renderOutput reads controllerTint).
 if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
 preview?.setColorTint?.(controllerTint);
+// OUTLINES: fixture outline strokes on the stage (2D footprints AND the 3D strip
+// curves). Off = light-only — just the lit cells/dots at full strength; the
+// selected fixture keeps its chrome so it stays editable. Persisted view pref.
+// (Reads the retired lz.wires3d key as a fallback — it shipped briefly as a
+// 3D-only "Wires" chip before becoming this top-bar toggle.)
+let fixtureOutlines = (() => {
+  try { return (localStorage.getItem('lz.outlines') ?? localStorage.getItem('lz.wires3d')) !== '0'; }
+  catch { return true; }
+})();
+const outlineBtn = document.getElementById('outline-btn');
+function setFixtureOutlines(on) {
+  fixtureOutlines = !!on;
+  try { localStorage.setItem('lz.outlines', fixtureOutlines ? '1' : '0'); } catch { /* ignore */ }
+  if (outlineBtn) outlineBtn.classList.toggle('on', fixtureOutlines);
+  preview?.setOutlines?.(fixtureOutlines);
+  redrawOverlay();
+}
+outlineBtn?.addEventListener('click', () => setFixtureOutlines(!fixtureOutlines));
+if (outlineBtn) outlineBtn.classList.toggle('on', fixtureOutlines);
+preview?.setOutlines?.(fixtureOutlines);
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');
@@ -2139,23 +2159,8 @@ if (projRow) {
   fg.classList.toggle('on', fieldGhosts);
   projRow.append(fg);
 }
-// WIRES: fixture outline strokes in the 3D viewport. Off = light-only — just the
-// lit LED dots at full strength (the selected fixture keeps its chrome so it stays
-// editable). Same view-only pref pattern as FIELDS.
-let wires3d = (() => { try { return localStorage.getItem('lz.wires3d') !== '0'; } catch { return true; } })();
-if (projRow) {
-  const wb = oel('button', { className: 'dir-btn proj-fields', textContent: 'Wires', id: 'wires-3d-btn',
-    title: 'fixture outlines in the viewport — off shows only the actual light (LED dots)',
-    onclick: () => {
-      wires3d = !wires3d;
-      try { localStorage.setItem('lz.wires3d', wires3d ? '1' : '0'); } catch { /* private mode */ }
-      wb.classList.toggle('on', wires3d);
-      preview?.setWires?.(wires3d);
-    } });
-  wb.classList.toggle('on', wires3d);
-  projRow.append(wb);
-}
-preview?.setWires?.(wires3d);
+// (The fixture-outlines toggle lives in the top bar — see setFixtureOutlines by
+//  the Tint wiring; it covers 2D and 3D, so no 3D-only chip here.)
 syncMode3d();   // reflect a persisted 3D mode on load
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed
@@ -3382,7 +3387,7 @@ const TOPBAR_CAPTIONS = {
   'menu-guide': 'Guide',
   'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
-  'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
+  'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'outline-btn': 'Outlines', 'wall-btn': 'Preview',
   'mode3d-btn': '3D',
   'daemon-chip': 'Offline', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
 };

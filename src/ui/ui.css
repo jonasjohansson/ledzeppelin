@@ -37,6 +37,7 @@
   --accent-line:#54402b;       /* active border */
   --readout:#d7dbe0;           /* numeric readouts — neutral (one step under --text) */
   --danger:#ff6b6b;
+  --warn:#cfa14f;              /* soft amber — advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
   --accent-dark:#07151f;       /* dark text/glyph ON an accent-filled surface */
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
@@ -817,7 +818,7 @@ body.gui-hidden #show-ui-pill { display: block; }
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
-.fx-badge.out-over { color: var(--danger); border-color: var(--danger); }   /* output over capacity */
+.fx-badge.out-over { color: var(--warn); }   /* output over its fps budget — advisory, not an error (border stays quiet) */
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
@@ -948,7 +949,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-group-dev:hover { text-decoration: underline; }
 .out-group-port { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); opacity: .8; }
 .out-group .out-chain { color: var(--accent); }
-.out-group .out-over { color: var(--danger); }
+.out-group .out-over { color: var(--warn); }
 
 /* === Output Fixtures list (merged tab) =====================================
    Same card chrome as the Inventory rows (full-width cells: fill + hairline), so
@@ -985,7 +986,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-binding:hover { color: var(--muted); }
 .out-tri { flex: 0 0 auto; width: 9px; color: var(--faint); font-size: var(--fs-micro); }
 .out-badge { flex: 0 0 auto; color: var(--muted); font: var(--fs-micro) var(--mono); font-variant-numeric: tabular-nums; }
-.out-badge.out-over { color: var(--danger); }
+.out-badge.out-over { color: var(--warn); }
 
 .out-stagger { padding: 2px 0 6px; }
 .out-stagger-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }

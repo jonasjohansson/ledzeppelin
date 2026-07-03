@@ -58,6 +58,8 @@ canvas{display:block}</style>
   <symbol id="ic-eye" viewBox="0 0 24 24"><path d="M16 20H8v-2h8v2Zm-8-2H4v-2h4v2Zm12 0h-4v-2h4v2ZM4 16H2v-2h2v2Zm10-6h-2v2h2v-2h2v4h-2v2h-4v-2H8v-4h2V8h4v2Zm8 6h-2v-2h2v2ZM2 14H0v-4h2v4Zm22 0h-2v-4h2v4ZM4 10H2V8h2v2Zm18 0h-2V8h2v2ZM8 8H4V6h4v2Zm12 0h-4V6h4v2Zm-4-2H8V4h8v2Z"/></symbol>
   <symbol id="ic-eye-off" viewBox="0 0 24 24"><path d="M0 10h2v4H0zm24 0h-2v4h2zm-8 0h-2v2h2zm-6 0H8v4h2zM2 8h2v2H2zm0 8h2v-2H2zm20-8h-2v2h2zm0 8h-2v-2h2zM4 6h4v2H4zm0 12h4v-2H4zM20 6h-4v2h4zM10 4h6v2h-6zM8 20h8v-2H8zm4-12h2v2h-2zm-2 6h4v2h-4zM8 8h2v2H8zm2 2h2v4h-2zm2 2h2v2h-2z"/><path d="M6 6h2v2H6zM4 4h2v2H4zM2 2h2v2H2zm12 12h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2zm2 2h2v2h-2z"/></symbol>
   <symbol id="ic-snap" viewBox="0 0 24 24"><path d="M5 4h14v4H5zM5 8h5v11H5zm9 0h5v11h-5z"/></symbol>
+  <!-- Dashed frame — fixture OUTLINES toggle (matches the dashed footprint strokes). -->
+  <symbol id="ic-outline" viewBox="0 0 24 24"><path d="M3 3h4v2H3zm7 0h4v2h-4zm7 0h4v2h-4zM3 19h4v2H3zm7 0h4v2h-4zm7 0h4v2h-4zM3 7h2v4H3zm0 6h2v4H3zM19 7h2v4h-2zm0 6h2v4h-2z"/></symbol>
   <symbol id="ic-grid" viewBox="0 0 24 24"><path d="M2 2h20v2H2zm0 18h20v2H2zM2 4h2v16H2zm18 0h2v16h-2zM4 8h16v2H4zm0 6h16v2H4z"/><path d="M8 4h2v16H8zm6 0h2v16h-2z"/></symbol>
   <symbol id="ic-library" viewBox="0 0 24 24"><path d="M2 4h20v2H2zM2 6h2v4H2zm18 0h2v4h-2zM4 8h16v2H4zm0 2h2v8H4zm14 0h2v8h-2zM4 18h16v2H4zM9 12h6v2H9z"/></symbol>
   <symbol id="ic-fixture" viewBox="0 0 24 24"><path d="M2 10h4v4H2zm6 0h4v4H8zm6 0h4v4h-4zm6 0h2v4h-2z"/></symbol>
@@ -114,6 +116,7 @@ canvas{display:block}</style>
     <button id="snap-btn" class="g-icon" title="snap fixtures to each other & the grid"><svg class="ic" aria-hidden="true"><use href="#ic-snap"/></svg></button>
     <button id="grid-btn" class="g-icon" title="show/hide the alignment grid"><svg class="ic" aria-hidden="true"><use href="#ic-grid"/></svg></button>
     <button id="color-btn" class="g-icon" title="tint fixtures by controller colour"><svg class="ic" aria-hidden="true"><use href="#ic-colour"/></svg></button>
+    <button id="outline-btn" class="g-icon" title="fixture outlines — off shows only the light (the selected fixture stays editable)"><svg class="ic" aria-hidden="true"><use href="#ic-outline"/></svg></button>
     <button id="wall-btn" class="g-icon" title="output preview — dim the composite; the fixtures' pixels light up with what they sample"><svg class="ic" aria-hidden="true"><use href="#ic-live"/></svg></button>
     <button id="mode3d-btn" class="g-icon" title="3D mode — arrange &amp; view the rig in 3D; pick a Projection preset to shape the output sampling"><svg class="ic" aria-hidden="true"><use href="#ic-3d"/></svg></button>
   </div>
