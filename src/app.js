@@ -26,7 +26,7 @@ import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl, setBezierArcZ } from './model/fixture-transform.js';
 import { isBezierFixture } from './model/bezier.js';
-import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX } from './model/project3d.js';
+import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, resetOrbit } from './model/project3d.js';
 import { chainOf, pruneChains, wireAfter, wireFirst } from './model/chains.js';   // (freePort moved with the chain action → output-list.js)
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
@@ -1927,6 +1927,17 @@ if (projRow) {
 }
 // (The fixture-outlines toggle lives in the top bar — see setFixtureOutlines by
 //  the Tint wiring; it covers 2D and 3D, so no 3D-only chip here.)
+// RESET VIEW — snap the orbit camera back to its default framing (angle + zoom +
+// centre). Only the view-only orbit moves; sampling (front-ortho in 3D) is fixed.
+if (projRow) {
+  const rv = oel('button', { className: 'dir-btn proj-reset', textContent: '⟲', title: 'reset the 3D view — orbit angle, zoom & centre' });
+  rv.addEventListener('click', () => {
+    const next = resetOrbit(show);
+    if (next === show) return;
+    show = next; saveShow(show); redrawOverlay();
+  });
+  projRow.append(rv);
+}
 syncMode3d();   // reflect a persisted 3D mode on load
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed
