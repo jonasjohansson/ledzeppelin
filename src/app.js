@@ -32,7 +32,7 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, audioEnabled, registerMediaElement, unregisterMediaElement } from './model/audio.js';
+import { updateAudio, setAudioGain, enableAudio, audioEnabled } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
@@ -42,6 +42,7 @@ import { confirmDelete } from './ui/confirm.js';
 import { initPrefs } from './ui/prefs.js';
 import { createOutputList } from './ui/output-list.js';
 import { createProjectIO } from './ui/project-io.js';
+import { createVideoRuntime } from './ui/video.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -2565,48 +2566,10 @@ setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch {
 // the dock in fixture-editing (output) mode via setOverlay.
 setOverlay(true);
 
-// --- Video clips: a <video> element + GL texture per video clip (runtime only;
-// the show stores only the object URL). syncVideos() reconciles the map with the
-// show each frame; uploadVideos() pushes the current frame into each texture.
-const videoMap = new Map(); // clipId → { url, el, tex }
-function syncVideos() {
-  const clips = [];
-  for (const L of show.composition?.layers || []) for (const c of L.clips || []) {
-    if (c && c.generator === 'video' && c.videoUrl) clips.push(c);
-  }
-  if (!clips.length && !videoMap.size) return;   // no video clips, nothing mapped → nothing to do
-  const live = new Set(clips.map((c) => c.id));
-  for (const [id, v] of videoMap) {
-    if (!live.has(id)) { unregisterMediaElement(v.el); try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
-  }
-  for (const c of clips) {
-    const existing = videoMap.get(c.id);
-    if (existing && existing.url === c.videoUrl) continue;
-    if (existing) { unregisterMediaElement(existing.el); try { existing.el.pause(); } catch { /* ignore */ } gl.deleteTexture(existing.tex); }
-    const el = document.createElement('video');
-    el.src = c.videoUrl; el.loop = true; el.muted = true; el.playsInline = true; el.autoplay = true;
-    el.play().catch(() => { /* will play on first user gesture */ });
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    videoMap.set(c.id, { url: c.videoUrl, el, tex });
-    registerMediaElement(el);   // so the 'composition' audio source can analyse it
-  }
-}
-function uploadVideos() {
-  if (!videoMap.size) return;
-  for (const v of videoMap.values()) {
-    if (v.el.readyState >= 2 && v.el.videoWidth) {
-      gl.bindTexture(gl.TEXTURE_2D, v.tex);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v.el); } catch { /* not ready */ }
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-  }
-}
-const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
+// Video-clip runtime (a <video> element + GL texture per video clip) lives in
+// src/ui/video.js — the loop calls sync/upload per frame, the compositor samples
+// via videos.videoTex, and the GL-loss handler clears the dead textures.
+const videos = createVideoRuntime({ getShow: () => show, gl });
 
 // Compositor is ready immediately (programs compile lazily on first render).
 rebuild(show);
@@ -2660,7 +2623,7 @@ function loopBody(ts) {
     if (ab.show !== show) { show = ab.show; if (!bindSaveTimer) bindSaveTimer = setTimeout(() => { bindSaveTimer = null; saveShow(show); }, 400); if (ab.fired) layerPanel?.refresh?.(); }
     prevBindCh = { ...chNow };
   }
-  syncVideos(); uploadVideos();
+  videos.syncVideos(); videos.uploadVideos();
   // Always composite + draw to the stage, even with NO fixtures/sampler — the
   // sampling + DDP send below are individually guarded on `sampler`. (Gating the
   // whole block on `sampler` left the stage black until a fixture was placed.)
@@ -2729,7 +2692,7 @@ function loopBody(ts) {
     // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
     // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
-      trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs: undefined,
+      trigSecs: pulseTrigSecs, videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
@@ -2835,7 +2798,7 @@ function rebuildGL() {
     screenProg = program(gl, SCREEN_FS);
     uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
     compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
-    videoMap.clear();                        // video textures are gone → recreated on next upload
+    videos.clearTextures();                  // video textures are gone → recreated on next upload
     refreshSampler();                        // rebuild the output sampler against the new context
   } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
 }
