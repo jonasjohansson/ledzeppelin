@@ -127,6 +127,11 @@ export function createPreview(canvasEl, opts = {}) {
   let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
   let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
   function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // Wires chip (3D): off = light-only viewport — no fixture outline strokes, just the
+  // lit LED dots at full strength (the SELECTED fixture keeps its chrome so it stays
+  // editable). Grid + canvas plane stay: neutral orientation, not fixture colour.
+  let wireChrome = true;
+  function setWires(on) { wireChrome = !!on; chromeKey = null; }
   // Live view: show ALL fixtures' cells at full strength (it's the "wall", not the
   // editor — selection-isolation doesn't apply).
   let liveView = false;
@@ -430,8 +435,10 @@ export function createPreview(canvasEl, opts = {}) {
       const pts = pts3[fi];
       const count = pts.length;
       const reversed = !!f.input.reversed;
-      ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
-      const cell = Math.max(1.5, 2.5 * ck);
+      // Light-only (Wires off): every dot at full strength and a touch larger —
+      // the dots ARE the picture once the outlines are gone.
+      ctx.globalAlpha = (!wireChrome || liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
+      const cell = wireChrome ? Math.max(1.5, 2.5 * ck) : Math.max(2, 3.5 * ck);
       let last = '';
       for (let i = 0; i < count; i++) {
         const [u, v] = project(pts[i], cam);
@@ -655,6 +662,7 @@ export function createPreview(canvasEl, opts = {}) {
         const bez = isBezierFixture(f.input);
         const pts3 = pts3Of(geomOf(f));                  // bezier draws its EVALUATED curve
         const selected = isSelected(selectedIds, f.id);
+        if (!wireChrome && !selected) continue;          // light-only: dots carry the scene
         if (f.hidden) {                                  // faint ghost outline
           poly3(pts3, selected ? accCss(.55) : 'rgba(150,156,166,.28)', 1.25 * ck, DASH);
           continue;
@@ -862,7 +870,7 @@ export function createPreview(canvasEl, opts = {}) {
     return p.join('');
   }
 
-  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor, setLiveView, setVolumetrics };
+  return { draw, setRenderScale, setBaseSize, setColorTint, setWires, setAccentColor, setLiveView, setVolumetrics };
 }
 
 // Drag-placement on the Output overlay:

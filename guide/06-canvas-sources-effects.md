@@ -111,7 +111,9 @@ In the 3D viewport each active field also draws a schematic **ghost** in its
 clip's colour — a translucent plane, gradient arrow, wireframe sphere rings, or
 a sparse noise lattice — so you can see *where* the field sits in space even
 where no LED catches it; the **FIELDS** chip in the stage's top-left corner
-toggles the ghosts.
+toggles the ghosts. The **WIRES** chip beside it toggles the fixture outline
+strokes — off gives a light-only viewport where the lit LED dots carry the
+whole scene (the selected fixture keeps its handles so it stays editable).
 
 Beyond the built-ins, LED Zeppelin runs **ISF** shaders (the Interactive Shader
 Format). Two ways to add one:

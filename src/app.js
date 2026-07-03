@@ -1847,7 +1847,7 @@ function renderOutput() {
   };
   // A fixture row — same chrome as the Inventory list rows (.output-row + boxed
   // .fx-badge chips) so the two tabs read alike.
-  const fixtureRow = (f, i, outLabel, devColor) => {
+  const fixtureRow = (f, i, outLabel, devColor, outOverTitle) => {
     const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
     row.dataset.fxid = f.id;
     // Controller identity colour: a subtle 3px left bar (CSS var; the selection
@@ -1866,7 +1866,11 @@ function renderOutput() {
     const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
     if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
     row.append(nameEl);
-    if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
+    if (outLabel) {
+      const ob = oel('span', { className: 'fx-badge' + (outOverTitle ? ' out-over' : ''), textContent: outLabel });
+      if (outOverTitle) ob.title = outOverTitle;
+      row.append(ob);
+    }
     // DMX fixtures badge their Art-Net patch (U{universe}.{address}); pixel strips
     // badge their pixel range.
     row.append(oel('span', { className: 'fx-badge', textContent: isDmxFixture(f) ? `U${f.input.dmx.universe ?? 0}.${f.input.dmx.address ?? 1}` : fixtureRange(f) }));
@@ -1927,11 +1931,21 @@ function renderOutput() {
     }
     const gdev = show.devices.find((d) => d.id === dg.deviceId);
     const devName = gdev?.name || dg.deviceId;
-    const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
+    // Per-OUTPUT loads: the ⚠ is a per-data-line framerate budget (maxPerOutput ≈
+    // 40 fps for WS281x), never a total-device cap — name the offending line(s) in
+    // the tooltip so a big total doesn't read as the problem.
+    const loads = dg.groups.map((g) => ({ port: g.port, px: g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) }));
+    const devPx = loads.reduce((m, l) => m + l.px, 0);
     const gcap = Number(gdev?.maxPerOutput) || 0;
-    const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
+    const overPorts = new Set(loads.filter((l) => gcap > 0 && l.px > gcap).map((l) => l.port));
+    const devOver = overPorts.size > 0;
     const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
       (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
+    const pxBadge = head.querySelector('.fx-badge');
+    if (pxBadge && loads.length) {
+      pxBadge.title = loads.map((l) => `out ${l.port}: ${l.px}${gcap ? `/${gcap}` : ''}px${overPorts.has(l.port) ? ' ⚠' : ''}`).join('  ·  ')
+        + (devOver ? `\n⚠ over the ~40 fps budget on that line — still works, just fewer fps` : '');
+    }
     // Online/offline/checking dot (same machinery as the old Devices list): the panel
     // caches each controller's last health check; renderOutput just paints it. Art-Net
     // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
@@ -1961,7 +1975,11 @@ function renderOutput() {
     dropZone(sec, dg.deviceId, null);
     // Fixtures as flat rows; a multi-output controller tags each row with its output.
     const multiOut = dg.groups.length > 1;
-    for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color));
+    for (const g of dg.groups) {
+      const load = loads.find((l) => l.port === g.port);
+      const overTitle = overPorts.has(g.port) ? `output ${g.port} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
+      for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color, overTitle));
+    }
     outputListEl.append(sec);
   }
 
@@ -2121,6 +2139,23 @@ if (projRow) {
   fg.classList.toggle('on', fieldGhosts);
   projRow.append(fg);
 }
+// WIRES: fixture outline strokes in the 3D viewport. Off = light-only — just the
+// lit LED dots at full strength (the selected fixture keeps its chrome so it stays
+// editable). Same view-only pref pattern as FIELDS.
+let wires3d = (() => { try { return localStorage.getItem('lz.wires3d') !== '0'; } catch { return true; } })();
+if (projRow) {
+  const wb = oel('button', { className: 'dir-btn proj-fields', textContent: 'Wires', id: 'wires-3d-btn',
+    title: 'fixture outlines in the viewport — off shows only the actual light (LED dots)',
+    onclick: () => {
+      wires3d = !wires3d;
+      try { localStorage.setItem('lz.wires3d', wires3d ? '1' : '0'); } catch { /* private mode */ }
+      wb.classList.toggle('on', wires3d);
+      preview?.setWires?.(wires3d);
+    } });
+  wb.classList.toggle('on', wires3d);
+  projRow.append(wb);
+}
+preview?.setWires?.(wires3d);
 syncMode3d();   // reflect a persisted 3D mode on load
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed
