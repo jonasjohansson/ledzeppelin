@@ -127,6 +127,12 @@ export function createPreview(canvasEl, opts = {}) {
   let viewZoom = 1;   // current stage zoom — chrome divides by this to stay a constant SCREEN size
   let colorTint = true;   // tint fixture chrome by controller colour (toggle in the corner)
   function setColorTint(on) { colorTint = !!on; chromeKey = null; }
+  // OUTLINES toggle (2D + 3D): off = light-only stage — no fixture outline strokes
+  // or chain wiring, just the lit cells/dots at full strength (the SELECTED fixture
+  // keeps its chrome so it stays editable). Grid + canvas plane stay in 3D: neutral
+  // orientation, not fixture colour.
+  let outlines = true;
+  function setOutlines(on) { outlines = !!on; chromeKey = null; }
   // Live view: show ALL fixtures' cells at full strength (it's the "wall", not the
   // editor — selection-isolation doesn't apply).
   let liveView = false;
@@ -275,8 +281,9 @@ export function createPreview(canvasEl, opts = {}) {
       const lpm = Number(f.ledsPerMeter)
         || (Number(f.meters) > 0 ? count / Number(f.meters) : 60);
       const litFrac = Math.min(1, Math.max(0.08, 5 * lpm / 1000));
-      // Live view → all cells full (the wall). Otherwise selected → full, rest 22%.
-      ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
+      // Live view / outlines off → all cells full (the light IS the picture).
+      // Otherwise selected → full, rest 22%.
+      ctx.globalAlpha = (!outlines || liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
       if (count >= 1 && rgba) {
         if (isGridFixture(f)) {
           // MATRIX: a filled cell per LED at its grid position. Cell size = the
@@ -430,8 +437,10 @@ export function createPreview(canvasEl, opts = {}) {
       const pts = pts3[fi];
       const count = pts.length;
       const reversed = !!f.input.reversed;
-      ctx.globalAlpha = (liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
-      const cell = Math.max(1.5, 2.5 * ck);
+      // Light-only (Wires off): every dot at full strength and a touch larger —
+      // the dots ARE the picture once the outlines are gone.
+      ctx.globalAlpha = (!outlines || liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
+      const cell = outlines ? Math.max(1.5, 2.5 * ck) : Math.max(2, 3.5 * ck);
       let last = '';
       for (let i = 0; i < count; i++) {
         const [u, v] = project(pts[i], cam);
@@ -655,6 +664,7 @@ export function createPreview(canvasEl, opts = {}) {
         const bez = isBezierFixture(f.input);
         const pts3 = pts3Of(geomOf(f));                  // bezier draws its EVALUATED curve
         const selected = isSelected(selectedIds, f.id);
+        if (!outlines && !selected) continue;            // light-only: dots carry the scene
         if (f.hidden) {                                  // faint ghost outline
           poly3(pts3, selected ? accCss(.55) : 'rgba(150,156,166,.28)', 1.25 * ck, DASH);
           continue;
@@ -753,6 +763,7 @@ export function createPreview(canvasEl, opts = {}) {
       const focusKey = selFx ? runKey(selFx) : null;
       for (const f of drawList) {
         const eps = f.input.points; if (!eps || !eps.length) continue;
+        if (!outlines && !isSelected(selectedIds, f.id)) continue;   // light-only: cells carry the scene
         const reversed = !!f.input.reversed;
         if (f.hidden) {                                  // faint ghost outline
           const onSel = isSelected(selectedIds, f.id);
@@ -830,7 +841,7 @@ export function createPreview(canvasEl, opts = {}) {
         const e = (which === 'in') === !rev ? pp[0] : pp[pp.length - 1];
         return [e[0] * W, e[1] * Hh];
       };
-      for (const ch of runsOf(show)) {
+      for (const ch of (outlines ? runsOf(show) : [])) {   // light-only: no wiring chrome
         if (ch.members.length < 2) continue;
         // Point fixtures (DMX pars) aren't daisy-chained pixel runs → no wiring lines.
         const members = ch.members.map((id) => show.fixtures.find((f) => f.id === id)).filter(Boolean).filter((f) => !isDmxFixture(f));
@@ -862,7 +873,7 @@ export function createPreview(canvasEl, opts = {}) {
     return p.join('');
   }
 
-  return { draw, setRenderScale, setBaseSize, setColorTint, setAccentColor, setLiveView, setVolumetrics };
+  return { draw, setRenderScale, setBaseSize, setColorTint, setOutlines, setAccentColor, setLiveView, setVolumetrics };
 }
 
 // Drag-placement on the Output overlay:

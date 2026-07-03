@@ -32,7 +32,7 @@ swiftc -O -target "$SWIFT_TARGET" scripts/launcher.swift -o "$C/MacOS/ledzeppeli
 chmod +x "$C/MacOS/ledzeppelin"
 
 echo "→ staging web assets into Resources…"
-for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory guide examples; do
+for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory settings guide examples; do
   [ -e "$p" ] && cp -R "$p" "$C/Resources/"
 done
 

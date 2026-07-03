@@ -18,28 +18,31 @@ import { Section } from './ui/section.js';
 import { activateTabs } from './ui/kit/tabs.js';
 import {
   prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
-  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, setCompositionOpacity, addISFClip, addISFEffect,
+  setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, setCompositionOpacity,
   copyName,
 } from './model/layers.js';
-import { parseISF, isfParams, wrapISF } from './engine/shaders/isf.js';
 import { routeOsc } from './model/osc-map.js';
 import { listMappables, bindMapping, clearMapping, setMappingMode, applyBindings } from './model/mappings.js';
 import { buildRemoteManifest } from './model/remote.js';
 import { syncShowFixtures, setFixtureTransform, transformFromPoints, pointsFromTransform, snap90, flipFixture, fixtureLabel, fixtureRange, fitCanvasToFixtures, thicknessOf, isAutoThickness, setFixtureZ, isPolylineFixture, setFixtureVertex, setFixtureShape, setBezierControl, setBezierArcZ } from './model/fixture-transform.js';
 import { isBezierFixture } from './model/bezier.js';
 import { toggleView3d, ORBIT_DIST_MIN, ORBIT_DIST_MAX, resetOrbit } from './model/project3d.js';
-import { chainOf, freePort, pruneChains, wireAfter, wireFirst } from './model/chains.js';
+import { chainOf, pruneChains, wireAfter, wireFirst } from './model/chains.js';   // (freePort moved with the chain action → output-list.js)
 import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, listInputs, registerMediaElement, unregisterMediaElement } from './model/audio.js';
+import { updateAudio, setAudioGain, enableAudio, audioEnabled } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
 import { armStartupRiff } from './ui/startup-riff.js';
 import { VERSION } from './version.js';
-import { confirmDelete, confirmDeletesOn, setConfirmDeletes } from './ui/confirm.js';
+import { confirmDelete } from './ui/confirm.js';
+import { initPrefs } from './ui/prefs.js';
+import { createOutputList } from './ui/output-list.js';
+import { createProjectIO } from './ui/project-io.js';
+import { createVideoRuntime } from './ui/video.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
@@ -466,7 +469,7 @@ const layerPanel = createLayerPanel({
   onLayerSelect: () => setInspectorTab('layer'), // switch to the Layer tab
   onCompositionSelect: () => setInspectorTab('composition'), // switch to the Composition tab
   getISFExamples: () => isfExamples,
-  onAddISF: (file) => importISFExample(file),
+  onAddISF: (file) => projectIO.importISFExample(file),   // deferred — projectIO is constructed later at boot
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -764,31 +767,14 @@ let collapsedDevices = new Set();   // controller groups collapsed in the Device
 let insetRaf = 0;             // rAF handle for the deferred camera re-clamp after a layout change (see updateStageInsets)
 const expandedGroups = new Set();    // device:output groups the user has OPENED (default = collapsed)
 const expandedDevices = new Set();   // controllers the user has OPENED (default = collapsed)
-let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
-// Assign the given fixtures to a device (+ optional output port) and re-pack — the
-// drag-to-assign / drag-to-unassign action (deviceId '' = back to the Unassigned pool).
-function assignFixturesTo(fxIds, deviceId, port) {
-  if (!fxIds || !fxIds.length) return;
-  const n = structuredClone(show);
-  for (const f of n.fixtures) if (fxIds.includes(f.id)) { f.output.deviceId = deviceId; if (port != null) f.output.port = port; }
-  selectedFixtureIds = new Set(fxIds); expandedDevices.add(deviceId);
-  saveShow(n); rebuild(n); panel.refresh(); renderOutput(); redrawOverlay();   // rebuild repacks pixel offsets
-}
-// Controller-colour tint for the UI (preview chrome + placement-list swatches).
-// Toggled from the corner "▢ color" button; persisted. Default ON.
-let controllerTint = (() => { try { return localStorage.getItem('lz.tint') !== '0'; } catch { return true; } })();
-const colorBtn = document.getElementById('color-btn');
-function setControllerTint(on) {
-  controllerTint = !!on;
-  try { localStorage.setItem('lz.tint', controllerTint ? '1' : '0'); } catch { /* ignore */ }
-  if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
-  preview?.setColorTint?.(controllerTint);
-  renderOutput(); redrawOverlay();
-}
-colorBtn?.addEventListener('click', () => setControllerTint(!controllerTint));
-// Initial sync (preview exists; the startup renderOutput reads controllerTint).
-if (colorBtn) colorBtn.classList.toggle('on', controllerTint);
-preview?.setColorTint?.(controllerTint);
+// (Drag-to-assign — dragFxIds + assignFixturesTo — moved into src/ui/output-list.js
+//  with the rest of the Output panel; see createOutputList below.)
+// View & appearance prefs (controller tint, fixture outlines, native right-click,
+// hover tooltips, accent + appearance CSS vars) — extracted to src/ui/prefs.js.
+// The returned appliers are re-run by the lz-settings bus handler below when the
+// Settings popout writes new keys. Snap + grid stay here: their state is read
+// per-frame by redrawOverlay and mutated by the drag machinery + settings bus.
+const prefs = initPrefs({ preview, renderOutput, redrawOverlay });
 // Snap toggle: a viewport corner button (mirrored by the Settings panel).
 // setSnapEnabled keeps both in step.
 const snapBtn = document.getElementById('snap-btn');
@@ -1052,18 +1038,16 @@ function positionEditor(sel) {
       endRow(pts.length - 1, '2'),
     ], 'the arch: two ends + the C(ontrol) in canvas px — raise C’s Z to pull the middle up into a standing arch');
   };
-  // SHAPE row — Bar (straight box) | Bezier (arch). Conversions keep the ends;
-  // entering bezier seeds the control at the chord midpoint. Matrices keep their
-  // grid footprint (no shape row). POLYLINE is no longer offered as a manual
-  // conversion (per feedback) but stays a first-class mode under the hood:
-  // imported LEDger runs with bends are polylines, and double-clicking a bar's
-  // segment still inserts a bend vertex — a polyline fixture shows its chip here
-  // so its state stays legible.
+  // SHAPE row — Bar (straight box) | Bezier (arch), always just those two.
+  // Conversions keep the ends; entering bezier seeds the control at the chord
+  // midpoint. Matrices keep their grid footprint (no shape row). POLYLINE has
+  // no chip at all: it stays a first-class mode under the hood (imported LEDger
+  // runs with bends, double-click still inserts a bend vertex) but a selected
+  // polyline just shows NEITHER chip active — clicking Bar/Bezier converts it.
   const shapeRow = () => {
     const cur = isBezierFixture(sel.input) ? 'bezier' : isPolylineFixture(sel.input) ? 'polyline' : 'bar';
     return oel('div', { className: 'dir-btns shape-row' }, [
       ['bar', 'Bar', 'straight strip — an x/y/w/h/rotation box'],
-      ...(cur === 'polyline' ? [['polyline', 'Polyline', 'bendable multi-segment run (double-click the run to add bends)']] : []),
       ['bezier', 'Bezier', 'quadratic arch — drag the diamond control; in 3D, Alt-drag it up into a standing arch'],
     ].map(([m, label, tip]) => oel('button', {
       className: 'dir-btn' + (m === cur ? ' on' : ''), textContent: label, title: tip,
@@ -1603,24 +1587,7 @@ function chainStatusRow(sel) {
   ]);
 }
 
-// Multi-select action: put the selected fixtures on ONE shared output (a fresh
-// port on the first one's device) so they become a chain.
-function chainSelectedAction() {
-  return oel('div', { className: 'output-edit' }, [
-    oel('button', {
-      className: 'fx-add', textContent: '⛓ chain (same output)',
-      onclick: () => {
-        const ids = [...selectedFixtureIds];
-        const first = show.fixtures.find((f) => f.id === ids[0]); if (!first) return;
-        const devId = first.output?.deviceId || '';
-        const port = freePort(show, devId);
-        const next = structuredClone(show);
-        for (const f of next.fixtures) if (selectedFixtureIds.has(f.id)) { f.output.deviceId = devId; f.output.port = port; }
-        applyShow(next);
-      },
-    }),
-  ]);
-}
+// (The chain-selected action moved into src/ui/output-list.js with the list.)
 
 // (Output kind — pixels vs DMX — follows the fixture's TYPE; there is no per-fixture
 // toggle. Define a DMX fixture as a DMX type in Inventory, a strip as a pixel type.)
@@ -1818,192 +1785,29 @@ function openTemplateMenu(anchor, kind) {
   tplMenuDismiss = dismissOnOutside(pop, closeTemplateMenu);   // click-outside + Esc (kit)
 }
 
-function renderOutput() {
-  updateInspector();
-  if (!outputListEl) return;
-  outputListEl.textContent = '';
-  closeTemplateMenu();   // a re-render detaches the old anchor; drop any open menu
-  // Add fixture / add device / inventory are header icons by the "Devices" title now
-  // (wired once at boot) — no in-list toolbar.
-  const fixtures = show.fixtures || [];
-  for (const id of [...selectedFixtureIds]) if (!fixtures.some((f) => f.id === id)) selectedFixtureIds.delete(id);
-  if (selectedDeviceId && !(show.devices || []).some((d) => d.id === selectedDeviceId)) selectedDeviceId = null;   // drop a stale device selection (e.g. after undo/delete)
-
-  // The Fixtures group always shows the placement list (the Inventory model editor
-  // is a separate group), so there's no longer a library-tab early-out.
-
-  // selectable rows + inline position editor under the row.
-  // (No early-out for an empty rig — the device containers still render below so
-  // they're visible + droppable even before any fixture is placed.)
-  // A header/row becomes a drop target: dropping the dragged fixture(s) assigns
-  // them to `deviceId` (+ `port` when given; deviceId '' = unassign).
-  const dropZone = (el, deviceId, port) => {
-    el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop-hover'); });
-    // dragleave fires when entering a CHILD too — only clear when truly leaving,
-    // so the hover doesn't flicker while dragging across the section's rows.
-    el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-hover'); });
-    el.addEventListener('drop', (e) => { e.preventDefault(); el.classList.remove('drop-hover'); assignFixturesTo(dragFxIds, deviceId, port); dragFxIds = []; });
-    return el;
-  };
-  // A fixture row — same chrome as the Inventory list rows (.output-row + boxed
-  // .fx-badge chips) so the two tabs read alike.
-  const fixtureRow = (f, i, outLabel, devColor) => {
-    const row = oel('div', { className: 'output-row' + (selectedFixtureIds.has(f.id) ? ' selected' : '') });
-    row.dataset.fxid = f.id;
-    // Controller identity colour: a subtle 3px left bar (CSS var; the selection
-    // accent bar overrides it — see .output-row.selected).
-    if (devColor) row.style.setProperty('--dev-color', devColor);
-    // Drag a fixture row onto a device header to assign it (the whole selection drags
-    // when this row is part of a multi-select).
-    row.draggable = true;
-    row.addEventListener('dragstart', (e) => {
-      dragFxIds = (selectedFixtureIds.has(f.id) && selectedFixtureIds.size > 1) ? [...selectedFixtureIds] : [f.id];
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
-    });
-    const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
-    const label = ftype?.name ? `${fixtureLabel(f, i)} ${ftype.name}` : fixtureLabel(f, i);
-    const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
-    if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
-    row.append(nameEl);
-    if (outLabel) row.append(oel('span', { className: 'fx-badge', textContent: outLabel }));
-    // DMX fixtures badge their Art-Net patch (U{universe}.{address}); pixel strips
-    // badge their pixel range.
-    row.append(oel('span', { className: 'fx-badge', textContent: isDmxFixture(f) ? `U${f.input.dmx.universe ?? 0}.${f.input.dmx.address ?? 1}` : fixtureRange(f) }));
-    row.onclick = (e) => selectFixture(f.id, e, { isolate: true });   // list click → just this fixture (⌫ deletes it)
-    return row;
-  };
-  // A collapsible controller group, styled exactly like the Inventory sections
-  // (▾ accent header + body). The triangle toggles; clicking the header selects the
-  // controller (or unassign group). Returns its parts so callers can wire drop-zones.
-  const devSection = (deviceId, title, badges, headClick) => {
-    // Controllers are ALWAYS expanded — no fold/collapse. Clicking the header still
-    // selects the controller for editing.
-    const sec = oel('div', { className: 'insp-sec out-sec is-open' });
-    const head = oel('div', { className: 'insp-sec-head' }, [oel('span', { className: 'insp-sec-title', textContent: (title || '').toUpperCase() })]);
-    for (const b of (badges || [])) head.append(oel('span', { className: 'fx-badge', textContent: b }));
-    if (headClick) head.onclick = headClick;
-    const body = oel('div', { className: 'insp-sec-body' });
-    sec.append(head, body);
-    return { sec, head, body };
-  };
-  // GROUP the placement list by CONTROLLER → output, rendered as Inventory-style
-  // collapsible sections (one per controller) with the fixtures as rows beneath.
-  const devOrder = []; const devMap = new Map();
-  fixtures.forEach((f, i) => {
-    const did = f.output?.deviceId || '';
-    let dg = devMap.get(did);
-    if (!dg) { dg = { deviceId: did, groups: [], gmap: new Map() }; devMap.set(did, dg); devOrder.push(dg); }
-    const port = f.output?.port ?? 1, key = `${did}:${port}`;
-    let g = dg.gmap.get(key);
-    if (!g) { g = { key, deviceId: did, port, items: [] }; dg.gmap.set(key, g); dg.groups.push(g); }
-    g.items.push({ f, i });
-  });
-  // Show EVERY device as a container (even with no fixtures) so it's a drop target
-  // for drag-to-assign — you can drop a fixture onto an empty controller.
-  for (const d of show.devices) {
-    if (!devMap.has(d.id)) { const dg = { deviceId: d.id, groups: [], gmap: new Map() }; devMap.set(d.id, dg); devOrder.push(dg); }
-  }
-  // Always show an "Unassigned" container, even when empty — it's a persistent drop
-  // target: drag a fixture onto it to UNASSIGN it (deviceId '').
-  if (!devMap.has('')) { const dg = { deviceId: '', groups: [], gmap: new Map() }; devMap.set('', dg); devOrder.push(dg); }
-  // Controllers first; the Unassigned holding group sits LAST (the place strips drop
-  // out to, below the real rig).
-  devOrder.sort((a, b) => (a.deviceId === '' ? 1 : 0) - (b.deviceId === '' ? 1 : 0));
-
-  for (const dg of devOrder) {
-    // UNASSIGNED — a plain heading (not a foldable group), still a drop target: drop
-    // a fixture here to unassign it. Its rows sit directly below the heading.
-    if (!dg.deviceId) {
-      const items = dg.groups.flatMap((g) => g.items);
-      const head = oel('div', { className: 'insp-sec-head out-unassigned' }, [
-        oel('span', { className: 'insp-sec-title', textContent: 'Unassigned' }),
-        oel('span', { className: 'fx-badge', textContent: `${items.length} fx` }),
-      ]);
-      dropZone(head, '', null);   // drop a fixture here → unassign it
-      outputListEl.append(head);
-      for (const { f, i } of items) outputListEl.append(fixtureRow(f, i));
-      continue;
-    }
-    const gdev = show.devices.find((d) => d.id === dg.deviceId);
-    const devName = gdev?.name || dg.deviceId;
-    const devPx = dg.groups.reduce((m, g) => m + g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0), 0);
-    const gcap = Number(gdev?.maxPerOutput) || 0;
-    const devOver = gcap > 0 && dg.groups.some((g) => g.items.reduce((s, it) => s + (it.f.pixelCount || 0), 0) > gcap);
-    const { sec, head, body } = devSection(dg.deviceId, devName, [`${devPx}px${devOver ? ' ⚠' : ''}`],
-      (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
-    // Online/offline/checking dot (same machinery as the old Devices list): the panel
-    // caches each controller's last health check; renderOutput just paints it. Art-Net
-    // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
-    if (gdev) {
-      const st = panel.deviceState?.(gdev.id);
-      const dotState = gdev.protocol === 'artnet' ? 'artnet'
-        : !gdev.ip ? 'noip'
-        : (panel.isPinging?.(gdev.id) || !st) ? 'check'
-        : st.ok ? 'online' : 'offline';
-      const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
-      // Dot sits before the title (the old .insp-tri anchor is gone — headers no
-      // longer fold, so anchoring after the triangle silently dropped the dot).
-      head.prepend(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
-    }
-    // Controller identity colour swatch, just before the title (assigned in
-    // syncDeviceTypes / editable in the device editor; Tint mode uses the same colour).
-    if (gdev?.color) {
-      const sw = oel('i', { className: 'dev-swatch', title: 'controller colour' });
-      sw.style.background = gdev.color;
-      head.insertBefore(sw, head.querySelector('.insp-sec-title'));
-    }
-    if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
-    if (selectedDeviceId === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
-    // The WHOLE section (header + its fixture rows) is the drop target — dropping
-    // anywhere on a controller group assigns there; the 24px header alone was too
-    // small a target to hit while dragging.
-    dropZone(sec, dg.deviceId, null);
-    // Fixtures as flat rows; a multi-output controller tags each row with its output.
-    const multiOut = dg.groups.length > 1;
-    for (const g of dg.groups) for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color));
-    outputListEl.append(sec);
-  }
-
-  if (selectedFixtureIds.size > 1) outputListEl.append(chainSelectedAction());
-  // SCAN button sits UNDER the list (with Unassigned), connected to its results below.
-  // Shows "Scanning…" + disabled while running so you can't double-scan; disabled when
-  // the daemon isn't up. The list re-renders during a scan, so this reflects live state.
-  const scanning = !!panel.scanning?.();
-  const daemonUp = !!bridge?.connected?.();
-  // Probe each WLED controller's status ONCE (one-shot per id) so the dots above
-  // reflect real online/offline — only when a daemon is up (no daemon → no network).
-  // Each resolved ping re-renders this list to repaint its dot. The Inventory popout
-  // never reaches here, so it never pings.
-  if (daemonUp) panel.pingDevices?.(show.devices, renderOutput);
-  outputListEl.append(oel('button', {
-    className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
-    title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',
-    disabled: scanning || !daemonUp,
-    onclick: () => panel.runScan?.(renderOutput),
-  }));
-  const scanRes = panel.scanResultsEl?.(); if (scanRes) outputListEl.append(scanRes);
-}
-
+// The Output panel (controller-grouped placement list + drag-to-assign + the
+// chain action) lives in src/ui/output-list.js — constructed here with explicit
+// hooks into app.js state; renderOutput stays as the hoisted delegate every
+// caller (and the modules that receive it) already uses.
+const outputList = createOutputList({
+  getShow: () => show,
+  getSelected: () => selectedFixtureIds,
+  setSelected: (s) => { selectedFixtureIds = s; },
+  getSelectedDeviceId: () => selectedDeviceId,
+  setSelectedDeviceId: (id) => { selectedDeviceId = id; },
+  expandedDevices,
+  panel,
+  bridgeConnected: () => !!bridge?.connected?.(),
+  outputListEl,
+  oel, typeSizeSuffix,
+  saveShow, rebuild, redrawOverlay, updateInspector, closeTemplateMenu,
+  selectFixture, selectDevice, applyShow,
+});
+function renderOutput() { outputList.render(); }
 const renderOutputList = renderOutput; // back-compat alias
 
-// This is an app surface, not a document — by default suppress the OS right-click menu
-// everywhere EXCEPT editable text fields (where copy/paste is wanted), and sliders keep
-// their right-click-to-reset. A Settings toggle ("native right-click") disables all of
-// that so a normal browser context menu is available — modules read body.native-ctx.
-let nativeCtxMenu = (() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })();
-const nativeCtxOn = () => nativeCtxMenu;
-const setNativeCtxMenu = (on) => {
-  nativeCtxMenu = !!on;
-  document.body.classList.toggle('native-ctx', nativeCtxMenu);
-  try { localStorage.setItem('lz.ctxmenu', nativeCtxMenu ? '1' : '0'); } catch { /* private */ }
-};
-setNativeCtxMenu(nativeCtxMenu);   // reflect on boot
-document.addEventListener('contextmenu', (e) => {
-  if (nativeCtxMenu) return;   // user opted into the browser's native menu everywhere
-  if (e.target.closest?.('input:not([type=range]), textarea, [contenteditable]')) return;
-  e.preventDefault();
-});
+// (Native right-click suppression + the Settings toggle moved to src/ui/prefs.js —
+//  modules still read body.native-ctx.)
 
 // --- Workspace layout: there are NO top-level tabs. The deck, the Clip/Layer/
 //     Composition inspector, and the Output/Fixtures column are all visible at
@@ -2121,6 +1925,8 @@ if (projRow) {
   fg.classList.toggle('on', fieldGhosts);
   projRow.append(fg);
 }
+// (The fixture-outlines toggle lives in the top bar — see setFixtureOutlines by
+//  the Tint wiring; it covers 2D and 3D, so no 3D-only chip here.)
 // RESET VIEW — snap the orbit camera back to its default framing (angle + zoom +
 // centre). Only the view-only orbit moves; sampling (front-ortho in 3D) is fixed.
 if (projRow) {
@@ -2623,8 +2429,8 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // Left-column tabs: Composition | Layer | Clip (one pane shown at a time).
-// (Settings moved to a floating overlay panel off the top-left gear — see
-// openSettingsPop; a stored 'settings' itab from older builds falls back here.)
+// (Settings moved to its own popup window off the top-left gear — see
+// openSettingsWindow; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
   const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip' };
   if (!panes[which]) which = 'composition';
@@ -2690,276 +2496,77 @@ remoteBtn?.addEventListener('click', () => { if (!remoteBtn.disabled) { try { wi
 // Restore the last-used right-column focus (fixtures/inventory) for the editor logic.
 outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { return null; } })() === 'library') ? 'library' : 'fixtures';
 
-// --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
-const ACCENT_KEY = 'lz.accent';
-const ACCENT_DEFAULT = '#e8a35c';
-const ACCENT_PRESETS = ['#eceef2', '#e8a35c', '#5cb8e8', '#6ee07d', '#5ce8c8', '#b98cff', '#e85c9e', '#e8d65c', '#ff6b6b'];   // first = near-white / monochrome
-const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
-const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
-const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
-// --accent cascades (green/amber/cyan + every color-mix(--accent …) follow); the
-// soft/line/text variants AND the warm surface ramp are derived from it here, so
-// changing the accent re-tints the whole sidebar (its gray surfaces carry a small
-// % of the accent → a desaturated tint that follows whatever accent you pick).
-function applyAccent(hex) {
-  const s = document.documentElement.style;
-  s.setProperty('--accent', hex);
-  s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
-  s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
-  s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
-  // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
-  // anchor is first lifted toward white by `lift` (the Settings › Appearance
-  // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
-  const lift = savedBright() / 100;     // negative = darker than the base anchors
-  const tm = savedTint() / 100;         // accent-tint multiplier (Settings › Appearance)
-  const L = (anchor) => accMix('#ffffff', anchor, lift);          // lift the gray anchor
-  const S = (anchor, w) => accMix(hex, L(anchor), w * tm);        // + tint it by the accent
-  s.setProperty('--bg', S('#0b0b0d', 0.03));
-  s.setProperty('--field-bg', S('#121214', 0.03));
-  const panel = S('#17171a', 0.04);
-  s.setProperty('--panel', panel);
-  s.setProperty('--panel-solid', panel);
-  s.setProperty('--panel-2', S('#1e1e22', 0.05));
-  s.setProperty('--hover', S('#2c2c31', 0.06));
-  s.setProperty('--line', S('#303034', 0.06));
-  s.setProperty('--line-2', S('#45454e', 0.07));
-  preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
-}
-const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
-function setAccent(hex) { applyAccent(hex); try { localStorage.setItem(ACCENT_KEY, hex); } catch { /* private */ } redrawOverlay(); broadcastManifest(true); }
-// --- Appearance (Settings › Appearance): UI brightness (surface lift, can go negative
-// = darker than base), accent tint, text contrast, text size. Persisted; live. ---
-const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
-const BRIGHT_KEY = 'lz.brightness';
-const savedBright = () => num(BRIGHT_KEY, 0, -12, 20);
-function setBrightness(v) { try { localStorage.setItem(BRIGHT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
-const TINT_KEY = 'lz.tint.amt';
-const savedTint = () => num(TINT_KEY, 100, 0, 220);
-function setTint(v) { try { localStorage.setItem(TINT_KEY, String(v)); } catch { /* private */ } applyAccent(savedAccent()); redrawOverlay(); }
-const CONTRAST_KEY = 'lz.contrast';
-const savedContrast = () => num(CONTRAST_KEY, 130, 60, 130);
-function applyContrast() {
-  const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
-  const s = document.documentElement.style;
-  s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
-  s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
-  s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
-  s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
-}
-function setContrast(v) { try { localStorage.setItem(CONTRAST_KEY, String(v)); } catch { /* private */ } applyContrast(); }
-const SCALE_KEY = 'lz.uiscale';
-const savedScale = () => num(SCALE_KEY, 1, 0.8, 1.4);
-function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.documentElement.style.setProperty('--ui-scale', String(c)); try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* private */ } }
-// Translucency of the floating panels (device editor + timeline): 0 = opaque … higher =
-// more see-through. Drives --pop-opacity = (100 − translucency)%.
-const TRANSLU_KEY = 'lz.translucency';
-const savedTranslucency = () => num(TRANSLU_KEY, 0, 0, 90);
-function setTranslucency(v) { const c = Math.max(0, Math.min(90, Math.round(v))); document.documentElement.style.setProperty('--pop-opacity', (100 - c) + '%'); try { localStorage.setItem(TRANSLU_KEY, String(c)); } catch { /* private */ } }
-setUiScale(savedScale());        // apply text scale on boot
-setTranslucency(savedTranslucency());   // apply panel translucency on boot
-applyContrast();                // apply text contrast on boot
-
-applyAccent(savedAccent());   // apply the saved accent (+ brightness + tint) on boot
-
-// --- Hover tooltips (native `title`) — ON by default (the icon-heavy chrome needs
-// them for discoverability). When toggled OFF in Settings, every `title` is moved to
-// `data-tip` (kept moved as the UI re-renders) so no tooltip appears on hover. Either
-// way titles read as sentence case. ---
-const TIPS_KEY = 'lz.tips';
-const tipsOn = () => { try { return localStorage.getItem(TIPS_KEY) !== '0'; } catch { return true; } };
-// Stash the title (so no native tooltip shows) BUT keep it as an aria-label so
-// icon-ONLY interactive controls still have an accessible name (a11y) when tooltips
-// are off. Only icon-only interactive elements get the label — adding aria-label to
-// plain spans (prohibited) or to controls that already show their text (name
-// mismatch) fails Lighthouse, so we skip those.
-// Tooltips read as normal sentence case (capitalise the first letter; acronyms like
-// MIDI/OSC are already upper-case mid-string and are left alone).
-const sentenceCase = (s) => (s && /^[a-z]/.test(s) ? s.charAt(0).toUpperCase() + s.slice(1) : s);
-const stashTip = (el) => {
-  const t = sentenceCase(el.getAttribute('title'));
-  if (t == null) return;
-  el.dataset.tip = t;
-  const interactive = el.matches('button, a[href], input, select, textarea, [role], [tabindex]');
-  const iconOnly = !el.textContent.trim();
-  if (interactive && iconOnly && !el.getAttribute('aria-label')) el.setAttribute('aria-label', t);
-  el.removeAttribute('title');
-};
-const stripTips = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) stashTip(root); root.querySelectorAll?.('[title]').forEach(stashTip); };
-const restoreTips = (root) => root.querySelectorAll?.('[data-tip]').forEach((el) => { el.setAttribute('title', el.dataset.tip); delete el.dataset.tip; });
-// Tips ON: keep native titles but sentence-case them (idempotent — only writes on change).
-const normTitle = (el) => { const t = el.getAttribute('title'); const n = sentenceCase(t); if (n && n !== t) el.setAttribute('title', n); };
-const normalizeTitles = (root) => { if (root.nodeType !== 1) return; if (root.hasAttribute('title')) normTitle(root); root.querySelectorAll?.('[title]').forEach(normTitle); };
-const tipObserver = new MutationObserver((muts) => {
-  const on = tipsOn();
-  for (const m of muts) {
-    if (m.type === 'attributes' && m.target.nodeType === 1 && m.target.hasAttribute('title')) { on ? normTitle(m.target) : stashTip(m.target); }
-    for (const n of m.addedNodes) { on ? normalizeTitles(n) : stripTips(n); }
-  }
-});
-function applyTips() {
-  if (tipsOn()) { restoreTips(document.body); normalizeTitles(document.body); }
-  else { stripTips(document.body); }
-  // One observer, mode-aware: normalises (on) or stashes (off) titles as the UI rebuilds.
-  tipObserver.disconnect();
-  tipObserver.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] });
-}
-function setTips(on) { try { localStorage.setItem(TIPS_KEY, on ? '1' : '0'); } catch { /* private */ } applyTips(); }
-applyTips();   // on boot
+// (Accent colour + appearance CSS-var appliers and the hover-tooltips machinery
+//  moved to src/ui/prefs.js — see the initPrefs call by the corner toggles; the
+//  returned appliers are re-run by the lz-settings bus handler below.)
 
 // The mapping surface lives in its own window (a named target → one reused
 // window; the click is the user gesture that satisfies the popup blocker).
 // (Mapping is now a tab of the Canvas island — embedded via iframe — so there's no
 //  separate-window opener anymore.)
 
-// Settings tab: accent colour + audio input (more preferences can join later).
-// Async because the audio device list needs enumerateDevices(); re-run whenever
-// the Settings subtab is opened so the device list (and any granted labels) refresh.
-async function buildSettings(mount) {
-  if (!mount) return;
-  mount.textContent = '';
+// --- Settings: a real popup window (settings/), like Library and Mapping (C2 —
+// popups everywhere). The gear opens it; the page mounts the SAME form
+// (src/ui/settings.js createSettingsPanel) with popout hooks and broadcasts
+// every edit as { type: 'settings-changed' } on BroadcastChannel('lz-settings').
+function openSettingsWindow() { try { return window.open('settings/', 'lz-settings', 'width=560,height=860'); } catch { return null; } }
+document.getElementById('menu-settings')?.addEventListener('click', openSettingsWindow);
 
-  // --- Audio input (the hardware device for the "Audio External" modulator + gain) ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'audio input' }));
-  const inputs = await listInputs();
-  const curDev = show.composition?.audioDevice || 'default';
-  const sel = oel('select', { title: 'hardware input device for the Audio External modulator' });
-  const opt = (value, label, on) => { const o = oel('option', { value, textContent: label }); if (on) o.selected = true; sel.append(o); };
-  opt('default', 'System default', curDev === 'default');
-  inputs.filter((d) => d.deviceId && d.deviceId !== 'default').forEach((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, curDev === d.deviceId));
-  sel.addEventListener('change', async () => {
-    const ok = await enableAudio('external', sel.value);
-    snapshotForUndo(show);   // audio-device pick is undoable
-    show = { ...show, composition: { ...show.composition, audioDevice: sel.value } };
-    saveShow(show);
-    sel.title = ok ? 'hardware input device for the Audio External modulator' : 'could not open that input, check permissions';
-  });
-  mount.append(oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Input' }), sel]));
-  mount.append(Slider('Gain', show.composition?.audioGain ?? 1, {
-    min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
-    onInput: (v) => { snapshotForUndo(show); show = { ...show, composition: { ...show.composition, audioGain: v } }; saveShowSoon(); },
-  }));
-
-  // --- Composition file (visuals only — the whole rig saves with the project, ⌘S) ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'composition file' }));
-  mount.append(oel('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
-  mount.append(oel('div', { className: 'seg-hint', textContent: 'to load: drag a project or composition .json onto the window' }));
-
-  // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
-  // on/off lives on the viewport corner button (a quick toggle while placing). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'snap' }));
-  mount.append(Slider('Grid', SNAP_GRID, {
-    min: 2, max: 100, step: 1, default: 20, commit: 'live',
-    onInput: (v) => { SNAP_GRID = Math.round(v); saveSnap(); redrawOverlay(); },
-  }));
-  mount.append(Slider('Distance', SNAP_DIST, {
-    min: 1, max: 40, step: 1, default: 10, commit: 'live',
-    onInput: (v) => { SNAP_DIST = Math.round(v); saveSnap(); },
-  }));
-
-  // --- Output: global framerate cap sent to the daemon (caps the DDP/Art-Net rate). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'output' }));
-  mount.append(Slider('Max FPS', savedOutFps(), {
-    min: 1, max: 60, step: 1, default: 42, commit: 'live',
-    onInput: (v) => { const n = Math.max(1, Math.min(60, Math.round(v))); try { localStorage.setItem(OUTFPS_KEY, String(n)); } catch { /* ignore */ } bridge?.setOutputFps?.(n); },
-  }));
-
-  // (OSC / socket control lives in the Mapping window now — it shows the canonical
-  // addresses, the socket JSON example, and the OSC :9000 endpoint there.)
-
-  // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
-  const toggleRow = (label, get, set) => {
-    const cb = oel('input', { type: 'checkbox' }); cb.checked = !!get();
-    cb.addEventListener('change', () => set(cb.checked));
-    // Checkbox FIRST so the label has the full remaining width (no truncation).
-    return oel('label', { className: 'fx-field set-toggle' }, [cb, oel('span', { textContent: label })]);
-  };
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'preferences' }));
-  const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
-  mount.append(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } }));
-  mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
-  mount.append(toggleRow('Show tooltips on hover', tipsOn, (v) => setTips(v)));
-  mount.append(toggleRow('Right-click shows the browser menu', nativeCtxOn, (v) => setNativeCtxMenu(v)));
-
-  // (Recording removed — the show CONFIG file (File › Save/Open) is the portable
-  // "recording": it re-runs the show live, interactivity intact. MIDI enable +
-  // input lives in the Mapping window.)
-
-  // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'appearance' }));
-  mount.append(Slider('Brightness', savedBright(), {
-    min: -12, max: 20, step: 1, default: 7, commit: 'live',
-    onInput: (v) => setBrightness(Math.round(v)),
-  }));
-  mount.append(Slider('Accent tint %', savedTint(), {
-    min: 0, max: 220, step: 5, default: 100, commit: 'live',
-    onInput: (v) => setTint(Math.round(v)),
-  }));
-  mount.append(Slider('Contrast %', savedContrast(), {
-    min: 60, max: 130, step: 2, default: 100, commit: 'live',
-    onInput: (v) => setContrast(Math.round(v)),
-  }));
-  mount.append(Slider('Translucency %', savedTranslucency(), {
-    min: 0, max: 90, step: 2, default: 38, commit: 'live',
-    onInput: (v) => setTranslucency(v),
-  }));
-  mount.append(Slider('Text size %', Math.round(savedScale() * 100), {
-    min: 80, max: 140, step: 5, default: 100, commit: 'live',
-    onInput: (v) => setUiScale(v / 100),
-  }));
-
-  // --- Accent colour (least priority → last): preset swatches. ---
-  mount.append(oel('div', { className: 'fx-pts', textContent: 'accent colour' }));
-  const cur = savedAccent();
-  const swatches = [];
-  const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
-  const row = oel('div', { className: 'accent-swatches' });
-  for (const p of ACCENT_PRESETS) {
-    const sw = oel('button', { className: 'accent-swatch', title: p });
-    sw.dataset.hex = p; sw.style.background = p;
-    sw.onclick = () => { setAccent(p); mark(p); };
-    swatches.push(sw); row.append(sw);
-  }
-  mount.append(row);
-  mark(cur);
-}
-
-// --- Settings: a floating overlay panel off the top-left gear (NOT a separate
-// window — buildSettings is wired to live app state; a cross-window settings page
-// would need a sync layer that isn't worth it). Rebuilt on every open (the audio
-// device list needs a fresh enumerate); closed by outside-click / Esc (kit). ---
-const settingsPop = document.getElementById('settings-pop');
-const settingsPopBody = document.getElementById('settings-pop-body');
-let settingsDismiss = null;
-function closeSettingsPop() {
-  if (!settingsPop || settingsPop.hidden) return;
-  settingsPop.hidden = true;
-  document.getElementById('menu-settings')?.classList.remove('open');
-  if (settingsDismiss) { settingsDismiss(); settingsDismiss = null; }
-}
-function openSettingsPop() {
-  if (!settingsPop) return;
-  if (!settingsPop.hidden) { closeSettingsPop(); return; }   // gear toggles
-  buildSettings(settingsPopBody);
-  settingsPop.hidden = false;
-  document.getElementById('menu-settings')?.classList.add('open');
-  // Park it under the gear (top-left), height-capped; the body scrolls.
-  const gear = document.getElementById('menu-settings');
-  const r = gear?.getBoundingClientRect();
-  settingsPop.style.top = `${Math.round((r?.bottom ?? 34) + 6)}px`;
-  settingsPop.style.left = `${Math.round(Math.max(8, r?.left ?? 8))}px`;
-  // Outside-click + Esc dismissal, hand-rolled (not the kit's dismissOnOutside):
-  // the GEAR must count as "inside", or its capture-phase close would race the
-  // button's own click and the gear could never toggle the panel shut.
-  const onClick = (ev) => { if (!settingsPop.contains(ev.target) && !ev.target.closest?.('#menu-settings')) closeSettingsPop(); };
-  const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeSettingsPop(); } };
-  setTimeout(() => document.addEventListener('click', onClick, true), 0);
-  document.addEventListener('keydown', onKey, true);
-  settingsDismiss = () => {
-    document.removeEventListener('click', onClick, true);
-    document.removeEventListener('keydown', onKey, true);
+// Adopt the popout's edits. Two ownership domains:
+//   · show-owned fields — Settings edits ONLY composition.audioDevice and
+//     composition.audioGain. The popout's saved blob carries a STALE copy of
+//     layers/fixtures/etc, so (mirroring the 'inventory-changed' targeted merge)
+//     we take just those two fields into the live show, then re-persist it.
+//   · localStorage-owned prefs — snap grid/dist (lz.snap), output fps cap
+//     (lz.outfps), tooltips (lz.tips), native right-click (lz.ctxmenu) and the
+//     appearance keys. The popout already wrote the keys; we re-read + re-run
+//     this window's side effects (snap vars + overlay, daemon fps push, title
+//     pass, body class, CSS vars).
+// Adopted edits are NOT undoable here — same rule as inventory merges: the undo
+// stack is main-window-local, and the popout streams micro-edits (a gain drag
+// would flood it). ⌘Z keeps working on composition edits made in this window.
+let setBus = null;
+try { setBus = new BroadcastChannel('lz-settings'); } catch { /* unsupported */ }
+let lastAdoptedAccent = prefs.savedAccent();   // only re-broadcast the remote manifest on a real accent change
+if (setBus) {
+  setBus.onmessage = (e) => {
+    if (e.data?.type !== 'settings-changed') return;
+    // Show-owned fields (targeted merge — never adopt the whole saved show).
+    const saved = loadShow();
+    if (saved) {
+      const dev = saved.composition?.audioDevice;
+      const gain = saved.composition?.audioGain;
+      const devChanged = dev != null && dev !== (show.composition?.audioDevice || 'default');
+      if (devChanged || (gain != null && gain !== show.composition?.audioGain)) {
+        show = { ...show, composition: { ...show.composition,
+          ...(dev != null ? { audioDevice: dev } : {}),
+          ...(gain != null ? { audioGain: gain } : {}),
+        } };
+        saveShow(show);   // re-persist the LIVE show (the popout's blob has stale layers)
+        // Re-open the input on the new device only if capture is already running —
+        // never start the microphone from a broadcast. (The loop applies gain each
+        // frame via setAudioGain(show.composition.audioGain), so gain needs no push.)
+        if (devChanged && audioEnabled('external')) enableAudio('external', dev);
+      }
+    }
+    // Snap: re-read lz.snap into the live vars (+ corner-button state) and redraw.
+    try {
+      const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
+      if (s) { SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; setSnapEnabled(!!s.on); }
+    } catch { /* ignore */ }
+    // Output fps cap → push to the daemon.
+    bridge?.setOutputFps?.(savedOutFps());
+    // Tooltips + native context menu (both idempotent appliers).
+    prefs.applyTips();
+    prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
+    // Appearance: re-apply every CSS-var applier from the (just-written) keys.
+    prefs.applyAccent(prefs.savedAccent()); prefs.applyContrast();
+    prefs.setUiScale(prefs.savedScale()); prefs.setTranslucency(prefs.savedTranslucency());
+    redrawOverlay();
+    const acc = prefs.savedAccent();
+    if (acc !== lastAdoptedAccent) { lastAdoptedAccent = acc; broadcastManifest(true); }   // remote surface follows the accent
   };
 }
-document.getElementById('menu-settings')?.addEventListener('click', openSettingsPop);
 
 // Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
 setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');
@@ -2968,48 +2575,10 @@ setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch {
 // the dock in fixture-editing (output) mode via setOverlay.
 setOverlay(true);
 
-// --- Video clips: a <video> element + GL texture per video clip (runtime only;
-// the show stores only the object URL). syncVideos() reconciles the map with the
-// show each frame; uploadVideos() pushes the current frame into each texture.
-const videoMap = new Map(); // clipId → { url, el, tex }
-function syncVideos() {
-  const clips = [];
-  for (const L of show.composition?.layers || []) for (const c of L.clips || []) {
-    if (c && c.generator === 'video' && c.videoUrl) clips.push(c);
-  }
-  if (!clips.length && !videoMap.size) return;   // no video clips, nothing mapped → nothing to do
-  const live = new Set(clips.map((c) => c.id));
-  for (const [id, v] of videoMap) {
-    if (!live.has(id)) { unregisterMediaElement(v.el); try { v.el.pause(); } catch { /* ignore */ } gl.deleteTexture(v.tex); videoMap.delete(id); }
-  }
-  for (const c of clips) {
-    const existing = videoMap.get(c.id);
-    if (existing && existing.url === c.videoUrl) continue;
-    if (existing) { unregisterMediaElement(existing.el); try { existing.el.pause(); } catch { /* ignore */ } gl.deleteTexture(existing.tex); }
-    const el = document.createElement('video');
-    el.src = c.videoUrl; el.loop = true; el.muted = true; el.playsInline = true; el.autoplay = true;
-    el.play().catch(() => { /* will play on first user gesture */ });
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    videoMap.set(c.id, { url: c.videoUrl, el, tex });
-    registerMediaElement(el);   // so the 'composition' audio source can analyse it
-  }
-}
-function uploadVideos() {
-  if (!videoMap.size) return;
-  for (const v of videoMap.values()) {
-    if (v.el.readyState >= 2 && v.el.videoWidth) {
-      gl.bindTexture(gl.TEXTURE_2D, v.tex);
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v.el); } catch { /* not ready */ }
-      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-    }
-  }
-}
-const videoTex = (clip) => videoMap.get(clip.id)?.tex || null;
+// Video-clip runtime (a <video> element + GL texture per video clip) lives in
+// src/ui/video.js — the loop calls sync/upload per frame, the compositor samples
+// via videos.videoTex, and the GL-loss handler clears the dead textures.
+const videos = createVideoRuntime({ getShow: () => show, gl });
 
 // Compositor is ready immediately (programs compile lazily on first render).
 rebuild(show);
@@ -3063,7 +2632,7 @@ function loopBody(ts) {
     if (ab.show !== show) { show = ab.show; if (!bindSaveTimer) bindSaveTimer = setTimeout(() => { bindSaveTimer = null; saveShow(show); }, 400); if (ab.fired) layerPanel?.refresh?.(); }
     prevBindCh = { ...chNow };
   }
-  syncVideos(); uploadVideos();
+  videos.syncVideos(); videos.uploadVideos();
   // Always composite + draw to the stage, even with NO fixtures/sampler — the
   // sampling + DDP send below are individually guarded on `sampler`. (Gating the
   // whole block on `sampler` left the stage black until a fixture was placed.)
@@ -3132,7 +2701,7 @@ function loopBody(ts) {
     // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
     // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
-      trigSecs: pulseTrigSecs, videoTex, masterOpacity, transitionMs: undefined,
+      trigSecs: pulseTrigSecs, videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
@@ -3238,7 +2807,7 @@ function rebuildGL() {
     screenProg = program(gl, SCREEN_FS);
     uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
     compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
-    videoMap.clear();                        // video textures are gone → recreated on next upload
+    videos.clearTextures();                  // video textures are gone → recreated on next upload
     refreshSampler();                        // rebuild the output sampler against the new context
   } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
 }
@@ -3267,153 +2836,21 @@ function fitToFixtures() {
   applyFullShow(fitCanvasToFixtures(show));
 }
 
-// New project: confirm, then reset to a sensible STARTER — one controller with a
-// single fixture wired to it, lit by a Lines clip. (Not blank, so there's
-// something on screen and a patch to build from.)
-// A fresh project gets a random LED Zeppelin track as its title (beats "untitled").
-const LZ_TRACKS = [
-  'Stairway to Heaven', 'Kashmir', 'Whole Lotta Love', 'Black Dog', 'Immigrant Song',
-  'Rock and Roll', 'Ramble On', 'Going to California', 'Dazed and Confused', 'Heartbreaker',
-  "Since I've Been Loving You", 'When the Levee Breaks', 'The Rain Song', 'Over the Hills and Far Away',
-  'No Quarter', 'Trampled Under Foot', 'Achilles Last Stand', 'In My Time of Dying', 'Ten Years Gone',
-  'The Ocean', 'Fool in the Rain', 'Gallows Pole', 'Tangerine', 'Thank You', 'Misty Mountain Hop',
-  'The Battle of Evermore', 'Good Times Bad Times', 'Communication Breakdown', 'In the Light',
-  "Nobody's Fault but Mine", 'All My Love', 'Houses of the Holy', 'The Song Remains the Same',
-];
-const randomTrackTitle = () => LZ_TRACKS[Math.floor(Math.random() * LZ_TRACKS.length)];
-
-function newProject() {
-  if (!window.confirm('Start a new project? This clears the current one (save first if you want to keep it).')) return;
-  // Reset to the standard default (Lines + Checkered, Generic Controller, 1280²) —
-  // the same show a fresh install loads — with a random LED Zeppelin track as its title.
-  const next = normalizeComposition(defaultShow());
-  if (next.composition) next.composition.title = randomTrackTitle();
-  applyFullShow(next);
-}
-
-function saveShowToFile() {
-  const blob = new Blob([JSON.stringify(show, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'project.json'; a.click(); URL.revokeObjectURL(a.href);
-}
-
-const openShowInput = document.getElementById('open-show-file');
-openShowInput?.addEventListener('change', async () => {
-  const file = openShowInput.files[0]; if (!file) return;
-  try {
-    const loaded = JSON.parse(await file.text());
-    if (!loaded || !Array.isArray(loaded.fixtures) || !loaded.composition) {
-      window.alert(loaded?.instances ? 'That looks like a LEDger file — use “import from LEDger…” in the File menu.' : 'Not a LED Zeppelin project file.');
-    } else {
-      applyFullShow(normalizeComposition(loaded));
-    }
-  } catch (e) { window.alert('Load failed: ' + e.message); }
-  openShowInput.value = '';
+// New / Save / Load / composition load / ISF import (picker + drag-drop +
+// bundled examples) + the ⌘S/⌘O shortcuts live in src/ui/project-io.js —
+// constructed with explicit hooks; the whole-show appliers above stay here
+// (they recreate the compositor, a live binding the render loop owns).
+const projectIO = createProjectIO({
+  getShow: () => show,
+  applyFullShow, applyComposition, rebuild,
+  layerPanel, setSection, typingIn, oel, defaultShow,
 });
-
-// Composition file = just the visuals (canvas + layers/clips/effects), no rig.
-function saveCompositionToFile() {
-  const blob = new Blob([JSON.stringify(show.composition || {}, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'composition.json'; a.click(); URL.revokeObjectURL(a.href);
-}
-const openCompInput = oel('input', { type: 'file', accept: '.json,application/json' });
-openCompInput.style.display = 'none'; document.body.append(openCompInput);
-openCompInput.addEventListener('change', async () => {
-  const file = openCompInput.files[0]; if (!file) return;
-  try { const c = JSON.parse(await file.text()); if (c && (c.layers || c.canvas)) applyComposition(c); else window.alert('Not a composition file.'); }
-  catch (e) { window.alert('Load failed: ' + e.message); }
-  openCompInput.value = '';
-});
-
-// Import an ISF shader (.fs/.isf) as a new generator clip on the active layer.
-// Its INPUTS become animatable, OSC/MIDI-mappable clip params automatically.
-// Content-stable id (a hash of the GLSL) so the same shader dedupes and a saved
-// clip's id never collides with a fresh import across sessions.
-const isfId = (g) => { let h = 5381; for (let i = 0; i < (g || '').length; i++) h = ((h << 5) + h + g.charCodeAt(i)) | 0; return 'isf' + (h >>> 0).toString(36); };
-const openISFInput = oel('input', { type: 'file', accept: '.fs,.isf,.frag,.glsl,.txt' });
-openISFInput.style.display = 'none'; document.body.append(openISFInput);
-// Import an ISF shader. `target` (from a drop) hints WHERE to land it:
-// {layerId, clipId} from the deck cell under the cursor — so dropping next to a
-// clip lands on THAT layer / applies the filter to THAT clip (not a new layer).
-function importISFText(text, filename, target) {
-  const r = parseISF(text);
-  if (!r.ok) { window.alert(`Not a valid ISF shader: ${r.error}`); return; }
-  const layers = show.composition?.layers || [];
-  if (!layers.length) { window.alert('Add a layer first.'); return; }
-  const isf = {
-    id: isfId(r.glsl),
-    name: (filename || '').replace(/\.[^.]+$/, '') || r.name,
-    glsl: r.glsl, inputs: r.inputs, params: isfParams(r.inputs),
-    src: wrapISF(r.glsl, r.inputs),
-  };
-  const findClip = (cid) => { for (const L of layers) for (const c of (L.clips || [])) if (c && c.id === cid) return { layerId: L.id, clipId: c.id }; return null; };
-  if (r.type === 'effect') {
-    // A filter (samples inputImage) → the clip under the drop, else the selected/
-    // active clip (optionally on the dropped-on layer).
-    const hit = (target?.clipId && findClip(target.clipId)) || findClip(layerPanel?.getSelectedClipId?.());
-    let layerId = hit?.layerId, clipId = hit?.clipId;
-    if (!clipId && target?.layerId) { const L = layers.find((x) => x.id === target.layerId); if (L) { layerId = L.id; clipId = L.activeClipId || L.clips?.[0]?.id; } }
-    if (!clipId) { const L = layers.find((x) => x.activeClipId) || layers[0]; layerId = L.id; clipId = L.activeClipId || L.clips?.[0]?.id; }
-    if (!clipId) { window.alert('Add/select a clip to apply the ISF effect to.'); return; }
-    rebuild(addISFEffect(show, layerId, clipId, isf));
-  } else {
-    // A generator → the dropped-on layer, else the selected/first layer.
-    const layerId = (target?.layerId && layers.some((L) => L.id === target.layerId)) ? target.layerId
-      : (layers.find((L) => L.id === layerPanel?.getSelectedLayerId?.()) || layers[0]).id;
-    rebuild(addISFClip(show, layerId, isf));
-  }
-  setSection('design'); layerPanel?.refresh?.();
-}
-openISFInput.addEventListener('change', async () => {
-  const file = openISFInput.files[0]; openISFInput.value = '';
-  if (file) importISFText(await file.text(), file.name);
-});
-// Drag-and-drop an ISF shader (.fs/.isf/.frag/.glsl) onto the window; the deck cell
-// under the cursor sets where it lands.
-const isISFName = (n) => /\.(fs|isf|frag|glsl)$/i.test(n || '');
-window.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) e.preventDefault(); });
-window.addEventListener('drop', async (e) => {
-  const all = [...(e.dataTransfer?.files || [])];
-  const isf = all.filter((f) => isISFName(f.name));
-  const json = all.filter((f) => /\.json$/i.test(f.name));
-  if (!isf.length && !json.length) return;
-  e.preventDefault();
-  // ISF shaders → a new generator clip under the drop target (layer/clip cell).
-  const node = document.elementFromPoint(e.clientX, e.clientY);
-  const target = { layerId: node?.closest?.('.deck-layer')?.dataset.layer, clipId: node?.closest?.('.clip-cell')?.dataset.clip };
-  for (const f of isf) importISFText(await f.text(), f.name, target);
-  // .json → load a LED Zeppelin project (rig + visuals) or a composition (visuals only).
-  for (const f of json) {
-    try {
-      const data = JSON.parse(await f.text());
-      if (data && Array.isArray(data.fixtures) && data.composition) applyFullShow(normalizeComposition(data));
-      else if (data && (data.layers || data.canvas)) applyComposition(data);
-      else if (data && Array.isArray(data.instances)) window.alert('That looks like a LEDger preset — import it from the Library window.');
-      else window.alert('Unrecognised .json — expected a LED Zeppelin project or composition.');
-    } catch (err) { window.alert('Load failed: ' + err.message); }
-  }
-});
-// Bundled ISF examples (source picker's "ISF" group): fetch one + import it.
-function importISFExample(file) {
-  fetch('./examples/isf/' + encodeURIComponent(file))
-    .then((r) => (r.ok ? r.text() : Promise.reject(new Error('not found'))))
-    .then((t) => importISFText(t, file))
-    .catch(() => window.alert('Could not load ' + file));
-}
 // Load the example index for the picker (best-effort; absent in some builds).
 fetch('./examples/isf/index.json').then((r) => r.json()).then((list) => { if (Array.isArray(list)) isfExamples = list; }).catch(() => {});
 
 // (Project file actions — new/save/load/import — live in the corner File menu
 // below; the old Settings-tab file block was removed with that tab.)
 
-// ⌘S save / ⌘O open — kept as shortcuts.
-document.addEventListener('keydown', (e) => {
-  if (!(e.metaKey || e.ctrlKey) || typingIn(e.target)) return;
-  const k = e.key.toLowerCase();
-  if (k === 's') { e.preventDefault(); saveShowToFile(); }
-  else if (k === 'o') { e.preventDefault(); openShowInput?.click(); }
-});
 
 // --- Corner-cluster dropdown menus (File / Audio) — open UPWARD from the bottom. ---
 const menuPop = oel('div', { id: 'menu-pop', hidden: true });
@@ -3455,7 +2892,7 @@ const TOPBAR_CAPTIONS = {
   'menu-guide': 'Guide',
   'menu-mapping': 'Mapping', 'menu-inventory': 'Library', 'menu-remote': 'Remote', 'menu-align': 'Align',
   'panel-left': 'Left', 'panel-bottom': 'Timeline', 'panel-right': 'Right',
-  'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'wall-btn': 'Preview',
+  'overlay-toggle': 'Edit', 'snap-btn': 'Snap', 'grid-btn': 'Grid', 'color-btn': 'Tint', 'outline-btn': 'Outlines', 'wall-btn': 'Preview',
   'mode3d-btn': '3D',
   'daemon-chip': 'Offline', 'menu-refresh': 'Update', 'menu-bug': 'Bug', 'menu-install': 'Install',
 };
@@ -3478,8 +2915,8 @@ document.getElementById('menu-refresh')?.addEventListener('click', async () => {
   } catch { /* Cache Storage unavailable / quota — ignore */ }
   location.reload();
 });
-document.getElementById('menu-save')?.addEventListener('click', saveShowToFile);
-document.getElementById('menu-open')?.addEventListener('click', () => openShowInput?.click());
+document.getElementById('menu-save')?.addEventListener('click', projectIO.saveShowToFile);
+document.getElementById('menu-open')?.addEventListener('click', () => projectIO.openShowPicker());
 // Offline chip: shown ONLY while the daemon/bridge is disconnected (on the hosted
 // site — no daemon ever — it stays up as a "no LED output" notice). Clicking opens
 // /health, the old health icon's diagnostic (shows the failure directly when down).
@@ -3490,7 +2927,7 @@ document.title = `LED Zeppelin v${VERSION}`;   // build version in the tab title
 document.getElementById('menu-bug')?.addEventListener('click', () => window.open(`${REPO_URL}/issues/new?title=${encodeURIComponent(`[bug] v${VERSION}: `)}`, '_blank', 'noopener'));
 // New project + LEDger import are their own top-bar icons; the ⤵ menu keeps the rest
 // (ISF shader import — drag-drop isn't wired yet — and composition save/load).
-document.getElementById('menu-new')?.addEventListener('click', newProject);
+document.getElementById('menu-new')?.addEventListener('click', projectIO.newProject);
 // LEDger import lives in the Inventory popout (it hosts the catalog + the import UI).
 // Open it and ask it to start the file picker; the popout applies the import and
 // broadcasts it back to this window (handled on the 'lz-inventory' channel).

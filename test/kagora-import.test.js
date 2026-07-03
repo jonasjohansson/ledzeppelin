@@ -349,3 +349,27 @@ test('a bent strip (>2 points) imports as a polyline, keeping every bend', () =>
   assert.equal(f.input.mode, 'polyline');
   assert.equal(f.input.points.length, 3);          // the bend is preserved, not collapsed to 2
 });
+
+test('strip points with z import as whole-polyline 3-tuples (z in canvas-height units)', () => {
+  // Two lifted arcs + one flat strip.
+  const p = structuredClone(preset);
+  const sA1 = p.instances.find((i) => i.id === 'sA-1');
+  const sA2 = p.instances.find((i) => i.id === 'sA-2');
+  sA1.points = [{ x: 0, y: 0, z: 0 }, { x: 100, y: 50, z: 30 }, { x: 200, y: 100, z: 0 }];
+  sA2.points = [{ x: 0, y: 100, z: 0 }, { x: 200, y: 0, z: 50 }];
+  // z normalizes by the RIG bbox's y-span (over ALL strips, incl. the flat one)
+  const ys = p.instances.filter((i) => i.kind === 'strip')
+    .flatMap((s) => (s.points ?? []).map((q) => q.y));
+  const spanY = Math.max(...ys) - Math.min(...ys);
+  const show = importKagora(p);
+  const f1 = show.fixtures.find((f) => f.id === 'sA-1');
+  // whole polyline promoted: feet at z 0 are 3-tuples too
+  assert.deepEqual(f1.input.points.map((q) => q.length), [3, 3, 3]);
+  assert.equal(f1.input.points[1][2], 30 / spanY);
+  assert.equal(f1.input.points[0][2], 0);
+  const f2 = show.fixtures.find((f) => f.id === 'sA-2');
+  assert.equal(f2.input.points[1][2], 50 / spanY);
+  // a strip with no z stays clean 2-tuples (byte-identical 2D guard)
+  const f3 = show.fixtures.find((f) => f.id === 'sB-1');
+  assert.ok(f3.input.points.every((q) => q.length === 2));
+});

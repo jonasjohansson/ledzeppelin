@@ -37,6 +37,7 @@
   --accent-line:#54402b;       /* active border */
   --readout:#d7dbe0;           /* numeric readouts — neutral (one step under --text) */
   --danger:#ff6b6b;
+  --warn:#cfa14f;              /* soft amber — advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
   --accent-dark:#07151f;       /* dark text/glyph ON an accent-filled surface */
   /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
@@ -567,17 +568,7 @@ body.view-overlay .island:not(#stage-island) .island-body { background: color-mi
 #device-pop .island-body { flex: 0 0 auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
 #device-pop .island-head { background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 7%), transparent); }
 
-/* Settings: a floating overlay island off the top-left GEAR (same chrome as
-   #device-pop; positioned under the gear in JS). The body scrolls. */
-#settings-pop {
-  position: fixed; z-index: 60; width: min(320px, calc(100vw - 16px));
-  max-height: calc(100vh - 56px); display: flex; flex-direction: column;
-  background: var(--panel-solid);
-  border: 1px solid var(--line-2); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
-}
-#settings-pop[hidden] { display: none; }
-#settings-pop .island-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* (Settings opens as its own popup window — settings/ — from the top-left gear.) */
 
 /* CURTAIN: a drag strip on the Timeline's top edge to resize it against the Canvas.
    No visible bar — the ns-resize cursor is the only affordance. */
@@ -593,7 +584,7 @@ body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-sele
 /* Dashboard knob disabled until something links to it. */
 .dash-cell.is-unlinked { opacity: .35; pointer-events: none; }
 
-/* (Settings lives in the floating #settings-pop island off the top-left gear;
+/* (Settings lives in its own popup window — settings/;
    #system-control is a hidden manifest mount.) */
 
 /* OVERLAY (the Control surface popup). */
@@ -669,7 +660,7 @@ body.gui-hidden #stage-island { border: none; }
 body.gui-hidden #stage-island .island-head { display: none; }
 /* Full-bleed shows the CANVAS regardless of which canvas-tab was active. */
 body.gui-hidden #stagewrap { display: flex !important; }
-body.gui-hidden #settings-pop, body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !important; }
+body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !important; }
 
 /* Menu-style button (window menus in the top bar). */
 .g-btn {
@@ -827,7 +818,7 @@ body.gui-hidden #show-ui-pill { display: block; }
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
 }
-.fx-badge.out-over { color: var(--danger); border-color: var(--danger); }   /* output over capacity */
+.fx-badge.out-over { color: var(--warn); }   /* output over its fps budget — advisory, not an error (border stays quiet) */
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
@@ -958,7 +949,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-group-dev:hover { text-decoration: underline; }
 .out-group-port { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); opacity: .8; }
 .out-group .out-chain { color: var(--accent); }
-.out-group .out-over { color: var(--danger); }
+.out-group .out-over { color: var(--warn); }
 
 /* === Output Fixtures list (merged tab) =====================================
    Same card chrome as the Inventory rows (full-width cells: fill + hairline), so
@@ -995,7 +986,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-binding:hover { color: var(--muted); }
 .out-tri { flex: 0 0 auto; width: 9px; color: var(--faint); font-size: var(--fs-micro); }
 .out-badge { flex: 0 0 auto; color: var(--muted); font: var(--fs-micro) var(--mono); font-variant-numeric: tabular-nums; }
-.out-badge.out-over { color: var(--danger); }
+.out-badge.out-over { color: var(--warn); }
 
 .out-stagger { padding: 2px 0 6px; }
 .out-stagger-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
@@ -1164,9 +1155,41 @@ input[type=checkbox]:checked::after {
 }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 .anim-cog.audio { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
-.anim-mode-menu { right: 0; min-width: 112px; }
-.fx-menu-item.is-current { color: var(--accent); }
-.fx-menu-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
+/* MODE PICKER FLYOUT (#anim-pop): the cog opens a small singleton panel docked
+   at the RIGHT EDGE of the left sidebar, vertically aligned with the clicked
+   param's row — a flyout sitting beside the sidebar (replaces the in-row slide
+   strip). Solid island chrome (a picker, not glass); positioned in JS. Rows
+   hosted outside #dock-left anchor at the cog instead (kit placement). */
+#anim-pop {
+  position: fixed; z-index: 60; min-width: 132px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius);
+  padding: 3px; display: flex; flex-direction: column; gap: 1px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.5);
+  animation: anim-pop-in 120ms ease;
+}
+@keyframes anim-pop-in { from { opacity: 0; transform: translateX(-6px); } }
+@media (prefers-reduced-motion: reduce) { #anim-pop { animation: none; } }
+/* Header: the param's name, in the quiet caps style of .fx-menu-label. */
+.anim-pop-head {
+  font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 3px;
+  text-transform: uppercase; letter-spacing: var(--ls-caps);
+  border-bottom: 1px solid var(--line); margin-bottom: 2px;
+}
+/* Compact one-line items — descriptions live on the hover title. */
+.anim-pop-item {
+  background: none; border: none; text-align: left; padding: 5px 8px; cursor: pointer;
+  border-radius: var(--radius); font-size: var(--fs-body); color: var(--text);
+}
+.anim-pop-item:hover { background: var(--hover); }
+/* Current mode: accent + a restrained dot mark at the right edge. */
+.anim-pop-item.is-current { color: var(--accent); }
+.anim-pop-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
+/* Control publish tick (themed checkbox + label) below a hairline. */
+.anim-pop-tick { display: inline-flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); margin-top: 2px; border-radius: 0; }
+.anim-pop-tick .fx-tick-box { width: 11px; height: 11px; }
+.anim-pop-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
+.anim-pop-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 3px; top: 0;
+  width: 3px; height: 6px; border: solid var(--accent-dark); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .is-audio input[type=range] { accent-color: var(--accent); }
 .is-animated input[type=range] { accent-color: var(--accent); }
 /* Modulation rail: any DRIVEN param (timeline/audio/external) wears an inset accent
@@ -1386,13 +1409,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .fx-menu-item { background: none; border: none; text-align: left; padding: 5px 8px; border-radius: var(--radius); font-size: var(--fs-body); color: var(--text); }
 /* "Control" publish tick — a real themed checkbox box (matches input[type=checkbox]),
-   not the tiny ☑ glyph it replaced. */
-.fx-menu-tick { display: flex; align-items: center; gap: 8px; }
+   not the tiny ☑ glyph it replaced. Lives in the anim mode flyout (#anim-pop). */
 .fx-tick-box { width: 14px; height: 14px; flex: 0 0 auto; box-sizing: border-box; position: relative;
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg); }
-.fx-menu-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
-.fx-menu-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 4px; top: 1px;
-  width: 3px; height: 7px; border: solid var(--accent-dark); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .fx-menu-danger { color: var(--danger); }
 .ly-rmfx { color: var(--danger); border-color: var(--line); }
 .ly-addfx { margin-top: 4px; }
@@ -1752,7 +1771,6 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 }
 .accent-swatch:hover { opacity: .75; }
 .accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
-#settings-pop-body .fx-add { margin-top: 8px; }
 
 /* --- UPPERCASE chrome (C6) --------------------------------------------------
    App-authored text reads uppercase (System85's lowercase looks odd in chrome);

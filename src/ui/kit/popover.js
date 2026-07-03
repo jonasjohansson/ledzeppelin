@@ -16,9 +16,11 @@ export function placePopover(pop, anchor) {
 
 // Wire click-outside (capture) + Escape to call `onClose`. Returns a cleanup fn
 // that removes the listeners — call it from your own close(). The deferred attach
-// avoids the opening click immediately dismissing the popup.
-export function dismissOnOutside(pop, onClose) {
-  const onClick = (ev) => { if (pop && !pop.contains(ev.target)) onClose(); };
+// avoids the opening click immediately dismissing the popup. `alsoInside` (optional)
+// exempts a second element — the opener button of a body-appended popup — so its own
+// click reaches the toggle handler instead of being eaten by the capture dismiss.
+export function dismissOnOutside(pop, onClose, alsoInside) {
+  const onClick = (ev) => { if (pop && !pop.contains(ev.target) && !alsoInside?.contains(ev.target)) onClose(); };
   const onKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); onClose(); } };
   setTimeout(() => document.addEventListener('click', onClick, true), 0);
   document.addEventListener('keydown', onKey, true);

@@ -39,8 +39,8 @@ It uses **scenes** (recallable snapshots), not a cue list. The released app need
 
 A single row of icon buttons (with tiny uppercase captions), grouped left to right:
 
-- **Settings** (gear, far left) — opens the settings panel (audio input, snap, output,
-  appearance) as a floating overlay.
+- **Settings** (gear, far left) — opens **Settings** (audio input, snap, output,
+  appearance) as a **popup window**, like Mapping and Library.
 - **Project** — lock (performance mode), save (⌘S), open (⌘O), new (undo/redo live on
   ⌘Z / ⇧⌘Z).
 - **Mapping** (mapping icon) and **Library** (box icon) — each opens as a **popup window**.
@@ -62,8 +62,8 @@ There is no Import button — **drag a file onto the window**:
 - a **composition** `.json` → loads visuals only;
 - a **LEDger preset** → you're pointed to the **Library** window to import it.
 
-Save the whole project with ⌘S (open with ⌘O); *Save composition…* lives in **Settings**
-(the gear at the top-left).
+Save the whole project with ⌘S (open with ⌘O); *Save composition…* lives in the
+**Settings** window (the gear at the top-left opens it).
 
 New to LED terms? Read [LED control concepts](02-concepts.md). Otherwise jump to
 [Getting started](03-getting-started.md).

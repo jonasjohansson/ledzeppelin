@@ -111,7 +111,10 @@ In the 3D viewport each active field also draws a schematic **ghost** in its
 clip's colour — a translucent plane, gradient arrow, wireframe sphere rings, or
 a sparse noise lattice — so you can see *where* the field sits in space even
 where no LED catches it; the **FIELDS** chip in the stage's top-left corner
-toggles the ghosts.
+toggles the ghosts. The top bar's **Outlines** toggle (dashed-frame icon, next
+to Tint) hides the fixture outline strokes in both the 2D stage and the 3D
+viewport — off gives a light-only view where the lit cells/dots carry the
+whole scene (the selected fixture keeps its handles so it stays editable).
 
 Beyond the built-ins, LED Zeppelin runs **ISF** shaders (the Interactive Shader
 Format). Two ways to add one:
@@ -163,7 +166,9 @@ inspector sections), but the per-clip chain is where most work happens.
 ## Parameter modulation
 
 Almost any numeric parameter can be **modulated** instead of held static. Each
-such row has a **cog (⚙)** that opens a mode menu:
+such row has a **cog (⚙)**: click it and a small mode picker flies out beside
+the sidebar, level with the row (the cog, `Esc`, or a click elsewhere closes
+it). The modes:
 
 - **Basic** — hold a single value (the plain slider), or sweep between an **in**
   and **out** value on a dual-handle range track.
@@ -188,7 +193,7 @@ external channel) — so the deck tells you at a glance which clips are driven.
 
 Any routable parameter can be driven from **outside** the app. Rather than a
 dedicated menu entry, you bind a param to an incoming OSC/MIDI channel in
-**System › Mapping** (see [Mappings](08-mappings.md)); the cog menu's **Control**
+**System › Mapping** (see [Mappings](08-mappings.md)); the cog picker's **Control**
 tick additionally publishes a parameter to the phone Companion / Control surface.
 Each routable param carries a canonical OSC address you can copy.
 

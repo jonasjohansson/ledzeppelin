@@ -181,6 +181,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   const wrap = el('div', { className: 'anim-param' });
   const cog = animModeMenu({
     animated, isAudio, isExternal, isDashboard, audioSource: anim?.source, oscAddress,
+    label: prettyParam(p.key),
     onPick: (mode) => {
       // Default the sweep to the FULL slider range (in = min, out = max).
       if (mode === 'basic') onAnim(null);
@@ -242,56 +243,84 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   return wrap;
 }
 
-// The cog button + its Basic/Timeline/Audio/External popover (Resolume-style).
-// The cog reflects the current mode (accent when animated, green for Audio);
-// the menu marks the active mode. Replaces the old inline "T" toggle + dropdown.
-function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource, onPick, oscAddress }) {
-  const wrap = el('div', { className: 'fx-menu-wrap anim-cog-wrap' });
-  const menu = el('div', { className: 'fx-menu anim-mode-menu', hidden: true });
-  let dismiss = null;
-  const close = () => { menu.hidden = true; if (dismiss) { dismiss(); dismiss = null; } };
+// The cog button + the MODE PICKER FLYOUT (Basic/Timeline/Dashboard/Audio).
+// Clicking the cog opens #anim-pop — a SINGLETON vertical panel docked at the
+// right edge of the LEFT SIDEBAR (#dock-left), vertically aligned with the
+// clicked param's row, so it reads as a flyout sitting beside the sidebar
+// (replaces the in-row slide strip). Opening from another param's cog MOVES the
+// panel there; Esc / outside click closes. When the row doesn't live inside
+// #dock-left (a popout or another column) the panel anchors at the cog instead
+// (standard kit placement). Picking closes the panel and calls onPick — the
+// commit that follows re-renders the panel's rows into the chosen state.
+let animPopEl = null, animPopDismiss = null, animPopOwner = null;
+function closeAnimPop() {
+  if (animPopDismiss) { animPopDismiss(); animPopDismiss = null; }
+  if (animPopEl) { animPopEl.remove(); animPopEl = null; }
+  animPopOwner = null;
+}
+function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource, onPick, oscAddress, label }) {
+  const wrap = el('div', { className: 'anim-cog-wrap' });
   const cur = !animated ? 'basic'
     : isDashboard ? 'dashboard'
     : isAudio ? (audioSource === 'composition' ? 'audio-composition' : 'audio-external')
     : isExternal ? 'external' : 'timeline';
   // Compact one-line items; what each mode does lives on the HOVER title — a
   // visible description per row made this little picker read like a manual.
-  const item = (mode, label, desc) => el('button', {
-    className: 'fx-menu-item' + (mode === cur ? ' is-current' : ''),
-    textContent: label, title: desc,
-    onclick: (e) => { e.stopPropagation(); close(); onPick(mode); },
+  const item = (mode, lbl, desc) => el('button', {
+    type: 'button',
+    className: 'anim-pop-item' + (mode === cur ? ' is-current' : ''),
+    textContent: lbl, title: desc,
+    onclick: (e) => { e.stopPropagation(); closeAnimPop(); onPick(mode); },
   });
-  menu.append(
-    item('basic', 'Basic', 'hold a value, or sweep between two'),
-    item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
-    item('dashboard', 'Dashboard', 'follow a global Dashboard link knob'),
-    item('audio-external', 'Audio Ext.', 'follow a band of a hardware audio input'),
-    item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio')
-    // No 'External' item: any param is bound live via System › Mapping (which sets
-    // the External binding under the hood), so an explicit menu entry is redundant.
-  );
-  // Control tick: a ☑/◻ row that publishes THIS parameter to the Control surface.
-  // (Only for params that have a canonical address — i.e. everything routable.)
-  if (oscAddress) {
-    const on = remoteHook.has(oscAddress);
-    const box = el('span', { className: 'fx-tick-box' });   // themed checkbox (bigger than the ☑ glyph)
-    menu.append(el('button', {
-      className: 'fx-menu-item fx-menu-tick' + (on ? ' is-on' : ''),
-      title: 'show this parameter on the Control surface',
-      onclick: (e) => { e.stopPropagation(); close(); remoteHook.toggle(oscAddress); },
-    }, [box, 'Control']));
-  }
+  const open = () => {
+    closeAnimPop();                           // singleton — opening elsewhere moves it
+    const pop = el('div', { id: 'anim-pop' }, [
+      el('div', { className: 'anim-pop-head', textContent: label || 'Modulation' }),
+      item('basic', 'Basic', 'hold a value, or sweep between two'),
+      item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
+      item('dashboard', 'Dashboard', 'follow a global Dashboard link knob'),
+      item('audio-external', 'Audio Ext.', 'follow a band of a hardware audio input'),
+      item('audio-composition', 'Audio Comp.', 'follow a band of the composition’s clip audio'),
+      // No 'External' item: any param is bound live via System › Mapping (which
+      // sets the External binding under the hood), so an explicit entry is redundant.
+    ]);
+    // Control tick: publishes THIS parameter to the Control surface. (Only for
+    // params that have a canonical address — i.e. everything routable.)
+    if (oscAddress) {
+      const on = remoteHook.has(oscAddress);
+      pop.append(el('button', {
+        type: 'button',
+        className: 'anim-pop-item anim-pop-tick' + (on ? ' is-on' : ''),
+        title: 'show this parameter on the Control surface',
+        onclick: (e) => { e.stopPropagation(); closeAnimPop(); remoteHook.toggle(oscAddress); },
+      }, [el('span', { className: 'fx-tick-box' }), 'Control']));
+    }
+    // POSITION: x = the left dock's right edge + a small gap; y = the clicked
+    // row's top — both clamped to the viewport, so it sits BESIDE the sidebar
+    // level with the row it edits. Rows hosted outside #dock-left fall back to
+    // the kit's anchored-at-the-cog placement.
+    const row = wrap.parentElement || wrap;   // the .ly-param row the cog lives in
+    const dock = document.getElementById('dock-left');
+    document.body.append(pop);                // attach first so offsetWidth/Height measure
+    if (dock && dock.contains(row)) {
+      const d = dock.getBoundingClientRect(), r = row.getBoundingClientRect();
+      pop.style.left = Math.max(6, Math.min(d.right + 6, window.innerWidth - 6 - pop.offsetWidth)) + 'px';
+      pop.style.top = Math.max(6, Math.min(r.top, window.innerHeight - 6 - pop.offsetHeight)) + 'px';
+    } else {
+      placePopover(pop, wrap);
+    }
+    animPopEl = pop; animPopOwner = wrap;
+    // The cog is OUTSIDE the body-appended panel — exempt it from the outside-
+    // click dismiss so its own click reaches the toggle (close) handler below.
+    animPopDismiss = dismissOnOutside(pop, closeAnimPop, wrap);
+  };
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
     textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio) · map it in System › Mapping · or expose it on the Control surface',
   });
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    if (menu.hidden) { menu.hidden = false; dismiss = dismissOnOutside(wrap, close); }
-    else close();
-  };
-  wrap.append(btn, menu);
+  btn.onclick = (e) => { e.stopPropagation(); if (animPopOwner === wrap) closeAnimPop(); else open(); };
+  wrap.append(btn);
   return wrap;
 }
 
@@ -627,6 +656,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   const libraryEl = mounts?.library || root;
 
   function render() {
+    closeAnimPop();   // the flyout is body-appended — don't strand it over stale rows
     const layers = getShow().composition?.layers || [];
     // Clear each distinct container once.
     const seen = new Set();

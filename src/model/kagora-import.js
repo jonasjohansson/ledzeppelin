@@ -214,7 +214,16 @@ export function importKagora(preset) {
   }
   const spanX = maxX - minX || 1;
   const spanY = maxY - minY || 1;
-  const norm = (p) => [(p.x - minX) / spanX, (p.y - minY) / spanY];
+  // z (height off the rig's ground plane, same px units as x/y — LEDger writes
+  // it on plan-view presets) normalizes by spanY: fixture 3-tuples are
+  // [x, y, z] with z in canvas-HEIGHT units, matching the 3D view/engine
+  // (app.js scales p[2] by cv.h, exactly like y). z = 0 is the ground plane, so
+  // there's no min-offset. A strip is promoted to 3-tuples as a WHOLE (feet at
+  // z 0 included) once any vertex is lifted — the no-mixed-dimensionality rule
+  // from fixture-transform; an all-flat strip stays clean 2-tuples.
+  const norm = (p, withZ) => (withZ
+    ? [(p.x - minX) / spanX, (p.y - minY) / spanY, (Number(p.z) || 0) / spanY]
+    : [(p.x - minX) / spanX, (p.y - minY) / spanY]);
 
   // UNIFORM pixel scale (long axis ≈ 1280). Used both for the canvas size AND for
   // each straight strip's TRANSFORM, so the layout is locked in pixel space and
@@ -234,9 +243,10 @@ export function importKagora(preset) {
 
   function normalizedPoints(s) {
     const pts = s.points ?? [];
-    if (pts.length >= 2) return pts.map(norm);
+    const withZ = pts.some((p) => Number(p?.z));
+    if (pts.length >= 2) return pts.map((p) => norm(p, withZ));
     // Synthesize a short default segment if the strip has no usable polyline.
-    if (pts.length === 1) return [norm(pts[0]), norm(pts[0])];
+    if (pts.length === 1) return [norm(pts[0], withZ), norm(pts[0], withZ)];
     return [[0, 0], [0.1, 0]];
   }
 
@@ -304,8 +314,12 @@ export function importKagora(preset) {
       input: (() => {
         const np = normalizedPoints(s);
         // A bent run (>2 points) stays a polyline (normalized points are canonical);
-        // a straight strip becomes a BAR with an explicit uniform-pixel transform.
-        if (np.length > 2) return { mode: 'polyline', points: np, samples: pixelCount };
+        // so does a LIFTED one (any z): a bar's points are re-derived from its
+        // x/y-only transform, which would drop the height. Only a flat straight
+        // strip becomes a BAR with an explicit uniform-pixel transform.
+        if (np.length > 2 || np.some((q) => q.length > 2)) {
+          return { mode: 'polyline', points: np, samples: pixelCount };
+        }
         return { mode: 'bar', transform: barTransform(s), points: np, samples: pixelCount };
       })(),
     };
