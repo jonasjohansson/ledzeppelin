@@ -1896,6 +1896,7 @@ function syncMode3d() {
   redrawOverlay();
 }
 function toggleMode3d() {
+  layerPanel?.closeModPop?.();   // a mode flip is a context change — don't leave the modulation flyout floating
   const next = toggleView3d(show);
   saveShow(next);
   rebuild(next);      // snapshots undo + rebuilds the sampler (3D samples front-ortho: lifted geometry's UVs differ from 2D)

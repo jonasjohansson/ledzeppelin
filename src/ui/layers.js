@@ -1673,7 +1673,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   render();
   // getSelectedClipId: app.js resolves /selected/… canonical OSC addresses
   // against the inspector's current clip at message time.
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
