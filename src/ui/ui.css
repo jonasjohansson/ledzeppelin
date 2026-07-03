@@ -1154,40 +1154,40 @@ input[type=checkbox]:checked::after {
 }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 .anim-cog.audio { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
-/* In-row mode picker: the cog slides the row's content out LEFT and a compact
-   segmented strip in from the RIGHT — same row, same height, no floating menu.
-   The strip is absolutely positioned over the row (no layout shift, neighbours
-   never move) and stops short of the cog, which stays put and toggles back.
-   The two panels travel the same distance in the same 180ms, so they tile —
-   a carousel slide, not a crossfade. */
-.anim-slide { position: relative; overflow: hidden; }
-.anim-slide > :not(.anim-mode-strip):not(.anim-cog-wrap) { transition: transform 180ms ease; }
-.anim-slide.slide-open > :not(.anim-mode-strip):not(.anim-cog-wrap) { transform: translateX(var(--slide-x, -100%)); }
-.anim-mode-strip {
-  position: absolute; left: 0; top: 0; bottom: 0; box-sizing: border-box;
-  display: flex; align-items: center; gap: 0;
-  transform: translateX(var(--strip-out, 100%)); transition: transform 180ms ease;
+/* MODE PICKER FLYOUT (#anim-pop): the cog opens a small singleton panel docked
+   at the RIGHT EDGE of the left sidebar, vertically aligned with the clicked
+   param's row — a flyout sitting beside the sidebar (replaces the in-row slide
+   strip). Solid island chrome (a picker, not glass); positioned in JS. Rows
+   hosted outside #dock-left anchor at the cog instead (kit placement). */
+#anim-pop {
+  position: fixed; z-index: 60; min-width: 132px;
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius);
+  padding: 3px; display: flex; flex-direction: column; gap: 1px;
+  box-shadow: 0 6px 16px rgba(0,0,0,.5);
+  animation: anim-pop-in 120ms ease;
 }
-.anim-slide.slide-open > .anim-mode-strip { transform: translateX(0); }
-@media (prefers-reduced-motion: reduce) {
-  .anim-slide > :not(.anim-mode-strip):not(.anim-cog-wrap), .anim-mode-strip { transition: none; }
+@keyframes anim-pop-in { from { opacity: 0; transform: translateX(-6px); } }
+@media (prefers-reduced-motion: reduce) { #anim-pop { animation: none; } }
+/* Header: the param's name, in the quiet caps style of .fx-menu-label. */
+.anim-pop-head {
+  font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 3px;
+  text-transform: uppercase; letter-spacing: var(--ls-caps);
+  border-bottom: 1px solid var(--line); margin-bottom: 2px;
 }
-/* Flush segments sharing hairlines (a classic segmented control — every pixel of
-   the row counts). Width follows the label; squeeze gracefully, don't clip. */
-.anim-strip-btn {
-  flex: 1 1 auto; min-width: 0; padding: 0 1px; height: var(--ctrl-h); cursor: pointer;
-  background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius);
-  color: var(--muted); font: calc(var(--fs-micro) - 1px) var(--mono); letter-spacing: normal;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+/* Compact one-line items — descriptions live on the hover title. */
+.anim-pop-item {
+  background: none; border: none; text-align: left; padding: 5px 8px; cursor: pointer;
+  border-radius: var(--radius); font-size: var(--fs-body); color: var(--text);
 }
-.anim-strip-btn + .anim-strip-btn { border-left: none; }
-.anim-strip-btn:hover { color: var(--text); background: var(--hover); }
-/* Current mode: restrained accent underline (no colored border). */
-.anim-strip-btn.is-current { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
-.anim-strip-tick { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
-.anim-strip-tick .fx-tick-box { width: 11px; height: 11px; }
-.anim-strip-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
-.anim-strip-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 3px; top: 0;
+.anim-pop-item:hover { background: var(--hover); }
+/* Current mode: accent + a restrained dot mark at the right edge. */
+.anim-pop-item.is-current { color: var(--accent); }
+.anim-pop-item.is-current::after { content: '●'; float: right; font-size: 7px; line-height: 1.6; opacity: .85; }
+/* Control publish tick (themed checkbox + label) below a hairline. */
+.anim-pop-tick { display: inline-flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); margin-top: 2px; border-radius: 0; }
+.anim-pop-tick .fx-tick-box { width: 11px; height: 11px; }
+.anim-pop-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
+.anim-pop-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 3px; top: 0;
   width: 3px; height: 6px; border: solid var(--accent-dark); border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .is-audio input[type=range] { accent-color: var(--accent); }
 .is-animated input[type=range] { accent-color: var(--accent); }
@@ -1408,7 +1408,7 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
 .fx-menu-item { background: none; border: none; text-align: left; padding: 5px 8px; border-radius: var(--radius); font-size: var(--fs-body); color: var(--text); }
 /* "Control" publish tick — a real themed checkbox box (matches input[type=checkbox]),
-   not the tiny ☑ glyph it replaced. Lives in the anim mode strip (CTL segment). */
+   not the tiny ☑ glyph it replaced. Lives in the anim mode flyout (#anim-pop). */
 .fx-tick-box { width: 14px; height: 14px; flex: 0 0 auto; box-sizing: border-box; position: relative;
   border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--field-bg); }
 .fx-menu-danger { color: var(--danger); }
