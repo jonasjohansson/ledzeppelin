@@ -43,16 +43,28 @@ export function initPrefs({ preview, renderOutput, redrawOverlay }) {
     catch { return true; }
   })();
   const outlineBtn = document.getElementById('outline-btn');
+  // Tint only colours the fixture outline strokes — with outlines hidden the
+  // button toggles nothing visible, so it's disabled while outlines are off
+  // (same pattern as EDIT disabled in 3D: disabled + a title that says why).
+  // The persisted lz.tint value is untouched — the preference just sits inert.
+  function syncTintEnabled() {
+    if (!colorBtn) return;
+    colorBtn.disabled = !fixtureOutlines;
+    colorBtn.title = fixtureOutlines ? 'tint fixtures by controller colour'
+      : 'tint needs outlines on — it colours the fixture outline strokes';
+  }
   function setFixtureOutlines(on) {
     fixtureOutlines = !!on;
     try { localStorage.setItem('lz.outlines', fixtureOutlines ? '1' : '0'); } catch { /* ignore */ }
     if (outlineBtn) outlineBtn.classList.toggle('on', fixtureOutlines);
     preview?.setOutlines?.(fixtureOutlines);
+    syncTintEnabled();
     redrawOverlay();
   }
   outlineBtn?.addEventListener('click', () => setFixtureOutlines(!fixtureOutlines));
   if (outlineBtn) outlineBtn.classList.toggle('on', fixtureOutlines);
   preview?.setOutlines?.(fixtureOutlines);
+  syncTintEnabled();   // persisted outlines=off → Tint boots disabled
 
   // This is an app surface, not a document — by default suppress the OS right-click menu
   // everywhere EXCEPT editable text fields (where copy/paste is wanted), and sliders keep
