@@ -1049,20 +1049,26 @@ function positionEditor(sel) {
   // Only a genuinely BENT polyline (3+ vertices) shows the vertex table. (Arcs are
   // bezier's job; their rig has no bent strips.)
   const straightPoly = isPolylineFixture(sel.input) && (sel.input.points?.length ?? 0) <= 2;
-  const shapeRow = () => {
+  // Shape toggle — small icon buttons in the POSITION header (not a chip row).
+  // Linear (straight strip) is always offered; Bezier (arch) is a 3D concept — the
+  // control is pulled UP in z — so it only appears in 3D mode (or when the fixture
+  // is already bezier, so you can always convert it back). A bent polyline shows
+  // NEITHER active. Conversions keep the ends via setFixtureShape.
+  const shapeToggle = () => {
     const cur = isBezierFixture(sel.input) ? 'bezier' : (isPolylineFixture(sel.input) && !straightPoly) ? 'polyline' : 'bar';
-    return oel('div', { className: 'dir-btns shape-row' }, [
-      ['bar', 'Bar', 'straight strip — an x/y/w/h/rotation box'],
-      ['bezier', 'Bezier', 'quadratic arch — drag the diamond control; in 3D, Alt-drag it up into a standing arch'],
-    ].map(([m, label, tip]) => oel('button', {
-      className: 'dir-btn' + (m === cur ? ' on' : ''), textContent: label, title: tip,
-      onclick: () => { if (m !== cur) apply(setFixtureShape(show, sel.id, m)); },
-    })));
+    const shapes = [['bar', 'ic-linear', 'Linear', 'straight strip — x / y / w / h / rotation']];
+    if (is3D() || isBezierFixture(sel.input)) shapes.push(['bezier', 'ic-bezier', 'Bezier', 'curved arch — in 3D, Alt-drag the control up into a standing arch']);
+    const wrap = oel('div', { className: 'shape-toggle' });
+    for (const [m, icon, label, tip] of shapes) {
+      const b = oel('button', { className: 'shape-btn' + (m === cur ? ' on' : ''), title: `${label} — ${tip}` });
+      b.innerHTML = `<svg class="ic-sm" aria-hidden="true"><use href="#${icon}"/></svg>`;
+      b.onclick = (e) => { e.stopPropagation(); if (m !== cur) apply(setFixtureShape(show, sel.id, m)); };
+      wrap.append(b);
+    }
+    return wrap;
   };
   const bentPoly = isPolylineFixture(sel.input) && !straightPoly;
-  return oel('div', { className: 'output-edit' }, [
-    flatGroup('Position', 'position', (body) => {
-      if (sel.input?.mode !== 'grid') body.append(shapeRow());
+  const posSec = flatGroup('Position', 'position', (body) => {
       if (isBezierFixture(sel.input)) { body.append(bezierTable(), reverseRow()); return; }
       if (bentPoly) {
         // A bent polyline (an imported arc). Keep Position tidy: a one-line summary
@@ -1123,7 +1129,12 @@ function positionEditor(sel) {
         ]),
         reverseRow(),
       );
-    }),
+    });
+  // The shape toggle sits in the POSITION header (right-aligned icons), not the body —
+  // pixel fixtures only (a matrix keeps its grid footprint, no shape choice).
+  if (sel.input?.mode !== 'grid') posSec.querySelector('.insp-sec-head')?.append(shapeToggle());
+  return oel('div', { className: 'output-edit' }, [
+    posSec,
     // Bent polyline only: the full per-vertex editor, in its OWN collapsible group
     // (starts collapsed — 'vertices' isn't in SEC_OPEN) so it's on tap but never
     // dominates the panel. Its title carries the count.
@@ -1356,9 +1367,10 @@ function multiPositionEditor(ids) {
   // when mixed. Same conversions as the single editor (bezier seeds c = chord
   // midpoint), applied per fixture in ONE undoable commit.
   const multiShapeRow = () => oel('div', { className: 'dir-btns shape-row' }, [
-    ['bar', 'Bar', 'straighten every selected strip into an x/y/w/h/rotation box'],
+    ['bar', 'Linear', 'straighten every selected strip into an x/y/w/h/rotation box'],
+    // Bezier is a 3D concept (raise Arc Z to stand the arches up) — only offered in 3D.
     // (Polyline is not offered as a bulk conversion — see the single editor note.)
-    ['bezier', 'Bezier', 'make every selected strip a quadratic arch (then raise Arc Z to stand them all up)'],
+    ...(is3D() ? [['bezier', 'Bezier', 'make every selected strip a quadratic arch (then raise Arc Z to stand them all up)']] : []),
   ].map(([m, label, tip]) => oel('button', {
     className: 'dir-btn' + (m === curShape ? ' on' : ''), textContent: label, title: tip,
     onclick: () => { if (m !== curShape) applyAll((nx, id) => { const f = fxOf(id, nx); return (!f || isDmxFixture(f) || f.input?.mode === 'grid') ? nx : setFixtureShape(nx, id, m); }); },

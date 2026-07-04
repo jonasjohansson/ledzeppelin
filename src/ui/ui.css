@@ -235,8 +235,19 @@ body.mode-3d #proj-row { display: flex; }
 #proj-row .proj-fields { text-transform: uppercase; }
 
 /* Fixture SHAPE row (Bar | Polyline | Bezier): equal-width segment buttons. */
-.shape-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; margin-bottom: var(--s2); }
-.shape-row .dir-btn { min-width: 0; justify-content: center; }
+.shape-row { display: flex; gap: 2px; margin-bottom: var(--s2); }
+.shape-row .dir-btn { flex: 1 1 0; min-width: 0; justify-content: center; }
+/* Shape toggle in the POSITION header: small icon buttons (Linear / Bezier),
+   right-aligned like the group reset. Active = accent tint. */
+.shape-toggle { margin-left: auto; flex: 0 0 auto; display: flex; gap: 2px; }
+.shape-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 18px;
+  padding: 0; background: none; border: 1px solid transparent; border-radius: var(--radius-sm);
+  color: var(--faint); cursor: pointer;
+}
+.shape-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.shape-btn.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+.shape-btn .ic-sm { width: 13px; height: 13px; fill: currentColor; display: block; }
 /* Per-vertex XYZ table (polyline/bezier fixture editor): # + X/Y/Z px columns.
    Inputs match the .fx-field chrome; Z is height off the canvas plane (3D). */
 .vtx-grid { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 2px 4px; align-items: center; margin-bottom: var(--s2); }
