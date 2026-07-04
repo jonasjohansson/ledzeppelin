@@ -1908,7 +1908,10 @@ setWallView(wallView);
 // orbit drags save WITHOUT entering undo history (like zoom/pan, it's not an
 // edit).
 const mode3dBtn = document.getElementById('mode3d-btn');
-const is3D = () => show.composition?.view3d?.mode === '3d';
+// Hoisted (function decl, not a const arrow) so it's callable from positionEditor's
+// shapeToggle even during the BOOT render pass, which runs before this line — a const
+// there hit the temporal dead zone and aborted init (fixtures became unselectable).
+function is3D() { return show.composition?.view3d?.mode === '3d'; }
 // Reflect the CURRENT show's mode on the button + overlay (also called after
 // undo/redo/open, where the mode may change without a click).
 function syncMode3d() {
