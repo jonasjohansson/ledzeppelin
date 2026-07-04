@@ -1044,8 +1044,13 @@ function positionEditor(sel) {
   // no chip at all: it stays a first-class mode under the hood (imported LEDger
   // runs with bends, double-click still inserts a bend vertex) but a selected
   // polyline just shows NEITHER chip active — clicking Bar/Bezier converts it.
+  // A STRAIGHT polyline (≤2 points — every LEDger-imported strip) is geometrically
+  // a bar, so it's edited AS a bar: no vertex "window", the Bar chip reads active.
+  // Only a genuinely BENT polyline (3+ vertices) shows the vertex table. (Arcs are
+  // bezier's job; their rig has no bent strips.)
+  const straightPoly = isPolylineFixture(sel.input) && (sel.input.points?.length ?? 0) <= 2;
   const shapeRow = () => {
-    const cur = isBezierFixture(sel.input) ? 'bezier' : isPolylineFixture(sel.input) ? 'polyline' : 'bar';
+    const cur = isBezierFixture(sel.input) ? 'bezier' : (isPolylineFixture(sel.input) && !straightPoly) ? 'polyline' : 'bar';
     return oel('div', { className: 'dir-btns shape-row' }, [
       ['bar', 'Bar', 'straight strip — an x/y/w/h/rotation box'],
       ['bezier', 'Bezier', 'quadratic arch — drag the diamond control; in 3D, Alt-drag it up into a standing arch'],
@@ -1058,7 +1063,7 @@ function positionEditor(sel) {
     flatGroup('Position', 'position', (body) => {
       if (sel.input?.mode !== 'grid') body.append(shapeRow());
       if (isBezierFixture(sel.input)) { body.append(bezierTable(), reverseRow()); return; }
-      if (isPolylineFixture(sel.input)) { body.append(vertexTable(), reverseRow()); return; }
+      if (isPolylineFixture(sel.input) && !straightPoly) { body.append(vertexTable(), reverseRow()); return; }
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
