@@ -2238,26 +2238,57 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Cmd/Ctrl-C / -V: copy & paste the selected fixture(s) on the Output overlay.
-// Paste appends each copy contiguously in its device's address space (so DDP
-// indices stay valid), nudges it off the original, and selects the new ones.
-// Only active in mapping mode; ignored while typing so it never steals the
-// browser's text copy/paste.
+// Each copy lands on the first OUTPUT of its source's controller with room to
+// spare (budget-aware — see placeFixtureCopies), nudged off the original, and the
+// new ones are selected. Only active in mapping mode; ignored while typing so it
+// never steals the browser's text copy/paste.
 // Clone the given fixtures into the show, placed next to their originals, and select
 // the copies. Shared by paste (V) and duplicate (D).
 function placeFixtureCopies(srcList) {
   if (!srcList?.length) return;
   if (!overlayVisible) setOverlay(true);   // reveal the copies
   const next = structuredClone(show);
-  const devEnd = (devId) => next.fixtures
-    .filter((x) => (x.output?.deviceId || '') === devId)
-    .reduce((m, x) => Math.max(m, (x.output?.pixelOffset || 0) + (x.output?.pixelCount || 0)), 0);
+  // Budget-aware placement: a copy stays on its source's controller but lands on the
+  // first OUTPUT there with room for it (per the ~40 fps maxPerOutput budget) —
+  // starting at the source's own output and rolling forward, wrapping across the
+  // device's outputs. So copying a strip to fill a DigOcta spreads across OUT 1→8,
+  // while short strips that fit together still daisy-chain on one line. Only when
+  // EVERY output on the controller is full does it overflow the source output.
+  // (rebuild → repackOffsets recomputes the exact per-output offsets afterwards;
+  // this just picks the PORT — an unassigned source stays unassigned.)
+  const loadKey = (devId, port) => `${devId}:${port}`;
+  const load = new Map();
+  for (const f of next.fixtures) {
+    const d = f.output?.deviceId; if (!d) continue;
+    const k = loadKey(d, f.output?.port ?? 1);
+    load.set(k, (load.get(k) || 0) + (f.pixelCount || 0));
+  }
+  const pickPort = (copy) => {
+    const devId = copy.output?.deviceId; if (!devId) return;   // unassigned stays put
+    const device = next.devices.find((d) => d.id === devId);
+    const budget = Number(device?.maxPerOutput) || 0;
+    const nOut = Math.max(1, Math.round(Number(device?.outputs) || 1));
+    const px = copy.pixelCount || 0;
+    const start = copy.output?.port ?? 1;
+    let port = start;
+    if (budget > 0) {
+      port = null;
+      for (let i = 0; i < nOut; i++) {
+        const p = ((start - 1 + i) % nOut) + 1;   // source output first, then roll forward (wrapping)
+        if ((load.get(loadKey(devId, p)) || 0) + px <= budget) { port = p; break; }
+      }
+      port = port ?? start;   // every output full → overflow the source output
+    }
+    copy.output.port = port;
+    load.set(loadKey(devId, port), (load.get(loadKey(devId, port)) || 0) + px);
+  };
   const newIds = [];
   const placed = [];   // clones of what we just made → the next paste cascades from these
   for (const src of srcList) {
     const copy = structuredClone(src);
     const base = (src.id || 'f').replace(/-copy\d*$/, '');
     let n = 1; do { copy.id = `${base}-copy${n > 1 ? n : ''}`; n++; } while (next.fixtures.some((x) => x.id === copy.id));
-    copy.output.pixelOffset = devEnd(copy.output?.deviceId || '');   // contiguous append
+    if (copy.output) { pickPort(copy); copy.output.pixelOffset = 0; }   // offset is repacked in rebuild()
     const tf = copy.input?.transform;
     if (tf) {
       // Place the copy NEXT TO the original (no overlap): shift x by the fixture's
