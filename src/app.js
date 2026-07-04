@@ -1059,11 +1059,26 @@ function positionEditor(sel) {
       onclick: () => { if (m !== cur) apply(setFixtureShape(show, sel.id, m)); },
     })));
   };
+  const bentPoly = isPolylineFixture(sel.input) && !straightPoly;
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
       if (sel.input?.mode !== 'grid') body.append(shapeRow());
       if (isBezierFixture(sel.input)) { body.append(bezierTable(), reverseRow()); return; }
-      if (isPolylineFixture(sel.input) && !straightPoly) { body.append(vertexTable(), reverseRow()); return; }
+      if (bentPoly) {
+        // A bent polyline (an imported arc). Keep Position tidy: a one-line summary
+        // + reverse; the raw per-vertex X/Y/Z table is the collapsed VERTICES group
+        // below (26 rows shouldn't own the panel — shape it in 3D by Alt-dragging).
+        body.append(
+          oel('div', { className: 'output-grid' }, [
+            oel('label', { className: 'fx-field' }, [
+              oel('span', { textContent: 'Shape' }),
+              oel('span', { className: 'fx-readonly', textContent: `curved · ${sel.input.points?.length || 0} vertices` }),
+            ]),
+          ]),
+          reverseRow(),
+        );
+        return;
+      }
       // X/Y address the bounding-box TOP-LEFT (Figma-style); convert to/from centre.
       const bb = aabbSize(tf, thicknessOf(sel, show.composition?.canvas));
       body.append(
@@ -1109,6 +1124,10 @@ function positionEditor(sel) {
         reverseRow(),
       );
     }),
+    // Bent polyline only: the full per-vertex editor, in its OWN collapsible group
+    // (starts collapsed — 'vertices' isn't in SEC_OPEN) so it's on tap but never
+    // dominates the panel. Its title carries the count.
+    bentPoly ? Section(`Vertices · ${sel.input.points?.length || 0}`, 'vertices', (body) => body.append(vertexTable())) : null,
     flatGroup('Patch', 'routing', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
@@ -1120,7 +1139,7 @@ function positionEditor(sel) {
         chainStatusRow(sel),
       );
     }),
-  ]);
+  ].filter(Boolean));
 }
 
 // Editor for a selected DMX fixture: profile + position, Art-Net patch (controller,

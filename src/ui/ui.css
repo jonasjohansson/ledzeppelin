@@ -240,6 +240,9 @@ body.mode-3d #proj-row { display: flex; }
 /* Per-vertex XYZ table (polyline/bezier fixture editor): # + X/Y/Z px columns.
    Inputs match the .fx-field chrome; Z is height off the canvas plane (3D). */
 .vtx-grid { display: grid; grid-template-columns: auto 1fr 1fr 1fr; gap: 2px 4px; align-items: center; margin-bottom: var(--s2); }
+/* A long imported arc can have dozens of vertices — cap the table (in its collapsed
+   VERTICES group) so it scrolls instead of pushing the rest of the inspector away. */
+.insp-sec[data-sec="vertices"] .vtx-grid { max-height: 240px; overflow-y: auto; }
 .vtx-grid .vtx-h { font: var(--fw-med) var(--fs-micro) var(--sans); color: var(--faint); text-transform: uppercase; letter-spacing: var(--ls-caps); text-align: right; padding-right: 3px; }
 .vtx-grid .vtx-h:first-child { text-align: left; }
 .vtx-grid .vtx-idx { font: var(--fs-micro) var(--mono); color: var(--faint); padding-right: 3px; }
