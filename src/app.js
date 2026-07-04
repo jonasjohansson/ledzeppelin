@@ -2972,7 +2972,31 @@ document.getElementById('menu-refresh')?.addEventListener('click', async () => {
   location.reload();
 });
 document.getElementById('menu-save')?.addEventListener('click', projectIO.saveShowToFile);
-document.getElementById('menu-open')?.addEventListener('click', () => projectIO.openShowPicker());
+// Bundled example PROJECTS (examples/projects/index.json) — ready-made rigs (e.g.
+// Balena Voladora) loaded like Open. Fetched once at boot; if any exist, the Open
+// button becomes a small menu (Open file… + each example), else it opens the file
+// picker directly.
+let exampleProjects = [];
+fetch('./examples/projects/index.json').then((r) => r.json()).then((list) => { if (Array.isArray(list)) exampleProjects = list; }).catch(() => {});
+async function loadExampleProject(file, name) {
+  if (!window.confirm(`Load “${name}”? This replaces the current project (save first if you want to keep it).`)) return;
+  try {
+    const res = await fetch(`./examples/projects/${file}`);
+    const parsed = await res.json();
+    const next = normalizeComposition(parsed);
+    if (next.composition && !next.composition.title) next.composition.title = name;
+    applyFullShow(next);
+  } catch (e) { window.alert(`Couldn't load “${name}”: ${e.message}`); }
+}
+const openBtn = document.getElementById('menu-open');
+openBtn?.addEventListener('click', () => {
+  if (!exampleProjects.length) { projectIO.openShowPicker(); return; }
+  openMenu(openBtn, menuList([
+    { label: 'Open file…', key: '⌘O', act: () => projectIO.openShowPicker() },
+    { sep: true }, { head: 'Examples' },
+    ...exampleProjects.map((p) => ({ label: p.name, act: () => loadExampleProject(p.file, p.name) })),
+  ]));
+});
 // Offline chip: shown ONLY while the daemon/bridge is disconnected (on the hosted
 // site — no daemon ever — it stays up as a "no LED output" notice). Clicking opens
 // /health, the old health icon's diagnostic (shows the failure directly when down).
