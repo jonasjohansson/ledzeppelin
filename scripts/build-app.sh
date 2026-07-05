@@ -28,6 +28,10 @@ build_one() {
 
   echo "→ staging web assets…"
   for p in "${ASSETS[@]}"; do [ -e "$p" ] && cp -R "$p" "$outdir/"; done
+  # cp -R keeps source perms; force staged assets world-readable so a 600-mode
+  # file (e.g. an owner-only font) doesn't serve as 403. `X` keeps the binary +
+  # dirs executable/searchable.
+  chmod -R a+rX "$outdir"
   echo "✓ $outdir/$bin"
 }
 

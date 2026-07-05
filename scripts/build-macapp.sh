@@ -35,6 +35,11 @@ echo "→ staging web assets into Resources…"
 for p in index.html manifest.webmanifest favicon.svg service-worker.js src fonts icons control mappings inventory settings guide examples; do
   [ -e "$p" ] && cp -R "$p" "$C/Resources/"
 done
+# cp -R preserves source perms — a 600-mode asset (e.g. a font copied with
+# owner-only perms) then serves as 403 Forbidden for anyone but the owner. Force
+# every staged file world-readable (dirs keep search) so the bundled daemon serves
+# them to any user.
+chmod -R a+rX "$C/Resources"
 
 # App icon — build AppIcon.icns from the 512px logo so the .app/Dock/Finder show
 # the LEDZeppelin mark instead of the generic blank icon.
