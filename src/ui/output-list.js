@@ -26,7 +26,7 @@
 //   selectFixture / selectDevice     — selection entry points (app.js owns selection)
 //   applyShow(next)                  — save+rebuild+refresh-everything (chain action)
 
-import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
+import { fixtureLabel, fixtureRange, fixtureNumbers } from '../model/fixture-transform.js';
 import { isDmxFixture } from '../model/dmx.js';
 import { freePort } from '../model/chains.js';
 
@@ -116,7 +116,8 @@ export function createOutputList(hooks) {
         try { e.dataTransfer.setData('text/plain', dragFxIds.join(',')); } catch { /* some browsers */ }
       });
       const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
-      const label = ftype?.name ? `${fixtureLabel(f, i)} ${ftype.name}` : fixtureLabel(f, i);
+      const dn = num.get(f.id); const nIdx = dn != null ? dn - 1 : i;   // display number (falls back to array index)
+      const label = ftype?.name ? `${fixtureLabel(f, nIdx)} ${ftype.name}` : fixtureLabel(f, nIdx);
       const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
       if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
       row.append(nameEl);
@@ -165,9 +166,18 @@ export function createOutputList(hooks) {
     // Always show an "Unassigned" container, even when empty — it's a persistent drop
     // target: drag a fixture onto it to UNASSIGN it (deviceId '').
     if (!devMap.has('')) { const dg = { deviceId: '', groups: [], gmap: new Map() }; devMap.set('', dg); devOrder.push(dg); }
-    // Controllers first; the Unassigned holding group sits LAST (the place strips drop
-    // out to, below the real rig).
-    devOrder.sort((a, b) => (a.deviceId === '' ? 1 : 0) - (b.deviceId === '' ? 1 : 0));
+    // Controllers in SETUP order (their position in show.devices), the Unassigned
+    // holding group LAST; each controller's outputs sorted ascending, and the strips
+    // on an output in pixel-offset (chain) order — so the list reads the way the rig
+    // is wired, not the order fixtures happened to be added.
+    const devIdxOf = new Map(show.devices.map((d, i) => [d.id, i]));
+    devOrder.sort((a, b) =>
+      (a.deviceId ? (devIdxOf.get(a.deviceId) ?? 1e6) : 1e9) - (b.deviceId ? (devIdxOf.get(b.deviceId) ?? 1e6) : 1e9));
+    for (const dg of devOrder) {
+      dg.groups.sort((a, b) => a.port - b.port);
+      for (const g of dg.groups) g.items.sort((a, b) => (a.f.output?.pixelOffset ?? 0) - (b.f.output?.pixelOffset ?? 0));
+    }
+    const num = fixtureNumbers(show);   // id → display number (#1,#2,… in this same order)
 
     for (const dg of devOrder) {
       // UNASSIGNED — a plain heading (not a foldable group), still a drop target: drop

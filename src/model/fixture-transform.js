@@ -191,9 +191,29 @@ export function thicknessOf(f, canvas) {
 
 // Auto fixture identity for the lists/canvas: a 1-based number ("#1", "#2", …).
 // The internal `id` stays the stable routing handle (chains/selection); users no
-// longer type it. Pass the fixture's index in the patch; falls back to id.
+// longer type it. Pass the fixture's DISPLAY number (see fixtureNumbers); falls back to id.
 export function fixtureLabel(f, index) {
   return index != null ? `#${index + 1}` : (f?.name || f?.id || '');
+}
+
+// Display numbering (#1, #2, …) in the ORDER the rig reads top-to-bottom: by
+// controller (its position in show.devices; unassigned last), then output port,
+// then pixel offset (chain order on that line). Used by BOTH the Output list and
+// the canvas labels so the numbers match and run 1,2,3,… — the raw array index
+// jumped around once fixtures were grouped by controller. Returns a Map id→number
+// (1-based); pass `map.get(f.id) - 1` where a 0-based index is wanted.
+export function fixtureNumbers(show) {
+  const devIdx = new Map((show?.devices || []).map((d, i) => [d.id, i]));
+  const rankDev = (did) => (did ? (devIdx.get(did) ?? 1e6) : 1e9);   // assigned by setup order, unassigned last
+  const ordered = (show?.fixtures || []).map((f, i) => ({ f, i }))
+    .sort((a, b) =>
+      rankDev(a.f.output?.deviceId || '') - rankDev(b.f.output?.deviceId || '')
+      || (a.f.output?.port ?? 1) - (b.f.output?.port ?? 1)
+      || (a.f.output?.pixelOffset ?? 0) - (b.f.output?.pixelOffset ?? 0)
+      || a.i - b.i);
+  const map = new Map();
+  ordered.forEach(({ f }, n) => map.set(f.id, n + 1));
+  return map;
 }
 
 // The DDP pixel range a fixture targets on its device, zero-padded ("000–288").

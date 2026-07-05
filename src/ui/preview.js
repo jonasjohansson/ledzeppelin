@@ -9,7 +9,7 @@ import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains
 import { isDmxFixture } from '../model/dmx.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
-  setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel,
+  setFixturePoints, setFixtureVertex, addFixtureVertex, removeFixtureVertex, fixtureLabel, fixtureNumbers,
   thicknessOf, setBezierControl,
 } from '../model/fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from '../model/bezier.js';
@@ -656,6 +656,7 @@ export function createPreview(canvasEl, opts = {}) {
 
     if (show && show.fixtures?.length) {
       const { fixtureOrder, chainColors } = pipelineFor(show);
+      const num = fixtureNumbers(show);   // #N matches the Output list
       const routed = new Set(fixtureOrder.map((f) => f.id));
       const drawList = fixtureOrder.concat(show.fixtures.filter((f) => !routed.has(f.id)));
       const dim = (c) => (colorTint ? c : accCss(.9));
@@ -691,7 +692,7 @@ export function createPreview(canvasEl, opts = {}) {
           }
           if (showLabels) {
             const q = prj(pts3[0][0], pts3[0][1], pts3[0][2]);
-            if (finite(q)) p.push(labelS(fixtureLabel(f, show.fixtures.indexOf(f)), q[0], q[1] - 10 * ck, true, ck));
+            if (finite(q)) p.push(labelS(fixtureLabel(f, (num.get(f.id) ?? 1) - 1), q[0], q[1] - 10 * ck, true, ck));
           }
         }
       }
@@ -751,6 +752,7 @@ export function createPreview(canvasEl, opts = {}) {
 
     if (show && show.fixtures?.length) {
       const { fixtureOrder, chainColors } = pipelineFor(show);
+      const num = fixtureNumbers(show);   // #N matches the Output list (controller · output · offset order)
       // Draw ROUTED fixtures (with chain colours) AND unassigned ones (no device
       // yet) — a fixture you just added should appear on the canvas so you can
       // place it before wiring it to an output. Unassigned ⇒ neutral colour.
@@ -779,7 +781,7 @@ export function createPreview(canvasEl, opts = {}) {
         const lblLen = eps.length >= 2 ? Math.hypot((eps[eps.length - 1][0] - eps[0][0]) * W, (eps[eps.length - 1][1] - eps[0][1]) * Hh) : 0;
         const showLbl = selected || runKey(f) === focusKey || (!focusKey && lblLen * viewZoom >= 46 && viewZoom >= 1.1);
         if (!selected && runKey(f) !== focusKey && lblLen * viewZoom < 13) continue;   // LOD: tiny → no chrome
-        const fIdx = show.fixtures.indexOf(f);
+        const fIdx = (num.get(f.id) ?? (show.fixtures.indexOf(f) + 1)) - 1;   // display #N (Output-list order)
         const dash = selected ? null : DASH;
 
         if (isBezierFixture(f.input)) {
