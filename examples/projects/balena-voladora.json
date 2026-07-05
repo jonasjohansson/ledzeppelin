@@ -17,8 +17,8 @@
   "devices": [
     {
       "port": 4048,
-      "id": "oct1",
-      "name": "Brain A",
+      "id": "oct110",
+      "name": "DigOcta 110",
       "typeId": "digocta",
       "ip": "192.168.0.110",
       "colorOrder": "GRB",
@@ -32,8 +32,8 @@
     },
     {
       "port": 4048,
-      "id": "oct2",
-      "name": "Brain B",
+      "id": "oct120",
+      "name": "DigOcta 120",
       "typeId": "digocta",
       "ip": "192.168.0.120",
       "colorOrder": "GRB",
@@ -48,39 +48,15 @@
   ],
   "fixtureTypes": [
     {
-      "id": "sk_rib",
-      "name": "SK6812 Rib",
+      "id": "sk",
+      "name": "SK6812 GRB",
       "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "meters": 1,
+      "pixelCount": 60,
+      "cols": 60,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW",
-      "params": []
-    },
-    {
-      "id": "sk_spline",
-      "name": "SK6812 Spline",
-      "ledsPerMeter": 60,
-      "meters": 4,
-      "pixelCount": 240,
-      "cols": 240,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW",
-      "params": []
-    },
-    {
-      "id": "sk_fin",
-      "name": "SK6812 Fin",
-      "ledsPerMeter": 60,
-      "meters": 2,
-      "pixelCount": 120,
-      "cols": 120,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW",
+      "colorFormat": "",
       "params": []
     },
     {
@@ -97,542 +73,618 @@
   ],
   "fixtures": [
     {
-      "id": "spline",
-      "typeId": "sk_spline",
-      "name": "Spline",
+      "id": "bv1",
+      "typeId": "sk",
+      "name": "Tail",
+      "pixelCount": 204,
+      "ledsPerMeter": 60,
+      "meters": 3.4,
       "input": {
         "transform": {
           "x": 400,
-          "y": 480,
-          "w": 600,
+          "y": 600,
+          "w": 340,
           "h": 10,
           "rotation": 90
         },
         "points": [
           [
             0.5,
-            0.18
+            0.4479166666666667
           ],
           [
             0.5,
-            0.78
+            0.8020833333333334
           ]
         ],
-        "samples": 240
+        "samples": 204
       },
       "output": {
-        "deviceId": "oct2",
-        "port": 5,
+        "deviceId": "oct110",
+        "port": 0,
         "pixelOffset": 0,
-        "pixelCount": 240
+        "pixelCount": 204
       },
-      "ledsPerMeter": 60,
-      "meters": 4,
-      "pixelCount": 240,
-      "cols": 240,
+      "cols": 204,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib1",
-      "typeId": "sk_rib",
-      "name": "Rib 1",
+      "id": "bv2",
+      "typeId": "sk",
+      "name": "Spline",
+      "pixelCount": 222,
+      "ledsPerMeter": 60,
+      "meters": 3.7,
       "input": {
         "transform": {
           "x": 400,
-          "y": 205,
-          "w": 225,
+          "y": 235,
+          "w": 370,
+          "h": 10,
+          "rotation": 90
+        },
+        "points": [
+          [
+            0.5,
+            0.052083333333333336
+          ],
+          [
+            0.5,
+            0.4375
+          ]
+        ],
+        "samples": 222
+      },
+      "output": {
+        "deviceId": "oct110",
+        "port": 5,
+        "pixelOffset": 0,
+        "pixelCount": 222
+      },
+      "cols": 222,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv3",
+      "typeId": "sk",
+      "name": "Rib 1",
+      "pixelCount": 42,
+      "ledsPerMeter": 60,
+      "meters": 0.7,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 85,
+          "w": 70,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.205
+            0.45625,
+            0.08854166666666667
           ],
           [
-            0.640625,
-            0.205
+            0.54375,
+            0.08854166666666667
           ]
         ],
-        "samples": 90
+        "samples": 42
       },
       "output": {
-        "deviceId": "oct1",
+        "deviceId": "oct110",
         "port": 1,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 42
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 42,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib2",
-      "typeId": "sk_rib",
+      "id": "bv4",
+      "typeId": "sk",
       "name": "Rib 2",
+      "pixelCount": 42,
+      "ledsPerMeter": 60,
+      "meters": 0.7,
       "input": {
         "transform": {
           "x": 400,
-          "y": 255,
-          "w": 225,
+          "y": 148,
+          "w": 70,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.255
+            0.45625,
+            0.15416666666666667
           ],
           [
-            0.640625,
-            0.255
+            0.54375,
+            0.15416666666666667
           ]
         ],
-        "samples": 90
+        "samples": 42
       },
       "output": {
-        "deviceId": "oct1",
+        "deviceId": "oct110",
         "port": 2,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 42
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 42,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib3",
-      "typeId": "sk_rib",
+      "id": "bv5",
+      "typeId": "sk",
       "name": "Rib 3",
+      "pixelCount": 50,
+      "ledsPerMeter": 60,
+      "meters": 0.8333333333333334,
       "input": {
         "transform": {
           "x": 400,
-          "y": 305,
-          "w": 225,
+          "y": 211,
+          "w": 83.33333333333334,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.305
+            0.44791666666666663,
+            0.21979166666666666
           ],
           [
-            0.640625,
-            0.305
+            0.5520833333333334,
+            0.21979166666666666
           ]
         ],
-        "samples": 90
+        "samples": 50
       },
       "output": {
-        "deviceId": "oct1",
+        "deviceId": "oct120",
+        "port": 2,
+        "pixelOffset": 0,
+        "pixelCount": 50
+      },
+      "cols": 50,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv6",
+      "typeId": "sk",
+      "name": "Rib 4",
+      "pixelCount": 60,
+      "ledsPerMeter": 60,
+      "meters": 1,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 274,
+          "w": 100,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.4375,
+            0.28541666666666665
+          ],
+          [
+            0.5625,
+            0.28541666666666665
+          ]
+        ],
+        "samples": 60
+      },
+      "output": {
+        "deviceId": "oct120",
+        "port": 0,
+        "pixelOffset": 0,
+        "pixelCount": 60
+      },
+      "cols": 60,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv7",
+      "typeId": "sk",
+      "name": "Rib 5",
+      "pixelCount": 72,
+      "ledsPerMeter": 60,
+      "meters": 1.2,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 337,
+          "w": 120,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.425,
+            0.35104166666666664
+          ],
+          [
+            0.575,
+            0.35104166666666664
+          ]
+        ],
+        "samples": 72
+      },
+      "output": {
+        "deviceId": "oct120",
         "port": 3,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 72
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 72,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib4",
-      "typeId": "sk_rib",
-      "name": "Rib 4",
+      "id": "bv8",
+      "typeId": "sk",
+      "name": "Rib 6",
+      "pixelCount": 84,
+      "ledsPerMeter": 60,
+      "meters": 1.4,
       "input": {
         "transform": {
           "x": 400,
-          "y": 355,
-          "w": 225,
+          "y": 400,
+          "w": 140,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.355
+            0.4125,
+            0.4166666666666667
           ],
           [
-            0.640625,
-            0.355
+            0.5875,
+            0.4166666666666667
           ]
         ],
-        "samples": 90
+        "samples": 84
       },
       "output": {
-        "deviceId": "oct1",
+        "deviceId": "oct120",
+        "port": 1,
+        "pixelOffset": 0,
+        "pixelCount": 84
+      },
+      "cols": 84,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv9",
+      "typeId": "sk",
+      "name": "Rib 7",
+      "pixelCount": 102,
+      "ledsPerMeter": 60,
+      "meters": 1.7,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 463,
+          "w": 170,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.39375,
+            0.4822916666666667
+          ],
+          [
+            0.60625,
+            0.4822916666666667
+          ]
+        ],
+        "samples": 102
+      },
+      "output": {
+        "deviceId": "oct110",
+        "port": 3,
+        "pixelOffset": 0,
+        "pixelCount": 102
+      },
+      "cols": 102,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv10",
+      "typeId": "sk",
+      "name": "Rib 8",
+      "pixelCount": 102,
+      "ledsPerMeter": 60,
+      "meters": 1.7,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 526,
+          "w": 170,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.39375,
+            0.5479166666666667
+          ],
+          [
+            0.60625,
+            0.5479166666666667
+          ]
+        ],
+        "samples": 102
+      },
+      "output": {
+        "deviceId": "oct110",
         "port": 4,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 102
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 102,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib5",
-      "typeId": "sk_rib",
-      "name": "Rib 5",
+      "id": "bv11",
+      "typeId": "sk",
+      "name": "Rib 9",
+      "pixelCount": 132,
+      "ledsPerMeter": 60,
+      "meters": 2.2,
       "input": {
         "transform": {
           "x": 400,
-          "y": 405,
-          "w": 225,
+          "y": 589,
+          "w": 220.00000000000003,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.405
+            0.3625,
+            0.6135416666666667
           ],
           [
-            0.640625,
-            0.405
+            0.6375,
+            0.6135416666666667
           ]
         ],
-        "samples": 90
+        "samples": 132
       },
       "output": {
-        "deviceId": "oct1",
-        "port": 5,
+        "deviceId": "oct120",
+        "port": 4,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 132
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 132,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib6",
-      "typeId": "sk_rib",
-      "name": "Rib 6",
+      "id": "bv12",
+      "typeId": "sk",
+      "name": "Rib 10",
+      "pixelCount": 162,
+      "ledsPerMeter": 60,
+      "meters": 2.7,
       "input": {
         "transform": {
           "x": 400,
-          "y": 455,
-          "w": 225,
+          "y": 652,
+          "w": 270,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.455
+            0.33125,
+            0.6791666666666667
           ],
           [
-            0.640625,
-            0.455
+            0.66875,
+            0.6791666666666667
           ]
         ],
-        "samples": 90
+        "samples": 162
       },
       "output": {
-        "deviceId": "oct1",
-        "port": 6,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "rib7",
-      "typeId": "sk_rib",
-      "name": "Rib 7",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 505,
-          "w": 225,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.359375,
-            0.505
-          ],
-          [
-            0.640625,
-            0.505
-          ]
-        ],
-        "samples": 90
-      },
-      "output": {
-        "deviceId": "oct1",
+        "deviceId": "oct120",
         "port": 7,
         "pixelOffset": 0,
-        "pixelCount": 90
+        "pixelCount": 162
       },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
+      "cols": 162,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
     },
     {
-      "id": "rib8",
-      "typeId": "sk_rib",
-      "name": "Rib 8",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 555,
-          "w": 225,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.359375,
-            0.555
-          ],
-          [
-            0.640625,
-            0.555
-          ]
-        ],
-        "samples": 90
-      },
-      "output": {
-        "deviceId": "oct1",
-        "port": 8,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "rib9",
-      "typeId": "sk_rib",
-      "name": "Rib 9",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 605,
-          "w": 225,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.359375,
-            0.605
-          ],
-          [
-            0.640625,
-            0.605
-          ]
-        ],
-        "samples": 90
-      },
-      "output": {
-        "deviceId": "oct2",
-        "port": 1,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "rib10",
-      "typeId": "sk_rib",
-      "name": "Rib 10",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 655,
-          "w": 225,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.359375,
-            0.655
-          ],
-          [
-            0.640625,
-            0.655
-          ]
-        ],
-        "samples": 90
-      },
-      "output": {
-        "deviceId": "oct2",
-        "port": 2,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "rib11",
-      "typeId": "sk_rib",
+      "id": "bv13",
+      "typeId": "sk",
       "name": "Rib 11",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 705,
-          "w": 225,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.359375,
-            0.705
-          ],
-          [
-            0.640625,
-            0.705
-          ]
-        ],
-        "samples": 90
-      },
-      "output": {
-        "deviceId": "oct2",
-        "port": 3,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
+      "pixelCount": 162,
       "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "rib12",
-      "typeId": "sk_rib",
-      "name": "Rib 12",
+      "meters": 2.7,
       "input": {
         "transform": {
           "x": 400,
-          "y": 755,
-          "w": 225,
+          "y": 715,
+          "w": 270,
           "h": 10,
           "rotation": 0
         },
         "points": [
           [
-            0.359375,
-            0.755
+            0.33125,
+            0.7447916666666666
           ],
           [
-            0.640625,
-            0.755
+            0.66875,
+            0.7447916666666666
           ]
         ],
-        "samples": 90
+        "samples": 162
       },
       "output": {
-        "deviceId": "oct2",
-        "port": 4,
-        "pixelOffset": 0,
-        "pixelCount": 90
-      },
-      "ledsPerMeter": 60,
-      "meters": 1.5,
-      "pixelCount": 90,
-      "cols": 90,
-      "rows": 1,
-      "distribution": 0,
-      "colorFormat": "GRBW"
-    },
-    {
-      "id": "fin",
-      "typeId": "sk_fin",
-      "name": "Fin",
-      "input": {
-        "transform": {
-          "x": 400,
-          "y": 830,
-          "w": 300,
-          "h": 10,
-          "rotation": 0
-        },
-        "points": [
-          [
-            0.3125,
-            0.83
-          ],
-          [
-            0.6875,
-            0.83
-          ]
-        ],
-        "samples": 120
-      },
-      "output": {
-        "deviceId": "oct2",
+        "deviceId": "oct120",
         "port": 6,
         "pixelOffset": 0,
-        "pixelCount": 120
+        "pixelCount": 162
       },
-      "ledsPerMeter": 60,
-      "meters": 2,
-      "pixelCount": 120,
-      "cols": 120,
+      "cols": 162,
       "rows": 1,
       "distribution": 0,
-      "colorFormat": "GRBW"
+      "colorFormat": ""
+    },
+    {
+      "id": "bv14",
+      "typeId": "sk",
+      "name": "Rib 12",
+      "pixelCount": 162,
+      "ledsPerMeter": 60,
+      "meters": 2.7,
+      "input": {
+        "transform": {
+          "x": 400,
+          "y": 775,
+          "w": 270,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.33125,
+            0.8072916666666666
+          ],
+          [
+            0.66875,
+            0.8072916666666666
+          ]
+        ],
+        "samples": 162
+      },
+      "output": {
+        "deviceId": "oct120",
+        "port": 5,
+        "pixelOffset": 0,
+        "pixelCount": 162
+      },
+      "cols": 162,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv15",
+      "typeId": "sk",
+      "name": "Fin L",
+      "pixelCount": 156,
+      "ledsPerMeter": 60,
+      "meters": 2.6,
+      "input": {
+        "transform": {
+          "x": 275,
+          "y": 855,
+          "w": 260,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.18125,
+            0.890625
+          ],
+          [
+            0.50625,
+            0.890625
+          ]
+        ],
+        "samples": 156
+      },
+      "output": {
+        "deviceId": "oct110",
+        "port": 6,
+        "pixelOffset": 0,
+        "pixelCount": 156
+      },
+      "cols": 156,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
+    },
+    {
+      "id": "bv16",
+      "typeId": "sk",
+      "name": "Fin R",
+      "pixelCount": 156,
+      "ledsPerMeter": 60,
+      "meters": 2.6,
+      "input": {
+        "transform": {
+          "x": 525,
+          "y": 855,
+          "w": 260,
+          "h": 10,
+          "rotation": 0
+        },
+        "points": [
+          [
+            0.49375,
+            0.890625
+          ],
+          [
+            0.81875,
+            0.890625
+          ]
+        ],
+        "samples": 156
+      },
+      "output": {
+        "deviceId": "oct110",
+        "port": 7,
+        "pixelOffset": 0,
+        "pixelCount": 156
+      },
+      "cols": 156,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": ""
     }
   ],
   "composition": {
     "canvas": {
       "w": 800,
-      "h": 1000
+      "h": 960
     },
     "layers": [
       {
