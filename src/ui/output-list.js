@@ -117,9 +117,17 @@ export function createOutputList(hooks) {
       });
       const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
       const dn = num.get(f.id); const nIdx = dn != null ? dn - 1 : i;   // display number (falls back to array index)
-      const label = ftype?.name ? `${fixtureLabel(f, nIdx)} ${ftype.name}` : fixtureLabel(f, nIdx);
+      // Prefer the fixture's OWN name (Rib 1 / Tail / Fin L…) over the shared type
+      // name — a rig of one type still reads per-strip. Falls back to the type name.
+      const nm = f.name || ftype?.name;
+      const label = nm ? `${fixtureLabel(f, nIdx)} ${nm}` : fixtureLabel(f, nIdx);
       const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
-      if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
+      // Size suffix reflects THIS fixture's spec (instances own it — a shared type's
+      // default px would be wrong), not the template's.
+      const sizeSuffix = isDmxFixture(f) ? (ftype ? typeSizeSuffix(ftype) : '')
+        : (Number(f.rows ?? ftype?.rows) || 1) > 1 ? `${f.cols ?? ftype?.cols}×${f.rows ?? ftype?.rows}`
+        : `${f.pixelCount ?? ftype?.pixelCount ?? 1}px`;
+      if (sizeSuffix) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${sizeSuffix})` }));   // greyed size, appended to the name
       row.append(nameEl);
       if (outLabel) {
         const ob = oel('span', { className: 'fx-badge' + (outOverTitle ? ' out-over' : ''), textContent: outLabel });

@@ -48,12 +48,48 @@
   ],
   "fixtureTypes": [
     {
-      "id": "sk",
-      "name": "SK6812 RGBW",
+      "id": "sk_rib",
+      "name": "Rib",
       "ledsPerMeter": 60,
-      "meters": 1,
-      "pixelCount": 60,
-      "cols": 60,
+      "meters": 1.5,
+      "pixelCount": 90,
+      "cols": 90,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": "GRBW",
+      "params": []
+    },
+    {
+      "id": "sk_spline",
+      "name": "Spline",
+      "ledsPerMeter": 60,
+      "meters": 3.7,
+      "pixelCount": 222,
+      "cols": 222,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": "GRBW",
+      "params": []
+    },
+    {
+      "id": "sk_tail",
+      "name": "Tail",
+      "ledsPerMeter": 60,
+      "meters": 3.4,
+      "pixelCount": 204,
+      "cols": 204,
+      "rows": 1,
+      "distribution": 0,
+      "colorFormat": "GRBW",
+      "params": []
+    },
+    {
+      "id": "sk_fin",
+      "name": "Fin",
+      "ledsPerMeter": 60,
+      "meters": 2.6,
+      "pixelCount": 156,
+      "cols": 156,
       "rows": 1,
       "distribution": 0,
       "colorFormat": "GRBW",
@@ -74,7 +110,7 @@
   "fixtures": [
     {
       "id": "bv1",
-      "typeId": "sk",
+      "typeId": "sk_tail",
       "name": "Tail",
       "pixelCount": 204,
       "ledsPerMeter": 60,
@@ -118,7 +154,7 @@
     },
     {
       "id": "bv2",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 1",
       "pixelCount": 42,
       "ledsPerMeter": 60,
@@ -182,7 +218,7 @@
     },
     {
       "id": "bv3",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 2",
       "pixelCount": 42,
       "ledsPerMeter": 60,
@@ -246,7 +282,7 @@
     },
     {
       "id": "bv4",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 3",
       "pixelCount": 50,
       "ledsPerMeter": 60,
@@ -310,7 +346,7 @@
     },
     {
       "id": "bv5",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 4",
       "pixelCount": 60,
       "ledsPerMeter": 60,
@@ -374,7 +410,7 @@
     },
     {
       "id": "bv6",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 5",
       "pixelCount": 72,
       "ledsPerMeter": 60,
@@ -438,7 +474,7 @@
     },
     {
       "id": "bv7",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 6",
       "pixelCount": 84,
       "ledsPerMeter": 60,
@@ -502,7 +538,7 @@
     },
     {
       "id": "bv8",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 7",
       "pixelCount": 102,
       "ledsPerMeter": 60,
@@ -566,7 +602,7 @@
     },
     {
       "id": "bv9",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 8",
       "pixelCount": 102,
       "ledsPerMeter": 60,
@@ -630,7 +666,7 @@
     },
     {
       "id": "bv10",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 9",
       "pixelCount": 132,
       "ledsPerMeter": 60,
@@ -694,7 +730,7 @@
     },
     {
       "id": "bv11",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 10",
       "pixelCount": 162,
       "ledsPerMeter": 60,
@@ -758,7 +794,7 @@
     },
     {
       "id": "bv12",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 11",
       "pixelCount": 162,
       "ledsPerMeter": 60,
@@ -822,7 +858,7 @@
     },
     {
       "id": "bv13",
-      "typeId": "sk",
+      "typeId": "sk_rib",
       "name": "Rib 12",
       "pixelCount": 162,
       "ledsPerMeter": 60,
@@ -886,7 +922,7 @@
     },
     {
       "id": "bv14",
-      "typeId": "sk",
+      "typeId": "sk_spline",
       "name": "Spline",
       "pixelCount": 222,
       "ledsPerMeter": 60,
@@ -924,7 +960,7 @@
     },
     {
       "id": "bv15",
-      "typeId": "sk",
+      "typeId": "sk_fin",
       "name": "Fin L",
       "pixelCount": 156,
       "ledsPerMeter": 60,
@@ -968,7 +1004,7 @@
     },
     {
       "id": "bv16",
-      "typeId": "sk",
+      "typeId": "sk_fin",
       "name": "Fin R",
       "pixelCount": 156,
       "ledsPerMeter": 60,
