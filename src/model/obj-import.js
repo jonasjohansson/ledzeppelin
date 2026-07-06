@@ -67,3 +67,52 @@ export function parseName(name) {
     dir: kv.dir === 'rev' ? 'rev' : 'fwd',
   };
 }
+
+// Build a LEDger/Kagora preset from parsed OBJ objects. Returns { preset, warnings }.
+// Dedupes a stripType per (leds,lpm,order); a controller per `out.dev`; wires the
+// first run on each (dev,port) to the controller and daisy-chains the rest.
+export function objToKagora(objects) {
+  const warnings = [];
+  const types = [];
+  const instances = [];
+  const edges = [];
+  const stripTypeByKey = new Map();
+  const controllerIds = new Set();
+  const lastStripOnPort = new Map();  // `${dev}.${port}` → last strip id (for daisy-chaining)
+  let sn = 0, en = 0;
+
+  const CONTROLLER_TYPE = { kind: 'controllerType', id: 'ct_obj', name: 'Imported', ports: [] };
+  types.push(CONTROLLER_TYPE);
+
+  for (const o of objects) {
+    const meta = parseName(o.name);
+    if (meta.leds == null) { warnings.push(`Skipped "${o.name}": no leds=N in the name.`); continue; }
+    if (!o.points || o.points.length < 2) { warnings.push(`Skipped "${meta.name}": needs at least 2 points.`); continue; }
+
+    const key = `${meta.leds}|${meta.lpm}|${meta.order}`;
+    let st = stripTypeByKey.get(key);
+    if (!st) {
+      st = { kind: 'stripType', id: `st_${stripTypeByKey.size}`, name: `${meta.leds}px`,
+        pixelCount: meta.leds, length_m: meta.leds / meta.lpm, ledsPerMeter: meta.lpm, colorOrder: meta.order,
+        ports: [{ id: 'data-in', dir: 'in', signal: 'data' }, { id: 'data-out', dir: 'out', signal: 'data' }] };
+      stripTypeByKey.set(key, st); types.push(st);
+    }
+
+    const pts = meta.dir === 'rev' ? [...o.points].reverse() : o.points;
+    const stripId = `run_${sn++}`;
+    instances.push({ kind: 'strip', id: stripId, typeId: st.id,
+      points: pts.map((p) => (Math.abs(p[2] || 0) > 1e-9 ? { x: p[0], y: p[1], z: p[2] } : { x: p[0], y: p[1] })) });
+
+    if (meta.out) {
+      const { dev, port } = meta.out;
+      if (!controllerIds.has(dev)) { controllerIds.add(dev); instances.push({ kind: 'controller', id: dev, name: dev, typeId: 'ct_obj' }); }
+      const pk = `${dev}.${port}`;
+      const prev = lastStripOnPort.get(pk);
+      edges.push(prev
+        ? { id: `e${en++}`, from: { id: 'data-out', instId: prev }, to: { id: 'data-in', instId: stripId }, channel: 'signal' }
+        : { id: `e${en++}`, from: { id: `data-out-${port}`, instId: dev }, to: { id: 'data-in', instId: stripId }, channel: 'signal' });
+      lastStripOnPort.set(pk, stripId);
+    }
+  }
+  return { preset: { version: 1, types, instances, edges }, warnings };
+}

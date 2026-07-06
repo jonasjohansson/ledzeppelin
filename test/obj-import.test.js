@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseObj, parseName } from '../src/model/obj-import.js';
+import { parseObj, parseName, objToKagora } from '../src/model/obj-import.js';
 
 test('parses vertices grouped by object, ordered by declaration when no l-lines', () => {
   const obj = `
@@ -54,4 +54,30 @@ test('parseName splits base name from __key=val tokens with defaults', () => {
   // dir + lpm
   const p = parseName('Spine__leds=120__lpm=144__dir=rev');
   assert.equal(p.lpm, 144); assert.equal(p.dir, 'rev');
+});
+
+test('objToKagora builds strips/types/controllers/edges + warns on bad runs', () => {
+  const objs = [
+    { name: 'Tail__leds=3__order=GRBW__out=oct.0', points: [[0, 0, 0], [1, 0, 0], [2, 0, 0]] },
+    { name: 'Rib__leds=2__out=oct.0', points: [[0, 1, 0], [0, 2, 0]] },   // same port → daisy-chain
+    { name: 'NoLeds', points: [[0, 0, 0], [1, 0, 0]] },                    // dropped + warned
+    { name: 'Short__leds=5', points: [[0, 0, 0]] },                        // <2 pts → dropped + warned
+  ];
+  const { preset, warnings } = objToKagora(objs);
+  const strips = preset.instances.filter((i) => i.kind === 'strip');
+  assert.equal(strips.length, 2);
+  assert.equal(warnings.length, 2);
+  // controller present
+  assert.ok(preset.instances.some((i) => i.kind === 'controller' && i.id === 'oct'));
+  // first run wired to controller data-out-0; second daisy-chains off the first
+  const e0 = preset.edges.find((e) => e.to.instId === strips[0].id);
+  assert.deepEqual([e0.from.instId, e0.from.id], ['oct', 'data-out-0']);
+  const e1 = preset.edges.find((e) => e.to.instId === strips[1].id);
+  assert.deepEqual([e1.from.instId, e1.from.id], [strips[0].id, 'data-out']);
+});
+
+test('objToKagora reverses points when dir=rev', () => {
+  const { preset } = objToKagora([{ name: 'R__leds=2__dir=rev', points: [[0, 0, 0], [9, 0, 0]] }]);
+  const s = preset.instances.find((i) => i.kind === 'strip');
+  assert.deepEqual([s.points[0].x, s.points[1].x], [9, 0]);
 });
