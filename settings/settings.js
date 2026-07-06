@@ -102,10 +102,12 @@ function applyTheme() {
   // Text contrast.
   const f = savedContrast() / 100;
   if (light) {
-    s.setProperty('--text', mix('#141417', '#ffffff', 2 - f));
-    s.setProperty('--muted', mix('#3a3a42', '#ffffff', 2 - f));
-    s.setProperty('--faint', mix('#63636c', '#ffffff', 2 - f));
-    s.setProperty('--readout', mix('#26262c', '#ffffff', 2 - f));
+    // Mirror the dark branch's direction (higher Contrast = more): mix near-black text
+    // anchors toward white by `f`. Keep in sync with src/ui/prefs.js applyContrast.
+    s.setProperty('--text', mix('#16161a', '#ffffff', f));
+    s.setProperty('--muted', mix('#4d4d57', '#ffffff', f));
+    s.setProperty('--faint', mix('#74747f', '#ffffff', f));
+    s.setProperty('--readout', mix('#2b2b32', '#ffffff', f));
   } else {
     s.setProperty('--text', mix('#f4f5f7', '#0c0c10', f));
     s.setProperty('--muted', mix('#a3aab4', '#0c0c10', f));

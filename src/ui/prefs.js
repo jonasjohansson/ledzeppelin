@@ -127,6 +127,7 @@ export function initPrefs({ preview, redrawOverlay }) {
       s.setProperty('--hover', S2('#d7d7de', 0.05));
       s.setProperty('--line', S2('#cfcfd6', 0.05));
       s.setProperty('--line-2', S2('#bcbcc6', 0.06));
+      s.setProperty('--stage-bg', '#0d0d0f');                          // display surfaces stay dark
     } else {
       s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
       s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
@@ -147,6 +148,7 @@ export function initPrefs({ preview, redrawOverlay }) {
       s.setProperty('--hover', S('#2c2c31', 0.06));
       s.setProperty('--line', S('#303034', 0.06));
       s.setProperty('--line-2', S('#45454e', 0.07));
+      s.setProperty('--stage-bg', S('#0b0b0d', 0.03));                 // == --bg: pasteboard tracks Brightness/Tint (unchanged dark behavior)
     }
     preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
   }
@@ -165,12 +167,14 @@ export function initPrefs({ preview, redrawOverlay }) {
     const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
     const s = document.documentElement.style;
     if (savedTheme() === 'light') {
-      // Dark text on a light chrome — mix near-black anchors toward white by (2 − f) so
-      // the same Contrast slider dims/brightens text symmetrically to the dark theme.
-      s.setProperty('--text', accMix('#141417', '#ffffff', 2 - f));
-      s.setProperty('--muted', accMix('#3a3a42', '#ffffff', 2 - f));
-      s.setProperty('--faint', accMix('#63636c', '#ffffff', 2 - f));
-      s.setProperty('--readout', accMix('#26262c', '#ffffff', 2 - f));
+      // Dark text on light chrome — the STRUCTURAL mirror of the dark branch: mix a
+      // near-black text anchor toward the bg (white) by `f`, so higher Contrast = darker
+      // text = MORE contrast (same slider direction as dark). Anchors are spaced so the
+      // text/muted/faint hierarchy survives the f>1 extrapolation (default f=1.3 → black text).
+      s.setProperty('--text', accMix('#16161a', '#ffffff', f));
+      s.setProperty('--muted', accMix('#4d4d57', '#ffffff', f));
+      s.setProperty('--faint', accMix('#74747f', '#ffffff', f));
+      s.setProperty('--readout', accMix('#2b2b32', '#ffffff', f));
     } else {
       s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
       s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
