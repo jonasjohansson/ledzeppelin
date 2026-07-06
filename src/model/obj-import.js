@@ -45,3 +45,25 @@ export function parseObj(text) {
     return { name: o.name, points: order.map((i) => verts[i]) };
   }).filter((o) => o.points.length >= 1);
 }
+
+// Parse an object name "Base__key=val__key=val" into fixture metadata.
+// Tokens: leds (int, required — null if absent), lpm (int, default 60),
+// order (color order string, default ''), out ("dev.port" → {dev,port} | null),
+// dir ('fwd'|'rev', default 'fwd').
+export function parseName(name) {
+  const parts = String(name ?? '').split('__');
+  const base = (parts.shift() || '').trim() || 'run';
+  const kv = {};
+  for (const tok of parts) { const i = tok.indexOf('='); if (i > 0) kv[tok.slice(0, i).trim().toLowerCase()] = tok.slice(i + 1).trim(); }
+  const int = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
+  let out = null;
+  if (kv.out) { const m = String(kv.out).match(/^(.+)\.(\d+)$/); if (m) out = { dev: m[1], port: parseInt(m[2], 10) }; }
+  return {
+    name: base,
+    leds: int(kv.leds),
+    lpm: int(kv.lpm) || 60,
+    order: kv.order || '',
+    out,
+    dir: kv.dir === 'rev' ? 'rev' : 'fwd',
+  };
+}
