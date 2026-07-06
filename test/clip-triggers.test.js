@@ -50,6 +50,18 @@ test('changing a clip tuning rebuilds its detector without touching other clips'
   assert.equal(ct.trigsFor('other').length, 1);       // unrelated bus intact
 });
 
+test('a level-mode clip fires via the gate, independent of an onset clip', () => {
+  const ct = createClipTriggers();
+  const clips = [{ id: 'lv', audioTrigger: { enabled: true, band: 'bass', mode: 'level', threshold: 0.5, refractoryMs: 0 } }];
+  let ms = 0;
+  const step = (v) => { const f = ct.poll(clips, bands({ bass: v }), ms, ms / 1000); ms += 16.7; return f; };
+  assert.deepEqual(step(0.2), []);      // below threshold
+  assert.deepEqual(step(0.7), ['lv']);  // crosses → fire
+  assert.deepEqual(step(0.8), []);      // held above → no re-fire
+  assert.deepEqual(step(0.1), []);      // drop (re-arm, no fire on a fall)
+  assert.deepEqual(step(0.7), ['lv']);  // next cross fires
+});
+
 test('prune drops buses + detectors for dead clips', () => {
   const ct = createClipTriggers();
   ct.fire('a', 1); ct.fire('b', 1);
