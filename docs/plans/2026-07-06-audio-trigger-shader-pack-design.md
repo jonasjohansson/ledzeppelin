@@ -75,7 +75,23 @@ Tight "greatest hits" set (7):
 **Testing:** each subagent confirms its GLSL compiles against the contract; controller
 smoke-tests in the app.
 
+## Phase C — DCC → fixture import (research spike, later)
+
+Design an installation in **Cinema 4D / Blender** and export it into the app's 3D fixture
+model. The scene already carries the geometry (a spline/curve per LED run); the open
+questions are how to carry the LED-specific data out of the DCC tool:
+
+- **Transport format** — glTF/OBJ (geometry only), Alembic (curves), or a sidecar CSV/JSON.
+- **Per-run metadata** — pixel count / LED density (led/m), run order + direction, and
+  controller/output (universe/port) mapping. Options: an object-naming convention
+  (e.g. `rib.03__leds=162__dir=fwd`), custom attributes, or a small exporter script/plugin.
+- **Mapping to the app** — each imported run becomes a `polyline` fixture (`samples` =
+  pixel count) with world-space points, matching the existing Balena rig format.
+
+To be brainstormed as its own design after Phase A ships. **Not** in scope for A or B.
+
 ## Sequencing
 
 1. Phase A: build, test, verify onset firing live, cut a release.
 2. Phase B: fan out the 7 shaders, integrate + smoke-test, cut a release.
+3. Phase C: brainstorm the DCC import spike separately.
