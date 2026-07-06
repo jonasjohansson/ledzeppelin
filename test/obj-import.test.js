@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { parseObj, parseName, objToKagora } from '../src/model/obj-import.js';
 import { importKagora } from '../src/model/kagora-import.js';
 
@@ -111,4 +112,25 @@ v 0 2 0
   assert.equal(byName.Rib.output.port, 1);
   // points normalized into 0..1
   for (const f of show.fixtures) for (const p of f.input.points) { assert.ok(p[0] >= 0 && p[0] <= 1); assert.ok(p[1] >= 0 && p[1] <= 1); }
+});
+
+test('golden whale-sample.obj imports to two fixtures with correct metadata', () => {
+  const text = readFileSync(new URL('./fixtures/whale-sample.obj', import.meta.url), 'utf8');
+  const { preset, warnings } = objToKagora(parseObj(text));
+  assert.equal(warnings.length, 0);
+  const show = importKagora(preset);
+  assert.equal(show.fixtures.length, 2);
+  const byName = Object.fromEntries(show.fixtures.map((f) => [f.name, f]));
+  // Spine: 120px GRBW on quinA port 0, polyline with z preserved
+  assert.equal(byName.Spine.pixelCount, 120);
+  assert.equal(byName.Spine.colorFormat, 'GRBW');
+  assert.equal(byName.Spine.output.deviceId, 'quinA');
+  assert.equal(byName.Spine.output.port, 0);
+  assert.equal(byName.Spine.input.mode, 'polyline');
+  assert.ok(byName.Spine.input.points.every((p) => p.length === 3));   // z preserved
+  // FinL: 48px on quinA port 1, polyline with z preserved
+  assert.equal(byName.FinL.pixelCount, 48);
+  assert.equal(byName.FinL.output.port, 1);
+  assert.equal(byName.FinL.input.mode, 'polyline');
+  assert.ok(byName.FinL.input.points.every((p) => p.length === 3));   // z preserved
 });
