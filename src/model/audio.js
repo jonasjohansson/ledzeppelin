@@ -102,13 +102,18 @@ function computeBands(s) {
 // calls pollAudioTrigger(nowMs) once per frame and fires the trigger on true.
 let _trig = { enabled: false, band: 'bass' };
 let _onset = createOnsetDetector({ sensitivity: 0.5, refractoryMs: 120, floor: 0.05 });
+let _onsetSig = '';
 
 export function setAudioTrigger(cfg = {}) {
   _trig.enabled = !!cfg.enabled;
   if (cfg.band && AUDIO_BANDS.includes(cfg.band)) _trig.band = cfg.band;
-  _onset = createOnsetDetector({
-    sensitivity: cfg.sensitivity, refractoryMs: cfg.refractoryMs, floor: cfg.floor,
-  });
+  // Rebuild the detector ONLY when its tuning changes — it's stateful (EMA +
+  // refractory), so rebuilding every frame would reset it and it could never fire.
+  const sig = `${cfg.sensitivity}|${cfg.refractoryMs}|${cfg.floor}`;
+  if (sig !== _onsetSig) {
+    _onsetSig = sig;
+    _onset = createOnsetDetector({ sensitivity: cfg.sensitivity, refractoryMs: cfg.refractoryMs, floor: cfg.floor });
+  }
 }
 export function audioTriggerEnabled() { return _trig.enabled; }
 

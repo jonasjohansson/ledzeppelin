@@ -32,7 +32,7 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, audioEnabled } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { updateAudio, setAudioGain, enableAudio, audioEnabled, setAudioTrigger, pollAudioTrigger } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
@@ -2739,7 +2739,12 @@ function loopBody(ts) {
     // compositing. No-op (same ref) when nothing is animated. The signals map
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
+    setAudioTrigger(show.composition?.audioTrigger || {});
     Object.assign(frameSignals, updateAudio(), chNow, dashboardSignals(show.composition));
+    // Audio-onset trigger: a mic spike fires the same bus as the ⚡ button. Use `ts`
+    // (the monotonic rAF timestamp, ms) so a transport.reset() — which rewinds `t` —
+    // can't push the detector's clock backward and suppress fires.
+    if (pollAudioTrigger(ts)) transport.fire();
     frameSignals.__bpm = show.composition?.bpm ?? 120;
     const signals = frameSignals;
     renderLayers = renderLayers.map((L) => {
