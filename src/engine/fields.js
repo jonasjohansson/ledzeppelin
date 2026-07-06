@@ -124,10 +124,46 @@ export function bodyWave(p, t, { axis = 2, wavelength = 0.5, amplitude = 0.1, of
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
+// Flow field — organic filaments that STREAM along a wind direction. Stateless:
+// dir = normalize(wind) (guarded to 0 when wind ≈ 0), and the sample point is
+// advected UPSTREAM by speed·t so the pattern appears to travel downstream along
+// dir. A three-sample noise offset domain-warps the field (turbulence); an
+// anisotropic squash along dir elongates features into trails; a band around the
+// fbm 0.5 iso-level with half-width from `thickness` carves the filaments; `seed`
+// offsets the noise domain so stacked instances decorrelate. PREMULTIPLIED rgba.
+// GLSL twin: sampler.js fieldColor id==6 (sin-hash ⇒ float32/float64 differ
+// numerically but are structurally identical — visually equivalent, like noise3d).
+const FF_OA = [19.19, 7.3, 2.7], FF_OB = [5.2, 41.7, 13.1], FF_OC = [31.3, 9.1, 27.9];
+export function flowfield(p, t, {
+  windX = 0.3, windY = 0, windZ = 0, speed = 0.4, scale = 2,
+  turbulence = 0.5, thickness = 0.4, trail = 0.5, seed = 0, color = [1, 1, 1],
+} = {}) {
+  const wm = Math.hypot(windX, windY, windZ);
+  const dx = wm < 1e-5 ? 0 : windX / wm, dy = wm < 1e-5 ? 0 : windY / wm, dz = wm < 1e-5 ? 0 : windZ / wm;
+  const s = seed * 11;
+  let qx = p[0] * scale - dx * speed * t + s;
+  let qy = p[1] * scale - dy * speed * t + s * 1.7;
+  let qz = p[2] * scale - dz * speed * t + s * 0.3;
+  // Domain-warp offset (three decorrelated fbm samples remapped to [-1, 1]).
+  const wx = fbm3(qx + FF_OA[0], qy + FF_OA[1], qz + FF_OA[2]) * 2 - 1;
+  const wy = fbm3(qx + FF_OB[0], qy + FF_OB[1], qz + FF_OB[2]) * 2 - 1;
+  const wz = fbm3(qx + FF_OC[0], qy + FF_OC[1], qz + FF_OC[2]) * 2 - 1;
+  qx += turbulence * wx; qy += turbulence * wy; qz += turbulence * wz;
+  // Anisotropic squash ALONG dir → elongated streaks (trails).
+  const k = trail * 0.9;
+  const along = qx * dx + qy * dy + qz * dz;
+  qx -= dx * along * k; qy -= dy * along * k; qz -= dz * along * k;
+  // Filament band around the fbm 0.5 iso-level; half-width from thickness.
+  const nrm = fbm3(qx, qy, qz);
+  const hw = 0.02 + thickness * 0.48;
+  const v = 1 - sstep(hw * 0.5, hw, Math.abs(nrm - 0.5));
+  return [color[0] * v, color[1] * v, color[2] * v, v];
+}
+
 // --- Sampler packing ---------------------------------------------------------
 
 // Stable field ids — the GLSL dispatcher in sampler.js switches on these.
-export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5 };
+export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5, flowfield: 6 };
 
 export const isVolumetricName = (name) => name in FIELD_IDS;
 

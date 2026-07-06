@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  planeSweep, axisGradient, noise3d, spherePulse, bodyWave,
+  planeSweep, axisGradient, noise3d, spherePulse, bodyWave, flowfield,
   FIELD_IDS, isVolumetricName, packVolumetrics, evalPacked,
 } from '../src/engine/fields.js';
 import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames } from '../src/engine/shaders/manifest.js';
@@ -116,6 +116,45 @@ test('spherePulse: full on the shell, zero far away, pinned soft edge', () => {
 test('spherePulse: z counts in the distance', () => {
   const P = { center: [0.5, 0.5, 0], radius: 0.3, thickness: 0.1, softness: 0, color: [1, 1, 1] };
   near(spherePulse([0.5, 0.5, 0.3], P)[3], 1);                    // straight up the z axis
+});
+
+// --- flowfield ---------------------------------------------------------------
+
+test('flowfield: id registered and distinct', () => {
+  assert.equal(FIELD_IDS.flowfield, 6);
+});
+
+test('flowfield: output is premultiplied and in range', () => {
+  const c = flowfield([0.4, 0.6, 0.3], 1.2, { color: [1, 0.5, 0.25] });
+  assert.equal(c.length, 4);
+  const [r, g, b, a] = c;
+  for (const v of c) assert.ok(v >= 0 && v <= 1, `${v} out of range`);
+  near(r, 1 * a, 1e-9); near(g, 0.5 * a, 1e-9); near(b, 0.25 * a, 1e-9);
+});
+
+test('flowfield: zero wind is static in time (no motion term)', () => {
+  const P = { windX: 0, windY: 0, windZ: 0, speed: 1 };
+  const a0 = flowfield([0.3, 0.7, 0.2], 0, P);
+  const a5 = flowfield([0.3, 0.7, 0.2], 5, P);
+  nearRGBA(a5, a0, 1e-9);
+});
+
+test('flowfield: seed decorrelates the pattern', () => {
+  const base = { windX: 0.3, seed: 0 };
+  const a = flowfield([0.5, 0.5, 0.5], 0, base)[3];
+  const b = flowfield([0.5, 0.5, 0.5], 0, { ...base, seed: 0.7 })[3];
+  assert.notEqual(a, b);
+});
+
+test('flowfield: thicker filaments cover at least as much as thin ones', () => {
+  const avg = (thickness) => {
+    let s = 0, n = 0;
+    for (let x = 0; x < 1; x += 0.2) for (let y = 0; y < 1; y += 0.2) for (let z = 0; z < 1; z += 0.2) {
+      s += flowfield([x, y, z], 0, { thickness, seed: 0.1 })[3]; n++;
+    }
+    return s / n;
+  };
+  assert.ok(avg(0.9) >= avg(0.1), 'thick should cover >= thin');
 });
 
 // --- manifest entries ----------------------------------------------------
