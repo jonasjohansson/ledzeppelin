@@ -81,6 +81,15 @@ PLIST
 
 echo "✓ $APP"
 
+# Install into /Applications so the normal double-click launcher (Spotlight/Dock)
+# always runs the LATEST build — otherwise an old installed copy shadows dist/.
+# ditto overwrites in place. Set NO_INSTALL=1 to skip (e.g. a pure distribution build).
+if [ -d /Applications ] && [ -z "${NO_INSTALL:-}" ]; then
+  ditto "$APP" "/Applications/$(basename "$APP")" \
+    && echo "→ installed to /Applications/$(basename "$APP")" \
+    || echo "  (could not install to /Applications — copy it manually)"
+fi
+
 if [ -n "${SIGN_ID:-}" ]; then
   echo "→ codesigning (hardened runtime)…"
   # cp -R + Finder can attach extended attributes; codesign then refuses the bundle
