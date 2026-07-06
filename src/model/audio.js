@@ -9,6 +9,8 @@
 // names (back-compat → external). Starting audio needs a user gesture, so the
 // enable* calls are driven from a click (the Audio menu / a modulator pick).
 
+import { createOnsetDetector } from './onset.js';
+
 export const AUDIO_BANDS = ['level', 'bass', 'mid', 'high'];
 export const AUDIO_SOURCES = ['external', 'composition'];
 
@@ -92,6 +94,30 @@ function computeBands(s) {
   s.bands.high = clamp(avg(Math.floor(n * 0.40), n) * g);
   s.bands.level = clamp(avg(0, n) * g);
   return s.bands;
+}
+
+// --- audio-onset trigger --------------------------------------------------------
+// One detector instance drives the app's trigger bus from the EXTERNAL (mic) band.
+// Config is pushed from the UI (settings.js) via setAudioTrigger(); the render loop
+// calls pollAudioTrigger(nowMs) once per frame and fires the trigger on true.
+let _trig = { enabled: false, band: 'bass' };
+let _onset = createOnsetDetector({ sensitivity: 0.5, refractoryMs: 120, floor: 0.05 });
+
+export function setAudioTrigger(cfg = {}) {
+  _trig.enabled = !!cfg.enabled;
+  if (cfg.band && AUDIO_BANDS.includes(cfg.band)) _trig.band = cfg.band;
+  _onset = createOnsetDetector({
+    sensitivity: cfg.sensitivity, refractoryMs: cfg.refractoryMs, floor: cfg.floor,
+  });
+}
+export function audioTriggerEnabled() { return _trig.enabled; }
+
+// Poll the onset detector against the latest external band. Returns true on the frame
+// an onset fires. No-op (false) when disabled or the mic isn't running. Call AFTER
+// updateAudio() so the bands are current.
+export function pollAudioTrigger(nowMs) {
+  if (!_trig.enabled || !SRC.external.enabled) return false;
+  return _onset.push(SRC.external.bands[_trig.band] || 0, nowMs);
 }
 
 // Signals map for anim.js: namespaced per source ("external:bass") + plain band
