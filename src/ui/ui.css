@@ -24,6 +24,9 @@
   /* WARM gray ramp — the surfaces carry a desaturated accent tint (brown-gray, not
      the old blue-gray) so the warm accent has presence across the whole sidebar. */
   --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
+  /* Display surfaces (stage pasteboard) stay dark in BOTH themes — LED content wants a
+     dark backdrop. Constant, NOT flipped by the Dark/Light theme toggle. */
+  --stage-bg:#0d0d0f;
   --panel-solid:#201d19;       /* menus/popovers share the panel surface */
   --line:#3a342d; --line-2:#4c4538;       /* hairline borders (warm) */
   --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84;
@@ -311,7 +314,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   flex: 1 1 auto; min-height: 0; position: relative; container-type: size;
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
-  background-color: var(--bg);
+  background-color: var(--stage-bg);   /* display surface — stays dark in light mode */
   background-image:
     linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%),
     linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%);
