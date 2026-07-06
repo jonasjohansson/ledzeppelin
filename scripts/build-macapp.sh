@@ -41,9 +41,11 @@ done
 # them to any user.
 chmod -R a+rX "$C/Resources"
 
-# App icon — build AppIcon.icns from the 512px logo so the .app/Dock/Finder show
-# the LEDZeppelin mark instead of the generic blank icon.
-ICON_SRC="icons/icon-512.png"
+# App icon — build AppIcon.icns from the ROUNDED macOS icon (icon-mac-1024.png:
+# the mark masked into the Big Sur squircle so the Dock/Finder icon has rounded
+# corners like every other app; falls back to the square icon if it's missing).
+# The square icons/icon-512.png stays the PWA/favicon source.
+ICON_SRC="icons/icon-mac-1024.png"; [ -f "$ICON_SRC" ] || ICON_SRC="icons/icon-512.png"
 if [ -f "$ICON_SRC" ] && command -v sips >/dev/null && command -v iconutil >/dev/null; then
   echo "→ building app icon…"
   ICONSET="$(mktemp -d)/AppIcon.iconset"; mkdir -p "$ICONSET"
