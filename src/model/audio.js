@@ -102,20 +102,19 @@ function computeBands(s) {
 // calls pollAudioTrigger(nowMs) once per frame and fires the trigger on true.
 let _trig = { enabled: false, band: 'bass' };
 let _onset = createOnsetDetector({ sensitivity: 0.5, refractoryMs: 120, floor: 0.05 });
-let _onsetSig = '';
+let _tune = { sensitivity: undefined, refractoryMs: undefined, floor: undefined };
 
 export function setAudioTrigger(cfg = {}) {
   _trig.enabled = !!cfg.enabled;
   if (cfg.band && AUDIO_BANDS.includes(cfg.band)) _trig.band = cfg.band;
   // Rebuild the detector ONLY when its tuning changes — it's stateful (EMA +
   // refractory), so rebuilding every frame would reset it and it could never fire.
-  const sig = `${cfg.sensitivity}|${cfg.refractoryMs}|${cfg.floor}`;
-  if (sig !== _onsetSig) {
-    _onsetSig = sig;
-    _onset = createOnsetDetector({ sensitivity: cfg.sensitivity, refractoryMs: cfg.refractoryMs, floor: cfg.floor });
+  // Compare fields directly (no per-frame string alloc — this runs every frame).
+  if (cfg.sensitivity !== _tune.sensitivity || cfg.refractoryMs !== _tune.refractoryMs || cfg.floor !== _tune.floor) {
+    _tune = { sensitivity: cfg.sensitivity, refractoryMs: cfg.refractoryMs, floor: cfg.floor };
+    _onset = createOnsetDetector(_tune);
   }
 }
-export function audioTriggerEnabled() { return _trig.enabled; }
 
 // Poll the onset detector against the latest external band. Returns true on the frame
 // an onset fires. No-op (false) when disabled or the mic isn't running. Call AFTER
