@@ -32,7 +32,8 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, audioEnabled, setAudioTrigger, pollAudioTrigger } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { updateAudio, setAudioGain, enableAudio, audioEnabled, externalBand } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { createClipTriggers } from './model/clip-triggers.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
@@ -438,7 +439,7 @@ const panel = createFixturePanel({
 // frame); the persisted show is untouched, so editing and playback don't fight.
 // startTs/lastTs are in requestAnimationFrame timestamp units (ms).
 let lastTs = 0, t0 = 0;
-let pulseTrigSecs = []; // seconds of recent ⚡ triggers (up to 8 stack as beams)
+const clipTriggers = createClipTriggers();   // per-clip ⚡/audio-onset trigger buses
 const nowSec = () => (lastTs - t0) / 1000;
 const transport = {
   direction: 'off',   // 'off' | 'forward' | 'backward' | 'shuffle'
@@ -450,11 +451,11 @@ const transport = {
   getLoop() { return this.loop; },
   setLoop(b) { this.loop = !!b; },
   toggle() { this.setDirection(this.direction === 'off' ? 'forward' : 'off'); },
-  fire() { pulseTrigSecs.push(nowSec()); if (pulseTrigSecs.length > 8) pulseTrigSecs = pulseTrigSecs.slice(-8); },
+  fire(clipId) { clipTriggers.fire(clipId, nowSec()); },
   // Restart the animation timer: clock back to 0 (Timeline sweeps, pulse autofire),
   // clear pending pulse triggers, and reset the compositor's integrated phase
   // clocks (line/hue speed sweeps) so everything re-syncs to its start.
-  reset() { t0 = lastTs; this.startTs = lastTs; pulseTrigSecs = []; compositor?.resetPhases?.(); },
+  reset() { t0 = lastTs; this.startTs = lastTs; clipTriggers.reset(); compositor?.resetPhases?.(); },
 };
 
 // The composer renders into the Resolume-style shell's three regions: the DECK
@@ -2739,12 +2740,18 @@ function loopBody(ts) {
     // compositing. No-op (same ref) when nothing is animated. The signals map
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
-    setAudioTrigger(show.composition?.audioTrigger || {});
     Object.assign(frameSignals, updateAudio(), chNow, dashboardSignals(show.composition));
-    // Audio-onset trigger: a mic spike fires the same bus as the ⚡ button. Use `ts`
-    // (the monotonic rAF timestamp, ms) so a transport.reset() — which rewinds `t` —
-    // can't push the detector's clock backward and suppress fires.
-    if (pollAudioTrigger(ts)) transport.fire();
+    // Per-clip audio triggers: poll each live triggerable clip's detector on ITS band.
+    // Use `ts` (the monotonic rAF timestamp, ms) so a transport.reset() — which rewinds
+    // `t` — can't push a detector's clock backward and suppress fires.
+    const activeTrigClips = [];
+    for (const L of (show.composition?.layers || [])) {
+      const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
+      if (c && getEntry(c.generator)?.triggerable) activeTrigClips.push(c);
+    }
+    clipTriggers.poll(activeTrigClips, externalBand, ts, nowSec());
+    // Drop trigger buses for clips that no longer exist in the show.
+    { const live = new Set(); for (const L of (show.composition?.layers || [])) for (const c of (L.clips || [])) if (c) live.add(c.id); clipTriggers.prune(live); }
     frameSignals.__bpm = show.composition?.bpm ?? 120;
     const signals = frameSignals;
     renderLayers = renderLayers.map((L) => {
@@ -2777,7 +2784,7 @@ function loopBody(ts) {
     // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
     // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
-      trigSecs: pulseTrigSecs, videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
+      trigSecsFor: (id) => clipTriggers.trigsFor(id), videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
@@ -2799,11 +2806,11 @@ function loopBody(ts) {
         const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
         if (!c || !getEntry(c.generator)?.volumetric) continue;
         act.push({
-          generator: c.generator, params: c.params, blend: L.blend,
+          id: c.id, generator: c.generator, params: c.params, blend: L.blend,
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
-      if (act.length) vol = { ...packVolumetrics(act), time: t, trigSecs: pulseTrigSecs };
+      if (act.length) vol = { ...packVolumetrics(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)) };
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no
