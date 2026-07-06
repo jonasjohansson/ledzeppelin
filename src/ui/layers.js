@@ -1325,11 +1325,18 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         [{ value: 'onset', label: 'Onset' }, { value: 'level', label: 'Level' }],
         mode, (v) => setATu({ mode: v }))));
 
-      // Threshold slider only in Onset mode; in Level mode the spectrum line is the control.
+      // Threshold — Onset: required spike above the running average (backs `sensitivity`,
+      // 0.05..2). Level: absolute 0..1 (backs `threshold`) — also draggable on the spectrum
+      // below; the slider gives keyboard/precise entry.
       if (mode === 'onset') {
         box.append(Slider('Threshold', at.sensitivity ?? 0.5, {
           min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
           onInput: (v) => setAT({ sensitivity: v }),
+        }));
+      } else {
+        box.append(Slider('Threshold', at.threshold ?? 0.5, {
+          min: 0, max: 1, step: 0.01, default: 0.5, commit: 'live',
+          onInput: (v) => setAT({ threshold: v }),
         }));
       }
       box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, {

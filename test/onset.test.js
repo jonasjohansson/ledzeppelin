@@ -92,3 +92,15 @@ test('level gate reset() re-arms', () => {
   g.reset();
   assert.equal(g.push(0.6, 10), true);
 });
+
+test('level gate setThreshold live-tunes WITHOUT re-arming (no burst while dragging over a held band)', () => {
+  const g = createLevelGateDetector({ threshold: 0.5, refractoryMs: 0 });
+  assert.equal(g.push(0.8, 0), true);     // rising cross → fire once, disarm
+  assert.equal(g.push(0.8, 10), false);   // held above → no re-fire
+  g.setThreshold(0.6);                     // drag line UP (still under v=0.8)
+  assert.equal(g.push(0.8, 20), false);   // stayed disarmed → no spurious fire
+  g.setThreshold(0.3);                     // drag line DOWN
+  assert.equal(g.push(0.8, 30), false);   // v never fell below thr-hyst → still disarmed, no burst
+  assert.equal(g.push(0.2, 40), false);   // now dips below → re-arm (no fire on the fall)
+  assert.equal(g.push(0.8, 50), true);    // next genuine rising cross fires
+});

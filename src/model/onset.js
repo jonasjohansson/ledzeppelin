@@ -47,7 +47,7 @@ export function createOnsetDetector(opts = {}) {
 // is the minimum gap between fires (the clip's Hold). Pure, no browser deps.
 const LEVEL_HYSTERESIS = 0.05;
 export function createLevelGateDetector(opts = {}) {
-  const threshold = clampNum(opts.threshold, 0.5, 0, 1);
+  let threshold = clampNum(opts.threshold, 0.5, 0, 1);
   const refractoryMs = clampNum(opts.refractoryMs, 120, 0, 5000);
   let armed = true;
   let lastFireMs = -Infinity;
@@ -61,6 +61,9 @@ export function createLevelGateDetector(opts = {}) {
       if (v >= threshold) armed = false;                     // above but suppressed (held/refractory)
       return false;
     },
+    // Live-tune the line WITHOUT resetting armed/lastFire — so dragging the threshold over a
+    // held-loud band doesn't rebuild+re-arm the gate every frame and machine-gun fires.
+    setThreshold(v) { threshold = clampNum(v, 0.5, 0, 1); },
     reset() { armed = true; lastFireMs = -Infinity; },
   };
 }

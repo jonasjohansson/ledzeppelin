@@ -10,7 +10,10 @@ const EMPTY = [];
 export function createClipTriggers() {
   const buses = new Map();       // clipId → number[] (seconds, newest last, cap 8)
   const detectors = new Map();   // clipId → { det, sig }
-  const sigOf = (a) => `${a.mode || 'onset'}|${a.sensitivity}|${a.refractoryMs}|${a.floor}|${a.threshold}`;
+  // NOTE: `threshold` is deliberately NOT in the sig — a level clip's threshold is live-tuned
+  // in place via det.setThreshold() below, so dragging the line doesn't rebuild+re-arm the gate
+  // (which would machine-gun fires over a held-loud band). Mode/sensitivity/hold changes rebuild.
+  const sigOf = (a) => `${a.mode || 'onset'}|${a.sensitivity}|${a.refractoryMs}|${a.floor}`;
   const push = (id, sec) => { let b = buses.get(id); if (!b) { b = []; buses.set(id, b); } b.push(sec); if (b.length > CAP) b.splice(0, b.length - CAP); };
 
   return {
@@ -26,6 +29,7 @@ export function createClipTriggers() {
         const sig = sigOf(at);
         let d = detectors.get(c.id);
         if (!d || d.sig !== sig) { d = { det: (at.mode === 'level') ? createLevelGateDetector(at) : createOnsetDetector(at), sig }; detectors.set(c.id, d); }
+        if (at.mode === 'level' && d.det.setThreshold) d.det.setThreshold(at.threshold);   // live-tune, no rebuild
         if (d.det.push(bandOf(at.band || 'bass'), nowMs)) { push(c.id, nowSec); fired.push(c.id); }
       }
       return fired;
