@@ -28,7 +28,7 @@
 
 import { fixtureLabel, fixtureRange, fixtureNumbers } from '../model/fixture-transform.js';
 import { isDmxFixture } from '../model/dmx.js';
-import { freePort } from '../model/chains.js';
+import { freePort, controllerColorMap } from '../model/chains.js';
 
 export function createOutputList(hooks) {
   const {
@@ -186,6 +186,7 @@ export function createOutputList(hooks) {
       for (const g of dg.groups) g.items.sort((a, b) => (a.f.output?.pixelOffset ?? 0) - (b.f.output?.pixelOffset ?? 0));
     }
     const num = fixtureNumbers(show);   // id → display number (#1,#2,… in this same order)
+    const cmap = controllerColorMap(show);   // per-fixture identity colour (controller hue · output shade)
 
     for (const dg of devOrder) {
       // UNASSIGNED — a plain heading (not a foldable group), still a drop target: drop
@@ -250,7 +251,9 @@ export function createOutputList(hooks) {
       for (const g of dg.groups) {
         const load = loads.find((l) => l.port === g.port);
         const overTitle = overPorts.has(g.port) ? `output ${g.port} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
-        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color, overTitle));
+        // Row accent = the fixture's OWN identity colour (controller hue · this
+        // output's shade), matching the canvas tint — not the flat device colour.
+        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, cmap.runColor(f.output?.deviceId || '', f.output?.port ?? 1), overTitle));
       }
       outputListEl.append(sec);
     }

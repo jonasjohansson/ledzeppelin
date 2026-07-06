@@ -61,17 +61,23 @@ export function controllerColorMap(show) {
     ports.get(d).add(p);
   }
   const portList = (d) => [...(ports.get(d) || [])].sort((a, b) => a - b);
-  // Generated fallback keeps 30% saturation: hues stay tellable-apart (which
-  // controller / which output) without turning the canvas into a colour chart.
+  // Vivid enough to read at a glance: a saturation FLOOR (an assigned pastel still
+  // reads as its controller; a generated hue pops instead of washing out) plus a
+  // wide lightness ramp so which OUTPUT a fixture is on is obvious.
+  const SAT_FLOOR = 62;
   const runColor = (deviceId, port) => {
     const a = hexToHsl(assigned.get(deviceId));
-    const [h, s, baseL] = a || [hue.get(deviceId) ?? 210, 30, 60];
+    const [h, s0, baseL] = a || [hue.get(deviceId) ?? 210, SAT_FLOOR, 56];
+    const s = Math.max(s0, SAT_FLOOR);
     const ps = portList(deviceId), n = ps.length || 1, i = Math.max(0, ps.indexOf(port));
-    const l = n > 1 ? 44 + i * (32 / (n - 1)) : baseL;   // ramp 44%..76% across the device's outputs
+    const l = n > 1 ? 40 + i * (38 / (n - 1)) : baseL;   // ramp 40%..78% across the device's outputs
     return `hsl(${h.toFixed(1)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`;
   };
-  const deviceColor = (deviceId) =>
-    assigned.get(deviceId) || `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 30%, 60%)`;
+  const deviceColor = (deviceId) => {
+    const a = hexToHsl(assigned.get(deviceId));
+    if (a) return `hsl(${a[0].toFixed(1)}, ${Math.max(a[1], SAT_FLOOR).toFixed(0)}%, ${a[2].toFixed(0)}%)`;
+    return `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, ${SAT_FLOOR}%, 58%)`;
+  };
   return { hue, runColor, deviceColor };
 }
 
