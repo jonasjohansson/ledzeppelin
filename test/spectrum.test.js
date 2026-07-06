@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bandRegions, barHeights } from '../src/ui/spectrum.js';
+import { bandRegions, barHeights, thresholdY, yToThreshold } from '../src/ui/spectrum.js';
 
 const SPLIT = { bass: [0, 0.10], mid: [0.10, 0.40], high: [0.40, 1] };
 
@@ -20,4 +20,13 @@ test('barHeights maps 0..255 bins to 0..height, length n', () => {
   assert.equal(h[0], 0);
   assert.equal(h[1], 100);
   assert.ok(Math.abs(h[2] - 50.2) < 1);      // 128/255*100
+});
+
+test('thresholdY / yToThreshold are inverse maps over the canvas height', () => {
+  assert.equal(thresholdY(1, 48), 0);        // full → top
+  assert.equal(thresholdY(0, 48), 48);       // zero → bottom
+  assert.equal(thresholdY(0.5, 48), 24);
+  assert.ok(Math.abs(yToThreshold(24, 48) - 0.5) < 1e-9);
+  assert.equal(yToThreshold(-10, 48), 1);    // clamped 0..1
+  assert.equal(yToThreshold(100, 48), 0);
 });
