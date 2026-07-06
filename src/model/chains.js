@@ -73,11 +73,10 @@ export function controllerColorMap(show) {
     const l = n > 1 ? 40 + i * (38 / (n - 1)) : baseL;   // ramp 40%..78% across the device's outputs
     return `hsl(${h.toFixed(1)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`;
   };
-  const deviceColor = (deviceId) => {
-    const a = hexToHsl(assigned.get(deviceId));
-    if (a) return `hsl(${a[0].toFixed(1)}, ${Math.max(a[1], SAT_FLOOR).toFixed(0)}%, ${a[2].toFixed(0)}%)`;
-    return `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, ${SAT_FLOOR}%, 58%)`;
-  };
+  // An ASSIGNED colour is the user's pick — return it verbatim. Only the GENERATED
+  // fallback gets the saturation floor (it was a washed-out 30%).
+  const deviceColor = (deviceId) =>
+    assigned.get(deviceId) || `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, ${SAT_FLOOR}%, 58%)`;
   return { hue, runColor, deviceColor };
 }
 

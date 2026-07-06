@@ -106,6 +106,6 @@ test('controllerColorMap still ramps per-output lightness for assigned colours',
     fixtures: [fx('a', 'd1', 1), fx('b', 'd1', 2)],
   };
   const { runColor } = controllerColorMap(show);
-  assert.equal(runColor('d1', 1), 'hsl(0.0, 100%, 44%)');      // 2 ports → 44%..76% ramp
-  assert.equal(runColor('d1', 2), 'hsl(0.0, 100%, 76%)');
+  assert.equal(runColor('d1', 1), 'hsl(0.0, 100%, 40%)');      // 2 ports → 40%..78% ramp
+  assert.equal(runColor('d1', 2), 'hsl(0.0, 100%, 78%)');
 });
