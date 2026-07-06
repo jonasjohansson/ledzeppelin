@@ -92,6 +92,17 @@ export function initPrefs({ preview, redrawOverlay }) {
   const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
   const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
+  // --- Theme (chrome palette: 'dark' default, or 'light'). Persisted in lz.theme;
+  // branches the accent/contrast appliers below so the CHROME goes light while the
+  // display surfaces (stage/preview/output/spectrum) stay dark (see ui.css --stage-bg).
+  const THEME_KEY = 'lz.theme';
+  const savedTheme = () => { try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch { return 'dark'; } };
+  function setTheme(v) {
+    try { localStorage.setItem(THEME_KEY, v === 'light' ? 'light' : 'dark'); } catch { /* private */ }
+    document.documentElement.dataset.theme = savedTheme();
+    applyAccent(savedAccent());
+    applyContrast();
+  }
   // --accent cascades (green/amber/cyan + every color-mix(--accent …) follow); the
   // soft/line/text variants AND the warm surface ramp are derived from it here, so
   // changing the accent re-tints the whole sidebar (its gray surfaces carry a small
@@ -99,25 +110,44 @@ export function initPrefs({ preview, redrawOverlay }) {
   function applyAccent(hex) {
     const s = document.documentElement.style;
     s.setProperty('--accent', hex);
-    s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
-    s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
-    s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
-    // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
-    // anchor is first lifted toward white by `lift` (the Settings › Appearance
-    // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
-    const lift = savedBright() / 100;     // negative = darker than the base anchors
-    const tm = savedTint() / 100;         // accent-tint multiplier (Settings › Appearance)
-    const L = (anchor) => accMix('#ffffff', anchor, lift);          // lift the gray anchor
-    const S = (anchor, w) => accMix(hex, L(anchor), w * tm);        // + tint it by the accent
-    s.setProperty('--bg', S('#0b0b0d', 0.03));
-    s.setProperty('--field-bg', S('#121214', 0.03));
-    const panel = S('#17171a', 0.04);
-    s.setProperty('--panel', panel);
-    s.setProperty('--panel-solid', panel);
-    s.setProperty('--panel-2', S('#1e1e22', 0.05));
-    s.setProperty('--hover', S('#2c2c31', 0.06));
-    s.setProperty('--line', S('#303034', 0.06));
-    s.setProperty('--line-2', S('#45454e', 0.07));
+    if (savedTheme() === 'light') {
+      // LIGHT chrome: near-white surface ramp with the same subtle accent tint. Anchors
+      // are light (no white-lift); the accent-soft/line/text swing toward white/near-black
+      // so accent-on-light stays legible. Display surfaces stay dark via --stage-bg.
+      s.setProperty('--accent-soft', accMix(hex, '#ffffff', 0.82));
+      s.setProperty('--accent-line', accMix(hex, '#ffffff', 0.45));
+      s.setProperty('--accent-text', accMix(hex, '#141414', 0.30));
+      const tm = savedTint() / 100;                                  // accent-tint multiplier
+      const S2 = (anchor, w) => accMix(hex, anchor, w * tm);         // tint light anchors, no lift
+      s.setProperty('--bg', S2('#f4f4f6', 0.02));
+      s.setProperty('--field-bg', S2('#ffffff', 0.02));
+      const panelL = S2('#eaeaee', 0.03);
+      s.setProperty('--panel', panelL); s.setProperty('--panel-solid', panelL);
+      s.setProperty('--panel-2', S2('#e2e2e7', 0.035));
+      s.setProperty('--hover', S2('#d7d7de', 0.05));
+      s.setProperty('--line', S2('#cfcfd6', 0.05));
+      s.setProperty('--line-2', S2('#bcbcc6', 0.06));
+    } else {
+      s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
+      s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
+      s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
+      // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
+      // anchor is first lifted toward white by `lift` (the Settings › Appearance
+      // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
+      const lift = savedBright() / 100;     // negative = darker than the base anchors
+      const tm = savedTint() / 100;         // accent-tint multiplier (Settings › Appearance)
+      const L = (anchor) => accMix('#ffffff', anchor, lift);          // lift the gray anchor
+      const S = (anchor, w) => accMix(hex, L(anchor), w * tm);        // + tint it by the accent
+      s.setProperty('--bg', S('#0b0b0d', 0.03));
+      s.setProperty('--field-bg', S('#121214', 0.03));
+      const panel = S('#17171a', 0.04);
+      s.setProperty('--panel', panel);
+      s.setProperty('--panel-solid', panel);
+      s.setProperty('--panel-2', S('#1e1e22', 0.05));
+      s.setProperty('--hover', S('#2c2c31', 0.06));
+      s.setProperty('--line', S('#303034', 0.06));
+      s.setProperty('--line-2', S('#45454e', 0.07));
+    }
     preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
   }
   const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
@@ -134,10 +164,19 @@ export function initPrefs({ preview, redrawOverlay }) {
   function applyContrast() {
     const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
     const s = document.documentElement.style;
-    s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
-    s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
-    s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
-    s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
+    if (savedTheme() === 'light') {
+      // Dark text on a light chrome — mix near-black anchors toward white by (2 − f) so
+      // the same Contrast slider dims/brightens text symmetrically to the dark theme.
+      s.setProperty('--text', accMix('#141417', '#ffffff', 2 - f));
+      s.setProperty('--muted', accMix('#3a3a42', '#ffffff', 2 - f));
+      s.setProperty('--faint', accMix('#63636c', '#ffffff', 2 - f));
+      s.setProperty('--readout', accMix('#26262c', '#ffffff', 2 - f));
+    } else {
+      s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
+      s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
+      s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
+      s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
+    }
   }
   const SCALE_KEY = 'lz.uiscale';
   const savedScale = () => num(SCALE_KEY, 1, 0.8, 1.4);
@@ -147,6 +186,7 @@ export function initPrefs({ preview, redrawOverlay }) {
   const TRANSLU_KEY = 'lz.translucency';
   const savedTranslucency = () => num(TRANSLU_KEY, 0, 0, 90);
   function setTranslucency(v) { const c = Math.max(0, Math.min(90, Math.round(v))); document.documentElement.style.setProperty('--pop-opacity', (100 - c) + '%'); try { localStorage.setItem(TRANSLU_KEY, String(c)); } catch { /* private */ } }
+  document.documentElement.dataset.theme = savedTheme();   // mark the chrome theme on boot
   setUiScale(savedScale());        // apply text scale on boot
   setTranslucency(savedTranslucency());   // apply panel translucency on boot
   applyContrast();                // apply text contrast on boot
@@ -199,6 +239,7 @@ export function initPrefs({ preview, redrawOverlay }) {
 
   return {
     applyAccent, savedAccent, applyContrast,
+    getTheme: savedTheme, setTheme,
     setUiScale, savedScale, setTranslucency, savedTranslucency,
     applyTips, setNativeCtxMenu,
   };
