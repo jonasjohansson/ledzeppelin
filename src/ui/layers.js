@@ -1268,12 +1268,39 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
     box.append(clipHead);
 
-    // Triggerable sources (Pulse) get a prominent Trigger button here.
+    // Triggerable sources (Pulse) get a prominent Trigger button here, plus this
+    // clip's own audio-onset config — the ⚡ and the mic both fire THIS clip's bus.
     if (gen?.triggerable && transport?.fire) {
       box.append(el('button', {
         className: 'clip-trigger', textContent: '⚡ trigger',
-        title: 'fire the pulse', onclick: () => transport.fire(),
+        title: 'fire the pulse', onclick: () => transport.fire(clip.id),
       }));
+
+      // Per-clip Audio Trigger — writes clip.audioTrigger via the same commit path
+      // as every other clip field (patchClipAudioTrigger → commitLive, mirroring
+      // patchClipName). setAT merges a patch onto the current config.
+      const at = clip.audioTrigger || {};
+      const setAT = (patch) => commitLive(patchClipAudioTrigger(show(), id, clip.id, patch));
+
+      box.append(el('div', { className: 'fx-pts', textContent: 'audio trigger' }));
+      const onToggle = el('input', { type: 'checkbox' });
+      onToggle.checked = !!at.enabled;
+      onToggle.addEventListener('change', () => setAT({ enabled: onToggle.checked }));
+      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Fire on sound' }), onToggle]));
+
+      box.append(field('Band', selectInput(
+        ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
+        at.band || 'bass', (v) => setAT({ band: v }))));
+
+      box.append(Slider('Sensitivity', at.sensitivity ?? 0.5, {
+        min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
+        onInput: (v) => setAT({ sensitivity: v }),
+      }));
+      box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, {
+        min: 40, max: 800, step: 10, default: 120, commit: 'live',
+        onInput: (v) => setAT({ refractoryMs: Math.round(v) }),
+      }));
+      box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip when the mic spikes in this band (enable the mic in Settings)' }));
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.
@@ -1684,6 +1711,17 @@ function patchClipName(show, layerId, clipId, name) {
   const layers = (show.composition?.layers || []).map((l) => {
     if (l.id !== layerId) return l;
     return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId ? { ...c, name } : c) };
+  });
+  return { ...show, composition: { ...show.composition, layers } };
+}
+
+// Merge a patch onto a clip's per-clip audioTrigger config (band/sensitivity/hold/
+// enabled). Same immutable clip-patch shape as patchClipName; fed to commitLive.
+function patchClipAudioTrigger(show, layerId, clipId, patch) {
+  const layers = (show.composition?.layers || []).map((l) => {
+    if (l.id !== layerId) return l;
+    return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId
+      ? { ...c, audioTrigger: { ...(c.audioTrigger || {}), ...patch } } : c) };
   });
   return { ...show, composition: { ...show.composition, layers } };
 }
