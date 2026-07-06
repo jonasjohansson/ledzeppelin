@@ -29,6 +29,13 @@ export function audioGain() { return globalGain; }
 export function setAudioGain(g) { const v = Number(g); globalGain = Number.isFinite(v) && v >= 0 ? v : 1; }
 export function audioEnabled(src) { return src ? !!SRC[src]?.enabled : (SRC.external.enabled || SRC.composition.enabled); }
 
+// Current external (mic) band value 0..1 (0 when the mic isn't running). Per-clip triggers
+// (src/model/clip-triggers.js) sample this in the render loop.
+export function externalBand(name) {
+  const s = SRC.external;
+  return s.enabled ? (s.bands[name] || 0) : 0;
+}
+
 function ensureCtx() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; }
 function ensureAnalyser(s) {
   ensureCtx();
