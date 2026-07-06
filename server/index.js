@@ -77,6 +77,7 @@ const http = createServer(async (req, res) => {
     return res.end(JSON.stringify({
       ok: true,
       version: VERSION,
+      pid: process.pid,   // so a newer instance can take over (SIGTERM) — see the port-in-use handler
       uptimeSec: Math.round(process.uptime()),
       fpsOut,
       clients: wss.clients.size,
@@ -180,7 +181,24 @@ let lastRoute = null;
 let lastFps = OUTPUT_FPS;
 let editorWs = null;
 const editorConnected = () => !!editorWs && editorWs.readyState === 1;
+// Auto-quit (packaged app only, LZ_AUTOQUIT=1 from the launcher): once the last
+// editor window closes, the daemon has no reason to linger — exit so it can't
+// become a stale process that holds the port and blocks the next launch/update.
+// A grace window survives a reload (Force-update briefly drops the socket). Dev
+// (`npm start`) and headless/API runs don't set the flag, so they stay up.
+const AUTOQUIT = process.env.LZ_AUTOQUIT === '1';
+let quitTimer = null, everHadClient = false;
+function armAutoQuit() {
+  if (!AUTOQUIT) return;
+  clearTimeout(quitTimer);
+  if (everHadClient && wss.clients.size === 0) {
+    quitTimer = setTimeout(() => {
+      if (wss.clients.size === 0) { console.log('[ws] last window closed — exiting'); process.exit(0); }
+    }, 8000);
+  }
+}
 wss.on('connection', (ws) => {
+  everHadClient = true; clearTimeout(quitTimer);
   console.log('[ws] client connected');
   if (lastManifest) { try { ws.send(lastManifest); } catch { /* closing */ } }   // hand a new phone the last known show
   // Hold the LATEST frame + route and emit DDP on the daemon's OWN fixed-rate
@@ -250,6 +268,7 @@ wss.on('connection', (ws) => {
     if (timer) clearInterval(timer);
     if (editorWs === ws) { editorWs = null; pushApiStatus(); }   // the editor left — relayed API writes now 503
     console.log('[ws] client disconnected');
+    armAutoQuit();   // last window gone → exit after the grace window (packaged app only)
   });
 });
 setInterval(() => { fpsOut = frames; if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
@@ -349,12 +368,35 @@ function portInUse(port) {
     setTimeout(() => done(false), 300);
   });
 }
-// If the port's busy, LED Zeppelin is most likely already running there — a
-// double-click should just OPEN that instance, not crash ("nothing happens").
+// Ask a running instance who it is (version + pid) so a NEWER launch can take over.
+async function fetchHealth(port) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 500);
+  try { const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: ctrl.signal }); return await r.json(); }
+  catch { return null; } finally { clearTimeout(t); }
+}
+async function waitForPortFree(port, ms) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { if (!(await portInUse(port))) return true; await new Promise((r) => setTimeout(r, 150)); }
+  return !(await portInUse(port));
+}
+// Port busy → LED Zeppelin is probably already there. The PACKAGED app (launcher sets
+// LZ_TAKEOVER=1) TAKES OVER: SIGTERM the running daemon — which makes its launcher
+// quit too — then binds the port itself, so an UPDATE actually applies and a
+// stale/stuck instance can't wedge the port forever. Dev/CLI just opens the existing
+// instance (no takeover — don't kill a running app from a terminal).
 if (await portInUse(PORT)) {
-  console.error(`port ${PORT} in use — LED Zeppelin already running? opening ${httpUrl}`);
-  if (wantOpen()) openBrowser(httpUrl);
-  process.exit(0);
+  const health = process.env.LZ_TAKEOVER === '1' ? await fetchHealth(PORT) : null;
+  if (health?.pid) {
+    console.error(`port ${PORT} held by pid ${health.pid} (v${health.version}) — taking over`);
+    try { process.kill(health.pid, 'SIGTERM'); } catch { /* already gone */ }
+    if (!(await waitForPortFree(PORT, 4000))) { try { process.kill(health.pid, 'SIGKILL'); } catch { /* */ } await waitForPortFree(PORT, 2000); }
+  }
+  if (await portInUse(PORT)) {   // still busy (not ours, or couldn't reclaim) → just open it
+    console.error(`port ${PORT} in use — LED Zeppelin already running? opening ${httpUrl}`);
+    if (wantOpen()) openBrowser(httpUrl);
+    process.exit(0);
+  }
 }
 // Backstop for any late bind race / unexpected throw (Bun emits listen errors in a
 // way the server's 'error' event + try/catch don't reliably catch).
