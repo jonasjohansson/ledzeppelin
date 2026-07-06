@@ -2876,6 +2876,20 @@ function loop(ts) {
 }
 requestAnimationFrame(loop);
 
+// Re-open the mic the user previously had ON (persisted lz.mic), on their FIRST interaction
+// — getUserMedia needs a user gesture, so it can't run on load. One-shot; the browser won't
+// re-prompt if permission was already granted, so the FFT + clip triggers just come alive.
+try {
+  if (localStorage.getItem('lz.mic') === '1') {
+    const reopenMic = () => {
+      window.removeEventListener('pointerdown', reopenMic); window.removeEventListener('keydown', reopenMic);
+      if (!audioEnabled('external')) enableAudio('external', show.composition?.audioDevice || 'default');
+    };
+    window.addEventListener('pointerdown', reopenMic);
+    window.addEventListener('keydown', reopenMic);
+  }
+} catch { /* ignore */ }
+
 // Global safety net: surface (don't swallow) any unhandled error / promise rejection so a
 // background failure can't silently leave the app in a bad state.
 window.addEventListener('error', (e) => console.error('[uncaught]', e.error || e.message));

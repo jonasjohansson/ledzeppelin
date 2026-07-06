@@ -39,7 +39,7 @@ export function createClipSpectrum({ band = 'bass', trigsFor } = {}, doc = docum
     const n = externalFFT(buf);
     if (!n) {                                     // mic off
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '10px monospace';
-      ctx.fillText('enable the mic in Settings', 8, H / 2 + 3);
+      ctx.fillText('mic off — turn on the Microphone above', 8, H / 2 + 3);
       requestAnimationFrame(frame); return;
     }
     // shaded band regions (+ highlight the selected one)

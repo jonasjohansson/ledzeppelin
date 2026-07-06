@@ -38,7 +38,7 @@ import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
-import { AUDIO_BANDS, enableAudio } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
+import { AUDIO_BANDS, enableAudio, audioEnabled, disableExternal } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
@@ -1287,6 +1287,27 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       const setATu = (patch) => commit(patchClipAudioTrigger(show(), id, clip.id, patch));
 
       box.append(el('div', { className: 'fx-pts', textContent: 'audio trigger' }));
+
+      // Shared mic on/off — the FFT + EVERY clip trigger read this one input. The click is
+      // the user gesture getUserMedia needs; the choice persists (lz.mic) so the mic
+      // re-opens on the next launch (see app.js first-gesture reopen).
+      const micOn = audioEnabled('external');
+      const micBtn = el('button', {
+        className: 'clip-trigger' + (micOn ? ' on' : ''),
+        textContent: micOn ? '● mic on' : '○ enable mic',
+        title: micOn ? 'microphone capturing — click to turn off' : 'turn on the shared microphone input',
+        onclick: async () => {
+          if (audioEnabled('external')) { disableExternal(); try { localStorage.setItem('lz.mic', '0'); } catch { /* ignore */ } }
+          else {
+            const ok = await enableAudio('external', show().composition?.audioDevice || 'default');
+            try { localStorage.setItem('lz.mic', ok ? '1' : '0'); } catch { /* ignore */ }
+            if (ok === false) { micBtn.title = 'could not open the mic — check the browser microphone permission'; }
+          }
+          render();
+        },
+      });
+      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Microphone' }), micBtn]));
+
       const onToggle = el('input', { type: 'checkbox' });
       onToggle.checked = !!at.enabled;
       onToggle.addEventListener('change', () => setATu({ enabled: onToggle.checked }));
@@ -1304,7 +1325,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         min: 40, max: 800, step: 10, default: 120, commit: 'live',
         onInput: (v) => setAT({ refractoryMs: Math.round(v) }),
       }));
-      box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip when the mic spikes in this band (enable the mic in Settings)' }));
+      box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip when the mic spikes in this band (turn on the Microphone above)' }));
       box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id) }).el);
     }
 

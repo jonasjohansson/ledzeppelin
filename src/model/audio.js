@@ -93,6 +93,14 @@ export async function enableExternal(deviceId) {
     s.deviceId = deviceId || 'default'; s.enabled = true; return true;
   } catch (e) { console.warn('Audio (external) unavailable:', e?.message || e); s.enabled = false; return false; }
 }
+// Close the mic input — stop the stream + free the graph node (keeps the analyser for
+// reuse). `enabled` goes false so externalBand/externalFFT report silence.
+export function disableExternal() {
+  const s = SRC.external;
+  if (s.node) { try { s.node.disconnect(); } catch { /* ignore */ } s.node = null; }
+  if (s.stream) { s.stream.getTracks().forEach((t) => t.stop()); s.stream = null; }
+  s.enabled = false;
+}
 export async function enableComposition() {
   ensureCtx(); if (ctx.state === 'suspended') { try { await ctx.resume(); } catch { /* ignore */ } }
   ensureAnalyser(SRC.composition);
