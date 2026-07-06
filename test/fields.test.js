@@ -121,7 +121,7 @@ test('spherePulse: z counts in the distance', () => {
 // --- manifest entries ----------------------------------------------------
 
 test('manifest: the volumetric generators exist with pinned defaults', () => {
-  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave']);
+  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse']);
   for (const n of volumetricNames()) {
     const e = getEntry(n);
     assert.equal(e.type, 'generator');
@@ -140,6 +140,7 @@ test('manifest: the volumetric generators exist with pinned defaults', () => {
     { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
   assert.deepEqual(defaultParams('bodywave'),
     { axis: 2, wavelength: 0.5, amplitude: 0.1, offset: 0, speed: 1, color: '#ffffff' });
+  assert.deepEqual(defaultParams('planepulse'), { axis: 2, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
   assert.equal(REGISTRY.bodywave.volumetric, true);
   assert.equal(labelOf('bodywave'), 'Body Wave');
   assert.equal(REGISTRY.spherepulse.triggerable, true);
@@ -216,4 +217,14 @@ test('evalPacked matches the direct field functions', () => {
   assert.deepEqual([...pw.b.slice(0, 4)], [2, 0, 0, 0]);
   nearRGBA(evalPacked(pw, 0, pt, 1.3),
     bodyWave(pt, 1.3, { axis: 2, wavelength: Math.fround(0.7), amplitude: Math.fround(0.1), offset: 0, speed: 2, color: [1, 1, 1] }), 1e-6);
+  // planepulse: A = (axis, thickness, softness, 0), B = (speed, 0, 0, 0); a plane
+  // sweeps per trigger at pos = age·speed — the packed clip round-trips to planeSweep.
+  const pp = packVolumetrics([{ generator: 'planepulse',
+    params: { 'planepulse.speed': 2, 'planepulse.softness': 0 }, blend: 'add', opacity: 1 }]);
+  assert.deepEqual([...pp.a.slice(0, 4)], [2, Math.fround(0.15), 0, 0]);
+  assert.deepEqual([...pp.b.slice(0, 4)], [2, 0, 0, 0]);
+  nearRGBA(evalPacked(pp, 0, pt, 0, [0.3]),
+    planeSweep(pt, { axis: 2, pos: 0.3 * 2, thickness: Math.fround(0.15), softness: 0, color: [1, 1, 1] }), 1e-6);
+  // no trigger → dark.
+  nearRGBA(evalPacked(pp, 0, pt, 0), [0, 0, 0, 0], 1e-6);
 });

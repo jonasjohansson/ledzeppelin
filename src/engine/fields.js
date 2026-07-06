@@ -127,7 +127,7 @@ export function bodyWave(p, t, { axis = 2, wavelength = 0.5, amplitude = 0.1, of
 // --- Sampler packing ---------------------------------------------------------
 
 // Stable field ids — the GLSL dispatcher in sampler.js switches on these.
-export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4 };
+export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5 };
 
 export const isVolumetricName = (name) => name in FIELD_IDS;
 
@@ -181,6 +181,11 @@ export function packVolumetrics(active) {
       a.set([P('axis'), P('wavelength'), P('amplitude'), P('offset')], i * 4);
       b.set([P('speed'), 0, 0, 0], i * 4);
       colA.set(C('color'), i * 3);
+    } else if (id === FIELD_IDS.planepulse) {
+      // A = (axis, thickness, softness, 0), B = (speed, 0, 0, 0) — pos comes from trigger age.
+      a.set([P('axis'), P('thickness'), P('softness'), 0], i * 4);
+      b.set([P('speed'), 0, 0, 0], i * 4);
+      colA.set(C('color'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
       b.set([P('thickness'), P('softness'), P('speed'), 0], i * 4);
@@ -204,6 +209,13 @@ export function evalPacked(packed, i, p, t, trigAges = []) {
   if (id === FIELD_IDS.bodywave) {
     const B = packed.b.subarray(i * 4, i * 4 + 4);
     return bodyWave(p, t, { axis: A[0], wavelength: A[1], amplitude: A[2], offset: A[3], speed: B[0], color: cA });
+  }
+  if (id === FIELD_IDS.planepulse) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    const base = { axis: A[0], thickness: A[1], softness: A[2], color: cA };
+    let out = [0, 0, 0, 0];
+    for (const age of trigAges) { const s = planeSweep(p, { ...base, pos: age * B[0] }); if (s[3] > out[3]) out = s; }
+    return out;
   }
   const B = packed.b.subarray(i * 4, i * 4 + 4);
   const base = { center: [A[0], A[1], A[2]], thickness: B[0], softness: B[1], color: cA };

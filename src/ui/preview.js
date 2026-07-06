@@ -630,6 +630,21 @@ export function createPreview(canvasEl, opts = {}) {
             if (qp) { ctx.fillStyle = css(wv[3] * op * 0.7); ctx.fillRect(qp[0] - 2 * ck, qp[1] - 2 * ck, 4 * ck, 4 * ck); }
           }
         }
+      } else if (id === FIELD_IDS.planepulse) {
+        // A = (axis, thickness, softness), B = (speed): one swept plane per
+        // recent ⚡ trigger — pos = (time − trigSec)·speed along the axis (the
+        // sampler's exact clock math). No trigger → nothing (dark).
+        const axis = A[o4], half = Math.max(1e-4, A[o4 + 1]) * 0.5;
+        const speed = gv.b[o4];
+        const trigs = gv.trigSecs || [];
+        for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
+          const pos = (t - trigs[k]) * speed;
+          if (pos < -0.05 || pos > 1.05) continue;
+          quadFill(planeQuad(axis, pos), css(0.1 * op));
+          quadOutline(planeQuad(axis, pos), css(0.5 * op), 1.25 * ck);
+          quadOutline(planeQuad(axis, pos - half), css(0.18 * op), ck);
+          quadOutline(planeQuad(axis, pos + half), css(0.18 * op), ck);
+        }
       }
     }
     ctx.restore();

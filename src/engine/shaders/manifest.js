@@ -469,6 +469,16 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const PLANEPULSE_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float thickness; uniform float softness; uniform vec3 color;
+${VOL_BAND}
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float v = vband(vaxis(p, axis) - 0.5, thickness, softness);
+  frag = vec4(color * v, 1.0);
+}`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -934,6 +944,16 @@ export const REGISTRY = {
       { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
+  planepulse: {
+    name: 'planepulse', type: 'generator', volumetric: true, src: PLANEPULSE_THUMB, triggerable: true,
+    params: [
+      { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
+      { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.15 },
+      { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1107,7 +1127,7 @@ const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
-  bodywave: 'Body Wave',
+  bodywave: 'Body Wave', planepulse: 'Plane Pulse',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',

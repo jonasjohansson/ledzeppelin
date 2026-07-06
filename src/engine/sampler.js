@@ -74,6 +74,12 @@ vec4 fieldColor(int i, vec3 p){
     float v = vband(wave, uVolA[i].z * 0.2, 0.5);
     return vec4(uVolColA[i] * v, v);
   }
+  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
+    float coord = vaxis(p, uVolA[i].x);
+    float v = 0.0;
+    for (int k = 0; k < 8; k++) { if (k >= uTrigCount) break; v = max(v, vband(coord - uTrigs[k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
+    return vec4(uVolColA[i] * v, v);
+  }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
   // (radius = age·speed — the same field re-evaluated, brightest wins).
