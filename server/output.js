@@ -1,5 +1,5 @@
 import dgram from 'node:dgram';
-import { buildPackets } from './ddp.js';
+import { buildPackets, ddpDataType } from './ddp.js';
 import { buildArtnetPackets, buildArtnetSync, nextSequence, ARTNET_PORT } from './artnet.js';
 import { packDmxUniverses } from './dmx-pack.js';
 import { buildLut, isIdentity } from './calibrate.js';
@@ -162,7 +162,13 @@ export function sendFrame(rgb, devices) {
         if (d.artnetSync) { syncPort = port; syncAfter = Math.max(syncAfter, Number(d.delayMs) || 0); }
       } else {
         const port = d.port ?? 4048;
-        const pkts = buildPackets(bytes, { sequence: seq });
+        // Declare the pixel format in the DDP header (byte 2) so WLED reads the
+        // right bytes/pixel. Use the device's stride; with MIXED strides on one
+        // controller there's no single correct type, so leave it undefined (0).
+        const segs = d.segments?.length ? d.segments : [{ colorOrder: d.colorOrder }];
+        const strides = segs.map((sg) => formatStride(sg.colorOrder || d.colorOrder || 'RGB'));
+        const uniform = strides.every((x) => x === strides[0]) ? strides[0] : 0;
+        const pkts = buildPackets(bytes, { sequence: seq, dataType: ddpDataType(uniform) });
         sends.push(() => { for (const pkt of pkts) udpSend(pkt, port, d.ip); });
       }
     }

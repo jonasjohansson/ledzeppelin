@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides } from './output.js';
+import { ddpDataType } from './ddp.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig, getOutputs } from './wled.js';
@@ -93,6 +94,31 @@ const http = createServer(async (req, res) => {
       .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
     res.setHeader('content-type', 'application/json');
     return res.end(JSON.stringify({ lan, port: PORT, osc: OSC_PORT }));
+  }
+  // DEBUG: dump the effective wire format the daemon is CURRENTLY sending, so a
+  // stride/colour-order mismatch (e.g. 3-byte RGB going to a 4-byte RGBW controller,
+  // or MIXED strides on one controller → polka-dot corruption) is visible offline at
+  // http://localhost:7070/api/debug/route — no light-strip guessing.
+  if (url.pathname === '/api/debug/route') {
+    res.setHeader('content-type', 'application/json');
+    const summary = (lastRoute || []).map((d) => {
+      const segs = d.segments?.length ? d.segments : [{ count: (d.byteEnd - d.byteStart) / 3, colorOrder: d.colorOrder }];
+      const strideOf = (s) => (s.colorOrder || d.colorOrder || 'RGB').length;
+      const strides = [...new Set(segs.map(strideOf))];
+      const uniform = strides.length === 1 ? strides[0] : 0;
+      const ddpByte2 = ddpDataType(uniform);
+      return {
+        ip: d.ip, protocol: d.protocol || 'ddp', deviceOrder: d.colorOrder,
+        pixels: (d.byteEnd - d.byteStart) / 3,
+        wireBytes: segs.reduce((n, s) => n + s.count * strideOf(s), 0),
+        mixedStride: strides.length > 1,   // TRUE → guaranteed misalignment on a WLED controller
+        // The DDP header byte-2 we send: 0x1B = RGBW, 0x0B = RGB, 0 = undefined.
+        // WLED reads this to pick bytes/pixel; must be 0x1B for a 4-byte RGBW strip.
+        ddpDataType: '0x' + ddpByte2.toString(16).padStart(2, '0').toUpperCase(),
+        segments: segs.map((s) => ({ count: s.count, order: s.colorOrder || d.colorOrder, stride: strideOf(s) })),
+      };
+    });
+    return res.end(JSON.stringify(summary, null, 2));
   }
   // Set the OSC listen PORT live (the Mapping window's OSC-input field). Rebinds.
   if (url.pathname === '/api/osc/port' && req.method === 'POST') {
