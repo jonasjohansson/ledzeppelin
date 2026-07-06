@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseObj, parseName, objToKagora } from '../src/model/obj-import.js';
+import { importKagora } from '../src/model/kagora-import.js';
 
 test('parses vertices grouped by object, ordered by declaration when no l-lines', () => {
   const obj = `
@@ -80,4 +81,34 @@ test('objToKagora reverses points when dir=rev', () => {
   const { preset } = objToKagora([{ name: 'R__leds=2__dir=rev', points: [[0, 0, 0], [9, 0, 0]] }]);
   const s = preset.instances.find((i) => i.kind === 'strip');
   assert.deepEqual([s.points[0].x, s.points[1].x], [9, 0]);
+});
+
+test('OBJ text round-trips through importKagora into correct fixtures', () => {
+  const objText = `
+o Tail__leds=204__order=GRBW__out=oct110.0
+v 0 0 1
+v 1 0 1
+v 2 0 1
+o Rib__leds=90__out=oct110.1
+v 0 1 0
+v 0 2 0
+`;
+  const { preset, warnings } = objToKagora(parseObj(objText));
+  assert.equal(warnings.length, 0);
+  const show = importKagora(preset);
+  const byName = Object.fromEntries(show.fixtures.map((f) => [f.name, f]));
+  // Tail: 204px GRBW, on device oct110 port 0, lifted (z) → polyline
+  assert.equal(byName.Tail.pixelCount, 204);
+  assert.equal(byName.Tail.colorFormat, 'GRBW');
+  assert.equal(byName.Tail.output.deviceId, 'oct110');
+  assert.equal(byName.Tail.output.port, 0);
+  assert.equal(byName.Tail.input.mode, 'polyline');
+  assert.equal(byName.Tail.input.samples, 204);
+  assert.ok(byName.Tail.input.points.every((p) => p.length === 3));   // z preserved
+  // Rib: 90px on the same device, port 1
+  assert.equal(byName.Rib.pixelCount, 90);
+  assert.equal(byName.Rib.output.deviceId, 'oct110');
+  assert.equal(byName.Rib.output.port, 1);
+  // points normalized into 0..1
+  for (const f of show.fixtures) for (const p of f.input.points) { assert.ok(p[0] >= 0 && p[0] <= 1); assert.ok(p[1] >= 0 && p[1] <= 1); }
 });

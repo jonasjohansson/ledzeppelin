@@ -92,15 +92,20 @@ export function objToKagora(objects) {
     const key = `${meta.leds}|${meta.lpm}|${meta.order}`;
     let st = stripTypeByKey.get(key);
     if (!st) {
+      // A 4+-char order (e.g. GRBW) is a white/amber-channel COLOUR FORMAT, not a plain
+      // RGB permutation — carry it as colorFormat and keep colorOrder to the RGB base.
+      const isFmt = meta.order.length > 3;
       st = { kind: 'stripType', id: `st_${stripTypeByKey.size}`, name: `${meta.leds}px`,
-        pixelCount: meta.leds, length_m: meta.leds / meta.lpm, ledsPerMeter: meta.lpm, colorOrder: meta.order,
+        pixelCount: meta.leds, length_m: meta.leds / meta.lpm, ledsPerMeter: meta.lpm,
+        colorOrder: isFmt ? meta.order.slice(0, 3) : meta.order,
+        colorFormat: isFmt ? meta.order : '',
         ports: [{ id: 'data-in', dir: 'in', signal: 'data' }, { id: 'data-out', dir: 'out', signal: 'data' }] };
       stripTypeByKey.set(key, st); types.push(st);
     }
 
     const pts = meta.dir === 'rev' ? [...o.points].reverse() : o.points;
     const stripId = `run_${sn++}`;
-    instances.push({ kind: 'strip', id: stripId, typeId: st.id,
+    instances.push({ kind: 'strip', id: stripId, name: meta.name, typeId: st.id,
       points: pts.map((p) => (Math.abs(p[2] || 0) > 1e-9 ? { x: p[0], y: p[1], z: p[2] } : { x: p[0], y: p[1] })) });
 
     if (meta.out) {
