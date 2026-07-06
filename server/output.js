@@ -93,10 +93,17 @@ export function buildDeviceBytes(slice, d, lut) {
   for (const s of segs) {
     const fmt = s.colorOrder || d.colorOrder || 'RGB';
     const stride = fmt.length;
+    const hasW = fmt.indexOf('W') !== -1;
     const a = s.start * 3;
     for (let p = 0; p < s.count; p++) {
-      const r = slice[a + p * 3], g = slice[a + p * 3 + 1], b = slice[a + p * 3 + 2];
-      const w = r < g ? (r < b ? r : b) : (g < b ? g : b);   // min(R,G,B) — only used if fmt has W
+      let r = slice[a + p * 3], g = slice[a + p * 3 + 1], b = slice[a + p * 3 + 2];
+      // RGBW white EXTRACTION: pull the common white (min R,G,B) out of RGB into the
+      // W channel and SUBTRACT it from R,G,B, so whites render on the dedicated white
+      // LED (cleaner, lower power) instead of doubling RGB-white + W. Only when the
+      // format carries a W — an RGB-only format must keep its full RGB (nowhere to
+      // move the white to, else white would go black).
+      let w = 0;
+      if (hasW) { w = r < g ? (r < b ? r : b) : (g < b ? g : b); r -= w; g -= w; b -= w; }
       for (let c = 0; c < stride; c++) {
         const ch = fmt[c];
         const v = ch === 'R' ? r : ch === 'G' ? g : ch === 'B' ? b : ch === 'W' ? w : 0;

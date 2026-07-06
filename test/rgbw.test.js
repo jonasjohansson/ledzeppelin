@@ -25,16 +25,27 @@ test('RGB orders still pack 3 bytes/px (no regression)', () => {
   assert.deepEqual(px([10, 20, 30, 40, 50, 60], { colorOrder: 'GRB' }), [20, 10, 30, 50, 40, 60]);
 });
 
-test('RGBW appends W = min(R,G,B), RGB kept', () => {
-  assert.deepEqual(px([10, 20, 30, 60, 50, 40], { colorOrder: 'RGBW' }), [10, 20, 30, 10, 60, 50, 40, 40]);
+test('RGBW extracts W = min(R,G,B) and subtracts it from RGB', () => {
+  // px1 (10,20,30): w=10 → (0,10,20,10).  px2 (60,50,40): w=40 → (20,10,0,40).
+  assert.deepEqual(px([10, 20, 30, 60, 50, 40], { colorOrder: 'RGBW' }), [0, 10, 20, 10, 20, 10, 0, 40]);
 });
 
-test('GRBW reorders RGB and appends white', () => {
-  assert.deepEqual(px([10, 20, 30], { colorOrder: 'GRBW' }), [20, 10, 30, 10]);
+test('pure white extracts to the W channel only (RGB go dark)', () => {
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [0, 0, 0, 255]);
 });
 
-test('WRGB puts white first', () => {
-  assert.deepEqual(px([10, 20, 30], { colorOrder: 'WRGB' }), [10, 10, 20, 30]);
+test('pure red has no white to extract (RGB kept, W=0)', () => {
+  assert.deepEqual(px([255, 0, 0], { colorOrder: 'RGBW' }), [255, 0, 0, 0]);
+});
+
+test('GRBW reorders the extracted RGB residual and appends white', () => {
+  // (10,20,30): w=10 → residual (0,10,20); GRBW order → (10,0,20,10).
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'GRBW' }), [10, 0, 20, 10]);
+});
+
+test('WRGB puts white first, RGB residual after', () => {
+  // (10,20,30): w=10 → residual (0,10,20); WRGB → (10,0,10,20).
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'WRGB' }), [10, 0, 10, 20]);
 });
 
 test('Art-Net chunks RGBW on whole-pixel universe boundaries (128 px = 512 B)', () => {
