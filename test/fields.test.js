@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  planeSweep, axisGradient, noise3d, spherePulse, bodyWave,
+  planeSweep, axisGradient, noise3d, spherePulse, bodyWave, flowfield,
   FIELD_IDS, isVolumetricName, packVolumetrics, evalPacked,
 } from '../src/engine/fields.js';
 import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames } from '../src/engine/shaders/manifest.js';
@@ -118,10 +118,49 @@ test('spherePulse: z counts in the distance', () => {
   near(spherePulse([0.5, 0.5, 0.3], P)[3], 1);                    // straight up the z axis
 });
 
+// --- flowfield ---------------------------------------------------------------
+
+test('flowfield: id registered and distinct', () => {
+  assert.equal(FIELD_IDS.flowfield, 6);
+});
+
+test('flowfield: output is premultiplied and in range', () => {
+  const c = flowfield([0.4, 0.6, 0.3], 1.2, { color: [1, 0.5, 0.25] });
+  assert.equal(c.length, 4);
+  const [r, g, b, a] = c;
+  for (const v of c) assert.ok(v >= 0 && v <= 1, `${v} out of range`);
+  near(r, 1 * a, 1e-9); near(g, 0.5 * a, 1e-9); near(b, 0.25 * a, 1e-9);
+});
+
+test('flowfield: zero wind is static in time (no motion term)', () => {
+  const P = { windX: 0, windY: 0, windZ: 0, speed: 1 };
+  const a0 = flowfield([0.3, 0.7, 0.2], 0, P);
+  const a5 = flowfield([0.3, 0.7, 0.2], 5, P);
+  nearRGBA(a5, a0, 1e-9);
+});
+
+test('flowfield: seed decorrelates the pattern', () => {
+  const base = { windX: 0.3, seed: 0 };
+  const a = flowfield([0.5, 0.5, 0.5], 0, base)[3];
+  const b = flowfield([0.5, 0.5, 0.5], 0, { ...base, seed: 0.7 })[3];
+  assert.notEqual(a, b);
+});
+
+test('flowfield: thicker filaments cover at least as much as thin ones', () => {
+  const avg = (thickness) => {
+    let s = 0, n = 0;
+    for (let x = 0; x < 1; x += 0.2) for (let y = 0; y < 1; y += 0.2) for (let z = 0; z < 1; z += 0.2) {
+      s += flowfield([x, y, z], 0, { thickness, seed: 0.1 })[3]; n++;
+    }
+    return s / n;
+  };
+  assert.ok(avg(0.9) >= avg(0.1), 'thick should cover >= thin');
+});
+
 // --- manifest entries ----------------------------------------------------
 
 test('manifest: the volumetric generators exist with pinned defaults', () => {
-  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse']);
+  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield']);
   for (const n of volumetricNames()) {
     const e = getEntry(n);
     assert.equal(e.type, 'generator');
@@ -146,6 +185,17 @@ test('manifest: the volumetric generators exist with pinned defaults', () => {
   assert.equal(REGISTRY.spherepulse.triggerable, true);
   assert.equal(labelOf('planesweep'), 'Plane Sweep');
   assert.equal(labelOf('noise3d'), 'Noise 3D');
+});
+
+test('flowfield: registered as a volumetric generator with defaults + label', () => {
+  assert.ok(volumetricNames().includes('flowfield'));
+  assert.equal(getEntry('flowfield').volumetric, true);
+  assert.equal(labelOf('flowfield'), 'Flow Field');
+  const d = defaultParams('flowfield');
+  assert.equal(d.windX, 0.3); assert.equal(d.speed, 0.4); assert.equal(d.scale, 2);
+  assert.equal(d.turbulence, 0.5); assert.equal(d.thickness, 0.4);
+  assert.equal(d.trail, 0.5); assert.equal(d.seed, 0);
+  assert.equal(d.color, '#ffffff'); assert.equal(d.fromCanvas, false);
 });
 
 test('manifest: non-volumetric entries are untouched by the flag', () => {
@@ -234,4 +284,21 @@ test('evalPacked matches the direct field functions', () => {
     planeSweep(pt, { axis: 2, pos: 0.3 * 2, thickness: Math.fround(0.15), softness: 0, color: [1, 1, 1] }), 1e-6);
   // no trigger → dark.
   nearRGBA(evalPacked(pp, 0, pt, 0), [0, 0, 0, 0], 1e-6);
+});
+
+test('flowfield: packs A/B/colB and round-trips through evalPacked', () => {
+  const p = packVolumetrics([{ generator: 'flowfield',
+    params: { 'flowfield.windX': 0.5, 'flowfield.windY': -0.2, 'flowfield.scale': 3,
+              'flowfield.turbulence': 0.6, 'flowfield.thickness': 0.3, 'flowfield.trail': 0.8,
+              'flowfield.seed': 0.4, 'flowfield.speed': 1.2, 'flowfield.color': '#ff8040' },
+    blend: 'add', opacity: 1 }]);
+  assert.deepEqual([...p.a.slice(0, 4)], [Math.fround(0.5), Math.fround(-0.2), 0, 3]);
+  assert.deepEqual([...p.b.slice(0, 4)], [Math.fround(0.6), Math.fround(0.3), Math.fround(0.8), Math.fround(0.4)]);
+  near(p.colB[0], Math.fround(1.2), 1e-6);
+  const pt = [0.3, 0.6, 0.4];
+  nearRGBA(evalPacked(p, 0, pt, 1.5),
+    flowfield(pt, 1.5, { windX: Math.fround(0.5), windY: Math.fround(-0.2), windZ: 0, scale: 3,
+      turbulence: Math.fround(0.6), thickness: Math.fround(0.3), trail: Math.fround(0.8),
+      seed: Math.fround(0.4), speed: Math.fround(1.2),
+      color: [Math.fround(1), Math.fround(0x80 / 255), Math.fround(0x40 / 255)] }), 1e-6);
 });
