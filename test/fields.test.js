@@ -132,15 +132,15 @@ test('manifest: the volumetric generators exist with pinned defaults', () => {
     assert.ok(isVolumetricName(n));
   }
   assert.deepEqual(defaultParams('planesweep'),
-    { axis: 2, pos: 0.5, thickness: 0.25, softness: 0.5, color: '#ffffff' });
+    { axis: 2, pos: 0.5, thickness: 0.25, softness: 0.5, color: '#ffffff', fromCanvas: false });
   assert.deepEqual(defaultParams('axisgradient'),
     { axis: 2, scroll: 0, colorA: '#000000', colorB: '#ffffff' });
-  assert.deepEqual(defaultParams('noise3d'), { scale: 3, speed: 0.3, axis: 2, drift: 0, color: '#ffffff' });
+  assert.deepEqual(defaultParams('noise3d'), { scale: 3, speed: 0.3, axis: 2, drift: 0, color: '#ffffff', fromCanvas: false });
   assert.deepEqual(defaultParams('spherepulse'),
-    { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
+    { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff', fromCanvas: false });
   assert.deepEqual(defaultParams('bodywave'),
-    { axis: 2, wavelength: 0.5, amplitude: 0.1, offset: 0, speed: 1, color: '#ffffff' });
-  assert.deepEqual(defaultParams('planepulse'), { axis: 2, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
+    { axis: 2, wavelength: 0.5, amplitude: 0.1, offset: 0, speed: 1, color: '#ffffff', fromCanvas: false });
+  assert.deepEqual(defaultParams('planepulse'), { axis: 2, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff', fromCanvas: false });
   assert.equal(REGISTRY.bodywave.volumetric, true);
   assert.equal(labelOf('bodywave'), 'Body Wave');
   assert.equal(REGISTRY.spherepulse.triggerable, true);

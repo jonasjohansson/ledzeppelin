@@ -897,6 +897,7 @@ export const REGISTRY = {
       { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.25 },
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
   axisgradient: {
@@ -918,6 +919,7 @@ export const REGISTRY = {
       { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
       { key: 'drift', type: 'float', min: 0, max: 2, default: 0 },
       { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
   spherepulse: {
@@ -931,6 +933,7 @@ export const REGISTRY = {
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
   bodywave: {
@@ -942,6 +945,7 @@ export const REGISTRY = {
       { key: 'offset', type: 'float', min: 0, max: 1, default: 0 },
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
   planepulse: {
@@ -952,6 +956,7 @@ export const REGISTRY = {
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
   displace: {
