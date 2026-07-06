@@ -13,7 +13,7 @@ import {
   thicknessOf, setBezierControl,
 } from '../model/fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from '../model/bezier.js';
-import { FIELD_IDS, axisGradient, noise3d } from '../engine/fields.js';
+import { FIELD_IDS, axisGradient, noise3d, bodyWave } from '../engine/fields.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
 // (so draw() and hitTest() — which use different pixel scales — agree).
@@ -612,6 +612,22 @@ export function createPreview(canvasEl, opts = {}) {
               ctx.fillStyle = css(v * op * 0.7);
               ctx.fillRect(q[0] - dot / 2, q[1] - dot / 2, dot, dot);
             }
+          }
+        }
+      } else if (id === FIELD_IDS.bodywave) {
+        // A = (axis, wavelength, amplitude, offset), B = (speed): dots sampled
+        // along the wave axis where the REAL field (fields.js bodyWave) reads bright.
+        const axis = A[o4], wavelength = A[o4 + 1], amplitude = A[o4 + 2], offset = A[o4 + 3];
+        const speed = gv.b[o4];
+        for (let ki = 0; ki < 6; ki++) {
+          const coord = ki / 6;
+          P[0] = axis < 0.5 ? coord : 0.5;
+          P[1] = (axis >= 0.5 && axis < 1.5) ? coord : 0.5;
+          P[2] = axis >= 1.5 ? coord : 0;
+          const wv = bodyWave(P, t, { axis, wavelength, amplitude, offset, speed, color: [1, 1, 1] });
+          if (wv[3] > 0.4) {
+            const qp = prj(P[0], P[1], P[2]);
+            if (qp) { ctx.fillStyle = css(wv[3] * op * 0.7); ctx.fillRect(qp[0] - 2 * ck, qp[1] - 2 * ck, 4 * ck, 4 * ck); }
           }
         }
       }

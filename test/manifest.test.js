@@ -36,7 +36,7 @@ test('defaultParams of an unknown name is empty', () => {
 });
 
 test('registry contains the expected generators and effects', () => {
-  assert.deepEqual(generatorNames().sort(), ['axisgradient', 'checkers', 'domainwarp', 'gradient', 'grid', 'line', 'metaballs', 'noise', 'noise3d', 'planesweep', 'plasma', 'pulse', 'radial', 'sine', 'solid', 'spectrum', 'spherepulse', 'tunnel']);
+  assert.deepEqual(generatorNames().sort(), ['axisgradient', 'bodywave', 'checkers', 'domainwarp', 'gradient', 'grid', 'line', 'metaballs', 'noise', 'noise3d', 'planesweep', 'plasma', 'pulse', 'radial', 'sine', 'solid', 'spectrum', 'spherepulse', 'tunnel']);
   assert.deepEqual(effectNames().sort(),
     ['basswarp', 'cascade', 'color', 'colorize', 'displace', 'feedback', 'hue', 'invert', 'repeat', 'rgb', 'segmenter', 'shockwave', 'strobe', 'threshold', 'trails']);
   for (const name of ['line', 'gradient', 'solid', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize', 'trails', 'feedback']) {

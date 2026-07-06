@@ -68,6 +68,12 @@ vec4 fieldColor(int i, vec3 p){
     float v = clamp(vfbm3((p - ax * (uT * uVolA[i].w)) * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
     return vec4(uVolColA[i] * v, v);
   }
+  if (id == 4) {           // body wave: A = (axis, wavelength, amplitude, offset), B = (speed, -, -, -)
+    float coord = vaxis(p, uVolA[i].x);
+    float wave = sin((coord - uVolA[i].w + uT * uVolB[i].x) * 6.2831853 / uVolA[i].y) * uVolA[i].z;
+    float v = vband(wave, uVolA[i].z * 0.2, 0.5);
+    return vec4(uVolColA[i] * v, v);
+  }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
   // (radius = age·speed — the same field re-evaluated, brightest wins).

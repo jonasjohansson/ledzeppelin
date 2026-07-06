@@ -456,6 +456,19 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const BODYWAVE_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float wavelength; uniform float amplitude; uniform float offset;
+uniform vec3 color;
+${VOL_BAND}
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  float coord = axis < 0.5 ? p.x : (axis < 1.5 ? p.y : p.z);
+  float wave = sin((coord - offset) * 6.2831853 / wavelength) * amplitude;
+  float v = vband(wave, amplitude * 0.2, 0.5);
+  frag = vec4(color * v, 1.0);
+}`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -910,6 +923,17 @@ export const REGISTRY = {
       { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
+  bodywave: {
+    name: 'bodywave', type: 'generator', volumetric: true, src: BODYWAVE_THUMB,
+    params: [
+      { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
+      { key: 'wavelength', type: 'float', min: 0.1, max: 2, default: 0.5 },
+      { key: 'amplitude', type: 'float', min: 0.01, max: 0.5, default: 0.1 },
+      { key: 'offset', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1083,6 +1107,7 @@ const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
+  bodywave: 'Body Wave',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  planeSweep, axisGradient, noise3d, spherePulse,
+  planeSweep, axisGradient, noise3d, spherePulse, bodyWave,
   FIELD_IDS, isVolumetricName, packVolumetrics, evalPacked,
 } from '../src/engine/fields.js';
 import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames } from '../src/engine/shaders/manifest.js';
@@ -120,8 +120,8 @@ test('spherePulse: z counts in the distance', () => {
 
 // --- manifest entries ----------------------------------------------------
 
-test('manifest: the 4 volumetric generators exist with pinned defaults', () => {
-  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse']);
+test('manifest: the volumetric generators exist with pinned defaults', () => {
+  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave']);
   for (const n of volumetricNames()) {
     const e = getEntry(n);
     assert.equal(e.type, 'generator');
@@ -138,6 +138,10 @@ test('manifest: the 4 volumetric generators exist with pinned defaults', () => {
   assert.deepEqual(defaultParams('noise3d'), { scale: 3, speed: 0.3, axis: 2, drift: 0, color: '#ffffff' });
   assert.deepEqual(defaultParams('spherepulse'),
     { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff' });
+  assert.deepEqual(defaultParams('bodywave'),
+    { axis: 2, wavelength: 0.5, amplitude: 0.1, offset: 0, speed: 1, color: '#ffffff' });
+  assert.equal(REGISTRY.bodywave.volumetric, true);
+  assert.equal(labelOf('bodywave'), 'Body Wave');
   assert.equal(REGISTRY.spherepulse.triggerable, true);
   assert.equal(labelOf('planesweep'), 'Plane Sweep');
   assert.equal(labelOf('noise3d'), 'Noise 3D');
@@ -204,4 +208,12 @@ test('evalPacked matches the direct field functions', () => {
   const trig = evalPacked(p, 2, pt, 0, [Math.hypot(0.2, 0.1, 0.4)]);   // shell exactly at this LED
   assert.ok(trig[3] >= still[3]);
   near(trig[3], 1, 1e-6);
+  // bodywave: A = (axis, wavelength, amplitude, offset), B = (speed, 0, 0, 0);
+  // the packed clip round-trips to the direct bodyWave field at p/t.
+  const pw = packVolumetrics([{ generator: 'bodywave',
+    params: { 'bodywave.wavelength': 0.7, 'bodywave.speed': 2 }, blend: 'add', opacity: 1 }]);
+  assert.deepEqual([...pw.a.slice(0, 4)], [2, Math.fround(0.7), Math.fround(0.1), 0]);
+  assert.deepEqual([...pw.b.slice(0, 4)], [2, 0, 0, 0]);
+  nearRGBA(evalPacked(pw, 0, pt, 1.3),
+    bodyWave(pt, 1.3, { axis: 2, wavelength: Math.fround(0.7), amplitude: Math.fround(0.1), offset: 0, speed: 2, color: [1, 1, 1] }), 1e-6);
 });

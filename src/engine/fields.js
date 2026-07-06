@@ -113,10 +113,21 @@ export function spherePulse(p, { center = [0.5, 0.5, 0], radius = 0.35, thicknes
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
+// Body wave — a traveling sine wave along a world `axis`: the band tracks a
+// sine of the axis coordinate (wavelength/amplitude), sliding by phase = t·speed.
+// The GLSL twin (sampler id==4) computes the identical (coord − offset + t·speed).
+export function bodyWave(p, t, { axis = 2, wavelength = 0.5, amplitude = 0.1, offset = 0, speed = 1, color = [1, 1, 1] } = {}) {
+  const coord = axisCoord(p, axis);
+  const phase = t * speed;
+  const wave = Math.sin((coord - offset + phase) * Math.PI * 2 / wavelength) * amplitude;
+  const v = band(wave, amplitude * 0.2, 0.5);
+  return [color[0] * v, color[1] * v, color[2] * v, v];
+}
+
 // --- Sampler packing ---------------------------------------------------------
 
 // Stable field ids — the GLSL dispatcher in sampler.js switches on these.
-export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3 };
+export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4 };
 
 export const isVolumetricName = (name) => name in FIELD_IDS;
 
@@ -165,6 +176,11 @@ export function packVolumetrics(active) {
       // A = (scale, speed, axis, drift)
       a.set([P('scale'), P('speed'), P('axis'), P('drift')], i * 4);
       colA.set(C('color'), i * 3);
+    } else if (id === FIELD_IDS.bodywave) {
+      // A = (axis, wavelength, amplitude, offset), B = (speed, 0, 0, 0)
+      a.set([P('axis'), P('wavelength'), P('amplitude'), P('offset')], i * 4);
+      b.set([P('speed'), 0, 0, 0], i * 4);
+      colA.set(C('color'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
       b.set([P('thickness'), P('softness'), P('speed'), 0], i * 4);
@@ -185,6 +201,10 @@ export function evalPacked(packed, i, p, t, trigAges = []) {
   if (id === FIELD_IDS.planesweep) return planeSweep(p, { axis: A[0], pos: A[1], thickness: A[2], softness: A[3], color: cA });
   if (id === FIELD_IDS.axisgradient) return axisGradient(p, { axis: A[0], colorA: cA, colorB: cB, scroll: A[1] });
   if (id === FIELD_IDS.noise3d) return noise3d(p, t, { scale: A[0], speed: A[1], axis: A[2], drift: A[3], color: cA });
+  if (id === FIELD_IDS.bodywave) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return bodyWave(p, t, { axis: A[0], wavelength: A[1], amplitude: A[2], offset: A[3], speed: B[0], color: cA });
+  }
   const B = packed.b.subarray(i * 4, i * 4 + 4);
   const base = { center: [A[0], A[1], A[2]], thickness: B[0], softness: B[1], color: cA };
   let out = spherePulse(p, { ...base, radius: A[3] });
