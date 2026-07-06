@@ -164,7 +164,8 @@ export function packVolumetrics(active) {
     const P = (key) => Number(paramOf(params, generator, key, defs[key])) || 0;
     const C = (key) => hexToRgb(paramOf(params, generator, key, defs[key]));
     const id = FIELD_IDS[generator];
-    meta.set([id, blendIndex(blend), opacity == null ? 1 : Number(opacity), 0], i * 4);
+    const fromCanvas = (paramOf(params, generator, 'fromCanvas', false) ? 1 : 0);
+    meta.set([id, blendIndex(blend), opacity == null ? 1 : Number(opacity), fromCanvas], i * 4);
     if (id === FIELD_IDS.planesweep) {
       a.set([P('axis'), P('pos'), P('thickness'), P('softness')], i * 4);
       colA.set(C('color'), i * 3);

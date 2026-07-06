@@ -180,6 +180,13 @@ test('packVolumetrics: resolves namespaced params, blends, colours; caps at 4', 
   assert.deepEqual([...p.b.slice(12, 16)], [Math.fround(0.15), 0.5, 1, 0]);
 });
 
+test('packVolumetrics packs the fromCanvas flag into meta.w', () => {
+  const on = packVolumetrics([{ generator: 'planepulse', params: { 'planepulse.fromCanvas': true }, blend: 'add', opacity: 1 }]);
+  assert.equal(on.meta[3], 1);
+  const off = packVolumetrics([{ generator: 'planepulse', params: {}, blend: 'add', opacity: 1 }]);
+  assert.equal(off.meta[3], 0);
+});
+
 test('packVolumetrics: unknown blend falls back to add (compositor parity)', () => {
   const p = packVolumetrics([{ generator: 'planesweep', params: {}, blend: undefined, opacity: 1 }]);
   assert.equal(p.meta[1], 1);
