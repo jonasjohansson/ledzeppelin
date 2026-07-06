@@ -130,10 +130,14 @@ export function createProjectIO(hooks) {
   async function applyObjFile(file) {
     try {
       const { preset, warnings } = objToKagora(parseObj(await file.text()));
-      const imp = importKagora(preset);
-      const allWarn = [...warnings, ...(imp.warnings || [])];
-      if (!imp.fixtures.length) { window.alert('No fixtures in that OBJ. Name each run like  Tail__leds=204__out=dev.0'); return; }
-      applyFullShow(normalizeComposition({ version: 1, devices: imp.devices, fixtureTypes: imp.fixtureTypes, fixtures: imp.fixtures, composition: imp.composition }));
+      // importKagora returns a COMPLETE, normalized show (deviceTypes + devices +
+      // fixtures + fixtureTypes + composition, already synced + canvas-fitted) — apply
+      // it WHOLE, exactly as the LEDger import panel does. Cherry-picking fields dropped
+      // deviceTypes, which the device manager + output need.
+      const { warnings: impWarnings, ...show } = importKagora(preset);
+      if (!show.fixtures.length) { window.alert('No fixtures in that OBJ. Name each run like  Tail__leds=204__out=dev.0'); return; }
+      applyFullShow(show);
+      const allWarn = [...warnings, ...(impWarnings || [])];
       if (allWarn.length) window.alert('Imported with notes:\n• ' + allWarn.join('\n• '));
     } catch (e) { window.alert('OBJ import failed: ' + e.message); }
   }
