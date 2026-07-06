@@ -13,14 +13,16 @@ import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 import { isValidIPv4 } from '../model/ip.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
-// Controller colour ORDER: the RGB wiring order (the per-fixture Color Format below
-// can override this and add a White channel).
-const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
+// Controller colour ORDER: the channel wiring order. The RGB reorderings plus the
+// 4-channel RGBW variants (White = min(R,G,B) at output) so a GRBW/SK6812 controller
+// can send its white byte directly; the per-fixture Color Format below still overrides.
+export const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG',
+  'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB'];
 // Per-FIXTURE colour FORMAT options: '' inherits the controller's order; the rest
-// pin this fixture's format, including RGBW variants (White = min(R,G,B) at output)
-// so RGB and RGBW strips can share one controller.
+// pin this fixture's format. Every controller order plus the amber (A) variants, so
+// RGB, RGBW and RGBWA strips can share one controller.
 const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
-  'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB', 'RGBA', 'RGBWA', 'RGBAW',
+  'RGBA', 'RGBWA', 'RGBAW',
   { value: 'NONE', label: 'None (channels only)' }];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 

@@ -2,8 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDeviceBytes, formatStride } from '../server/output.js';
 import { buildArtnetPackets } from '../server/artnet.js';
+import { COLOR_ORDERS } from '../src/ui/fixtures.js';
 
 const px = (slice, d) => [...buildDeviceBytes(Buffer.from(slice), d)];
+
+test('controller colour orders offer the 4-channel RGBW variants', () => {
+  // A GRBW/SK6812 controller must be selectable so a fixture with no explicit
+  // colorFormat still emits its white byte (pipeline falls back to device order).
+  for (const o of ['RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB']) {
+    assert.ok(COLOR_ORDERS.includes(o), `COLOR_ORDERS missing ${o}`);
+  }
+});
 
 test('formatStride: RGB=3, RGBW=4, RGBWA=5', () => {
   assert.equal(formatStride('GRB'), 3);
