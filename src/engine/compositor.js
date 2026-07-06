@@ -32,6 +32,9 @@ import { REGISTRY, getEntry, defaultParams, hexToRgb } from './shaders/manifest.
 // so a single shared buffer avoids a per-effect, per-frame allocation).
 const TRIG_SCRATCH = new Float32Array(8);
 
+// instanceKey → owner clip id (strip any ':sub' suffix). Shared with the cleanup block.
+const ownerOf = (k) => { const i = (k || '').indexOf(':'); return i >= 0 ? k.slice(0, i) : (k || ''); };
+
 const BLIT_FS = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uTex; uniform float opacity;
@@ -195,7 +198,7 @@ export function makeCompositor(gl, w, h) {
     const uTrigs = loc(c, 'uTrigs[0]');
     if (uTrigs !== null) {
       const arr = TRIG_SCRATCH; arr.fill(1e6);
-      const trigs = frameEnv.trigSecs || [];
+      const trigs = (frameEnv.trigSecsFor ? frameEnv.trigSecsFor(ownerOf(instanceKey || entry.name)) : frameEnv.trigSecs) || [];
       const n = Math.min(trigs.length, 8);
       for (let i = 0; i < n; i++) arr[i] = timeSec - trigs[trigs.length - n + i];
       gl.uniform1fv(uTrigs, arr);
