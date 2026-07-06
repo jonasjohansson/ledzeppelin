@@ -1479,7 +1479,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
   const SOURCE_CATEGORIES = [
     ['Basic', ['solid', 'gradient', 'line']],
     ['Pattern', ['grid', 'checkers', 'spectrum']],
-    ['Motion', ['sine', 'pulse', 'radial']],
+    ['Motion', ['sine', 'pulse', 'radial', 'plasma', 'tunnel']],
+    ['Liquid', ['domainwarp', 'metaballs']],
     ['Organic', ['noise']],
     // Per-LED 3D fields (evaluated at each LED's world xyz in the sampler pass,
     // not drawn on the canvas). Max 4 active at once.

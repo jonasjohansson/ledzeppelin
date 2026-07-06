@@ -456,6 +456,303 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const DOMAINWARP = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float aspect;
+uniform float scale;
+uniform float speed;
+uniform float warp;
+uniform float contrast;
+uniform vec3 colorA;
+uniform vec3 colorB;
+
+// --- hash / value noise ---
+float hash(vec2 p){
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p){
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  // smoothstep quintic interpolation
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = hash(i + vec2(0.0, 0.0));
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// --- fractal brownian motion (fixed 5 octaves) ---
+float fbm(vec2 p){
+  float sum = 0.0;
+  float amp = 0.5;
+  mat2 rot = mat2(0.80, 0.60, -0.60, 0.80);
+  for(int i = 0; i < 5; i++){
+    sum += amp * vnoise(p);
+    p = rot * p * 2.02;
+    amp *= 0.5;
+  }
+  return sum;
+}
+
+void main(){
+  // isotropic, centered coords
+  vec2 p = (uv - 0.5);
+  p.x *= aspect;
+  p *= scale;
+
+  // continuous motion time (prefer pre-integrated phase)
+  float t = uPhase * speed;
+
+  // domain warp: two layers of fbm displace the sample position
+  vec2 q = vec2(
+    fbm(p + vec2(0.0, 0.0) + 0.15 * t),
+    fbm(p + vec2(5.2, 1.3) - 0.12 * t)
+  );
+
+  vec2 r = vec2(
+    fbm(p + warp * q + vec2(1.7, 9.2) + 0.10 * t),
+    fbm(p + warp * q + vec2(8.3, 2.8) - 0.13 * t)
+  );
+
+  float f = fbm(p + warp * r);
+
+  // shape the field into flowing bands / marble contrast
+  f = clamp(f + 0.25 * length(q) + 0.15 * length(r), 0.0, 1.0);
+  f = pow(f, max(contrast, 0.001));
+  f = clamp(f, 0.0, 1.0);
+
+  vec3 col = mix(colorA, colorB, f);
+  frag = vec4(col, 1.0);
+}`;
+
+const METABALLS = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT;
+uniform float aspect;
+uniform float count;
+uniform float radius;
+uniform float speed;
+uniform float softness;
+uniform vec3 color;
+
+void main(){
+  // Work in aspect-corrected space so x-distance matches y-distance
+  // and blobs stay round on any canvas.
+  vec2 p = vec2(uv.x * aspect, uv.y);
+
+  float r2 = radius * radius;
+  float field = 0.0;
+
+  for(int i = 0; i < 8; i++){
+    if(float(i) >= count) break;
+    float fi = float(i);
+
+    // Distinct drift phase per blob; self-animating on uT.
+    vec2 c = vec2(
+      0.5 + 0.34 * sin(uT * speed + fi * 2.4),
+      0.5 + 0.34 * cos(uT * speed * 0.9 + fi * 1.7)
+    );
+    c.x *= aspect;
+
+    vec2 d = p - c;
+    float dist2 = dot(d, d);
+    // Inverse-square metaball contribution; == 1.0 at dist == radius.
+    field += r2 / (dist2 + 1e-4);
+  }
+
+  // Threshold the summed field into a glowing organic mass.
+  // softness feathers the edge symmetrically around the 1.0 iso-level.
+  float m = smoothstep(1.0 - softness, 1.0 + softness, field);
+
+  // Premultiplied-friendly: alpha == blob intensity, 0 in empty areas.
+  frag = vec4(color * m, m);
+}`;
+
+const PLASMA = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale;   // spatial frequency
+uniform float speed;   // motion rate (multiplies phase)
+uniform float warp;    // extra domain distortion
+uniform float sat;     // color saturation 0..1
+uniform float uPhase;  // speed*time from engine
+uniform float aspect;  // canvas w/h for isotropic radial term
+
+vec3 hue(float h){
+  return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0);
+}
+
+void main(){
+  float t = uPhase * speed;
+  // centred, aspect-corrected coords so the radial term is isotropic
+  vec2 p = (uv - 0.5) * vec2(aspect, 1.0) * scale;
+
+  // optional domain warp: swirl the coordinates before sampling
+  p += warp * vec2(
+    sin(p.y * 1.7 + t * 0.9),
+    cos(p.x * 1.5 - t * 0.7)
+  );
+
+  // layered sine waves: horizontal, diagonal, and radial ripples
+  float v = 0.0;
+  v += sin(p.x + t);
+  v += sin(p.y * 0.9 - t * 1.1);
+  v += sin((p.x + p.y) * 0.7 + t * 0.8);
+  float r = length(p) + 1.0;
+  v += sin(r * 1.3 - t * 1.6);
+
+  // v spans about -4..4; normalise to a hue and cycle it over time
+  float h = v * 0.125 + t * 0.05;
+
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)), 1.0);
+}`;
+
+const TUNNEL = `#version 300 es
+precision highp float;
+in vec2 uv;
+out vec4 frag;
+
+uniform float uT;
+uniform float uPhase;
+uniform float aspect;
+
+uniform float speed;         // fly-in speed (scales the scroll)
+uniform float rings;         // ring frequency along depth
+uniform float angularBands;  // number of angular stripes around the tunnel
+uniform float twist;         // spiral: rotate angle with depth
+uniform vec3  colorA;        // fog / edge color
+uniform vec3  colorB;        // near / stripe color
+
+const float PI  = 3.14159265359;
+const float TAU = 6.28318530718;
+
+void main() {
+  // Centered, aspect-corrected coords so the tunnel stays circular.
+  vec2 p = uv - 0.5;
+  p.x *= aspect;
+
+  // Polar coordinates around center.
+  float r = length(p);
+  float a = atan(p.y, p.x);
+
+  // Depth: 1/r goes to infinity at the center (the far end of the tunnel),
+  // and the scroll (uPhase*speed as a fallback on uT) flies us inward.
+  float scroll = uPhase + uT * speed * 0.15;
+  float depth  = 1.0 / max(r, 1e-3) + scroll * speed;
+
+  // Spiral: twist the angle as a function of depth.
+  float ang = a + depth * twist;
+
+  // Angular coordinate normalized to [0,1) around the tunnel.
+  float angC = ang / TAU;
+
+  // Ring pattern along depth + stripe pattern around the tunnel.
+  float ringWave   = 0.5 + 0.5 * sin(depth * rings * TAU);
+  float stripeWave = 0.5 + 0.5 * sin(angC * angularBands * TAU);
+
+  // Combine into a single tunnel-wall pattern.
+  float pattern = ringWave * stripeWave;
+  pattern = pow(pattern, 1.5); // crisp up the bright bands
+
+  // Depth fog: center (small r) glows, edges (large r) fade to colorA.
+  float fog = smoothstep(0.0, 0.6, r);
+
+  vec3 col = mix(colorA, colorB, pattern);
+  col = mix(col, colorA, fog);
+
+  frag = vec4(col, 1.0);
+}
+`;
+
+const SHOCKWAVE = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+uniform float uTrigs[8];
+uniform int uTrigCount;
+uniform float aspect;
+uniform float speed;
+uniform float amp;
+uniform float width;
+uniform float rimGain;
+uniform float centerX;
+uniform float centerY;
+uniform vec3 rimColor;
+
+void main(){
+  vec2 center = vec2(centerX, centerY);
+  vec2 p = uv - center;
+  p.x *= aspect;
+  float r = length(p);
+
+  // Radial direction in aspect-corrected space (guarded against r == 0).
+  vec2 dir = r > 1e-5 ? p / r : vec2(0.0);
+
+  vec2 disp = vec2(0.0);
+  float rim = 0.0;
+
+  // Constant loop bound; only 0..uTrigCount-1 are valid triggers.
+  for(int i = 0; i < 8; i++){
+    if(i >= uTrigCount) break;
+    float age = uTrigs[i];
+    float ringR = age * speed;
+    float d = r - ringR;
+    // Narrow Gaussian band of thickness ~width centered on the ring.
+    float w = max(width, 1e-4);
+    float band = exp(-(d * d) / (w * w));
+    // Fade the whole ring out as it ages so old rings vanish.
+    float fade = exp(-age * 3.0);
+    float env = band * fade;
+    // Push the sample outward along the radial normal.
+    disp += dir * (amp * env);
+    rim += env * rimGain;
+  }
+
+  // Displacement was built in aspect-corrected space; undo the x scale for UV.
+  vec2 dispUV = vec2(disp.x / aspect, disp.y);
+
+  vec4 base = texture(uTex, uv + dispUV);
+  frag = base + vec4(rimColor * rim, 0.0);
+}`;
+
+const BASSWARP = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+uniform float uT;
+uniform float aspect;
+uniform float amount;
+uniform float scale;
+uniform float speed;
+uniform float swirl;
+
+void main(){
+  // Aspect-corrected working coord so the wobble is isotropic on wide canvases.
+  vec2 p = uv;
+  p.x *= aspect;
+
+  float t = uT * speed;
+
+  // Two octaves of scrolling sines on BOTH axes -> liquid, not a shear.
+  vec2 w;
+  w.x  = sin(p.y * scale        + t)        + 0.5 * sin(p.y * scale * 2.03 - t * 1.7 + 1.3);
+  w.y  = cos(p.x * scale        - t)        + 0.5 * cos(p.x * scale * 1.97 + t * 1.4 - 0.7);
+  // cross-feed the octaves for swirlier, less grid-like flow
+  w.x += 0.5 * sin(p.x * scale * 0.75 + t * 0.6);
+  w.y += 0.5 * cos(p.y * scale * 0.75 - t * 0.6);
+
+  // Optional rotational component around the image centre.
+  vec2 c = uv - 0.5;
+  vec2 rot = vec2(-c.y, c.x) * swirl * (0.5 + 0.5 * sin(t + length(c) * scale));
+
+  // All displacement is scaled by amount -> amount == 0 is exact pass-through.
+  vec2 disp = (w * 0.1 + rot) * amount;
+
+  frag = texture(uTex, uv + disp);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -705,6 +1002,68 @@ export const REGISTRY = {
       { key: 'highColor', type: 'color', default: '#ffffff' },
     ],
   },
+  domainwarp: {
+    name: 'domainwarp', type: 'generator', src: DOMAINWARP,
+    params: [
+      { key: 'scale', type: 'float', min: 0.5, max: 12, default: 3, step: 0.1 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.6, step: 0.01 },
+      { key: 'warp', type: 'float', min: 0, max: 4, default: 2.2, step: 0.05 },
+      { key: 'contrast', type: 'float', min: 0.3, max: 3, default: 1.1, step: 0.05 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
+    ],
+  },
+  metaballs: {
+    name: 'metaballs', type: 'generator', src: METABALLS,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 8, default: 4, step: 1 },
+      { key: 'radius', type: 'float', min: 0.04, max: 0.4, default: 0.16, step: 0.005 },
+      { key: 'speed', type: 'float', min: 0, max: 2, default: 0.4, step: 0.01 },
+      { key: 'softness', type: 'float', min: 0.05, max: 0.9, default: 0.4, step: 0.01 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  plasma: {
+    name: 'plasma', type: 'generator', src: PLASMA,
+    params: [
+      { key: 'scale', type: 'float', min: 1, max: 24, default: 6, step: 0.1 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 1, step: 0.01 },
+      { key: 'warp', type: 'float', min: 0, max: 3, default: 0.6, step: 0.01 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 0.9, step: 0.01 },
+    ],
+  },
+  tunnel: {
+    name: 'tunnel', type: 'generator', src: TUNNEL,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 1, step: 0.01 },
+      { key: 'rings', type: 'float', min: 0.5, max: 20, default: 6, step: 0.1 },
+      { key: 'angularBands', type: 'float', min: 1, max: 32, default: 8, step: 1 },
+      { key: 'twist', type: 'float', min: -2, max: 2, default: 0.25, step: 0.01 },
+      { key: 'colorA', type: 'color', default: '#000000' },
+      { key: 'colorB', type: 'color', default: '#ffffff' },
+    ],
+  },
+  shockwave: {
+    name: 'shockwave', type: 'effect', triggerable: true, src: SHOCKWAVE,
+    params: [
+      { key: 'speed', type: 'float', min: 0.05, max: 3, default: 0.9, step: 0.01 },
+      { key: 'amp', type: 'float', min: 0, max: 0.25, default: 0.04, step: 0.001 },
+      { key: 'width', type: 'float', min: 0.005, max: 0.3, default: 0.05, step: 0.005 },
+      { key: 'rimGain', type: 'float', min: 0, max: 3, default: 0.6, step: 0.01 },
+      { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5, step: 0.01 },
+      { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5, step: 0.01 },
+      { key: 'rimColor', type: 'color', default: '#ffffff' },
+    ],
+  },
+  basswarp: {
+    name: 'basswarp', type: 'effect', src: BASSWARP,
+    params: [
+      { key: 'amount', type: 'float', min: 0, max: 1, default: 0.3, step: 0.01 },
+      { key: 'scale', type: 'float', min: 1, max: 40, default: 9, step: 0.5 },
+      { key: 'speed', type: 'float', min: 0, max: 6, default: 1.2, step: 0.01 },
+      { key: 'swirl', type: 'float', min: 0, max: 2, default: 0.4, step: 0.01 },
+    ],
+  },
 };
 
 // Parse a "#rrggbb" (or "#rgb") string to normalized [r,g,b] in 0..1. Used by the
@@ -727,6 +1086,8 @@ const LABELS = {
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
+  domainwarp: 'Domain Warp', metaballs: 'Metaballs', plasma: 'Plasma', tunnel: 'Tunnel',
+  shockwave: 'Shockwave', basswarp: 'Bass Warp',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
