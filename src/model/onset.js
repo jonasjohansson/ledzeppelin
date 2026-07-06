@@ -41,6 +41,30 @@ export function createOnsetDetector(opts = {}) {
   };
 }
 
+// Absolute-level GATE (the twin of the onset detector for "Level" mode): fires when the
+// value rises to/above `threshold`, then stays quiet until it drops below
+// `threshold - HYSTERESIS` (anti-chatter at the line) AND it rises again. `refractoryMs`
+// is the minimum gap between fires (the clip's Hold). Pure, no browser deps.
+const LEVEL_HYSTERESIS = 0.05;
+export function createLevelGateDetector(opts = {}) {
+  const threshold = clampNum(opts.threshold, 0.5, 0, 1);
+  const refractoryMs = clampNum(opts.refractoryMs, 120, 0, 5000);
+  let armed = true;
+  let lastFireMs = -Infinity;
+  return {
+    push(value, nowMs) {
+      const v = Number.isFinite(value) ? value : 0;
+      if (v < threshold - LEVEL_HYSTERESIS) armed = true;   // fell back below → re-arm
+      if (armed && v >= threshold && nowMs - lastFireMs >= refractoryMs) {
+        armed = false; lastFireMs = nowMs; return true;
+      }
+      if (v >= threshold) armed = false;                     // above but suppressed (held/refractory)
+      return false;
+    },
+    reset() { armed = true; lastFireMs = -Infinity; },
+  };
+}
+
 function clampNum(x, dflt, lo, hi) {
   const n = Number(x);
   if (!Number.isFinite(n)) return dflt;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createOnsetDetector } from '../src/model/onset.js';
+import { createOnsetDetector, createLevelGateDetector } from '../src/model/onset.js';
 
 // Feed a value stream at 60fps (dt≈16.7ms). Count fires.
 function run(det, values, dtMs = 1000 / 60) {
@@ -58,4 +58,37 @@ test('out-of-range opts are clamped (floor→1 means a 0.9 spike never fires)', 
   const det = createOnsetDetector({ sensitivity: 99, refractoryMs: -5, floor: 2, attack: 5 });
   const vals = [...Array(30).fill(0.1), 0.9, ...Array(30).fill(0.1)];
   assert.equal(run(det, vals), 0);
+});
+
+test('level gate fires on the rising cross above threshold, once', () => {
+  const g = createLevelGateDetector({ threshold: 0.5, refractoryMs: 0 });
+  assert.equal(g.push(0.2, 0), false);      // below
+  assert.equal(g.push(0.6, 10), true);      // crosses up → fire
+  assert.equal(g.push(0.7, 20), false);     // still above → no re-fire (held)
+  assert.equal(g.push(0.65, 30), false);
+});
+
+test('level gate re-arms only after dropping below threshold - hysteresis', () => {
+  const g = createLevelGateDetector({ threshold: 0.5, refractoryMs: 0 });
+  g.push(0.6, 0);                            // fire, disarm
+  assert.equal(g.push(0.48, 10), false);    // dipped but within hysteresis (0.05) → still disarmed
+  assert.equal(g.push(0.6, 20), false);     // back up but never re-armed → no fire
+  assert.equal(g.push(0.40, 30), false);    // now below thr-hyst → re-arm (no fire on a fall)
+  assert.equal(g.push(0.6, 40), true);      // next rising cross fires
+});
+
+test('level gate Hold enforces a minimum gap between fires', () => {
+  const g = createLevelGateDetector({ threshold: 0.5, refractoryMs: 200 });
+  assert.equal(g.push(0.6, 0), true);       // fire
+  g.push(0.3, 50);                          // drop → re-arm
+  assert.equal(g.push(0.6, 100), false);   // rising cross but only 100ms since last fire < 200 → suppressed
+  g.push(0.3, 150);
+  assert.equal(g.push(0.6, 260), true);    // 260ms ≥ 200 → fires
+});
+
+test('level gate reset() re-arms', () => {
+  const g = createLevelGateDetector({ threshold: 0.5, refractoryMs: 0 });
+  g.push(0.6, 0);
+  g.reset();
+  assert.equal(g.push(0.6, 10), true);
 });
