@@ -70,6 +70,37 @@ export function createSettingsPanel(hooks) {
       onInput: (v) => { const s = getShow(); setShow({ ...s, composition: { ...s.composition, audioGain: v } }, { undoable: true, defer: true }); },
     }));
 
+    // --- Audio trigger: a mic onset fires the ⚡ trigger bus (Pulse + Sphere Pulse) ---
+    const trig = getShow().composition?.audioTrigger || {};
+    const setTrig = (patch) => {
+      const s = getShow();
+      setShow({ ...s, composition: { ...s.composition, audioTrigger: { ...(s.composition?.audioTrigger || {}), ...patch } } }, { undoable: true, defer: true });
+    };
+    mount.append(el('div', { className: 'fx-pts', textContent: 'audio trigger' }));
+    const onToggle = el('input', { type: 'checkbox' });
+    onToggle.checked = !!trig.enabled;
+    onToggle.addEventListener('change', () => setTrig({ enabled: onToggle.checked }));
+    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Fire on sound' }), onToggle]));
+
+    const bandSel = el('select', { title: 'which frequency band drives the onset' });
+    ['bass', 'mid', 'high', 'level'].forEach((b) => {
+      const o = el('option', { value: b, textContent: b[0].toUpperCase() + b.slice(1) });
+      if ((trig.band || 'bass') === b) o.selected = true;
+      bandSel.append(o);
+    });
+    bandSel.addEventListener('change', () => setTrig({ band: bandSel.value }));
+    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Band' }), bandSel]));
+
+    mount.append(Slider('Sensitivity', trig.sensitivity ?? 0.5, {
+      min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
+      onInput: (v) => setTrig({ sensitivity: v }),
+    }));
+    mount.append(Slider('Hold (ms)', trig.refractoryMs ?? 120, {
+      min: 40, max: 800, step: 10, default: 120, commit: 'live',
+      onInput: (v) => setTrig({ refractoryMs: Math.round(v) }),
+    }));
+    mount.append(el('div', { className: 'seg-hint', textContent: 'needs the mic input enabled above; drives any triggerable clip (Pulse, Sphere Pulse)' }));
+
     // --- Composition file (visuals only — the whole rig saves with the project, ⌘S) ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'composition file' }));
     mount.append(el('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
