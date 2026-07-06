@@ -50,12 +50,16 @@ float vnoise3(vec3 p){
 float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
   for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
 
+// From-Canvas tint: when uVolMeta[i].w is set, colour the field's intensity with
+// the composited 2D canvas at this LED's UV instead of the flat param colour.
+vec3 volTint(int i, vec2 cuv, vec3 flatCol) { return uVolMeta[i].w > 0.5 ? texture(uCanvas, cuv).rgb : flatCol; }
+
 // One packed clip's field at world point p → PREMULTIPLIED rgba.
-vec4 fieldColor(int i, vec3 p){
+vec4 fieldColor(int i, vec3 p, vec2 cuv){
   int id = int(uVolMeta[i].x + 0.5);
   if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
     float v = vband(vaxis(p, uVolA[i].x) - uVolA[i].y, uVolA[i].z, uVolA[i].w);
-    return vec4(uVolColA[i] * v, v);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
   if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
     float g = fract(vaxis(p, uVolA[i].x) - uVolA[i].y);
@@ -66,19 +70,19 @@ vec4 fieldColor(int i, vec3 p){
     // drift 0 subtracts an exact 0 → byte-identical to the pre-drift field.
     vec3 ax = uVolA[i].z < 0.5 ? vec3(1.0, 0.0, 0.0) : (uVolA[i].z < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
     float v = clamp(vfbm3((p - ax * (uT * uVolA[i].w)) * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
-    return vec4(uVolColA[i] * v, v);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
   if (id == 4) {           // body wave: A = (axis, wavelength, amplitude, offset), B = (speed, -, -, -)
     float coord = vaxis(p, uVolA[i].x);
     float wave = sin((coord - uVolA[i].w + uT * uVolB[i].x) * 6.2831853 / uVolA[i].y) * uVolA[i].z;
     float v = vband(wave, uVolA[i].z * 0.2, 0.5);
-    return vec4(uVolColA[i] * v, v);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
   if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
     float coord = vaxis(p, uVolA[i].x);
     float v = 0.0;
     for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
-    return vec4(uVolColA[i] * v, v);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
@@ -89,7 +93,7 @@ vec4 fieldColor(int i, vec3 p){
     if (k >= uVolTrigCount[i]) break;
     v = max(v, vband(d - uVolTrigs[i*8+k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
   }
-  return vec4(uVolColA[i] * v, v);
+  return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
 }
 
 void main(){
@@ -108,7 +112,7 @@ void main(){
   vec3 rgb = base.rgb;
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
-    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz);
+    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz, c);
     float op = uVolMeta[i].z;
     vec3 src = f.rgb * op; float sa = f.a * op;
     int mode = int(uVolMeta[i].y + 0.5);
