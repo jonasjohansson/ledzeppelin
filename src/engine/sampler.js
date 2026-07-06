@@ -22,8 +22,8 @@ uniform sampler2D uMap;
 uniform sampler2D uPos;      // per-LED world xyz (same W×H layout as uMap)
 uniform int uVolCount;       // active volumetric clips (0 = plain pass-through)
 uniform float uT;            // seconds (noise3d drift)
-uniform float uTrigs[8];     // seconds since recent triggers (spherepulse shells)
-uniform int uTrigCount;
+uniform float uVolTrigs[32];   // 4 slots × 8 — seconds since each trigger, per volumetric clip
+uniform int uVolTrigCount[4];
 uniform vec4 uVolMeta[4];
 uniform vec4 uVolA[4];
 uniform vec4 uVolB[4];
@@ -77,7 +77,7 @@ vec4 fieldColor(int i, vec3 p){
   if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
     float coord = vaxis(p, uVolA[i].x);
     float v = 0.0;
-    for (int k = 0; k < 8; k++) { if (k >= uTrigCount) break; v = max(v, vband(coord - uTrigs[k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
+    for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
     return vec4(uVolColA[i] * v, v);
   }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
@@ -86,8 +86,8 @@ vec4 fieldColor(int i, vec3 p){
   float d = length(p - uVolA[i].xyz);
   float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
   for (int k = 0; k < 8; k++) {
-    if (k >= uTrigCount) break;
-    v = max(v, vband(d - uTrigs[k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
+    if (k >= uVolTrigCount[i]) break;
+    v = max(v, vband(d - uVolTrigs[i*8+k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
   }
   return vec4(uVolColA[i] * v, v);
 }
@@ -162,14 +162,15 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   const locPos = gl.getUniformLocation(prog, 'uPos');
   const locVolCount = gl.getUniformLocation(prog, 'uVolCount');
   const locT = gl.getUniformLocation(prog, 'uT');
-  const locTrigs = gl.getUniformLocation(prog, 'uTrigs[0]');
-  const locTrigCount = gl.getUniformLocation(prog, 'uTrigCount');
+  const locVolTrigs = gl.getUniformLocation(prog, 'uVolTrigs[0]');
+  const locVolTrigCount = gl.getUniformLocation(prog, 'uVolTrigCount[0]');
   const locVolMeta = gl.getUniformLocation(prog, 'uVolMeta[0]');
   const locVolA = gl.getUniformLocation(prog, 'uVolA[0]');
   const locVolB = gl.getUniformLocation(prog, 'uVolB[0]');
   const locVolColA = gl.getUniformLocation(prog, 'uVolColA[0]');
   const locVolColB = gl.getUniformLocation(prog, 'uVolColB[0]');
-  const TRIG_SCRATCH = new Float32Array(8);
+  const VOL_TRIG_SCRATCH = new Float32Array(32);   // 4 slots × 8
+  const VOL_TRIG_COUNT_SCRATCH = new Int32Array(4);
   const byteLen = W * H * 4;
   const out = new Uint8Array(byteLen);
   const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
@@ -228,13 +229,18 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
         gl.uniform4fv(locVolB, vol.b);
         gl.uniform3fv(locVolColA, vol.colA);
         gl.uniform3fv(locVolColB, vol.colB);
-        // uTrigs = seconds since each recent ⚡ trigger (compositor convention).
-        TRIG_SCRATCH.fill(1e6);
-        const trigs = vol.trigSecs || [];
-        const tn = Math.min(trigs.length, 8);
-        for (let i = 0; i < tn; i++) TRIG_SCRATCH[i] = (vol.time || 0) - trigs[trigs.length - tn + i];
-        gl.uniform1fv(locTrigs, TRIG_SCRATCH);
-        gl.uniform1i(locTrigCount, tn);
+        // uVolTrigs = seconds since each recent ⚡ trigger, per slot (compositor convention).
+        // Prefer per-slot vol.volTrigs[s]; fall back to replicating the global vol.trigSecs
+        // into every active slot so a single-bus caller behaves identically.
+        VOL_TRIG_SCRATCH.fill(1e6);
+        for (let s = n2; s < 4; s++) VOL_TRIG_COUNT_SCRATCH[s] = 0;   // clear unused slots
+        for (let s = 0; s < Math.min(n2, 4); s++) {
+          const trigs = (vol.volTrigs && vol.volTrigs[s]) || vol.trigSecs || [];
+          const tn = Math.min(trigs.length, 8);
+          for (let k = 0; k < tn; k++) VOL_TRIG_SCRATCH[s * 8 + k] = (vol.time || 0) - trigs[trigs.length - tn + k];
+          VOL_TRIG_COUNT_SCRATCH[s] = tn;
+        }
+        gl.uniform1fv(locVolTrigs, VOL_TRIG_SCRATCH); gl.uniform1iv(locVolTrigCount, VOL_TRIG_COUNT_SCRATCH);
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 
