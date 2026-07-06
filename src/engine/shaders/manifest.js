@@ -479,6 +479,41 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const FLOWFIELD_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float windX; uniform float windY; uniform float windZ; uniform float speed;
+uniform float scale; uniform float turbulence; uniform float thickness; uniform float trail; uniform float seed;
+uniform float uT; uniform vec3 color;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float x00 = mix(vhash3(i), vhash3(i + vec3(1, 0, 0)), f.x);
+  float x10 = mix(vhash3(i + vec3(0, 1, 0)), vhash3(i + vec3(1, 1, 0)), f.x);
+  float x01 = mix(vhash3(i + vec3(0, 0, 1)), vhash3(i + vec3(1, 0, 1)), f.x);
+  float x11 = mix(vhash3(i + vec3(0, 1, 1)), vhash3(i + vec3(1, 1, 1)), f.x);
+  return mix(mix(x00, x10, f.y), mix(x01, x11, f.y), f.z);
+}
+float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
+  for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
+void main(){
+  vec3 p = vec3(uv.x, uv.y, uv.y);
+  vec3 wind = vec3(windX, windY, windZ); float wm = length(wind);
+  vec3 dir = wm < 1e-5 ? vec3(0.0) : wind / wm;
+  float s = seed * 11.0;
+  vec3 q = p * scale - dir * (speed * uT) + vec3(s, s * 1.7, s * 0.3);
+  vec3 w = vec3(
+    vfbm3(q + vec3(19.19, 7.3, 2.7)),
+    vfbm3(q + vec3(5.2, 41.7, 13.1)),
+    vfbm3(q + vec3(31.3, 9.1, 27.9))) * 2.0 - 1.0;
+  q += turbulence * w;
+  float k = trail * 0.9; float along = dot(q, dir); q -= dir * along * k;
+  float nrm = vfbm3(q);
+  float hw = 0.02 + thickness * 0.48;
+  float tt = clamp((abs(nrm - 0.5) - hw * 0.5) / max(hw - hw * 0.5, 1e-5), 0.0, 1.0);
+  float v = 1.0 - tt * tt * (3.0 - 2.0 * tt);
+  frag = vec4(color * v, 1.0);
+}`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -959,6 +994,22 @@ export const REGISTRY = {
       { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
+  flowfield: {
+    name: 'flowfield', type: 'generator', volumetric: true, src: FLOWFIELD_THUMB,
+    params: [
+      { key: 'windX', type: 'float', min: -1, max: 1, default: 0.3 },
+      { key: 'windY', type: 'float', min: -1, max: 1, default: 0 },
+      { key: 'windZ', type: 'float', min: -1, max: 1, default: 0 },
+      { key: 'speed', type: 'float', min: 0, max: 2, default: 0.4 },
+      { key: 'scale', type: 'float', min: 0.2, max: 8, default: 2 },
+      { key: 'turbulence', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'thickness', type: 'float', min: 0, max: 1, default: 0.4 },
+      { key: 'trail', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'seed', type: 'float', min: 0, max: 1, default: 0 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'fromCanvas', type: 'bool', default: false },
+    ],
+  },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1132,7 +1183,7 @@ const LABELS = {
   line: 'Lines', gradient: 'Gradient', solid: 'Color', sine: 'Sine',
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
-  bodywave: 'Body Wave', planepulse: 'Plane Pulse',
+  bodywave: 'Body Wave', planepulse: 'Plane Pulse', flowfield: 'Flow Field',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',

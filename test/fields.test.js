@@ -160,7 +160,7 @@ test('flowfield: thicker filaments cover at least as much as thin ones', () => {
 // --- manifest entries ----------------------------------------------------
 
 test('manifest: the volumetric generators exist with pinned defaults', () => {
-  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse']);
+  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield']);
   for (const n of volumetricNames()) {
     const e = getEntry(n);
     assert.equal(e.type, 'generator');
@@ -185,6 +185,17 @@ test('manifest: the volumetric generators exist with pinned defaults', () => {
   assert.equal(REGISTRY.spherepulse.triggerable, true);
   assert.equal(labelOf('planesweep'), 'Plane Sweep');
   assert.equal(labelOf('noise3d'), 'Noise 3D');
+});
+
+test('flowfield: registered as a volumetric generator with defaults + label', () => {
+  assert.ok(volumetricNames().includes('flowfield'));
+  assert.equal(getEntry('flowfield').volumetric, true);
+  assert.equal(labelOf('flowfield'), 'Flow Field');
+  const d = defaultParams('flowfield');
+  assert.equal(d.windX, 0.3); assert.equal(d.speed, 0.4); assert.equal(d.scale, 2);
+  assert.equal(d.turbulence, 0.5); assert.equal(d.thickness, 0.4);
+  assert.equal(d.trail, 0.5); assert.equal(d.seed, 0);
+  assert.equal(d.color, '#ffffff'); assert.equal(d.fromCanvas, false);
 });
 
 test('manifest: non-volumetric entries are untouched by the flag', () => {
