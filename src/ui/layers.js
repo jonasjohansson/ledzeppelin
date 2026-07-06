@@ -1280,17 +1280,20 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       // as every other clip field (patchClipAudioTrigger → commitLive, mirroring
       // patchClipName). setAT merges a patch onto the current config.
       const at = clip.audioTrigger || {};
+      // Sliders stream LIVE (commitLive, no re-render); the discrete enable/band
+      // edits are undoable single actions (commit).
       const setAT = (patch) => commitLive(patchClipAudioTrigger(show(), id, clip.id, patch));
+      const setATu = (patch) => commit(patchClipAudioTrigger(show(), id, clip.id, patch));
 
       box.append(el('div', { className: 'fx-pts', textContent: 'audio trigger' }));
       const onToggle = el('input', { type: 'checkbox' });
       onToggle.checked = !!at.enabled;
-      onToggle.addEventListener('change', () => setAT({ enabled: onToggle.checked }));
+      onToggle.addEventListener('change', () => setATu({ enabled: onToggle.checked }));
       box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Fire on sound' }), onToggle]));
 
       box.append(field('Band', selectInput(
         ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
-        at.band || 'bass', (v) => setAT({ band: v }))));
+        at.band || 'bass', (v) => setATu({ band: v }))));
 
       box.append(Slider('Sensitivity', at.sensitivity ?? 0.5, {
         min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',

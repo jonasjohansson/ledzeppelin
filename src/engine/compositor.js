@@ -192,9 +192,12 @@ export function makeCompositor(gl, w, h) {
       gl.uniform1f(uPhase, pc.phase);
     }
 
-    // uTrigs[] — seconds since each recent trigger (from frameEnv.trigSecs),
-    // huge (1e6) before a trigger so triggerable sources (Pulse) stay idle. The
-    // most recent up-to-8 triggers stack as independent beams.
+    // uTrigs[] — seconds since each recent trigger, huge (1e6) before a trigger so
+    // triggerable sources (Pulse) stay idle. Per-clip: trigSecsFor(ownerOf(key)) routes
+    // each shader to ITS clip's bus — a clip GENERATOR keys on clip.id, a clip EFFECT on
+    // `clip.id:fxN` → ownerOf → clip.id, so a triggerable effect (Shockwave) shares its
+    // host clip's bus. Layer/composition-level effects have no clip owner → no triggers.
+    // (Fallback to the global frameEnv.trigSecs when no trigSecsFor is supplied.)
     const uTrigs = loc(c, 'uTrigs[0]');
     if (uTrigs !== null) {
       const arr = TRIG_SCRATCH; arr.fill(1e6);

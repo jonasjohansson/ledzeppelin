@@ -588,7 +588,7 @@ export function createPreview(canvasEl, opts = {}) {
         const cx = A[o4], cy = A[o4 + 1], cz = A[o4 + 2], r = A[o4 + 3];
         const speed = gv.b[o4 + 2];
         if (r > 1e-3) rings3(cx, cy, cz, r, css(0.6 * op), 1.25 * ck);
-        const trigs = gv.trigSecs || [];
+        const trigs = (gv.volTrigs && gv.volTrigs[i]) || gv.trigSecs || [];
         for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
           const rr = (t - trigs[k]) * speed;
           if (rr > 0.02 && rr < 2) rings3(cx, cy, cz, rr, css(0.4 * op), ck);
@@ -636,7 +636,7 @@ export function createPreview(canvasEl, opts = {}) {
         // sampler's exact clock math). No trigger → nothing (dark).
         const axis = A[o4], half = Math.max(1e-4, A[o4 + 1]) * 0.5;
         const speed = gv.b[o4];
-        const trigs = gv.trigSecs || [];
+        const trigs = (gv.volTrigs && gv.volTrigs[i]) || gv.trigSecs || [];
         for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
           const pos = (t - trigs[k]) * speed;
           if (pos < -0.05 || pos > 1.05) continue;
