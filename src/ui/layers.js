@@ -46,6 +46,7 @@ import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { placePopover, dismissOnOutside } from './kit/popover.js';
 import { confirmDelete } from './confirm.js';
+import { createClipSpectrum } from './spectrum.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
@@ -491,7 +492,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, clipTrigsFor, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
   if (transport?.now) animClock = transport.now;
   animBpm = () => getShow().composition?.bpm ?? 120;
   dashLinks = () => getShow().composition?.dashboard?.links || [];
@@ -1304,6 +1305,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
         onInput: (v) => setAT({ refractoryMs: Math.round(v) }),
       }));
       box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip when the mic spikes in this band (enable the mic in Settings)' }));
+      box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id) }).el);
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.

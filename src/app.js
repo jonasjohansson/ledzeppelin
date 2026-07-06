@@ -465,6 +465,7 @@ const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
+  clipTrigsFor: (id) => clipTriggers.trigsFor(id),
   thumbnails,
   onClipSelect: () => setInspectorTab('clip'), // switch the left column to the Clip tab
   onLayerSelect: () => setInspectorTab('layer'), // switch to the Layer tab
