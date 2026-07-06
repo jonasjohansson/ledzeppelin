@@ -274,3 +274,20 @@ test('evalPacked matches the direct field functions', () => {
   // no trigger → dark.
   nearRGBA(evalPacked(pp, 0, pt, 0), [0, 0, 0, 0], 1e-6);
 });
+
+test('flowfield: packs A/B/colB and round-trips through evalPacked', () => {
+  const p = packVolumetrics([{ generator: 'flowfield',
+    params: { 'flowfield.windX': 0.5, 'flowfield.windY': -0.2, 'flowfield.scale': 3,
+              'flowfield.turbulence': 0.6, 'flowfield.thickness': 0.3, 'flowfield.trail': 0.8,
+              'flowfield.seed': 0.4, 'flowfield.speed': 1.2, 'flowfield.color': '#ff8040' },
+    blend: 'add', opacity: 1 }]);
+  assert.deepEqual([...p.a.slice(0, 4)], [Math.fround(0.5), Math.fround(-0.2), 0, 3]);
+  assert.deepEqual([...p.b.slice(0, 4)], [Math.fround(0.6), Math.fround(0.3), Math.fround(0.8), Math.fround(0.4)]);
+  near(p.colB[0], Math.fround(1.2), 1e-6);
+  const pt = [0.3, 0.6, 0.4];
+  nearRGBA(evalPacked(p, 0, pt, 1.5),
+    flowfield(pt, 1.5, { windX: Math.fround(0.5), windY: Math.fround(-0.2), windZ: 0, scale: 3,
+      turbulence: Math.fround(0.6), thickness: Math.fround(0.3), trail: Math.fround(0.8),
+      seed: Math.fround(0.4), speed: Math.fround(1.2),
+      color: [Math.fround(1), Math.fround(0x80 / 255), Math.fround(0x40 / 255)] }), 1e-6);
+});

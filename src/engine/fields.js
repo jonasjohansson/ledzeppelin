@@ -223,6 +223,13 @@ export function packVolumetrics(active) {
       a.set([P('axis'), P('thickness'), P('softness'), 0], i * 4);
       b.set([P('speed'), 0, 0, 0], i * 4);
       colA.set(C('color'), i * 3);
+    } else if (id === FIELD_IDS.flowfield) {
+      // A = (windX, windY, windZ, scale), B = (turbulence, thickness, trail, seed),
+      // colB.x = speed (parked in the unused secondary-colour slot).
+      a.set([P('windX'), P('windY'), P('windZ'), P('scale')], i * 4);
+      b.set([P('turbulence'), P('thickness'), P('trail'), P('seed')], i * 4);
+      colB.set([P('speed'), 0, 0], i * 3);
+      colA.set(C('color'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
       b.set([P('thickness'), P('softness'), P('speed'), 0], i * 4);
@@ -253,6 +260,14 @@ export function evalPacked(packed, i, p, t, trigAges = []) {
     let out = [0, 0, 0, 0];
     for (const age of trigAges) { const s = planeSweep(p, { ...base, pos: age * B[0] }); if (s[3] > out[3]) out = s; }
     return out;
+  }
+  if (id === FIELD_IDS.flowfield) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return flowfield(p, t, {
+      windX: A[0], windY: A[1], windZ: A[2], scale: A[3],
+      turbulence: B[0], thickness: B[1], trail: B[2], seed: B[3],
+      speed: packed.colB[i * 3], color: cA,
+    });
   }
   const B = packed.b.subarray(i * 4, i * 4 + 4);
   const base = { center: [A[0], A[1], A[2]], thickness: B[0], softness: B[1], color: cA };
