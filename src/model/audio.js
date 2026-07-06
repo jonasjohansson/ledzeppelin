@@ -12,6 +12,10 @@
 export const AUDIO_BANDS = ['level', 'bass', 'mid', 'high'];
 export const AUDIO_SOURCES = ['external', 'composition'];
 
+// The bin-fraction ranges for each band — the ONE source of truth shared by computeBands
+// (modulation) and the FFT visualiser (src/ui/spectrum.js). `level` is the full range.
+export const AUDIO_BAND_SPLIT = { bass: [0, 0.10], mid: [0.10, 0.40], high: [0.40, 1] };
+
 let ctx = null;
 let globalGain = 1;                   // master multiplier on every source
 const registered = new Set();         // comp <video> els known to the app
@@ -33,6 +37,17 @@ export function externalBand(name) {
   const s = SRC.external;
   return s.enabled ? (s.bands[name] || 0) : 0;
 }
+
+// Live mic spectrum into a caller-owned Uint8Array (length >= binCount). Returns the bin
+// count, or 0 when the mic isn't running. Self-refreshing → the visualiser reads it on its
+// own rAF without depending on the main render loop.
+export function externalFFT(out) {
+  const s = SRC.external;
+  if (!s.enabled || !s.analyser) return 0;
+  s.analyser.getByteFrequencyData(out);
+  return s.analyser.frequencyBinCount;
+}
+export function externalBinCount() { return SRC.external.analyser?.frequencyBinCount || 512; }
 
 function ensureCtx() { if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)(); return ctx; }
 function ensureAnalyser(s) {
@@ -94,9 +109,10 @@ function computeBands(s) {
   const d = s.data, n = d.length;
   const avg = (a, b) => { let x = 0; for (let i = a; i < b; i++) x += d[i]; return b > a ? x / ((b - a) * 255) : 0; };
   const g = globalGain, clamp = (x) => (x > 1 ? 1 : x < 0 ? 0 : x);
-  s.bands.bass = clamp(avg(0, Math.floor(n * 0.10)) * g);
-  s.bands.mid = clamp(avg(Math.floor(n * 0.10), Math.floor(n * 0.40)) * g);
-  s.bands.high = clamp(avg(Math.floor(n * 0.40), n) * g);
+  const rng = (band) => { const [lo, hi] = AUDIO_BAND_SPLIT[band]; return avg(Math.floor(n * lo), Math.floor(n * hi)); };
+  s.bands.bass = clamp(rng('bass') * g);
+  s.bands.mid = clamp(rng('mid') * g);
+  s.bands.high = clamp(rng('high') * g);
   s.bands.level = clamp(avg(0, n) * g);
   return s.bands;
 }
