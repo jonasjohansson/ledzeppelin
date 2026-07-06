@@ -84,6 +84,23 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv){
     for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
+  if (id == 6) {           // flow field: A=(windX,windY,windZ,scale), B=(turbulence,thickness,trail,seed), colB.x=speed
+    vec3 wind = uVolA[i].xyz; float wm = length(wind);
+    vec3 dir = wm < 1e-5 ? vec3(0.0) : wind / wm;
+    float s = uVolB[i].w * 11.0;   // seed
+    vec3 q = p * uVolA[i].w - dir * (uVolColB[i].x * uT) + vec3(s, s * 1.7, s * 0.3);
+    vec3 w = vec3(
+      vfbm3(q + vec3(19.19, 7.3, 2.7)),
+      vfbm3(q + vec3(5.2, 41.7, 13.1)),
+      vfbm3(q + vec3(31.3, 9.1, 27.9))) * 2.0 - 1.0;
+    q += uVolB[i].x * w;                       // turbulence
+    float k = uVolB[i].z * 0.9; float along = dot(q, dir); q -= dir * along * k;   // trail
+    float nrm = vfbm3(q);
+    float hw = 0.02 + uVolB[i].y * 0.48;       // thickness
+    float tt = clamp((abs(nrm - 0.5) - hw * 0.5) / max(hw - hw * 0.5, 1e-5), 0.0, 1.0);
+    float v = 1.0 - tt * tt * (3.0 - 2.0 * tt);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
   // (radius = age·speed — the same field re-evaluated, brightest wins).
