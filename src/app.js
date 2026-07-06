@@ -2633,6 +2633,7 @@ if (setBus) {
     prefs.applyTips();
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
     // Appearance: re-apply every CSS-var applier from the (just-written) keys.
+    document.documentElement.dataset.theme = prefs.getTheme();   // Dark|Light chrome marker
     prefs.applyAccent(prefs.savedAccent()); prefs.applyContrast();
     prefs.setUiScale(prefs.savedScale()); prefs.setTranslucency(prefs.savedTranslucency());
     redrawOverlay();

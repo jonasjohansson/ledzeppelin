@@ -15,6 +15,16 @@ export function syncAccent() {
     s.setProperty('--accent-line', mix(hex, '#0a0a0a', 0.40));
     s.setProperty('--accent-text', mix(hex, '#ffffff', 0.62));
   };
-  apply();
-  addEventListener('storage', (e) => { if (e.key === 'lz.accent') apply(); });
+  // Theme (Dark|Light chrome) also travels in localStorage (lz.theme). Mark it on the
+  // root so these popouts follow the editor's theme; accent vars re-derive alongside.
+  const applyTheme = () => {
+    let t; try { t = localStorage.getItem('lz.theme'); } catch { t = null; }
+    document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+    apply();
+  };
+  applyTheme();
+  addEventListener('storage', (e) => {
+    if (e.key === 'lz.accent') apply();
+    else if (e.key === 'lz.theme') applyTheme();
+  });
 }
