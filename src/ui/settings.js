@@ -109,8 +109,18 @@ export function createSettingsPanel(hooks) {
     mount.append(toggleRow('Show tooltips on hover', prefs.getTips, (v) => prefs.setTips(v)));
     mount.append(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v)));
 
-    // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
+    // --- Appearance: theme / brightness / accent tint / contrast / text size (all live). ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
+    // Theme flips the UI CHROME light/dark; display surfaces (stage/preview/output/
+    // spectrum) stay dark. Discrete choice → a select, like the audio Input above.
+    const themeSel = el('select', { title: 'UI chrome theme — the stage/preview/output stay dark' });
+    [['dark', 'Dark'], ['light', 'Light']].forEach(([v, label]) => {
+      const o = el('option', { value: v, textContent: label });
+      if (appearance.getTheme() === v) o.selected = true;
+      themeSel.append(o);
+    });
+    themeSel.addEventListener('change', () => appearance.setTheme(themeSel.value));
+    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Theme' }), themeSel]));
     mount.append(Slider('Brightness', appearance.getBrightness(), {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),
