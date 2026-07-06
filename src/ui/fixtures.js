@@ -1,8 +1,8 @@
 import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures } from '../model/show.js';
-import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
+import { fixtureLabel, fixtureRange, pointsFromTransform } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
-import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
+import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig, getDeviceOutputs } from '../wled.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
@@ -318,15 +318,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
     const known = new Set((show.devices || []).map((d) => d.ip));
     // A found controller → one click to add it (with the right protocol/port).
-    const foundRow = (label, ip, badges, makeDevice) => {
+    const uniqueDeviceId = (next) => { let n = (next.devices.length || 0) + 1, id; do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id)); return id; };
+    const foundRow = (label, ip, badges, makeDevice, wledIp) => {
       const added = known.has(ip);
       const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
       add.onclick = () => {
         const next = structuredClone(show);
         // Unique id: increment until unused (a mid-list delete can make
         // `length + 1` collide with an existing id — and this id drives selection).
-        let n = (next.devices.length || 0) + 1, id;
-        do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id));
+        const id = uniqueDeviceId(next);
         next.devices.push(makeDevice(next, id));
         selDeviceId = id; lastSel = 'device';
         commit(next);
@@ -334,11 +334,55 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         // #output-list re-renders + selects the new device immediately (issue #4).
         onDeviceAdded?.(id);
       };
-      // Name (truncates) · IP chip (fixed slot so rows column-align) · detail chips · add.
+      const buttons = [add];
+      // WLED only: "+ outputs" also imports a fixture per configured LED output
+      // (skipping empty ones) — reads the controller's bus config over the daemon
+      // proxy, then lays each output out as a horizontal bar sized to its pixels.
+      if (wledIp && !added) {
+        const addOut = el('button', { className: 'ctrl-btn', textContent: '+ outputs', title: 'add this controller AND a fixture per configured LED output' });
+        addOut.onclick = async () => {
+          addOut.disabled = true; const orig = addOut.textContent; addOut.textContent = '…';
+          const res = await getDeviceOutputs(wledIp);
+          if (!res.ok || !Array.isArray(res.data)) {   // daemon down / not WLED / no buses → plain Add still works
+            addOut.textContent = orig; addOut.disabled = false;
+            addOut.title = `couldn't read outputs: ${res.error || 'no data'}`;
+            return;
+          }
+          const outs = res.data.filter((o) => (o.len || 0) > 0);   // skip length-0 (unused) outputs
+          const next = structuredClone(getShow());
+          const id = uniqueDeviceId(next);
+          const dev = makeDevice(next, id);
+          dev.outputs = res.data.length;                           // instance owns its output count (8-bus ⇒ reads as DigOcta)
+          if (outs[0]?.order) dev.colorOrder = outs[0].order;
+          const byOut = (next.deviceTypes || []).find((t) => Number(t.outputs) === res.data.length);
+          if (byOut) dev.typeId = byOut.id;                        // pick the matching QuinLED model by bus count
+          next.devices.push(dev);
+          const cv = next.composition?.canvas || { w: 1280, h: 720 };
+          const PXPM = 100, LPM = 60;                              // drawn scale: canvas-px per metre; strips are 60 led/m
+          let fn = 1;
+          outs.forEach((o, k) => {
+            while (next.fixtures.some((x) => x.id === `f${fn}`)) fn++;
+            const meters = o.len / LPM;
+            const tf = { x: cv.w / 2, y: 60 + k * 40, w: meters * PXPM, h: 10, rotation: 0 };
+            next.fixtures.push({
+              id: `f${fn++}`, name: `Out ${o.index + 1}`,
+              pixelCount: o.len, ledsPerMeter: LPM, meters,
+              colorFormat: o.rgbw ? o.order + 'W' : '',           // 4-ch (e.g. GRBW) for a white-channel strip, else inherit
+              input: { transform: tf, points: pointsFromTransform(tf, cv) },
+              output: { deviceId: id, port: o.index, pixelOffset: 0 },   // port = WLED bus index (DDP buffer order)
+            });
+          });
+          selDeviceId = id; lastSel = 'device';
+          commit(next);
+          onDeviceAdded?.(id);
+        };
+        buttons.push(addOut);
+      }
+      // Name (truncates) · IP chip (fixed slot so rows column-align) · detail chips · add(+outputs).
       return el('div', { className: 'output-row scan-row' }, [
         el('span', { textContent: label || ip, title: label || ip }),
         el('span', { className: 'fx-badge scan-ip', textContent: ip }),
-        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b, title: b })), add,
+        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b, title: b })), ...buttons,
       ]);
     };
     const res = scanState.result;
@@ -350,7 +394,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
           const dts = next.deviceTypes || [];
           const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
           return { id, name: d.name || id, ip: d.ip, colorOrder: 'GRB', port: 4048, typeId };
-        }));
+        }, d.ip));
       }
     }
     // Art-Net nodes (ArtPoll) — added as Art-Net devices (universe 0, port 6454).

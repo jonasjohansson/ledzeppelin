@@ -12,7 +12,7 @@ import { serveStatic } from './static.js';
 import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides } from './output.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
-import { getState, postState, scanSubnet, pushConfig } from './wled.js';
+import { getState, postState, scanSubnet, pushConfig, getOutputs } from './wled.js';
 import { createApiHandler, readJson, authorized, problem, statusBody, parseManifest, clipsBody, controlsBody } from './api.js';
 
 // Proxy a WLED JSON-API call (GET state, POST partial state) for the browser.
@@ -110,6 +110,14 @@ const http = createServer(async (req, res) => {
   if (url.pathname === '/api/wled/scan') {
     res.setHeader('content-type', 'application/json');
     try { res.end(JSON.stringify(await scanSubnet())); }
+    catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
+    return;
+  }
+  if (url.pathname === '/api/wled/outputs') {
+    res.setHeader('content-type', 'application/json');
+    const ip = url.searchParams.get('ip');
+    if (!ip) { res.writeHead(400); return res.end(JSON.stringify({ error: 'missing ip' })); }
+    try { res.end(JSON.stringify(await getOutputs(ip))); }
     catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
     return;
   }

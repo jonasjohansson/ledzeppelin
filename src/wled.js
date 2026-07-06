@@ -45,6 +45,20 @@ export async function pushDeviceConfig(ip, outs) {
   }
 }
 
+// Read a controller's LED OUTPUTS (buses) so they can be imported as fixtures.
+// Resolves to { ok, data:[{ index, len, order, rgbw, pin }] } | { ok:false, error }.
+export async function getDeviceOutputs(ip) {
+  if (!ip) return { ok: false, error: 'no ip' };
+  try {
+    const r = await fetch(`/api/wled/outputs?ip=${encodeURIComponent(ip)}`);
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || data.error) return { ok: false, error: data.error || `HTTP ${r.status}` };
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 // Scan the local network (via the daemon) for WLED controllers. Resolves to
 // { ok, data:{ subnets, scanned, devices:[{ip,name,leds,mac,…}] } } | { ok:false, error }.
 export async function scanDevices() {
