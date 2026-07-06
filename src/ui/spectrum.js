@@ -47,6 +47,9 @@ export function createClipSpectrum({ band = 'bass', trigsFor, mode = 'onset', th
     sizeOnce();
     const W = 240, H = 48;
     ctx.clearRect(0, 0, W, H);
+    // Own dark scope backdrop FIRST so the white/cyan bars stay legible whatever the
+    // panel colour (the chrome may be light — this display surface stays dark).
+    ctx.fillStyle = 'rgba(12,12,14,0.9)'; ctx.fillRect(0, 0, W, H);
     const n = externalFFT(buf);
     if (!n) {                                     // mic off
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '10px monospace';
