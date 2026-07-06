@@ -1317,16 +1317,33 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
         at.band || 'bass', (v) => setATu({ band: v }))));
 
-      box.append(Slider('Sensitivity', at.sensitivity ?? 0.5, {
-        min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
-        onInput: (v) => setAT({ sensitivity: v }),
-      }));
+      // Onset (spike above the running average) vs Level (band level over an absolute line,
+      // dragged on the spectrum). Undoable (re-render) — swaps the slider in/out and recreates
+      // the spectrum with the right props.
+      const mode = at.mode || 'onset';
+      box.append(field('Trigger', selectInput(
+        [{ value: 'onset', label: 'Onset' }, { value: 'level', label: 'Level' }],
+        mode, (v) => setATu({ mode: v }))));
+
+      // Threshold slider only in Onset mode; in Level mode the spectrum line is the control.
+      if (mode === 'onset') {
+        box.append(Slider('Threshold', at.sensitivity ?? 0.5, {
+          min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
+          onInput: (v) => setAT({ sensitivity: v }),
+        }));
+      }
       box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, {
         min: 40, max: 800, step: 10, default: 120, commit: 'live',
         onInput: (v) => setAT({ refractoryMs: Math.round(v) }),
       }));
-      box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip when the mic spikes in this band (turn on the Microphone above)' }));
-      box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id) }).el);
+      box.append(el('div', { className: 'seg-hint', textContent: mode === 'level'
+        ? 'fires THIS clip while the band level is over the line — drag it on the spectrum'
+        : 'fires THIS clip on a spike above the running average in this band' }));
+      box.append(createClipSpectrum({
+        band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id),
+        mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined,
+        onThresholdChange: (v) => setAT({ threshold: v }),
+      }).el);
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.
