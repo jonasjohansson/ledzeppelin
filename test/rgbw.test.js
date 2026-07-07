@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDeviceBytes, formatStride } from '../server/output.js';
+import { buildDeviceBytes, formatStride, setWhiteMode } from '../server/output.js';
 import { buildArtnetPackets } from '../server/artnet.js';
 import { COLOR_ORDERS } from '../src/ui/fixtures.js';
 
@@ -31,6 +31,14 @@ test('RGBW extracts W = min(R,G,B) and subtracts it from RGB', () => {
 });
 
 test('pure white extracts to the W channel only (RGB go dark)', () => {
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [0, 0, 0, 255]);
+});
+
+test('white mode: additive keeps RGB full (W added on top), accurate subtracts', () => {
+  setWhiteMode('additive');
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [255, 255, 255, 255]);   // white = RGB + W
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'RGBW' }), [10, 20, 30, 10]);           // RGB kept, W=min
+  setWhiteMode('accurate');   // reset to default so the other tests see extraction
   assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [0, 0, 0, 255]);
 });
 

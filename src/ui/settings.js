@@ -19,6 +19,7 @@
 //   snap.get() → {grid, dist}      — fixture-placement snap values;
 //   snap.set({grid?, dist?})         persist + apply (main also redraws its overlay).
 //   output.getFps() / setFps(n)    — the daemon output-fps cap (lz.outfps).
+//   output.getWhiteMode() / setWhiteMode(m) — RGBW white derivation (lz.whitemode).
 //   prefs.getTips/setTips          — hover-tooltip toggle (main re-runs its title pass).
 //   prefs.getNativeCtx/setNativeCtx— native right-click menu toggle (body class in main).
 //   appearance.*                   — get/set pairs for brightness / tint / contrast /
@@ -94,6 +95,16 @@ export function createSettingsPanel(hooks) {
       min: 1, max: 60, step: 1, default: 42, commit: 'live',
       onInput: (v) => output.setFps(Math.max(1, Math.min(60, Math.round(v)))),
     }));
+    // RGBW white derivation: Accurate pulls white onto the dedicated W LED
+    // (subtracts it from RGB); Additive keeps RGB full and adds W on top.
+    const wmSel = el('select', { title: 'RGBW white: Accurate = white on the W LED only; Additive = RGB + W (brighter)' });
+    [['accurate', 'Accurate (true white)'], ['additive', 'Additive']].forEach(([v, label]) => {
+      const o = el('option', { value: v, textContent: label });
+      if ((output.getWhiteMode?.() || 'accurate') === v) o.selected = true;
+      wmSel.append(o);
+    });
+    wmSel.addEventListener('change', () => output.setWhiteMode?.(wmSel.value));
+    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'White Mode' }), wmSel]));
 
     // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
     const toggleRow = (label, get, set) => {

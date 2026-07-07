@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
-import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides } from './output.js';
+import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides, setWhiteMode } from './output.js';
 import { ddpDataType } from './ddp.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
@@ -268,6 +268,7 @@ wss.on('connection', (ws) => {
         // Optional global output framerate cap (clamped); rebuild the pacer if it changed.
         const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps) || OUTPUT_FPS)));
         if (fps !== outFps) { outFps = fps; console.log(`[ws] output fps → ${outFps}`); startTimer(); }
+        setWhiteMode(m.whiteMode);   // global RGBW white mode ('accurate' | 'additive')
         // Only the editor sends routes → mark it (control API); announce the
         // editor coming online to /api/v1/events subscribers.
         const hadEditor = editorConnected();

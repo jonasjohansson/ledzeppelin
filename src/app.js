@@ -159,6 +159,8 @@ let controlPanel = null;   // Control-tab panel (assigned once built; null-safe 
 // Global output framerate cap sent to the daemon (System › Settings; persisted).
 const OUTFPS_KEY = 'lz.outfps';
 const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
+const WHITEMODE_KEY = 'lz.whitemode';
+const savedWhiteMode = () => { try { return localStorage.getItem(WHITEMODE_KEY) === 'additive' ? 'additive' : 'accurate'; } catch { return 'accurate'; } };
 let prevBindCh = {};     // last frame's channel values, for action-binding rising edges
 let bindSaveTimer = null;
 
@@ -223,7 +225,7 @@ function rebuild(next) {
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: (live) => { panel?.refresh?.(); updateHealthBtn?.(live); }, fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan + health icon
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: (live) => { panel?.refresh?.(); updateHealthBtn?.(live); }, fps: savedOutFps(), whiteMode: savedWhiteMode() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan + health icon
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -2627,8 +2629,9 @@ if (setBus) {
       const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
       if (s) { SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; setSnapEnabled(!!s.on); }
     } catch { /* ignore */ }
-    // Output fps cap → push to the daemon.
+    // Output fps cap + RGBW white mode → push to the daemon.
     bridge?.setOutputFps?.(savedOutFps());
+    bridge?.setWhiteMode?.(savedWhiteMode());
     // Tooltips + native context menu (both idempotent appliers).
     prefs.applyTips();
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());

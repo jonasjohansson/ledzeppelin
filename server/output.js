@@ -46,6 +46,14 @@ export function blackoutGain(now = Date.now()) {
   return blackout ? 1 - t : t;
 }
 
+// RGBW white derivation mode (global — set from the editor's route message, like
+// output fps). 'accurate' extracts white = min(R,G,B) and SUBTRACTS it from RGB so
+// white renders on the dedicated W LED only; 'additive' keeps RGB at full and adds
+// W on top (brighter, mixed white). Only affects formats that carry a W channel.
+let whiteMode = 'accurate';
+export function setWhiteMode(m) { whiteMode = m === 'additive' ? 'additive' : 'accurate'; return whiteMode; }
+export function getWhiteMode() { return whiteMode; }
+
 // Per-device brightness OVERRIDE multiplier (ip → 0..1), applied on top of the
 // route's own brightness in the calibration LUT. An override, not an edit —
 // the editor's route resends can't clobber it, and it doesn't persist.
@@ -103,7 +111,7 @@ export function buildDeviceBytes(slice, d, lut) {
       // format carries a W — an RGB-only format must keep its full RGB (nowhere to
       // move the white to, else white would go black).
       let w = 0;
-      if (hasW) { w = r < g ? (r < b ? r : b) : (g < b ? g : b); r -= w; g -= w; b -= w; }
+      if (hasW) { w = r < g ? (r < b ? r : b) : (g < b ? g : b); if (whiteMode === 'accurate') { r -= w; g -= w; b -= w; } }
       for (let c = 0; c < stride; c++) {
         const ch = fmt[c];
         const v = ch === 'R' ? r : ch === 'G' ? g : ch === 'B' ? b : ch === 'W' ? w : 0;

@@ -152,6 +152,8 @@ const panel = createSettingsPanel({
   output: {
     getFps: () => num('lz.outfps', 42, 1, 60),
     setFps: (n) => { put('lz.outfps', n); postSoon(); },
+    getWhiteMode: () => { try { return localStorage.getItem('lz.whitemode') === 'additive' ? 'additive' : 'accurate'; } catch { return 'accurate'; } },
+    setWhiteMode: (m) => { put('lz.whitemode', m === 'additive' ? 'additive' : 'accurate'); postSoon(); },
   },
   prefs: {
     getTips: () => flag('lz.tips'),
