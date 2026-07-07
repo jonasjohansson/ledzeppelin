@@ -30,7 +30,7 @@
 // confirm-before-delete) are handled internally — both windows share the key.
 
 import { el } from './dom.js';
-import { Slider } from './controls.js';
+import { Slider, Segmented } from './controls.js';
 import { listInputs } from '../model/audio.js';
 import { confirmDeletesOn, setConfirmDeletes } from './confirm.js';
 
@@ -97,14 +97,8 @@ export function createSettingsPanel(hooks) {
     }));
     // RGBW white derivation: Accurate pulls white onto the dedicated W LED
     // (subtracts it from RGB); Additive keeps RGB full and adds W on top.
-    const wmSel = el('select', { title: 'RGBW white: Accurate = white on the W LED only; Additive = RGB + W (brighter)' });
-    [['accurate', 'Accurate (true white)'], ['additive', 'Additive']].forEach(([v, label]) => {
-      const o = el('option', { value: v, textContent: label });
-      if ((output.getWhiteMode?.() || 'accurate') === v) o.selected = true;
-      wmSel.append(o);
-    });
-    wmSel.addEventListener('change', () => output.setWhiteMode?.(wmSel.value));
-    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'White Mode' }), wmSel]));
+    mount.append(Segmented('White Mode', [['accurate', 'Accurate'], ['additive', 'Additive']],
+      () => output.getWhiteMode?.() || 'accurate', (v) => output.setWhiteMode?.(v)));
 
     // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
     const toggleRow = (label, get, set) => {
@@ -124,14 +118,8 @@ export function createSettingsPanel(hooks) {
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
     // Theme flips the UI CHROME light/dark; display surfaces (stage/preview/output/
     // spectrum) stay dark. Discrete choice → a select, like the audio Input above.
-    const themeSel = el('select', { title: 'UI chrome theme — the stage/preview/output stay dark' });
-    [['dark', 'Dark'], ['light', 'Light']].forEach(([v, label]) => {
-      const o = el('option', { value: v, textContent: label });
-      if (appearance.getTheme() === v) o.selected = true;
-      themeSel.append(o);
-    });
-    themeSel.addEventListener('change', () => appearance.setTheme(themeSel.value));
-    mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Theme' }), themeSel]));
+    mount.append(Segmented('Theme', [['dark', 'Dark'], ['light', 'Light']],
+      () => appearance.getTheme(), (v) => appearance.setTheme(v)));
     mount.append(Slider('Brightness', appearance.getBrightness(), {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),

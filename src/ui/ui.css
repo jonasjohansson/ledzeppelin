@@ -1745,6 +1745,17 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-rail .pick-item:active { cursor: grabbing; }
 .src-rail .lib-thumb { width: 46px; height: 30px; object-fit: cover; margin-right: 6px; flex: none; }
 
+/* Segmented toggle (Segmented in controls.js): the house control for a small fixed
+   choice set (2–3), instead of a <select>. Flat + hairline; accent tint when on. */
+.seg-field > .seg-2 { flex: 1 1 0; min-width: 0; }
+.seg-2 { display: flex; min-width: 0; height: var(--ctrl-h); border: 1px solid var(--field-border); border-radius: var(--radius); overflow: hidden; }
+.seg-2-btn { flex: 1 1 0; min-width: 0; height: 100%; background: transparent; border: none; color: var(--muted);
+  padding: 0 8px; font: var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-ui); cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg-2-btn + .seg-2-btn { border-left: 1px solid var(--field-border); }
+.seg-2-btn:hover { color: var(--text); background: var(--hover); }
+.seg-2-btn.is-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
 /* Transport bar (play-through of the clip timeline). */
 .composer-deckhead { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }
 .transport { display: flex; align-items: center; gap: 8px; }
