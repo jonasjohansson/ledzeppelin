@@ -2527,6 +2527,25 @@ function setOutputTab(which) {
   renderOutput();
 }
 
+// Output island VIEW tabs: 'fixtures' (the patch/output list) | 'sources' (a
+// draggable source-library palette). Distinct from outputTab (internal editor
+// mode). The rail is rebuilt each time Sources is shown so thumbnails/newly
+// imported sources appear; its items drag onto the layer slots' drop targets.
+function setPatchTab(which) {
+  which = which === 'sources' ? 'sources' : 'fixtures';
+  const fx = document.getElementById('patch-fixtures');
+  const src = document.getElementById('patch-sources');
+  if (fx) fx.hidden = which !== 'fixtures';
+  if (src) {
+    src.hidden = which !== 'sources';
+    if (which === 'sources') { src.textContent = ''; src.append(layerPanel.buildSourceRail()); }
+  }
+  const tabs = document.getElementById('patch-tabs');
+  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.ptab === which);
+  try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
+}
+document.getElementById('patch-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setPatchTab(b.dataset.ptab); });
+
 // Compat shim: there are no top-level sections anymore (everything is docked).
 function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }
 
@@ -2647,6 +2666,8 @@ if (setBus) {
 
 // Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
 setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');
+// Restore the Output island view tab (Output | Sources).
+setPatchTab((() => { try { return localStorage.getItem('lz.ptab'); } catch { return null; } })() || 'fixtures');
 
 // Show the fixture overlay by default (you see your rig on load) — this also puts
 // the dock in fixture-editing (output) mode via setOverlay.
