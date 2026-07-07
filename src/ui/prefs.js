@@ -16,6 +16,8 @@
 // showGrid) is read per-frame by the overlay redraw and mutated by drag
 // machinery + the settings bus — it lives with that code in app.js.
 
+import { themeVars, applyVars } from './palette.js';
+
 export function initPrefs({ preview, redrawOverlay }) {
   // Controller-colour tint for the fixture CHROME on the preview canvas. (The Output
   // list's controller dots/swatches always show gdev.color regardless of this toggle,
@@ -107,50 +109,12 @@ export function initPrefs({ preview, redrawOverlay }) {
   // soft/line/text variants AND the warm surface ramp are derived from it here, so
   // changing the accent re-tints the whole sidebar (its gray surfaces carry a small
   // % of the accent → a desaturated tint that follows whatever accent you pick).
+  // The chrome palette is derived in ONE place now (src/ui/palette.js): light is the
+  // dark ramp luminance-inverted, so Brightness/Tint/Contrast track BOTH themes.
   function applyAccent(hex) {
-    const s = document.documentElement.style;
-    s.setProperty('--accent', hex);
-    if (savedTheme() === 'light') {
-      // LIGHT chrome: near-white surface ramp with the same subtle accent tint. Anchors
-      // are light (no white-lift); the accent-soft/line/text swing toward white/near-black
-      // so accent-on-light stays legible. Display surfaces stay dark via --stage-bg.
-      s.setProperty('--accent-soft', accMix(hex, '#ffffff', 0.82));
-      s.setProperty('--accent-line', accMix(hex, '#ffffff', 0.45));
-      s.setProperty('--accent-text', accMix(hex, '#141414', 0.30));
-      const tm = savedTint() / 100;                                  // accent-tint multiplier
-      const S2 = (anchor, w) => accMix(hex, anchor, w * tm);         // tint light anchors, no lift
-      s.setProperty('--bg', S2('#f4f4f6', 0.02));
-      s.setProperty('--field-bg', S2('#ffffff', 0.02));
-      const panelL = S2('#eaeaee', 0.03);
-      s.setProperty('--panel', panelL); s.setProperty('--panel-solid', panelL);
-      s.setProperty('--panel-2', S2('#e2e2e7', 0.035));
-      s.setProperty('--hover', S2('#d7d7de', 0.05));
-      s.setProperty('--line', S2('#cfcfd6', 0.05));
-      s.setProperty('--line-2', S2('#bcbcc6', 0.06));
-      s.setProperty('--stage-bg', '#0d0d0f');                          // display surfaces stay dark
-    } else {
-      s.setProperty('--accent-soft', accMix(hex, '#0a0a0a', 0.16));
-      s.setProperty('--accent-line', accMix(hex, '#0a0a0a', 0.40));
-      s.setProperty('--accent-text', accMix(hex, '#ffffff', 0.62));
-      // Surface ramp = a neutral dark gray with a SUBTLE touch of the accent. Each gray
-      // anchor is first lifted toward white by `lift` (the Settings › Appearance
-      // brightness, 0 = base near-black … ~0.2 = noticeably brighter).
-      const lift = savedBright() / 100;     // negative = darker than the base anchors
-      const tm = savedTint() / 100;         // accent-tint multiplier (Settings › Appearance)
-      const L = (anchor) => accMix('#ffffff', anchor, lift);          // lift the gray anchor
-      const S = (anchor, w) => accMix(hex, L(anchor), w * tm);        // + tint it by the accent
-      s.setProperty('--bg', S('#0b0b0d', 0.03));
-      s.setProperty('--field-bg', S('#121214', 0.03));
-      const panel = S('#17171a', 0.04);
-      s.setProperty('--panel', panel);
-      s.setProperty('--panel-solid', panel);
-      s.setProperty('--panel-2', S('#1e1e22', 0.05));
-      s.setProperty('--hover', S('#2c2c31', 0.06));
-      s.setProperty('--line', S('#303034', 0.06));
-      s.setProperty('--line-2', S('#45454e', 0.07));
-      s.setProperty('--stage-bg', S('#0b0b0d', 0.03));                 // == --bg: pasteboard tracks Brightness/Tint (unchanged dark behavior)
-    }
-    preview?.setAccentColor?.(hex);   // fixture chrome on the canvas follows the accent
+    const accent = /^#?[0-9a-f]{6}$/i.test(hex || '') ? hex : savedAccent();
+    applyVars(themeVars({ accent, theme: savedTheme(), brightness: savedBright(), tint: savedTint(), contrast: savedContrast() }));
+    preview?.setAccentColor?.(accent);   // fixture chrome on the canvas follows the accent
   }
   const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
 
@@ -163,25 +127,9 @@ export function initPrefs({ preview, redrawOverlay }) {
   const savedTint = () => num(TINT_KEY, 100, 0, 220);
   const CONTRAST_KEY = 'lz.contrast';
   const savedContrast = () => num(CONTRAST_KEY, 130, 60, 130);
-  function applyContrast() {
-    const f = savedContrast() / 100;   // 1 = base; <1 dims text toward bg; >1 brightens
-    const s = document.documentElement.style;
-    if (savedTheme() === 'light') {
-      // Dark text on light chrome — the STRUCTURAL mirror of the dark branch: mix a
-      // near-black text anchor toward the bg (white) by `f`, so higher Contrast = darker
-      // text = MORE contrast (same slider direction as dark). Anchors are spaced so the
-      // text/muted/faint hierarchy survives the f>1 extrapolation (default f=1.3 → black text).
-      s.setProperty('--text', accMix('#16161a', '#ffffff', f));
-      s.setProperty('--muted', accMix('#4d4d57', '#ffffff', f));
-      s.setProperty('--faint', accMix('#74747f', '#ffffff', f));
-      s.setProperty('--readout', accMix('#2b2b32', '#ffffff', f));
-    } else {
-      s.setProperty('--text', accMix('#f4f5f7', '#0c0c10', f));
-      s.setProperty('--muted', accMix('#a3aab4', '#0c0c10', f));
-      s.setProperty('--faint', accMix('#737a84', '#0c0c10', f));
-      s.setProperty('--readout', accMix('#d7dbe0', '#0c0c10', f));
-    }
-  }
+  // Text contrast is part of the derived palette now (palette.js) — re-derive the whole
+  // chrome so the text vars update in step with the current theme/brightness/tint.
+  function applyContrast() { applyAccent(savedAccent()); }
   const SCALE_KEY = 'lz.uiscale';
   const savedScale = () => num(SCALE_KEY, 1, 0.8, 1.4);
   function setUiScale(v) { const c = Math.max(0.8, Math.min(1.4, v)); document.documentElement.style.setProperty('--ui-scale', String(c)); try { localStorage.setItem(SCALE_KEY, String(c)); } catch { /* private */ } }

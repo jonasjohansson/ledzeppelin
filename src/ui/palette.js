@@ -1,0 +1,80 @@
+// The SINGLE source of truth for the chrome palette. Every surface / text / accent
+// CSS var is derived from ONE dark anchor set + the accent + the Brightness / Tint /
+// Contrast sliders. LIGHT mode = the SAME anchors with inverted luminance, so both
+// themes track the sliders (no separate hand-tuned light copy — that used to live,
+// duplicated, in prefs.js + settings/settings.js + sync-accent.js).
+//
+// Dark output is byte-identical to the old hand-tuned dark branch (verified against
+// the previous formulas), so dark mode is unchanged; only light is newly derived.
+
+const h2 = (x) => { const m = /^#?([0-9a-f]{6})$/i.exec(x || ''); if (!m) return null; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+const toHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+// Linear mix a→b by weight w (w=1 → a, w=0 → b). Clamps out-of-range channels, so a
+// contrast f>1 can push a text anchor PAST its endpoint (extrapolation) and stay valid.
+export const mixHex = (a, b, w) => { const A = h2(a) || [0, 0, 0], B = h2(b) || [0, 0, 0]; return toHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
+
+// Invert a near-neutral anchor's luminance to its light-mode counterpart. The old
+// hand-tuned light ramp was ≈ 1 − dark luminance across every surface, so this
+// reproduces it while keeping ONE definition. Returns a neutral gray at the target
+// luminance (the accent tint below re-introduces the subtle warmth).
+function flipL(hex) {
+  const [r, g, b] = h2(hex) || [0, 0, 0];
+  const L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;   // relative luminance 0..1
+  const v = Math.round((1 - L) * 255);
+  return toHex(v, v, v);
+}
+
+// Dark surface anchors (the tuned base) + their accent-tint weight. Light reuses them
+// luminance-inverted. field-bg is nudged toward the ramp extreme in light so inputs
+// stay the brightest surface (raised), matching the light convention of white fields.
+const SURFACES = [
+  ['--bg',       '#0b0b0d', 0.03, 0],
+  ['--field-bg', '#121214', 0.03, 0.5],   // 4th = light-only extra lift toward white
+  ['--panel',    '#17171a', 0.04, 0],
+  ['--panel-2',  '#1e1e22', 0.05, 0],
+  ['--hover',    '#2c2c31', 0.06, 0],
+  ['--line',     '#303034', 0.06, 0],
+  ['--line-2',   '#45454e', 0.07, 0],
+];
+// Text anchors (dark). Light mirrors them luminance-inverted; contrast mixes toward
+// the surface extreme (black in dark, white in light) in the same slider direction.
+const TEXT = [['--text', '#f4f5f7'], ['--muted', '#a3aab4'], ['--faint', '#737a84'], ['--readout', '#d7dbe0']];
+
+// Compute the full chrome var map for the given accent + theme + slider values.
+export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, contrast = 130 } = {}) {
+  const light = theme === 'light';
+  const hex = h2(accent) ? accent : '#eceef2';
+  const tm = tint / 100;              // accent-tint multiplier
+  const lift = brightness / 100;      // surface lift toward white (both themes: higher = brighter)
+  const f = contrast / 100;           // text contrast (higher = more)
+  const vars = { '--accent': hex };
+
+  // Accent variants — contrast against the surface: dark mixes toward black, light toward white.
+  vars['--accent-soft'] = light ? mixHex(hex, '#ffffff', 0.82) : mixHex(hex, '#0a0a0a', 0.16);
+  vars['--accent-line'] = light ? mixHex(hex, '#ffffff', 0.45) : mixHex(hex, '#0a0a0a', 0.40);
+  vars['--accent-text'] = light ? mixHex(hex, '#141414', 0.30) : mixHex(hex, '#ffffff', 0.62);
+
+  // Surfaces — anchor (dark, or luminance-inverted for light), lifted by Brightness,
+  // then tinted by the accent. Identical formula for both themes.
+  for (const [k, dark, w, lightExtra] of SURFACES) {
+    let base = light ? flipL(dark) : dark;
+    if (light && lightExtra) base = mixHex('#ffffff', base, 1 - lightExtra);   // pull toward white
+    const lifted = mixHex('#ffffff', base, lift);   // lift 0 → base; >0 → toward white
+    const val = mixHex(hex, lifted, w * tm);
+    vars[k] = val;
+    if (k === '--panel') vars['--panel-solid'] = val;
+  }
+
+  // Text — contrast mixes each anchor toward the surface extreme (mirror per theme).
+  for (const [k, dark] of TEXT) vars[k] = light ? mixHex(flipL(dark), '#ffffff', f) : mixHex(dark, '#0c0c10', f);
+
+  // Display surfaces (stage / preview pasteboard) stay dark in BOTH themes — the LED
+  // visuals are true-colour on black. Dark tracks Brightness/Tint (== --bg); light pins dark.
+  vars['--stage-bg'] = light ? '#0d0d0f' : vars['--bg'];
+  return vars;
+}
+
+// Apply a var map to a document root (or any element's style).
+export function applyVars(vars, styleEl = document.documentElement.style) {
+  for (const k in vars) styleEl.setProperty(k, vars[k]);
+}

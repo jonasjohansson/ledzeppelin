@@ -22,6 +22,7 @@
 // events); discrete controls (select, checkboxes, swatches) post immediately.
 
 import { createSettingsPanel } from '../src/ui/settings.js';
+import { themeVars, applyVars } from '../src/ui/palette.js';
 import { loadShow, saveShow } from '../src/ui/fixtures.js';
 import { emptyShow, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
 
@@ -64,56 +65,8 @@ function applyTheme() {
   const hex = savedAccent();
   const light = savedTheme() === 'light';
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
-  s.setProperty('--accent', hex);
-  const tm = savedTint() / 100;
-  if (light) {
-    // LIGHT chrome — mirrors prefs.js applyAccent's light branch (this popout keeps
-    // its own copy of the palette math; see the sync-accent.js precedent).
-    s.setProperty('--accent-soft', mix(hex, '#ffffff', 0.82));
-    s.setProperty('--accent-line', mix(hex, '#ffffff', 0.45));
-    s.setProperty('--accent-text', mix(hex, '#141414', 0.30));
-    const S2 = (anchor, w) => mix(hex, anchor, w * tm);
-    s.setProperty('--bg', S2('#f4f4f6', 0.02));
-    s.setProperty('--field-bg', S2('#ffffff', 0.02));
-    const panelL = S2('#eaeaee', 0.03);
-    s.setProperty('--panel', panelL); s.setProperty('--panel-solid', panelL);
-    s.setProperty('--panel-2', S2('#e2e2e7', 0.035));
-    s.setProperty('--hover', S2('#d7d7de', 0.05));
-    s.setProperty('--line', S2('#cfcfd6', 0.05));
-    s.setProperty('--line-2', S2('#bcbcc6', 0.06));
-  } else {
-    s.setProperty('--accent-soft', mix(hex, '#0a0a0a', 0.16));
-    s.setProperty('--accent-line', mix(hex, '#0a0a0a', 0.40));
-    s.setProperty('--accent-text', mix(hex, '#ffffff', 0.62));
-    // Surfaces: lift the near-black anchors by Brightness, then tint by the accent.
-    const lift = savedBright() / 100;
-    const L = (anchor) => mix('#ffffff', anchor, lift);
-    const S = (anchor, w) => mix(hex, L(anchor), w * tm);
-    s.setProperty('--bg', S('#0b0b0d', 0.03));
-    s.setProperty('--field-bg', S('#121214', 0.03));
-    const panel = S('#17171a', 0.04);
-    s.setProperty('--panel', panel);
-    s.setProperty('--panel-solid', panel);
-    s.setProperty('--panel-2', S('#1e1e22', 0.05));
-    s.setProperty('--hover', S('#2c2c31', 0.06));
-    s.setProperty('--line', S('#303034', 0.06));
-    s.setProperty('--line-2', S('#45454e', 0.07));
-  }
-  // Text contrast.
-  const f = savedContrast() / 100;
-  if (light) {
-    // Mirror the dark branch's direction (higher Contrast = more): mix near-black text
-    // anchors toward white by `f`. Keep in sync with src/ui/prefs.js applyContrast.
-    s.setProperty('--text', mix('#16161a', '#ffffff', f));
-    s.setProperty('--muted', mix('#4d4d57', '#ffffff', f));
-    s.setProperty('--faint', mix('#74747f', '#ffffff', f));
-    s.setProperty('--readout', mix('#2b2b32', '#ffffff', f));
-  } else {
-    s.setProperty('--text', mix('#f4f5f7', '#0c0c10', f));
-    s.setProperty('--muted', mix('#a3aab4', '#0c0c10', f));
-    s.setProperty('--faint', mix('#737a84', '#0c0c10', f));
-    s.setProperty('--readout', mix('#d7dbe0', '#0c0c10', f));
-  }
+  // Whole chrome palette from the ONE shared deriver (light = dark luminance-inverted).
+  applyVars(themeVars({ accent: hex, theme: light ? 'light' : 'dark', brightness: savedBright(), tint: savedTint(), contrast: savedContrast() }), s);
   // Text size + floating-panel translucency.
   s.setProperty('--ui-scale', String(savedScale()));
   s.setProperty('--pop-opacity', (100 - savedTranslucency()) + '%');
