@@ -14,14 +14,41 @@ function broadcast(pkt, port) {
   udpSend(pkt, port, '255.255.255.255');
 }
 // Per-send errors (a single dead/unreachable device) were silently swallowed —
-// surface them, but rate-limited so one bad controller on a 120-fixture rig
-// can't flood the log every frame.
-let lastSendErrAt = 0;
+// surface them PER IP so a 12-controller rig can tell WHICH controller went dark
+// (a single global throttle used to mask a second failing device behind the
+// first). Both the DDP and Art-Net paths funnel through udpSend, so this covers
+// every output protocol. CAVEAT: a UDP send() "succeeds" the instant the packet
+// is handed to the OS — it does NOT confirm the controller received it. So this
+// catches GROSS failures (no route to host, network down, bad IP), not a
+// silently-dead-but-reachable controller. A true reachability probe is separate.
+const deviceErrors = new Map();   // ip → { count, lastAt, lastMsg }
+// Record a send failure for `ip`, returning whether the log throttle window
+// (2s per ip) is open. Pure/deterministic given `now` — split out so it's unit
+// testable without driving async UDP sends.
+export function recordSendError(ip, msg, now = Date.now()) {
+  let e = deviceErrors.get(ip);
+  if (!e) { e = { count: 0, lastAt: 0, lastMsg: '', lastLogAt: 0 }; deviceErrors.set(ip, e); }
+  e.count++;
+  e.lastAt = now;
+  e.lastMsg = msg;
+  const shouldLog = now - e.lastLogAt > 2000;
+  if (shouldLog) e.lastLogAt = now;
+  return shouldLog;
+}
+export function getDeviceOutputHealth() {
+  const now = Date.now();
+  return Object.fromEntries([...deviceErrors].map(([ip, e]) => [ip, {
+    sendErrors: e.count,
+    lastErrorMsAgo: now - e.lastAt,
+    lastError: e.lastMsg,
+  }]));
+}
 function udpSend(pkt, port, ip) {
   sock.send(pkt, port, ip, (err) => {
     if (!err) return;
-    const t = Date.now();
-    if (t - lastSendErrAt > 2000) { lastSendErrAt = t; console.error(`[output] send to ${ip}:${port} failed: ${err.message}`); }
+    // Rate-limited PER IP: one bad controller logs ~every 2s, but a different
+    // failing controller still gets its own line (no cross-masking).
+    if (recordSendError(ip, err.message)) console.error(`[output] send to ${ip}:${port} failed: ${err.message}`);
   });
 }
 const artSeq = new Map();   // `${ip}:${port}` → last ArtDmx sequence (rolls 1..255, never 0)

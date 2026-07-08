@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
-import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides, setWhiteMode } from './output.js';
+import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides, setWhiteMode, getDeviceOutputHealth } from './output.js';
 import { ddpDataType } from './ddp.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
@@ -85,6 +85,11 @@ const http = createServer(async (req, res) => {
       lastFrameMsAgo: lastFrameAt ? Date.now() - lastFrameAt : null,
       lastFreshMsAgo: lastFreshAt ? Date.now() - lastFreshAt : null,
       outputStale,
+      // Per-device output errors — a SPARSE map (ip → {sendErrors, lastErrorMsAgo,
+      // lastError}); absent/empty means every controller's sends are flushing to the
+      // OS. Catches gross send failures (no route, bad IP), not silent-but-reachable
+      // controllers (UDP send success ≠ delivery — see output.js).
+      deviceErrors: getDeviceOutputHealth(),
       osc: OSC_PORT,
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
     }));
