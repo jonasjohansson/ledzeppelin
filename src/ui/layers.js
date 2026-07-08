@@ -1597,6 +1597,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     inp.click();
   }
 
+  // Add a source to the ACTIVE layer (the one pickVideo falls back to) — used by the
+  // Sources tab's click-to-add. Drag-to-a-slot uses the slot's own drop target.
+  function addSourceToActiveLayer(name) {
+    const l = layerOfClip(selectedClipId) || topLayer();
+    if (l) commit(addClip(show(), l.id, name));
+  }
+  function pickVideoActive() { pickVideo(null); }   // pickVideo already falls back to the active/top layer
+
   // Wire an element as a drop target that accepts the module drag payload.
   function makeDropTarget(node, onDrop) {
     node.addEventListener('dragover', (e) => {
@@ -1785,37 +1793,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     return root;
   }
 
-  // Persistent source LIBRARY for the Output pane's "Sources" tab: the same grouped
-  // catalog as the click-picker, but a standing panel whose items are DRAGGABLE onto
-  // layer slots — they set the shared `drag` payload the slot drop targets already
-  // accept (makeDropTarget → addClip). Reuses thumbnails + SOURCE_CATEGORIES + labels.
-  function buildSourceRail() {
-    const root = el('div', { className: 'src-rail' });
-    const item = (name) => {
-      const row = el('div', { className: 'pick-item src-item', draggable: true, title: 'drag onto a layer' });
-      const thumb = thumbnails[name];
-      if (thumb) row.append(el('img', { className: 'lib-thumb', src: thumb, alt: '', draggable: false }));
-      row.append(el('span', { className: 'lib-label', textContent: labelOf(name) }));
-      row.addEventListener('dragstart', (e) => { drag = { kind: 'source', name }; e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', name); } catch { /* some browsers */ } });
-      row.addEventListener('dragend', () => { drag = null; });
-      return row;
-    };
-    const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
-    const all = generatorNames(); const seen = new Set();
-    for (const [label, names] of SOURCE_CATEGORIES) {
-      const have = names.filter((n) => all.includes(n)); if (!have.length) continue;
-      have.forEach((n) => seen.add(n));
-      root.append(el('div', { className: 'pick-group', textContent: label }), grid(have));
-    }
-    const rest = all.filter((n) => !seen.has(n));
-    if (rest.length) root.append(el('div', { className: 'pick-group', textContent: 'More' }), grid(rest));
-    return root;
-  }
-
   render();
   // getSelectedClipId: app.js resolves /selected/… canonical OSC addresses
   // against the inspector's current clip at message time.
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop, buildSourceRail, sourceBrowser };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop, addSourceToActiveLayer, pickVideoActive, sourceBrowser };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
