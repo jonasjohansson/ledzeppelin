@@ -1696,14 +1696,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 /* Sources tab (Output island): hosts the TD-style source browser (below). */
 #patch-sources { overflow-y: auto; padding: 2px 4px; }
 
-/* TD-style source browser (Sources tab + '+' picker). Family tabs (colour = a small
-   dot + a 2px active underline, restrained), search, dense card grid, description line. */
+/* Source browser (Sources tab): one scrolling list of thumbnail cards, grouped by
+   2D / 3D / Shaders section headers, with a description line. */
 .src-browser { display: flex; flex-direction: column; min-height: 0; height: 100%; }
-.src-browser-pop { width: min(680px, calc(100vw - 16px)); max-width: none; padding: 6px; }
-.src-browser-pop .src-browser { max-height: min(60vh, 520px); }
-
-.src-search { flex: none; margin: 6px 0; height: var(--ctrl-h); background: var(--field-bg); color: var(--text);
-  border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0 7px; font: var(--fs-ctrl) var(--mono); }
 
 /* One scroll; the 2D / 3D / Shaders subgroups are section HEADERS (a small category dot
    + a faint uppercase label), not tabs. */
@@ -1718,6 +1713,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-card:hover { border-color: var(--cat, var(--accent)); }
 .src-card:active { cursor: grabbing; }
 .src-thumb { width: 100%; height: 46px; object-fit: cover; display: block; background: #000; }
+/* + video tile: a placeholder the same size as a thumbnail, with a centred +. */
+.src-thumb-add { display: flex; align-items: center; justify-content: center; color: var(--faint); font: 20px/1 var(--mono); background: var(--panel-2); }
 .src-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--faint)); }
 .src-label { font: var(--fs-micro) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .src-isf .src-label, .src-video .src-label { color: var(--faint); }

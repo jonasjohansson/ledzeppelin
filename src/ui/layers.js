@@ -1721,8 +1721,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   // and the '+' clip picker (click → onPick). Filtering/categories are pure (source-catalog).
   function sourceBrowser({ onPick, draggable = false, onVideo } = {}) {
     const root = el('div', { className: 'src-browser' });
-    let query = '';
-    const search = el('input', { className: 'src-search', type: 'search', placeholder: 'search sources…' });
     const listEl = el('div', { className: 'src-list' });   // one scroll; groups are headers, not tabs
     const descEl = el('div', { className: 'src-desc' });
     const setDesc = (name) => { descEl.textContent = name ? (descOf(name) || sourceCategory(name)) : ''; };
@@ -1751,7 +1749,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     };
     const videoCard = () => {
       const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
-      v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
+      // A placeholder tile so the card is the same size as the thumbnail cards.
+      v.append(el('div', { className: 'src-thumb src-thumb-add', textContent: '+' }), el('span', { className: 'src-label', textContent: 'video…' }));
       v.addEventListener('click', () => onVideo());
       return v;
     };
@@ -1770,20 +1769,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     };
     const render = () => {
       listEl.textContent = '';
-      const q = query.trim().toLowerCase();
-      const match = (n) => !q || labelOf(n).toLowerCase().includes(q) || n.toLowerCase().includes(q);
       const gens = generatorNames();
-      const twoD = gens.filter((n) => sourceCategory(n) === '2D' && match(n)).map(card);
-      if (onVideo && (!q || 'video'.includes(q))) twoD.push(videoCard());
-      const threeD = gens.filter((n) => sourceCategory(n) === '3D' && match(n)).map(card);
+      const twoD = gens.filter((n) => sourceCategory(n) === '2D').map(card);
+      if (onVideo) twoD.push(videoCard());
+      const threeD = gens.filter((n) => sourceCategory(n) === '3D').map(card);
       const examples = (getISFExamples && getISFExamples()) || [];
-      const shaders = onAddISF ? examples.filter((f) => !q || f.toLowerCase().includes(q)).map(isfCard) : [];
+      const shaders = onAddISF ? examples.map(isfCard) : [];
       section('2D', twoD); section('3D', threeD); section('Shaders', shaders);
       if (!listEl.childNodes.length) listEl.append(el('div', { className: 'seg-hint', textContent: 'no sources' }));
     };
 
-    search.addEventListener('input', () => { query = search.value; render(); });
-    root.append(search, listEl, descEl);
+    root.append(listEl, descEl);
     render();
     return root;
   }
