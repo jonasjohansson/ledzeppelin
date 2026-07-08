@@ -238,8 +238,18 @@ function rebuild(next) {
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
   const { sampleUVs, samplePositions, spans } = buildPipelineInputs(show);
-  sampler?.dispose?.();
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  const n = sampleUVs.length / 2;
+  // DRAG path: the LED count is unchanged, only per-LED UV/xyz moved — refresh the
+  // textures IN PLACE so the PBO readback ring stays warm (sample() keeps returning
+  // valid frames every frame ⇒ no frozen wall / dark preview during the drag).
+  // Only when n actually changed (or there's no sampler yet) do we tear down and
+  // rebuild the target + PBO ring via makeSampler.
+  if (sampler && n > 0 && sampler.n === n && sampler.update?.(sampleUVs, samplePositions)) {
+    // updated in place
+  } else {
+    sampler?.dispose?.();
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  }
   lastSpans = spans; recomputeHiddenSpans();
 }
 
@@ -2955,6 +2965,11 @@ function rebuildGL() {
     uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
     compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
     videos.clearTextures();                  // video textures are gone → recreated on next upload
+    // The previous sampler's GL objects died with the context — null it so
+    // refreshSampler takes the full REBUILD path (never texSubImage into dead
+    // textures via update()). samplerProgram recompiles too: the cached program's
+    // handle is now invalid, so its gl.isProgram guard forces a fresh compile.
+    sampler = null;
     refreshSampler();                        // rebuild the output sampler against the new context
   } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
 }
