@@ -21,6 +21,7 @@
 import {
   generatorNames, effectNames, effectKind, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
+import { SOURCE_CATEGORIES, CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from './source-catalog.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
@@ -1553,17 +1554,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     pickPop.remove(); pickPop = null;
     if (pickDismiss) { pickDismiss(); pickDismiss = null; }
   }
-  // Source picker grouping (built-in generators) — uncategorised ones fall into "More".
-  const SOURCE_CATEGORIES = [
-    ['Basic', ['solid', 'gradient', 'line']],
-    ['Pattern', ['grid', 'checkers', 'spectrum']],
-    ['Motion', ['sine', 'pulse', 'radial', 'plasma', 'tunnel']],
-    ['Liquid', ['domainwarp', 'metaballs']],
-    ['Organic', ['noise']],
-    // Per-LED 3D fields (evaluated at each LED's world xyz in the sampler pass,
-    // not drawn on the canvas). Max 4 active at once.
-    ['Volumetric', ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield']],
-  ];
+  // Source picker grouping (built-in generators) — SOURCE_CATEGORIES is imported
+  // from ./source-catalog.js; uncategorised generators fall into "More".
   function openPicker(anchor, kind, onPick, opts = {}) {
     closePicker();
     const pop = el('div', { className: 'pick-pop' + (kind === 'source' ? ' pick-grouped' : '') });
