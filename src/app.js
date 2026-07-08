@@ -3103,16 +3103,25 @@ document.getElementById('menu-save')?.addEventListener('click', projectIO.saveSh
 // picker directly.
 let exampleProjects = [];
 fetch('./examples/projects/index.json').then((r) => r.json()).then((list) => { if (Array.isArray(list)) exampleProjects = list; }).catch(() => {});
-async function loadExampleProject(file, name) {
-  if (!window.confirm(`Load “${name}”? This replaces the current project (save first if you want to keep it).`)) return;
+async function loadExampleProject(file, name, { confirm = true } = {}) {
+  if (confirm && !window.confirm(`Load “${name}”? This replaces the current project (save first if you want to keep it).`)) return;
   try {
     const res = await fetch(`./examples/projects/${file}`);
     const parsed = await res.json();
     const next = normalizeComposition(parsed);
     if (next.composition && !next.composition.title) next.composition.title = name;
     applyFullShow(next);
-  } catch (e) { window.alert(`Couldn't load “${name}”: ${e.message}`); }
+  } catch (e) { if (confirm) window.alert(`Couldn't load “${name}”: ${e.message}`); else console.warn(`Couldn't auto-load project “${file}”:`, e.message); }
 }
+// Deep-link / kiosk boot: ?project=<file> loads a bundled example project straight away
+// (no confirm), overriding localStorage — so the Pi kiosk always comes up on a fixed show
+// (e.g. http://localhost:7070/?project=balena-voladora.json). Basename only (no traversal).
+(() => {
+  const file = new URLSearchParams(location.search).get('project');
+  if (file && !file.includes('/') && !file.includes('..')) {
+    loadExampleProject(file, file.replace(/\.[^.]+$/, ''), { confirm: false });
+  }
+})();
 const openBtn = document.getElementById('menu-open');
 openBtn?.addEventListener('click', () => {
   if (!exampleProjects.length) { projectIO.openShowPicker(); return; }
