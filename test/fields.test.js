@@ -321,6 +321,18 @@ test('evalColorFx: invert flips, threshold binarizes, rgb scales, strobe gates',
   near3(evalColorFx([1, 1, 1], FX_IDS.strobe, [1, 0, 0, 0], 0.2), [0, 0, 0]);   // fract(0.2)<0.5 → gate 0
 });
 
+test('evalColorFx: hue rotates in the standard (2D hueRot) direction — cross(k,s)', () => {
+  // Independently compute Rodrigues about the grey axis with cross((k,k,k), s),
+  // exactly as manifest.js hueRot / the GLSL colorFx do, and assert the twin matches.
+  const k = 0.57735026, shift = 0.1, a = shift * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+  const s = [0.9, 0.2, 0.1], [r, g, b] = s, dot = k * (r + g + b);
+  const cx = k * (b - g), cy = k * (r - b), cz = k * (g - r);   // cross((k,k,k), s)
+  const exp = [r * cs + cx * sn + k * dot * (1 - cs), g * cs + cy * sn + k * dot * (1 - cs), b * cs + cz * sn + k * dot * (1 - cs)]
+    .map((v) => Math.max(0, Math.min(1, v)));
+  const got = evalColorFx(s, FX_IDS.hue, [shift, 0, 0, 0], 0);
+  got.forEach((v, i) => assert.ok(Math.abs(v - exp[i]) < 1e-6, `${got} != ${exp}`));
+});
+
 test('flowfield: packs A/B/colB and round-trips through evalPacked', () => {
   const p = packVolumetrics([{ generator: 'flowfield',
     params: { 'flowfield.windX': 0.5, 'flowfield.windY': -0.2, 'flowfield.scale': 3,

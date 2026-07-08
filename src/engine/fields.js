@@ -285,7 +285,7 @@ export function evalColorFx(s, id, p, t) {
   if (id === FX_IDS.hue) {
     const a = (p[0] + p[1] * t) * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a), k = 0.57735026;
     const dot = k * (r + g + b);
-    const cx = g * k - b * k, cy = b * k - r * k, cz = r * k - g * k;
+    const cx = b * k - g * k, cy = r * k - b * k, cz = g * k - r * k;   // cross((k,k,k), s) — matches 2D hueRot
     r = r * cs + cx * sn + k * dot * (1 - cs); g = g * cs + cy * sn + k * dot * (1 - cs); b = b * cs + cz * sn + k * dot * (1 - cs);
   } else if (id === FX_IDS.color) {
     const gm = 1 / Math.max(0.01, p[3]);

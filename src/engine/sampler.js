@@ -122,10 +122,9 @@ vec3 colorFx(vec3 s, int clip){
     int id = int(uFxId[clip * 4 + j] + 0.5);
     if (id == 0) continue;
     vec4 p = uFxP[clip * 4 + j];
-    if (id == 1) {                       // hue (Rodrigues about grey axis)
-      // NOTE: cross(s, k) — mirrors the JS twin's cross(s,k) sign (not cross(k,s)).
+    if (id == 1) {                       // hue (Rodrigues about grey axis — matches 2D hueRot)
       float a = (p.x + p.y * uT) * 6.2831853; vec3 k = vec3(0.57735026); float cs = cos(a), sn = sin(a);
-      s = s * cs + cross(s, k) * sn + k * dot(k, s) * (1.0 - cs);
+      s = s * cs + cross(k, s) * sn + k * dot(k, s) * (1.0 - cs);
     } else if (id == 2) {                // Adjustments: gamma→bright→contrast→sat
       s = pow(clamp(s, 0.0, 1.0), vec3(1.0 / max(0.01, p.w))) * p.x;
       s = (s - 0.5) * p.y + 0.5;
