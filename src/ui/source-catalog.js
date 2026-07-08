@@ -1,6 +1,6 @@
 // Source families for the browser/picker tabs + the pure filtering logic. No DOM —
 // unit-tested. Category source-of-truth (moved out of layers.js so it's shared + testable).
-import { generatorNames, labelOf } from '../engine/shaders/manifest.js';
+import { labelOf } from '../engine/shaders/manifest.js';
 
 export const SOURCE_CATEGORIES = [
   ['Basic', ['solid', 'gradient', 'line']],
