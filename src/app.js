@@ -3,7 +3,7 @@ import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureT
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
-import { packVolumetrics } from './engine/fields.js';
+import { packVolumetrics, packColorFx } from './engine/fields.js';
 import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
@@ -2832,11 +2832,11 @@ function loopBody(ts) {
         const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
         if (!c || !getEntry(c.generator)?.volumetric) continue;
         act.push({
-          id: c.id, generator: c.generator, params: c.params, blend: L.blend,
+          id: c.id, generator: c.generator, params: c.params, blend: L.blend, effects: c.effects,
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
-      if (act.length) vol = { ...packVolumetrics(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)) };
+      if (act.length) vol = { ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)) };
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no

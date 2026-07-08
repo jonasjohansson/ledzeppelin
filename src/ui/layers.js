@@ -19,7 +19,7 @@
 // kept for app.js compatibility).
 
 import {
-  generatorNames, effectNames, getEntry, labelOf,
+  generatorNames, effectNames, effectKind, getEntry, labelOf,
 } from '../engine/shaders/manifest.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
@@ -1470,7 +1470,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     box.append(Section('Effects', 'effects', (b) => {
       for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addClipEffect(show(), id, clip.id, name)));
+      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addClipEffect(show(), id, clip.id, name)),
+        { colorOnly: !!getEntry(clip.generator)?.volumetric });
       b.append(addBtn);
     }, undefined, clipFx.length === 0));
     return box;
@@ -1603,7 +1604,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         pop.append(vid);
       }
     } else {
-      pop.append(grid(effectNames()));
+      const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
+      pop.append(grid(names));
     }
     placePopover(pop, anchor);          // anchor + viewport-clamp (kit)
     pickPop = pop;

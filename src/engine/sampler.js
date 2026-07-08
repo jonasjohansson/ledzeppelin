@@ -29,6 +29,8 @@ uniform vec4 uVolA[4];
 uniform vec4 uVolB[4];
 uniform vec3 uVolColA[4];
 uniform vec3 uVolColB[4];
+uniform float uFxId[16];   // 4 clips × 4 colour-effect slots (0 = none)
+uniform vec4 uFxP[16];     // per-slot params
 
 // --- field kit (twins of fields.js) ---
 float vband(float d, float th, float so){
@@ -113,6 +115,34 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv){
   return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
 }
 
+// Per-LED colour-effect chain for volumetric clip 'clip' (4 slots). Operates on a
+// STRAIGHT (un-premultiplied) colour. GLSL twin of fields.js evalColorFx.
+vec3 colorFx(vec3 s, int clip){
+  for (int j = 0; j < 4; j++) {
+    int id = int(uFxId[clip * 4 + j] + 0.5);
+    if (id == 0) continue;
+    vec4 p = uFxP[clip * 4 + j];
+    if (id == 1) {                       // hue (Rodrigues about grey axis — matches 2D hueRot)
+      float a = (p.x + p.y * uT) * 6.2831853; vec3 k = vec3(0.57735026); float cs = cos(a), sn = sin(a);
+      s = s * cs + cross(k, s) * sn + k * dot(k, s) * (1.0 - cs);
+    } else if (id == 2) {                // Adjustments: gamma→bright→contrast→sat
+      s = pow(clamp(s, 0.0, 1.0), vec3(1.0 / max(0.01, p.w))) * p.x;
+      s = (s - 0.5) * p.y + 0.5;
+      float l = dot(s, vec3(0.299, 0.587, 0.114)); s = mix(vec3(l), s, p.z);
+    } else if (id == 3) {                // invert
+      s = mix(s, 1.0 - s, clamp(p.x, 0.0, 1.0));
+    } else if (id == 4) {                // rgb gain
+      s = s * p.xyz;
+    } else if (id == 5) {                // threshold (luminance binarise)
+      s = vec3(step(p.x, dot(s, vec3(0.299, 0.587, 0.114))));
+    } else if (id == 6) {                // strobe (time gate)
+      s *= step(0.5, fract(uT * p.x));
+    }
+    s = clamp(s, 0.0, 1.0);
+  }
+  return s;
+}
+
 void main(){
   ivec2 t = ivec2(gl_FragCoord.xy);
   vec2 suv = texelFetch(uMap, t, 0).rg;
@@ -130,6 +160,8 @@ void main(){
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
     vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz, c);
+    // Phase-1 colour effects: fold the clip's chain over the STRAIGHT colour, re-premult.
+    if (f.a > 0.0) { vec3 s = colorFx(f.rgb / f.a, i); f.rgb = s * f.a; }
     float op = uVolMeta[i].z;
     vec3 src = f.rgb * op; float sa = f.a * op;
     int mode = int(uVolMeta[i].y + 0.5);
@@ -190,8 +222,12 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   const locVolB = gl.getUniformLocation(prog, 'uVolB[0]');
   const locVolColA = gl.getUniformLocation(prog, 'uVolColA[0]');
   const locVolColB = gl.getUniformLocation(prog, 'uVolColB[0]');
+  const locFxId = gl.getUniformLocation(prog, 'uFxId[0]');
+  const locFxP = gl.getUniformLocation(prog, 'uFxP[0]');
   const VOL_TRIG_SCRATCH = new Float32Array(32);   // 4 slots × 8
   const VOL_TRIG_COUNT_SCRATCH = new Int32Array(4);
+  const FX_ID_ZERO = new Float32Array(16);
+  const FX_P_ZERO = new Float32Array(64);
   const byteLen = W * H * 4;
   const out = new Uint8Array(byteLen);
   const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
@@ -250,6 +286,8 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
         gl.uniform4fv(locVolB, vol.b);
         gl.uniform3fv(locVolColA, vol.colA);
         gl.uniform3fv(locVolColB, vol.colB);
+        gl.uniform1fv(locFxId, vol.fxId || FX_ID_ZERO);
+        gl.uniform4fv(locFxP, vol.fxParam || FX_P_ZERO);
         // uVolTrigs = seconds since each recent ⚡ trigger, per slot (compositor convention).
         // Prefer per-slot vol.volTrigs[s]; fall back to replicating the global vol.trigSecs
         // into every active slot so a single-bus caller behaves identically.

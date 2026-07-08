@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {
   planeSweep, axisGradient, noise3d, spherePulse, bodyWave, flowfield,
   FIELD_IDS, isVolumetricName, packVolumetrics, evalPacked,
+  packColorFx, evalColorFx, FX_IDS,
 } from '../src/engine/fields.js';
-import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames } from '../src/engine/shaders/manifest.js';
+import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames, effectKind } from '../src/engine/shaders/manifest.js';
 
 const near = (got, want, eps = 1e-9) =>
   assert.ok(Math.abs(got - want) < eps, `${got} !~ ${want}`);
@@ -12,6 +13,11 @@ const nearRGBA = (got, want, eps = 1e-9) => {
   assert.equal(got.length, 4);
   got.forEach((v, i) => near(v, want[i], eps));
 };
+
+test('effectKind: the phase-1 color effects are tagged color; spatial ones are not', () => {
+  for (const n of ['hue', 'color', 'invert', 'rgb', 'threshold', 'strobe']) assert.equal(effectKind(n), 'color', n);
+  for (const n of ['displace', 'repeat', 'feedback', 'colorize']) assert.notEqual(effectKind(n), 'color', n);
+});
 
 // --- planeSweep --------------------------------------------------------------
 
@@ -284,6 +290,47 @@ test('evalPacked matches the direct field functions', () => {
     planeSweep(pt, { axis: 2, pos: 0.3 * 2, thickness: Math.fround(0.15), softness: 0, color: [1, 1, 1] }), 1e-6);
   // no trigger → dark.
   nearRGBA(evalPacked(pp, 0, pt, 0), [0, 0, 0, 0], 1e-6);
+});
+
+// --- packColorFx / evalColorFx ------------------------------------------------
+
+test('packColorFx: lays out per-clip effect slots (4 per clip)', () => {
+  const act = [{ generator: 'flowfield', effects: ['invert', 'hue'],
+    params: { 'invert.amount': 1, 'hue.shift': 0.25, 'hue.speed': 0 } }];
+  const { fxId, fxParam } = packColorFx(act);
+  assert.equal(fxId.length, 16); assert.equal(fxParam.length, 64);
+  assert.equal(fxId[0], FX_IDS.invert);
+  assert.equal(fxId[1], FX_IDS.hue);
+  assert.equal(fxId[2], 0);
+  assert.equal(fxParam[0], 1);        // invert amount
+  assert.equal(fxParam[4], 0.25);     // hue shift (slot1 → base 4)
+});
+
+test('packColorFx: drops non-color effects and caps at 4/clip', () => {
+  const act = [{ generator: 'flowfield', effects: ['displace', 'invert', 'rgb', 'threshold', 'hue', 'strobe'], params: {} }];
+  const { fxId } = packColorFx(act);
+  assert.deepEqual([...fxId.slice(0, 4)], [FX_IDS.invert, FX_IDS.rgb, FX_IDS.threshold, FX_IDS.hue]);
+});
+
+test('evalColorFx: invert flips, threshold binarizes, rgb scales, strobe gates', () => {
+  const near3 = (a, b) => a.forEach((v, i) => assert.ok(Math.abs(v - b[i]) < 1e-6, `${a}!=${b}`));
+  near3(evalColorFx([0.2, 0.4, 0.6], FX_IDS.invert, [1, 0, 0, 0], 0), [0.8, 0.6, 0.4]);
+  near3(evalColorFx([1, 1, 1], FX_IDS.threshold, [0.5, 0, 0, 0], 0), [1, 1, 1]);
+  near3(evalColorFx([0, 0, 0], FX_IDS.threshold, [0.5, 0, 0, 0], 0), [0, 0, 0]);
+  near3(evalColorFx([0.5, 0.5, 0.5], FX_IDS.rgb, [2, 1, 0, 0], 0), [1, 0.5, 0]);
+  near3(evalColorFx([1, 1, 1], FX_IDS.strobe, [1, 0, 0, 0], 0.2), [0, 0, 0]);   // fract(0.2)<0.5 → gate 0
+});
+
+test('evalColorFx: hue rotates in the standard (2D hueRot) direction — cross(k,s)', () => {
+  // Independently compute Rodrigues about the grey axis with cross((k,k,k), s),
+  // exactly as manifest.js hueRot / the GLSL colorFx do, and assert the twin matches.
+  const k = 0.57735026, shift = 0.1, a = shift * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a);
+  const s = [0.9, 0.2, 0.1], [r, g, b] = s, dot = k * (r + g + b);
+  const cx = k * (b - g), cy = k * (r - b), cz = k * (g - r);   // cross((k,k,k), s)
+  const exp = [r * cs + cx * sn + k * dot * (1 - cs), g * cs + cy * sn + k * dot * (1 - cs), b * cs + cz * sn + k * dot * (1 - cs)]
+    .map((v) => Math.max(0, Math.min(1, v)));
+  const got = evalColorFx(s, FX_IDS.hue, [shift, 0, 0, 0], 0);
+  got.forEach((v, i) => assert.ok(Math.abs(v - exp[i]) < 1e-6, `${got} != ${exp}`));
 });
 
 test('flowfield: packs A/B/colB and round-trips through evalPacked', () => {

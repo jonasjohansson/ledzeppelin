@@ -1023,7 +1023,7 @@ export const REGISTRY = {
     ],
   },
   strobe: {
-    name: 'strobe', type: 'effect', src: STROBE,
+    name: 'strobe', type: 'effect', kind: 'color', src: STROBE,
     params: [
       { key: 'rate', type: 'float', min: 0, max: 20, default: 4 },
     ],
@@ -1064,14 +1064,14 @@ export const REGISTRY = {
     ],
   },
   hue: {
-    name: 'hue', type: 'effect', src: HUE,
+    name: 'hue', type: 'effect', kind: 'color', src: HUE,
     params: [
       { key: 'shift', type: 'float', min: 0, max: 1, default: 0 },
       { key: 'speed', type: 'float', min: 0, max: 2, default: 0 },
     ],
   },
   color: {
-    name: 'color', type: 'effect', src: COLOR,
+    name: 'color', type: 'effect', kind: 'color', src: COLOR,
     params: [
       { key: 'brightness', type: 'float', min: 0, max: 3, default: 1 },
       { key: 'contrast', type: 'float', min: 0, max: 3, default: 1 },
@@ -1080,11 +1080,11 @@ export const REGISTRY = {
     ],
   },
   invert: {
-    name: 'invert', type: 'effect', src: INVERT,
+    name: 'invert', type: 'effect', kind: 'color', src: INVERT,
     params: [{ key: 'amount', type: 'float', min: 0, max: 1, default: 1 }],
   },
   rgb: {
-    name: 'rgb', type: 'effect', src: RGB,
+    name: 'rgb', type: 'effect', kind: 'color', src: RGB,
     params: [
       { key: 'red', type: 'float', min: 0, max: 2, default: 1 },
       { key: 'green', type: 'float', min: 0, max: 2, default: 1 },
@@ -1092,7 +1092,7 @@ export const REGISTRY = {
     ],
   },
   threshold: {
-    name: 'threshold', type: 'effect', src: THRESHOLD,
+    name: 'threshold', type: 'effect', kind: 'color', src: THRESHOLD,
     params: [{ key: 'level', type: 'float', min: 0, max: 1, default: 0.5 }],
   },
   colorize: {
@@ -1195,6 +1195,10 @@ export const labelOf = (name) =>
 
 // Look up a generator or effect entry by name.
 export function getEntry(name) { return REGISTRY[name] || null; }
+
+// Effect class: 'color' (pointwise — works per-LED on a volumetric clip), else
+// undefined for spatial effects (coord/resample — 2D only for now).
+export const effectKind = (name) => REGISTRY[name]?.kind || null;
 
 // Pure helper: { key: default } for a generator/effect, or {} if unknown.
 export function defaultParams(name) {
