@@ -239,6 +239,72 @@ export function packVolumetrics(active) {
   return { count: n, meta, a, b, colA, colB };
 }
 
+// --- Colour effects on volumetric clips (Phase 1) -----------------------------
+// Pointwise colour ops applied per-LED to a field's STRAIGHT colour in the sampler.
+// Stable ids — the GLSL colorFx() switch in sampler.js mirrors these.
+export const FX_IDS = { none: 0, hue: 1, color: 2, invert: 3, rgb: 4, threshold: 5, strobe: 6 };
+const FX_MAXPER = 4;   // colour effects packed per clip (must match sampler uFxId layout)
+
+function fxSlot(name, params) {
+  const id = FX_IDS[name] || 0;
+  const P = (k, d) => Number(paramOf(params, name, k, d)) || 0;
+  if (id === FX_IDS.hue) return [id, [P('shift', 0), P('speed', 0), 0, 0]];
+  if (id === FX_IDS.color) return [id, [P('brightness', 1), P('contrast', 1), P('saturation', 1), P('gamma', 1)]];
+  if (id === FX_IDS.invert) return [id, [P('amount', 1), 0, 0, 0]];
+  if (id === FX_IDS.rgb) return [id, [P('red', 1), P('green', 1), P('blue', 1), 0]];
+  if (id === FX_IDS.threshold) return [id, [P('level', 0.5), 0, 0, 0]];
+  if (id === FX_IDS.strobe) return [id, [P('rate', 4), 0, 0, 0]];
+  return [0, [0, 0, 0, 0]];
+}
+
+// Pack up to 4 ACTIVE clips' colour-effect chains into flat uniform arrays.
+// active entries carry `effects` (the clip's effect-name array) + `params`.
+export function packColorFx(active) {
+  const n = Math.min(4, active.length);
+  const fxId = new Float32Array(16);
+  const fxParam = new Float32Array(64);
+  for (let i = 0; i < n; i++) {
+    const { effects, params } = active[i];
+    let j = 0;
+    for (const name of (effects || [])) {
+      if (j >= FX_MAXPER) break;
+      if (FX_IDS[name] == null || FX_IDS[name] === 0) continue;
+      const [id, p] = fxSlot(name, params);
+      const slot = i * FX_MAXPER + j;
+      fxId[slot] = id;
+      fxParam.set(p, slot * 4);
+      j++;
+    }
+  }
+  return { fxId, fxParam };
+}
+
+// JS twin of the GLSL colorFx fold — apply ONE effect to a straight colour [r,g,b] 0..1.
+export function evalColorFx(s, id, p, t) {
+  let [r, g, b] = s;
+  if (id === FX_IDS.hue) {
+    const a = (p[0] + p[1] * t) * 2 * Math.PI, cs = Math.cos(a), sn = Math.sin(a), k = 0.57735026;
+    const dot = k * (r + g + b);
+    const cx = g * k - b * k, cy = b * k - r * k, cz = r * k - g * k;
+    r = r * cs + cx * sn + k * dot * (1 - cs); g = g * cs + cy * sn + k * dot * (1 - cs); b = b * cs + cz * sn + k * dot * (1 - cs);
+  } else if (id === FX_IDS.color) {
+    const gm = 1 / Math.max(0.01, p[3]);
+    r = Math.pow(clamp01(r), gm) * p[0]; g = Math.pow(clamp01(g), gm) * p[0]; b = Math.pow(clamp01(b), gm) * p[0];
+    r = (r - 0.5) * p[1] + 0.5; g = (g - 0.5) * p[1] + 0.5; b = (b - 0.5) * p[1] + 0.5;
+    const l = 0.299 * r + 0.587 * g + 0.114 * b;
+    r = l + (r - l) * p[2]; g = l + (g - l) * p[2]; b = l + (b - l) * p[2];
+  } else if (id === FX_IDS.invert) {
+    const a = clamp01(p[0]); r = r + (1 - 2 * r) * a; g = g + (1 - 2 * g) * a; b = b + (1 - 2 * b) * a;
+  } else if (id === FX_IDS.rgb) {
+    r *= p[0]; g *= p[1]; b *= p[2];
+  } else if (id === FX_IDS.threshold) {
+    const l = 0.299 * r + 0.587 * g + 0.114 * b, v = l >= p[0] ? 1 : 0; r = g = b = v;
+  } else if (id === FX_IDS.strobe) {
+    const gate = (p[0] * t - Math.floor(p[0] * t)) >= 0.5 ? 1 : 0; r *= gate; g *= gate; b *= gate;
+  }
+  return [clamp01(r), clamp01(g), clamp01(b)];
+}
+
 // JS twin of the sampler's per-LED field dispatch — evaluates one PACKED clip
 // at p/t (trigAges = seconds since recent ⚡ triggers, for spherepulse shells).
 // Used by tests (and the e2e GPU-parity check) to predict sampler output.
