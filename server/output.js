@@ -86,17 +86,43 @@ function deviceLut(d) {
 // LED can render — leaving R/G/B as-is (the common "additive white" behaviour).
 export const formatStride = (fmt) => (fmt || 'RGB').length;
 
+// Per-device RING of reusable output buffers. buildDeviceBytes used to Buffer.alloc
+// a fresh buffer every frame — deliberately, because the packet gather-lists it feeds
+// to udpSend are subarray VIEWS the async (fire-and-forget) UDP send holds until it
+// flushes; a reused buffer must not be overwritten while a send still references it.
+// At 12 devices × 42fps that's ~500 allocs/s of GC churn. Instead rotate a small ring
+// per device so a buffer isn't reused until RING_DEPTH frames later — by which the
+// send has long flushed (LAN UDP flushes in microseconds; the ring gives ~48-72ms of
+// slack). Keyed by the DEVICE OBJECT: it's stable across frames, and a 'route' message
+// replaces every device wholesale (JSON.parse → new objects), so the old ring is GC'd
+// and the new object lazily gets a fresh, correctly-sized ring. A device's `total`
+// only changes on such a route swap, but the size check re-rings defensively anyway.
+const RING_DEPTH = 3;
+const deviceRings = new WeakMap();   // device object → { bufs: Buffer[RING_DEPTH], idx, size }
+function pooledBuffer(d, total) {
+  let ring = deviceRings.get(d);
+  if (!ring || ring.size !== total) { ring = { bufs: new Array(RING_DEPTH).fill(null), idx: 0, size: total }; deviceRings.set(d, ring); }
+  let buf = ring.bufs[ring.idx];
+  if (!buf) buf = ring.bufs[ring.idx] = Buffer.alloc(total);   // fresh ⇒ already zeroed
+  else buf.fill(0);                                            // reused ⇒ restore Buffer.alloc's zero-fill (uncovered channels stay dark)
+  ring.idx = (ring.idx + 1) % RING_DEPTH;
+  return buf;
+}
+
 // Build a device's output bytes in ONE pass: per-segment colour-format remap (incl.
-// RGBW expansion) AND the gamma/brightness LUT folded together into a single fresh
-// buffer. Allocated fresh per frame so in-flight UDP sends that reference it stay
-// valid. Output length is per-format (RGB→3B/px, RGBW→4B/px), not the 3B/px input.
-export function buildDeviceBytes(slice, d, lut) {
+// RGBW expansion) AND the gamma/brightness LUT folded together into a single buffer.
+// Output length is per-format (RGB→3B/px, RGBW→4B/px), not the 3B/px input.
+// `pool` (default on) draws the buffer from the device's ring (see pooledBuffer); a
+// DELAYED device (delayMs) holds its buffer past the ring window, so the caller passes
+// pool=false to keep the safe fresh-alloc-per-frame for those.
+export function buildDeviceBytes(slice, d, lut, pool = true) {
   const segs = d.segments?.length ? d.segments : [{ start: 0, count: slice.length / 3, colorOrder: d.colorOrder }];
   let total = 0;
   for (const s of segs) total += s.count * formatStride(s.colorOrder || d.colorOrder || 'RGB');
-  // Zero-filled (not allocUnsafe): if segments don't fully tile the slice (stale/
-  // partial route), uncovered channels stay dark, not random memory.
-  const out = Buffer.alloc(total);
+  // Zero-filled (pooled buffers are .fill(0)'d on reuse, fresh Buffer.alloc is zeroed):
+  // if segments don't fully tile the slice (stale/partial route), uncovered channels
+  // stay dark, not random memory.
+  const out = pool ? pooledBuffer(d, total) : Buffer.alloc(total);
   let o = 0;
   for (const s of segs) {
     const fmt = s.colorOrder || d.colorOrder || 'RGB';
@@ -152,7 +178,9 @@ export function sendFrame(rgb, devices) {
     const sends = [];   // a device can emit pixel strips AND/OR DMX fixtures
     const slice = rgb.subarray(d.byteStart, d.byteEnd);
     if (slice.length) {
-      const bytes = buildDeviceBytes(slice, d, deviceLut(d));   // reorder + gamma/brightness, one pass
+      // Delayed devices (delayMs) hold their bytes past the buffer ring's window
+      // (the send fires N ms later), so opt them out of pooling → safe fresh alloc.
+      const bytes = buildDeviceBytes(slice, d, deviceLut(d), !(Number(d.delayMs) > 0));   // reorder + gamma/brightness, one pass
       if (d.protocol === 'artnet') {
         const port = d.port ?? ARTNET_PORT;
         const key = `${d.ip}:${port}`;

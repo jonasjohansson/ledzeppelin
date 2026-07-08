@@ -56,6 +56,31 @@ test('WRGB puts white first, RGB residual after', () => {
   assert.deepEqual(px([10, 20, 30], { colorOrder: 'WRGB' }), [10, 0, 10, 20]);
 });
 
+test('buildDeviceBytes pooling: repeated calls return correct, independent results', () => {
+  // The daemon pools per-device output buffers in a small ring (keyed by the device
+  // object). Two CONSECUTIVE calls on the same device must return DIFFERENT buffers
+  // (so an in-flight UDP send of the previous frame isn't corrupted) and each must
+  // carry the correct bytes for its own input.
+  const d = { colorOrder: 'RGBW' };
+  const a = buildDeviceBytes(Buffer.from([255, 255, 255]), d, null);   // → 0,0,0,255
+  const b = buildDeviceBytes(Buffer.from([255, 0, 0]), d, null);       // → 255,0,0,0
+  assert.notEqual(a, b, 'consecutive pooled calls must not return the same buffer');
+  assert.deepEqual([...a], [0, 0, 0, 255]);
+  assert.deepEqual([...b], [255, 0, 0, 0]);
+  // Drive well past the ring depth: every return stays correct as buffers are reused.
+  for (let i = 0; i < 8; i++) {
+    const r = buildDeviceBytes(Buffer.from([10, 20, 30]), d, null);   // w=10 → 0,10,20,10
+    assert.deepEqual([...r], [0, 10, 20, 10], `iteration ${i}`);
+  }
+  // Reused buffers are zero-filled: a partial slice (fewer pixels than segments claim)
+  // leaves uncovered channels dark, never stale bytes from a prior frame.
+  const dPart = { colorOrder: 'RGB', segments: [{ start: 0, count: 2, colorOrder: 'RGB' }] };
+  buildDeviceBytes(Buffer.from([255, 255, 255, 255, 255, 255]), dPart, null);   // seed both pixels bright
+  const partial = buildDeviceBytes(Buffer.from([1, 2, 3]), dPart, null);        // only 1 px of input
+  assert.deepEqual([...partial.subarray(0, 3)], [1, 2, 3]);
+  assert.deepEqual([...partial.subarray(3, 6)], [0, 0, 0], 'uncovered pixel stays dark');
+});
+
 test('Art-Net chunks RGBW on whole-pixel universe boundaries (128 px = 512 B)', () => {
   // 130 RGBW pixels = 520 bytes → universe 0 holds 512 (128 px), universe 1 holds 8.
   const bytes = Buffer.alloc(130 * 4);
