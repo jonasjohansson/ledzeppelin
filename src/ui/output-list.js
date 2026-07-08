@@ -39,6 +39,34 @@ export function createOutputList(hooks) {
   } = hooks;
 
   let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
+
+  // Liveness dot state for a controller — the panel caches each device's last health
+  // check; this maps it to the dot's class/title. Shared by render (full build) and
+  // repaintDots (an in-place update on a ping resolve, no full re-render).
+  const dotStateFor = (gdev) => {
+    const st = panel.deviceState?.(gdev.id);
+    const dotState = gdev.protocol === 'artnet' ? 'artnet'
+      : !gdev.ip ? 'noip'
+      : (panel.isPinging?.(gdev.id) || !st) ? 'check'
+      : st.ok ? 'online' : 'offline';
+    return { dotState, dotTitle: { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState] };
+  };
+  // Repaint JUST the liveness dots in place. A health ping resolving means only a
+  // controller's reachability changed — so update each dot's class/title rather than
+  // running the full render() (which rebuilds the whole patch list AND re-mounts the
+  // floating inspector, churning the editor / stealing focus mid-edit during a show).
+  function repaintDots() {
+    if (!outputListEl) return;
+    const byId = new Map((getShow().devices || []).map((d) => [d.id, d]));
+    for (const dot of outputListEl.querySelectorAll('.dev-dot')) {
+      const gdev = byId.get(dot.dataset.devid);
+      if (!gdev) continue;
+      const { dotState, dotTitle } = dotStateFor(gdev);
+      dot.className = `dev-dot dev-${dotState}`;
+      dot.title = dotTitle;
+    }
+  }
+
   // Assign the given fixtures to a device (+ optional output port) and re-pack — the
   // drag-to-assign / drag-to-unassign action (deviceId '' = back to the Unassigned pool).
   function assignFixturesTo(fxIds, deviceId, port) {
@@ -223,15 +251,13 @@ export function createOutputList(hooks) {
       // caches each controller's last health check; renderOutput just paints it. Art-Net
       // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
       if (gdev) {
-        const st = panel.deviceState?.(gdev.id);
-        const dotState = gdev.protocol === 'artnet' ? 'artnet'
-          : !gdev.ip ? 'noip'
-          : (panel.isPinging?.(gdev.id) || !st) ? 'check'
-          : st.ok ? 'online' : 'offline';
-        const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
+        const { dotState, dotTitle } = dotStateFor(gdev);
         // Dot sits before the title (the old .insp-tri anchor is gone — headers no
         // longer fold, so anchoring after the triangle silently dropped the dot).
-        head.prepend(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
+        // Tagged with its device id so a ping resolve can repaint it in place (repaintDots).
+        const dot = oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle });
+        dot.dataset.devid = gdev.id;
+        head.prepend(dot);
       }
       // Controller identity colour swatch, just before the title (assigned in
       // syncDeviceTypes / editable in the device editor; Tint mode uses the same colour).
@@ -266,9 +292,10 @@ export function createOutputList(hooks) {
     const daemonUp = bridgeConnected();
     // Probe each WLED controller's status ONCE (one-shot per id) so the dots above
     // reflect real online/offline — only when a daemon is up (no daemon → no network).
-    // Each resolved ping re-renders this list to repaint its dot. The Inventory popout
-    // never reaches here, so it never pings.
-    if (daemonUp) panel.pingDevices?.(show.devices, render);
+    // Each resolved ping repaints ONLY its dot in place (repaintDots) — NOT a full
+    // render() — so background health checks never rebuild the patch list / inspector
+    // mid-edit. The Inventory popout never reaches here, so it never pings.
+    if (daemonUp) panel.pingDevices?.(show.devices, repaintDots);
     outputListEl.append(oel('button', {
       className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
       title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',

@@ -1729,19 +1729,26 @@ function updateInspector() {
   // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
   // a re-click). Re-focus the same field's input by its label after re-appending.
   const ae = document.activeElement;
-  let focusKey = null, vtxKey = null, selStart = null, selEnd = null;
-  if (ae && ae.tagName === 'INPUT' && fxBodyEl.contains(ae)) {
+  let focusKey = null, focusTag = null, vtxKey = null, selStart = null, selEnd = null;
+  // Capture text/number inputs, <select> dropdowns (device Format/Protocol/Model) AND
+  // the <input type=color> swatch — all live in a .fx-field keyed by its <span> label
+  // (or a per-vertex data-vtx), so editing a dropdown survives a re-mount too.
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && fxBodyEl.contains(ae)) {
+    focusTag = ae.tagName;
     focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
     vtxKey = ae.dataset?.vtx || null;   // per-vertex XYZ table cells key by "row:axis"
-    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
+    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number/select/color don't expose selection */ }
   }
   fxBodyEl.textContent = '';
   if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
   else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
   if (focusKey || vtxKey) {
     const fld = focusKey && [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
-    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`) : fld?.querySelector('input');
-    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number input */ } }
+    // Re-focus the SAME kind of control by its label-key (a <select> and a colour
+    // swatch can share a field with nothing else, so match on the captured tag).
+    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`)
+      : fld?.querySelector(focusTag === 'SELECT' ? 'select' : 'input');
+    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number/select/color */ } }
   }
   updateStageInsets();
   updateAlignBtn();
