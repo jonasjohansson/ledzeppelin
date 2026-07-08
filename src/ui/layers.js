@@ -21,7 +21,7 @@
 import {
   generatorNames, effectNames, effectKind, getEntry, labelOf, descOf,
 } from '../engine/shaders/manifest.js';
-import { CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from './source-catalog.js';
+import { CATEGORY_COLORS, sourceCategory } from './source-catalog.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
@@ -1721,10 +1721,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   // and the '+' clip picker (click → onPick). Filtering/categories are pure (source-catalog).
   function sourceBrowser({ onPick, draggable = false, onVideo } = {}) {
     const root = el('div', { className: 'src-browser' });
-    let tab = '2D', query = '';
-    const tabbar = el('div', { className: 'src-tabs' });
+    let query = '';
     const search = el('input', { className: 'src-search', type: 'search', placeholder: 'search sources…' });
-    const gridEl = el('div', { className: 'src-grid' });
+    const listEl = el('div', { className: 'src-list' });   // one scroll; groups are headers, not tabs
     const descEl = el('div', { className: 'src-desc' });
     const setDesc = (name) => { descEl.textContent = name ? (descOf(name) || sourceCategory(name)) : ''; };
 
@@ -1743,44 +1742,49 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       }
       return c;
     };
-
-    const renderGrid = () => {
-      gridEl.textContent = '';
-      const names = filterSources(generatorNames(), { tab, query });
-      names.forEach((n) => gridEl.append(card(n)));
-      // ISF imports live under the Shaders tab; the video source under 2D.
-      if (tab === 'Shaders' && !query) {
-        const examples = (getISFExamples && getISFExamples()) || [];
-        if (examples.length && onAddISF) examples.forEach((file) => {
-          const c = el('div', { className: 'src-card src-isf', title: file });
-          c.style.setProperty('--cat', CATEGORY_COLORS.Shaders);
-          c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
-          c.addEventListener('click', () => onAddISF(file));
-          gridEl.append(c);
-        });
-      }
-      if (tab === '2D' && onVideo && !query) {
-        const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
-        v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
-        v.addEventListener('click', () => onVideo());
-        gridEl.append(v);
-      }
-      if (!gridEl.childNodes.length) gridEl.append(el('div', { className: 'seg-hint', textContent: tab === 'Shaders' ? 'no shaders imported' : 'no sources' }));
+    const isfCard = (file) => {
+      const c = el('div', { className: 'src-card src-isf', title: file });
+      c.style.setProperty('--cat', CATEGORY_COLORS.Shaders);
+      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
+      c.addEventListener('click', () => onAddISF(file));
+      return c;
+    };
+    const videoCard = () => {
+      const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
+      v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
+      v.addEventListener('click', () => onVideo());
+      return v;
     };
 
-    const renderTabs = () => {
-      tabbar.textContent = '';
-      for (const t of CATEGORY_TABS) {
-        const b = el('button', { className: 'src-tab' + (t === tab && !query ? ' is-on' : ''), textContent: t });
-        if (CATEGORY_COLORS[t]) b.style.setProperty('--cat', CATEGORY_COLORS[t]);
-        b.addEventListener('click', () => { tab = t; query = ''; search.value = ''; renderTabs(); renderGrid(); });
-        tabbar.append(b);
-      }
+    // A subgroup = a labelled HEADER + its card grid, appended into the single scroll list.
+    const section = (label, cards) => {
+      if (!cards.length) return;
+      const g = el('div', { className: 'src-group' });
+      const head = el('div', { className: 'src-group-head', textContent: label });
+      head.style.setProperty('--cat', CATEGORY_COLORS[label] || 'var(--faint)');
+      g.append(head);
+      const grid = el('div', { className: 'src-grid' });
+      cards.forEach((c) => grid.append(c));
+      g.append(grid);
+      listEl.append(g);
+    };
+    const render = () => {
+      listEl.textContent = '';
+      const q = query.trim().toLowerCase();
+      const match = (n) => !q || labelOf(n).toLowerCase().includes(q) || n.toLowerCase().includes(q);
+      const gens = generatorNames();
+      const twoD = gens.filter((n) => sourceCategory(n) === '2D' && match(n)).map(card);
+      if (onVideo && (!q || 'video'.includes(q))) twoD.push(videoCard());
+      const threeD = gens.filter((n) => sourceCategory(n) === '3D' && match(n)).map(card);
+      const examples = (getISFExamples && getISFExamples()) || [];
+      const shaders = onAddISF ? examples.filter((f) => !q || f.toLowerCase().includes(q)).map(isfCard) : [];
+      section('2D', twoD); section('3D', threeD); section('Shaders', shaders);
+      if (!listEl.childNodes.length) listEl.append(el('div', { className: 'seg-hint', textContent: 'no sources' }));
     };
 
-    search.addEventListener('input', () => { query = search.value; renderTabs(); renderGrid(); });
-    root.append(tabbar, search, gridEl, descEl);
-    renderTabs(); renderGrid();
+    search.addEventListener('input', () => { query = search.value; render(); });
+    root.append(search, listEl, descEl);
+    render();
     return root;
   }
 

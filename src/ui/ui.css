@@ -1702,17 +1702,17 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-browser-pop { width: min(680px, calc(100vw - 16px)); max-width: none; padding: 6px; }
 .src-browser-pop .src-browser { max-height: min(60vh, 520px); }
 
-.src-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; flex: none; }
-.src-tab { flex: 0 0 auto; background: transparent; border: none; border-bottom: 2px solid transparent;
-  color: var(--muted); font: var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-ui); padding: 5px 9px; cursor: pointer; white-space: nowrap; }
-.src-tab:hover { color: var(--text); }
-.src-tab.is-on { color: var(--text); border-bottom-color: var(--cat, var(--accent)); }
-
 .src-search { flex: none; margin: 6px 0; height: var(--ctrl-h); background: var(--field-bg); color: var(--text);
   border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0 7px; font: var(--fs-ctrl) var(--mono); }
 
-.src-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; align-content: start; padding: 2px; }
+/* One scroll; the 2D / 3D / Shaders subgroups are section HEADERS (a small category dot
+   + a faint uppercase label), not tabs. */
+.src-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 2px; }
+.src-group + .src-group { margin-top: 4px; }
+.src-group-head { display: flex; align-items: center; gap: 6px; padding: 8px 2px 5px;
+  font: var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; color: var(--faint); }
+.src-group-head::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--faint)); flex: none; }
+.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; align-content: start; }
 .src-card { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 4px; cursor: grab;
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .src-card:hover { border-color: var(--cat, var(--accent)); }
