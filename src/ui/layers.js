@@ -19,7 +19,7 @@
 // kept for app.js compatibility).
 
 import {
-  generatorNames, effectNames, effectKind, getEntry, labelOf,
+  generatorNames, effectNames, effectKind, getEntry, labelOf, descOf,
 } from '../engine/shaders/manifest.js';
 import { SOURCE_CATEGORIES, CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from './source-catalog.js';
 import {
@@ -1569,32 +1569,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     };
     const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
     if (kind === 'source') {
-      // Grouped, 2-column grid (easier to scan than one long list).
-      const all = generatorNames(); const seen = new Set();
-      for (const [label, names] of SOURCE_CATEGORIES) {
-        const have = names.filter((n) => all.includes(n)); if (!have.length) continue;
-        have.forEach((n) => seen.add(n));
-        pop.append(el('div', { className: 'pick-group', textContent: label }), grid(have));
-      }
-      const rest = all.filter((n) => !seen.has(n));   // any uncategorised generator still shows
-      if (rest.length) pop.append(el('div', { className: 'pick-group', textContent: 'More' }), grid(rest));
-      // Bundled ISF example shaders — pick one to import it as a clip/effect.
-      const examples = (getISFExamples && getISFExamples()) || [];
-      if (examples.length && onAddISF) {
-        const g = el('div', { className: 'pick-grid' });
-        for (const file of examples) {
-          const row = el('div', { className: 'pick-item' });
-          row.append(el('span', { className: 'lib-label', textContent: file.replace(/\.[^.]+$/, '') }));
-          row.onclick = (e) => { e.stopPropagation(); closePicker(); onAddISF(file); };
-          g.append(row);
-        }
-        pop.append(el('div', { className: 'pick-group', textContent: 'ISF' }), g);
-      }
-      if (opts.onVideo) {
-        const vid = el('div', { className: 'pick-item pick-video', textContent: '+ video…' });
-        vid.onclick = (e) => { e.stopPropagation(); closePicker(); opts.onVideo(); };
-        pop.append(vid);
-      }
+      pop.classList.add('src-browser-pop');
+      pop.append(sourceBrowser({ onPick: (n) => { closePicker(); onPick(n); }, onVideo: opts.onVideo }));
     } else {
       const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
       pop.append(grid(names));
@@ -1742,6 +1718,73 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     return true;
   }
 
+  // TD-style source BROWSER: family tabs + search + dense card grid + a description
+  // line. Shared by the Output-pane Sources tab (draggable, click-adds-to-active-layer)
+  // and the '+' clip picker (click → onPick). Filtering/categories are pure (source-catalog).
+  function sourceBrowser({ onPick, draggable = false, onVideo } = {}) {
+    const root = el('div', { className: 'src-browser' });
+    let tab = 'All', query = '';
+    const tabbar = el('div', { className: 'src-tabs' });
+    const search = el('input', { className: 'src-search', type: 'search', placeholder: 'search sources…' });
+    const gridEl = el('div', { className: 'src-grid' });
+    const descEl = el('div', { className: 'src-desc' });
+    const setDesc = (name) => { descEl.textContent = name ? (descOf(name) || sourceCategory(name)) : ''; };
+
+    const card = (name) => {
+      const cat = sourceCategory(name);
+      const c = el('div', { className: 'src-card', title: labelOf(name), draggable: !!draggable });
+      c.style.setProperty('--cat', CATEGORY_COLORS[cat] || 'var(--faint)');
+      const thumb = thumbnails[name];
+      if (thumb) c.append(el('img', { className: 'src-thumb', src: thumb, alt: '', draggable: false }));
+      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: labelOf(name) }));
+      c.addEventListener('mouseenter', () => setDesc(name));
+      if (onPick) c.addEventListener('click', () => onPick(name));
+      if (draggable) {
+        c.addEventListener('dragstart', (e) => { drag = { kind: 'source', name }; e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', name); } catch { /* */ } });
+        c.addEventListener('dragend', () => { drag = null; });
+      }
+      return c;
+    };
+
+    const renderGrid = () => {
+      gridEl.textContent = '';
+      const names = filterSources(generatorNames(), { tab, query });
+      names.forEach((n) => gridEl.append(card(n)));
+      if ((tab === 'All' || tab === 'More') && !query) {
+        const examples = (getISFExamples && getISFExamples()) || [];
+        if (examples.length && onAddISF) examples.forEach((file) => {
+          const c = el('div', { className: 'src-card src-isf', title: file });
+          c.style.setProperty('--cat', CATEGORY_COLORS.More);
+          c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
+          c.addEventListener('click', () => onAddISF(file));
+          gridEl.append(c);
+        });
+        if (onVideo) {
+          const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
+          v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
+          v.addEventListener('click', () => onVideo());
+          gridEl.append(v);
+        }
+      }
+      if (!gridEl.childNodes.length) gridEl.append(el('div', { className: 'seg-hint', textContent: 'no sources' }));
+    };
+
+    const renderTabs = () => {
+      tabbar.textContent = '';
+      for (const t of CATEGORY_TABS) {
+        const b = el('button', { className: 'src-tab' + (t === tab && !query ? ' is-on' : ''), textContent: t });
+        if (CATEGORY_COLORS[t]) b.style.setProperty('--cat', CATEGORY_COLORS[t]);
+        b.addEventListener('click', () => { tab = t; query = ''; search.value = ''; renderTabs(); renderGrid(); });
+        tabbar.append(b);
+      }
+    };
+
+    search.addEventListener('input', () => { query = search.value; renderTabs(); renderGrid(); });
+    root.append(tabbar, search, gridEl, descEl);
+    renderTabs(); renderGrid();
+    return root;
+  }
+
   // Persistent source LIBRARY for the Output pane's "Sources" tab: the same grouped
   // catalog as the click-picker, but a standing panel whose items are DRAGGABLE onto
   // layer slots — they set the shared `drag` payload the slot drop targets already
@@ -1772,7 +1815,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   render();
   // getSelectedClipId: app.js resolves /selected/… canonical OSC addresses
   // against the inspector's current clip at message time.
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop, buildSourceRail };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop, buildSourceRail, sourceBrowser };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
