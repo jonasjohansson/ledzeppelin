@@ -4,7 +4,7 @@ import {
   planeSweep, axisGradient, noise3d, spherePulse, bodyWave, flowfield,
   FIELD_IDS, isVolumetricName, packVolumetrics, evalPacked,
 } from '../src/engine/fields.js';
-import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames } from '../src/engine/shaders/manifest.js';
+import { REGISTRY, getEntry, defaultParams, volumetricNames, labelOf, generatorNames, effectKind } from '../src/engine/shaders/manifest.js';
 
 const near = (got, want, eps = 1e-9) =>
   assert.ok(Math.abs(got - want) < eps, `${got} !~ ${want}`);
@@ -12,6 +12,11 @@ const nearRGBA = (got, want, eps = 1e-9) => {
   assert.equal(got.length, 4);
   got.forEach((v, i) => near(v, want[i], eps));
 };
+
+test('effectKind: the phase-1 color effects are tagged color; spatial ones are not', () => {
+  for (const n of ['hue', 'color', 'invert', 'rgb', 'threshold', 'strobe']) assert.equal(effectKind(n), 'color', n);
+  for (const n of ['displace', 'repeat', 'feedback', 'colorize']) assert.notEqual(effectKind(n), 'color', n);
+});
 
 // --- planeSweep --------------------------------------------------------------
 
