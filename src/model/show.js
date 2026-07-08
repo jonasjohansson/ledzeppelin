@@ -248,6 +248,16 @@ export function syncFixtureTypes(show) {
 export const typeInstanceCount = (show, typeId) =>
   (show.fixtures || []).filter((f) => f.typeId === typeId).length;
 
+// The colour format actually SENT for a fixture: its own colorFormat wins (unless
+// 'NONE'/empty), else the device's colour order, else the fixture-type's order.
+// 'NONE' (channels-only / par) has no pixel order so it falls through to inherit.
+// Pure — shared by the pipeline (segment colour order) and the fixture inspector
+// (the "sending: …" echo) so the two never disagree.
+export function effectiveColorFormat(fixtureColorFormat, deviceColorOrder, typeColorOrder) {
+  const fmt = fixtureColorFormat && fixtureColorFormat !== 'NONE' ? fixtureColorFormat : null;
+  return fmt || deviceColorOrder || typeColorOrder || 'RGB';
+}
+
 // EXPLICIT template push (C1): overwrite the SPEC fields of every placed fixture
 // with `typeId` from its template. Instances stay standalone (the invariant) —
 // this is the one deliberate "fan out the template" action. Copies exactly the
@@ -292,14 +302,14 @@ export function repackOffsets(show) {
   fixtures.forEach((f, i) => { (order[f.output?.deviceId || ''] ||= []).push(i); });
   const offsetByIndex = {};
   for (const dev in order) {
-    order[dev].sort((a, b) => ((fixtures[a].output?.port ?? 1) - (fixtures[b].output?.port ?? 1)) || (a - b));
+    order[dev].sort((a, b) => ((fixtures[a].output?.port ?? 0) - (fixtures[b].output?.port ?? 0)) || (a - b));
     // Offsets are OUTPUT-LOCAL: the counter resets per port, so every output's
     // chain addresses from 0 (out 1: 0–240, out 2: 0–240 — they don't stack).
     // The wire layout is unchanged: pipeline.js concatenates ports in ascending
     // order at send time, so the device buffer bytes are identical.
     let cursor = 0, lastPort = null;
     for (const i of order[dev]) {
-      const port = fixtures[i].output?.port ?? 1;
+      const port = fixtures[i].output?.port ?? 0;
       if (port !== lastPort) { cursor = 0; lastPort = port; }
       offsetByIndex[i] = cursor; cursor += fixtures[i].pixelCount || 0;
     }
@@ -308,9 +318,27 @@ export function repackOffsets(show) {
     ...show,
     fixtures: fixtures.map((f, i) => ({
       ...f,
-      output: { ...f.output, port: f.output?.port ?? 1, pixelOffset: offsetByIndex[i] ?? 0, pixelCount: f.pixelCount || 0 },
+      output: { ...f.output, port: f.output?.port ?? 0, pixelOffset: offsetByIndex[i] ?? 0, pixelCount: f.pixelCount || 0 },
     })),
   };
+}
+
+// Build the dense per-OUTPUT config array pushed to a WLED controller ("save to
+// device"). ONE { len, order } slot per WLED bus, indexed DIRECTLY by the
+// fixture's 0-based output port (port = WLED bus index — the same 0-based scan/
+// import/DDP-buffer convention), so a port-0 fixture is counted and every port
+// maps to its own bus (no off-by-one). `outs[p].len` = the summed pixels of every
+// fixture on device `deviceId` port `p`; ports outside 0..nOut-1 are ignored.
+// pushConfig (server/wled.js) writes outs[i] → the controller's bus i. Pure.
+export function deviceOutputConfig(fixtures, deviceId, nOut, colorOrder = 'GRB') {
+  const n = Math.max(0, Math.round(Number(nOut) || 0));
+  const outs = Array.from({ length: n }, () => ({ len: 0, order: colorOrder }));
+  for (const f of fixtures || []) {
+    if ((f.output?.deviceId || '') !== deviceId) continue;
+    const p = f.output?.port ?? 0;
+    if (Number.isInteger(p) && p >= 0 && p < n) outs[p].len += (f.pixelCount || 0);
+  }
+  return outs;
 }
 
 export function validate(show) {
@@ -331,7 +359,7 @@ export function validate(show) {
     const byPort = new Map();
     for (const f of show.fixtures) {
       if (f.output?.deviceId !== d.id) continue;
-      const p = f.output?.port ?? 1;
+      const p = f.output?.port ?? 0;
       if (!byPort.has(p)) byPort.set(p, []);
       byPort.get(p).push(f);
     }

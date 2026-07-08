@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures, effectiveColorFormat } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -7,7 +7,7 @@ import { packVolumetrics, packColorFx } from './engine/fields.js';
 import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
-import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { createFixturePanel, loadShow, saveShow, COLOR_FORMATS } from './ui/fixtures.js';
 import { stampFixture, stampDevice } from './model/templates.js';
 import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
@@ -78,7 +78,7 @@ function defaultShow() {
   show.fixtures = [{
     id: 'f1', typeId: 'generic',
     input: { transform: tf, points: pointsFromTransform(tf, cv) },
-    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 96 },
+    output: { deviceId: 'c1', port: 0, pixelOffset: 0, pixelCount: 96 },
   }];
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
@@ -238,8 +238,18 @@ function rebuild(next) {
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
   const { sampleUVs, samplePositions, spans } = buildPipelineInputs(show);
-  sampler?.dispose?.();
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  const n = sampleUVs.length / 2;
+  // DRAG path: the LED count is unchanged, only per-LED UV/xyz moved — refresh the
+  // textures IN PLACE so the PBO readback ring stays warm (sample() keeps returning
+  // valid frames every frame ⇒ no frozen wall / dark preview during the drag).
+  // Only when n actually changed (or there's no sampler yet) do we tear down and
+  // rebuild the target + PBO ring via makeSampler.
+  if (sampler && n > 0 && sampler.n === n && sampler.update?.(sampleUVs, samplePositions)) {
+    // updated in place
+  } else {
+    sampler?.dispose?.();
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  }
   lastSpans = spans; recomputeHiddenSpans();
 }
 
@@ -704,7 +714,7 @@ function selectFixture(fxId, ev, opts = {}) {
   if (fxId != null && !multiMod) {
     outputTab = 'fixtures';
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
-    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
+    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 0}`); }
     panel.selectFixture?.(fxId);
   }
   renderOutput(); redrawOverlay();
@@ -951,7 +961,7 @@ function positionEditor(sel) {
   // every member together.
   const ch = chainOf(show, sel.id);
   const isHead = !ch || ch.index === 0;
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const moveRun = (patch) => {
     const key = runKeyOf(sel);
     const next = structuredClone(show);
@@ -977,13 +987,35 @@ function positionEditor(sel) {
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const nOut = Math.max(1, Math.round(dev?.outputs ?? 4));
   const portSel = oel('select');
-  for (let p = 1; p <= nOut; p++) {
-    const o = oel('option', { value: String(p), textContent: `Output ${p}` });
-    if (p === (sel.output?.port ?? 1)) o.selected = true;
+  // Ports are 0-based WLED bus indices (value); the label is 1-based for humans.
+  for (let p = 0; p < nOut; p++) {
+    const o = oel('option', { value: String(p), textContent: `Output ${p + 1}` });
+    if (p === (sel.output?.port ?? 0)) o.selected = true;
     portSel.append(o);
   }
   portSel.disabled = !isHead;
   portSel.addEventListener('change', () => moveRun({ port: Number(portSel.value) }));
+  // Per-FIXTURE colour format — WLED's per-output model: format lives here, on the
+  // output, not on the container device. '' = inherit the controller's colour order.
+  // Unlike device/output (a per-run property set by the head), format is genuinely
+  // per-fixture, so it stays editable for every chain member.
+  const type = (show.fixtureTypes || []).find((t) => t.id === sel.typeId);
+  const fmtSel = oel('select');
+  for (const o of COLOR_FORMATS) {
+    const val = o.value ?? o;
+    const op = oel('option', { value: val, textContent: o.label ?? o });
+    if (val === (sel.colorFormat || '')) op.selected = true;
+    fmtSel.append(op);
+  }
+  fmtSel.addEventListener('change', () => {
+    const next = structuredClone(show);
+    const f = next.fixtures.find((x) => x.id === sel.id);
+    if (f) f.colorFormat = fmtSel.value;
+    apply(next);
+  });
+  // The format ACTUALLY sent (own format wins, else device order, else type order) —
+  // computed exactly as the pipeline does, so the user never has to guess.
+  const sending = effectiveColorFormat(sel.colorFormat, dev?.colorOrder, sel.colorOrder);
   // Two collapsible groups (same accent-header + rule + chevron as the Clip
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
@@ -1149,6 +1181,8 @@ function positionEditor(sel) {
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Colour format' }), fmtSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Sending' }), oel('span', { className: 'fx-readonly', textContent: sending, title: 'the colour format actually sent (own format, else controller order)' })]),
         ]),
         // CHAIN status + wiring — is this fixture daisy-chained, and where in the run.
         chainStatusRow(sel),
@@ -1397,7 +1431,7 @@ function multiPositionEditor(ids) {
     ...show.devices.map((d) => ({ value: d.id, label: `${d.name || d.id} (${d.id})` }))];
   const devIds = [...new Set(list.map((f) => f.output?.deviceId).filter(Boolean))];
   const nOut = Math.max(1, 4, ...devIds.map((id) => Math.round(show.devices.find((d) => d.id === id)?.outputs ?? 4)));
-  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i + 1), label: `Output ${i + 1}` }));
+  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i), label: `Output ${i + 1}` }));   // value = 0-based bus, label 1-based
 
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
@@ -1587,11 +1621,11 @@ function chainStatusRow(sel) {
   const ch = chainOf(show, sel.id);
   const idxOf = (id) => show.fixtures.findIndex((x) => x.id === id);
   const nameOf = (id) => { const i = idxOf(id); return i >= 0 ? fixtureLabel(show.fixtures[i], i) : id; };
-  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${f?.output?.port ?? 1})`; };
+  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${(f?.output?.port ?? 0) + 1})`; };   // o = 1-based output label (port is 0-based)
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const devName = dev?.name || dev?.id || 'controller';
   // Pixel load + capacity on this fixture's output (0 max = unlimited).
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const key = runKeyOf(sel);
   const runPx = show.fixtures.filter((f) => runKeyOf(f) === key).reduce((m, f) => m + (f.pixelCount || 0), 0);
   const cap = Number(dev?.maxPerOutput) || 0;
@@ -1616,7 +1650,7 @@ function chainStatusRow(sel) {
   // End of chain with nothing to offer — the output is full, or there are simply no
   // other fixtures to wire after this one → nothing to pick, so disable the picker.
   toSel.disabled = !next && (full || candidates.length === 0);
-  if (full) toSel.title = `${devName} Output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  if (full) toSel.title = `${devName} Output ${(sel.output?.port ?? 0) + 1} is full (${runPx}/${cap}px)`;
   else if (!next && candidates.length === 0) toSel.title = 'no other fixtures to wire after this one';
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
@@ -1695,19 +1729,26 @@ function updateInspector() {
   // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
   // a re-click). Re-focus the same field's input by its label after re-appending.
   const ae = document.activeElement;
-  let focusKey = null, vtxKey = null, selStart = null, selEnd = null;
-  if (ae && ae.tagName === 'INPUT' && fxBodyEl.contains(ae)) {
+  let focusKey = null, focusTag = null, vtxKey = null, selStart = null, selEnd = null;
+  // Capture text/number inputs, <select> dropdowns (device Format/Protocol/Model) AND
+  // the <input type=color> swatch — all live in a .fx-field keyed by its <span> label
+  // (or a per-vertex data-vtx), so editing a dropdown survives a re-mount too.
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && fxBodyEl.contains(ae)) {
+    focusTag = ae.tagName;
     focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
     vtxKey = ae.dataset?.vtx || null;   // per-vertex XYZ table cells key by "row:axis"
-    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
+    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number/select/color don't expose selection */ }
   }
   fxBodyEl.textContent = '';
   if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
   else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
   if (focusKey || vtxKey) {
     const fld = focusKey && [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
-    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`) : fld?.querySelector('input');
-    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number input */ } }
+    // Re-focus the SAME kind of control by its label-key (a <select> and a colour
+    // swatch can share a field with nothing else, so match on the captured tag).
+    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`)
+      : fld?.querySelector(focusTag === 'SELECT' ? 'select' : 'input');
+    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number/select/color */ } }
   }
   updateStageInsets();
   updateAlignBtn();
@@ -2279,7 +2320,7 @@ function placeFixtureCopies(srcList) {
   const load = new Map();
   for (const f of next.fixtures) {
     const d = f.output?.deviceId; if (!d) continue;
-    const k = loadKey(d, f.output?.port ?? 1);
+    const k = loadKey(d, f.output?.port ?? 0);
     load.set(k, (load.get(k) || 0) + (f.pixelCount || 0));
   }
   const pickPort = (copy) => {
@@ -2288,12 +2329,12 @@ function placeFixtureCopies(srcList) {
     const budget = Number(device?.maxPerOutput) || 0;
     const nOut = Math.max(1, Math.round(Number(device?.outputs) || 1));
     const px = copy.pixelCount || 0;
-    const start = copy.output?.port ?? 1;
+    const start = copy.output?.port ?? 0;
     let port = start;
     if (budget > 0) {
       port = null;
       for (let i = 0; i < nOut; i++) {
-        const p = ((start - 1 + i) % nOut) + 1;   // source output first, then roll forward (wrapping)
+        const p = (start + i) % nOut;   // 0-based: source output first, then roll forward (wrapping)
         if ((load.get(loadKey(devId, p)) || 0) + px <= budget) { port = p; break; }
       }
       port = port ?? start;   // every output full → overflow the source output
@@ -2931,6 +2972,11 @@ function rebuildGL() {
     uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
     compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
     videos.clearTextures();                  // video textures are gone → recreated on next upload
+    // The previous sampler's GL objects died with the context — null it so
+    // refreshSampler takes the full REBUILD path (never texSubImage into dead
+    // textures via update()). samplerProgram recompiles too: the cached program's
+    // handle is now invalid, so its gl.isProgram guard forces a fresh compile.
+    sampler = null;
     refreshSampler();                        // rebuild the output sampler against the new context
   } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
 }

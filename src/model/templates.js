@@ -53,7 +53,7 @@ export function stampFixture(template, id) {
     distribution,
     colorFormat: t.colorFormat ?? '',
     // Fresh patch + placement (unassigned until the UI wires it).
-    output: { deviceId: '', port: 1, pixelOffset: 0, pixelCount },
+    output: { deviceId: '', port: 0, pixelOffset: 0, pixelCount },
     input: { mode: isGrid ? 'grid' : 'bar', transform, points, samples: pixelCount },
   };
   // A DMX-profile type → a channel-block fixture: inline its params/channels and

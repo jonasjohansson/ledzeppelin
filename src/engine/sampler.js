@@ -157,9 +157,10 @@ void main(){
   vec4 base = vec4(0.0, 0.0, 0.0, 1.0);
   if (!(c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0)) base = texture(uCanvas, c);
   vec3 rgb = base.rgb;
+  vec3 ledPos = texelFetch(uPos, t, 0).xyz;   // per-LED world xyz — fetch once, not per clip
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
-    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz, c);
+    vec4 f = fieldColor(i, ledPos, c);
     // Phase-1 colour effects: fold the clip's chain over the STRAIGHT colour, re-premult.
     if (f.a > 0.0) { vec3 s = colorFx(f.rgb / f.a, i); f.rgb = s * f.a; }
     float op = uVolMeta[i].z;
@@ -176,6 +177,20 @@ void main(){
   frag = vec4(rgb, base.a);
 }`;
 
+// The SAMPLE_FS program is expensive to compile+link, and during a live fixture
+// DRAG the sampler is rebuilt every frame (positions move) — so we compile it
+// ONCE per GL context and share it across every sampler instance (mirrors the
+// compositor's program cache). Keyed by the gl object; a `gl.isProgram` guard
+// recompiles automatically after WebGL context-loss (the old program handle is
+// invalidated by the driver, so isProgram → false ⇒ fresh compile). Because the
+// program is shared, dispose() must NOT delete it — it outlives any one sampler.
+const SAMPLE_PROGRAMS = new WeakMap();   // gl → linked SAMPLE_FS program
+function samplerProgram(gl) {
+  let p = SAMPLE_PROGRAMS.get(gl);
+  if (!p || !gl.isProgram(p)) { p = program(gl, SAMPLE_FS); SAMPLE_PROGRAMS.set(gl, p); }
+  return p;
+}
+
 // samplePositions (optional, Float32Array len 3N — xyz per LED, same order as
 // the uv pairs) feeds the volumetric field pass; absent/empty falls back to a
 // canvas-plane position derived from nothing (all zeros) and volumetric clips
@@ -188,28 +203,25 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   const maxw = Math.max(1, Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096));
   const W = Math.max(1, Math.min(n || 1, maxw));
   const H = Math.max(1, Math.ceil((n || 1) / W));
-  // Pad the UV data (and readback buffer) to the full W×H grid.
-  const uvs = (W * H === n) ? sampleUVs : (() => { const a = new Float32Array(W * H * 2); a.set(sampleUVs); return a; })();
+  // Pad the UV / position data to the full W×H grid (a partial last row when n
+  // isn't a whole multiple of W). Shared by the initial build and in-place update.
+  const packUVs = (src) => (W * H === n) ? src : (() => { const a = new Float32Array(W * H * 2); a.set(src); return a; })();
+  const packPos = (src) => { const a = new Float32Array(W * H * 3); if (src?.length) a.set(src.subarray(0, Math.min(src.length, a.length))); return a; };
 
   const map = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, map);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, uvs);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, packUVs(sampleUVs));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   // Per-LED WORLD xyz for the volumetric field pass — same W×H layout as the uv
   // map. Padded like the uvs; a missing/short positions array reads as origin.
-  const posData = (() => {
-    const a = new Float32Array(W * H * 3);
-    if (samplePositions?.length) a.set(samplePositions.subarray(0, Math.min(samplePositions.length, a.length)));
-    return a;
-  })();
   const posTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, posTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, posData);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, packPos(samplePositions));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, W, H);
-  const prog = program(gl, SAMPLE_FS);
+  const prog = samplerProgram(gl);   // shared, compiled once per GL context (see samplerProgram)
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
   const locPos = gl.getUniformLocation(prog, 'uPos');
@@ -258,9 +270,27 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
       gl.deleteTexture(posTex);
       gl.deleteTexture(target.tex);
       gl.deleteFramebuffer(target.fbo);
-      gl.deleteProgram(prog);
+      // NB: `prog` is the SHARED, cached SAMPLE_FS program (samplerProgram) — it
+      // outlives this instance, so it is deliberately NOT deleted here.
       for (const b of pbos) gl.deleteBuffer(b);
       for (const s of fences) if (s) gl.deleteSync(s);
+    },
+    // In-place refresh for when only the per-LED UV/position data changed but the
+    // LED COUNT is unchanged (the live fixture-DRAG path). Re-uploads the map and
+    // position textures WITHOUT touching the render target, the 3-PBO readback
+    // ring, its fences, the queue, or lastValid — so the ring stays WARM and
+    // sample() keeps returning valid frames every frame of the drag (no dark wall).
+    // texSubImage2D reuses the existing W×H storage (same n ⇒ same W/H). Callers
+    // MUST only invoke this when the new n equals this sampler's n (see app.js);
+    // a mismatch is rejected so a stale caller can fall back to a full rebuild.
+    update(uvs /* Float32Array len 2N */, positions) {
+      if ((uvs.length / 2) !== n) return false;
+      gl.bindTexture(gl.TEXTURE_2D, map);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RG, gl.FLOAT, packUVs(uvs));
+      gl.bindTexture(gl.TEXTURE_2D, posTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGB, gl.FLOAT, packPos(positions));
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return true;
     },
     // `vol` (optional): the active volumetric clips for this frame —
     // { count, meta, a, b, colA, colB } from packVolumetrics (fields.js) plus

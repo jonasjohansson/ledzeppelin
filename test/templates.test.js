@@ -53,7 +53,7 @@ test('stampFixture produces a default patch/placement that validates once placed
   const fx = stampFixture(tmpl, 'f1');
 
   assert.equal(fx.output.deviceId, '');
-  assert.equal(fx.output.port, 1);
+  assert.equal(fx.output.port, 0);   // 0-based WLED bus index (matches scan/import)
   assert.equal(fx.output.pixelOffset, 0);
   assert.equal(fx.output.pixelCount, tmpl.pixelCount);   // validate(): output.pixelCount === pixelCount
   assert.ok(fx.input.points.length >= 2);                // validate(): input needs ≥2 points

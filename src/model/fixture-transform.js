@@ -208,7 +208,7 @@ export function fixtureNumbers(show) {
   const ordered = (show?.fixtures || []).map((f, i) => ({ f, i }))
     .sort((a, b) =>
       rankDev(a.f.output?.deviceId || '') - rankDev(b.f.output?.deviceId || '')
-      || (a.f.output?.port ?? 1) - (b.f.output?.port ?? 1)
+      || (a.f.output?.port ?? 0) - (b.f.output?.port ?? 0)
       || (a.f.output?.pixelOffset ?? 0) - (b.f.output?.pixelOffset ?? 0)
       || a.i - b.i);
   const map = new Map();

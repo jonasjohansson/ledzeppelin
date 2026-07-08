@@ -54,6 +54,13 @@ export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, 
   vars['--accent-line'] = light ? mixHex(hex, '#ffffff', 0.45) : mixHex(hex, '#0a0a0a', 0.40);
   vars['--accent-text'] = light ? mixHex(hex, '#141414', 0.30) : mixHex(hex, '#ffffff', 0.62);
 
+  // Glyph/text colour ON an accent-FILLED surface (subtabs, view-seg active button,
+  // checkbox tick, selected clip/layer labels). Must contrast the accent FILL, not the
+  // theme — so it tracks the accent hue AND flips: a light accent gets near-black text,
+  // a genuinely dark accent gets near-white (else the old static blue-black vanished).
+  const accL = (() => { const [r, g, b] = h2(hex) || [0, 0, 0]; return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; })();
+  vars['--accent-dark'] = accL > 0.5 ? mixHex(hex, '#0a0a0a', 0.12) : mixHex(hex, '#f4f4f6', 0.12);
+
   // Surfaces — anchor (dark, or luminance-inverted for light), lifted by Brightness,
   // then tinted by the accent. Identical formula for both themes.
   for (const [k, dark, w, lightExtra] of SURFACES) {
