@@ -21,7 +21,7 @@
 import {
   generatorNames, effectNames, effectKind, getEntry, labelOf, descOf,
 } from '../engine/shaders/manifest.js';
-import { SOURCE_CATEGORIES, CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from './source-catalog.js';
+import { CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from './source-catalog.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
@@ -1731,7 +1731,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   // and the '+' clip picker (click → onPick). Filtering/categories are pure (source-catalog).
   function sourceBrowser({ onPick, draggable = false, onVideo } = {}) {
     const root = el('div', { className: 'src-browser' });
-    let tab = 'All', query = '';
+    let tab = '2D', query = '';
     const tabbar = el('div', { className: 'src-tabs' });
     const search = el('input', { className: 'src-search', type: 'search', placeholder: 'search sources…' });
     const gridEl = el('div', { className: 'src-grid' });
@@ -1758,23 +1758,24 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       gridEl.textContent = '';
       const names = filterSources(generatorNames(), { tab, query });
       names.forEach((n) => gridEl.append(card(n)));
-      if ((tab === 'All' || tab === 'More') && !query) {
+      // ISF imports live under the Shaders tab; the video source under 2D.
+      if (tab === 'Shaders' && !query) {
         const examples = (getISFExamples && getISFExamples()) || [];
         if (examples.length && onAddISF) examples.forEach((file) => {
           const c = el('div', { className: 'src-card src-isf', title: file });
-          c.style.setProperty('--cat', CATEGORY_COLORS.More);
+          c.style.setProperty('--cat', CATEGORY_COLORS.Shaders);
           c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
           c.addEventListener('click', () => onAddISF(file));
           gridEl.append(c);
         });
-        if (onVideo) {
-          const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
-          v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
-          v.addEventListener('click', () => onVideo());
-          gridEl.append(v);
-        }
       }
-      if (!gridEl.childNodes.length) gridEl.append(el('div', { className: 'seg-hint', textContent: 'no sources' }));
+      if (tab === '2D' && onVideo && !query) {
+        const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
+        v.append(el('span', { className: 'src-label', textContent: '+ video…' }));
+        v.addEventListener('click', () => onVideo());
+        gridEl.append(v);
+      }
+      if (!gridEl.childNodes.length) gridEl.append(el('div', { className: 'seg-hint', textContent: tab === 'Shaders' ? 'no shaders imported' : 'no sources' }));
     };
 
     const renderTabs = () => {
