@@ -814,7 +814,7 @@ void main(){
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
-    name: 'line', type: 'generator', src: LINE,
+    name: 'line', type: 'generator', desc: 'Sweeping lines / bars.', src: LINE,
     params: [
       { key: 'pos', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'width', type: 'float', min: 0, max: 0.5, default: 0.08 },
@@ -831,7 +831,7 @@ export const REGISTRY = {
     ],
   },
   gradient: {
-    name: 'gradient', type: 'generator', src: GRADIENT,
+    name: 'gradient', type: 'generator', desc: 'A two-colour ramp across the canvas.', src: GRADIENT,
     params: [
       { key: 'angle', type: 'float', min: 0, max: 360, default: 0 },
       { key: 'colorA', type: 'color', default: '#000000' },
@@ -839,7 +839,7 @@ export const REGISTRY = {
     ],
   },
   solid: {
-    name: 'solid', type: 'generator', src: SOLID,
+    name: 'solid', type: 'generator', desc: 'A flat colour fill.', src: SOLID,
     params: [
       { key: 'color', type: 'color', default: '#ffffff' },
       { key: 'useKelvin', type: 'bool', default: false },
@@ -848,7 +848,7 @@ export const REGISTRY = {
     ],
   },
   sine: {
-    name: 'sine', type: 'generator', src: SINE,
+    name: 'sine', type: 'generator', desc: 'Scrolling sine bands.', src: SINE,
     params: [
       { key: 'freq', type: 'float', min: 0.25, max: 16, default: 3 },
       { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
@@ -862,7 +862,7 @@ export const REGISTRY = {
     ],
   },
   checkers: {
-    name: 'checkers', type: 'generator', src: CHECKERS,
+    name: 'checkers', type: 'generator', desc: 'A checkerboard.', src: CHECKERS,
     params: [
       { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
       { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
@@ -870,7 +870,7 @@ export const REGISTRY = {
     ],
   },
   grid: {
-    name: 'grid', type: 'generator', src: GRID,
+    name: 'grid', type: 'generator', desc: 'A grid of cells.', src: GRID,
     params: [
       { key: 'cols', type: 'float', min: 1, max: 64, default: 8 },
       { key: 'rows', type: 'float', min: 1, max: 64, default: 8 },
@@ -879,7 +879,7 @@ export const REGISTRY = {
     ],
   },
   pulse: {
-    name: 'pulse', type: 'generator', src: PULSE, triggerable: true,
+    name: 'pulse', type: 'generator', desc: 'A pulsing radial burst.', src: PULSE, triggerable: true,
     params: [
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'headWidth', type: 'float', min: 0, max: 0.3, default: 0.04 },
@@ -890,7 +890,7 @@ export const REGISTRY = {
     ],
   },
   radial: {
-    name: 'radial', type: 'generator', src: RADIAL, triggerable: true,
+    name: 'radial', type: 'generator', desc: 'A radial gradient / rings.', src: RADIAL, triggerable: true,
     params: [
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
       { key: 'width', type: 'float', min: 0.01, max: 1, default: 0.25 },
@@ -904,7 +904,7 @@ export const REGISTRY = {
     ],
   },
   noise: {
-    name: 'noise', type: 'generator', src: NOISE,
+    name: 'noise', type: 'generator', desc: 'Animated fBm value noise.', src: NOISE,
     params: [
       { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
@@ -914,7 +914,7 @@ export const REGISTRY = {
     ],
   },
   spectrum: {
-    name: 'spectrum', type: 'generator', src: SPECTRUM,
+    name: 'spectrum', type: 'generator', desc: 'Audio spectrum bars.', src: SPECTRUM,
     params: [
       { key: 'bands', type: 'float', min: 1, max: 12, default: 1, step: 1 },
       { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
@@ -925,7 +925,7 @@ export const REGISTRY = {
   // Volumetric fields (per-LED, evaluated in the sampler; max 4 active at once).
   // `axis`: 0 = x, 1 = y, 2 = z (z = height off the canvas plane).
   planesweep: {
-    name: 'planesweep', type: 'generator', volumetric: true, src: PLANESWEEP_THUMB,
+    name: 'planesweep', type: 'generator', desc: '3D: a lit plane swept along an axis.', volumetric: true, src: PLANESWEEP_THUMB,
     params: [
       { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
       { key: 'pos', type: 'float', min: 0, max: 1, default: 0.5 },
@@ -936,7 +936,7 @@ export const REGISTRY = {
     ],
   },
   axisgradient: {
-    name: 'axisgradient', type: 'generator', volumetric: true, src: AXISGRADIENT_THUMB,
+    name: 'axisgradient', type: 'generator', desc: '3D: a colour ramp along a world axis.', volumetric: true, src: AXISGRADIENT_THUMB,
     params: [
       { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
       { key: 'scroll', type: 'float', min: 0, max: 1, default: 0 },
@@ -945,7 +945,7 @@ export const REGISTRY = {
     ],
   },
   noise3d: {
-    name: 'noise3d', type: 'generator', volumetric: true, src: NOISE3D_THUMB,
+    name: 'noise3d', type: 'generator', desc: '3D: volumetric fBm noise with drift.', volumetric: true, src: NOISE3D_THUMB,
     params: [
       { key: 'scale', type: 'float', min: 0.5, max: 16, default: 3 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.3 },
@@ -958,7 +958,7 @@ export const REGISTRY = {
     ],
   },
   spherepulse: {
-    name: 'spherepulse', type: 'generator', volumetric: true, src: SPHEREPULSE_THUMB, triggerable: true,
+    name: 'spherepulse', type: 'generator', desc: '3D: expanding spherical shells (triggerable).', volumetric: true, src: SPHEREPULSE_THUMB, triggerable: true,
     params: [
       { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
@@ -972,7 +972,7 @@ export const REGISTRY = {
     ],
   },
   bodywave: {
-    name: 'bodywave', type: 'generator', volumetric: true, src: BODYWAVE_THUMB,
+    name: 'bodywave', type: 'generator', desc: '3D: a travelling sine wave along an axis.', volumetric: true, src: BODYWAVE_THUMB,
     params: [
       { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
       { key: 'wavelength', type: 'float', min: 0.1, max: 2, default: 0.5 },
@@ -984,7 +984,7 @@ export const REGISTRY = {
     ],
   },
   planepulse: {
-    name: 'planepulse', type: 'generator', volumetric: true, src: PLANEPULSE_THUMB, triggerable: true,
+    name: 'planepulse', type: 'generator', desc: '3D: planes sweeping per trigger.', volumetric: true, src: PLANEPULSE_THUMB, triggerable: true,
     params: [
       { key: 'axis', type: 'float', min: 0, max: 2, default: 2, step: 1 },
       { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.15 },
@@ -995,7 +995,7 @@ export const REGISTRY = {
     ],
   },
   flowfield: {
-    name: 'flowfield', type: 'generator', volumetric: true, src: FLOWFIELD_THUMB,
+    name: 'flowfield', type: 'generator', desc: '3D: curl-noise filaments streaming on the wind.', volumetric: true, src: FLOWFIELD_THUMB,
     params: [
       { key: 'windX', type: 'float', min: -1, max: 1, default: 0.3 },
       { key: 'windY', type: 'float', min: -1, max: 1, default: 0 },
@@ -1103,7 +1103,7 @@ export const REGISTRY = {
     ],
   },
   domainwarp: {
-    name: 'domainwarp', type: 'generator', src: DOMAINWARP,
+    name: 'domainwarp', type: 'generator', desc: 'Domain-warped liquid noise.', src: DOMAINWARP,
     params: [
       { key: 'scale', type: 'float', min: 0.5, max: 12, default: 3, step: 0.1 },
       { key: 'speed', type: 'float', min: 0, max: 3, default: 0.6, step: 0.01 },
@@ -1114,7 +1114,7 @@ export const REGISTRY = {
     ],
   },
   metaballs: {
-    name: 'metaballs', type: 'generator', src: METABALLS,
+    name: 'metaballs', type: 'generator', desc: 'Blobby metaballs.', src: METABALLS,
     params: [
       { key: 'count', type: 'float', min: 1, max: 8, default: 4, step: 1 },
       { key: 'radius', type: 'float', min: 0.04, max: 0.4, default: 0.16, step: 0.005 },
@@ -1124,7 +1124,7 @@ export const REGISTRY = {
     ],
   },
   plasma: {
-    name: 'plasma', type: 'generator', src: PLASMA,
+    name: 'plasma', type: 'generator', desc: 'Classic flowing plasma.', src: PLASMA,
     params: [
       { key: 'scale', type: 'float', min: 1, max: 24, default: 6, step: 0.1 },
       { key: 'speed', type: 'float', min: 0, max: 4, default: 1, step: 0.01 },
@@ -1133,7 +1133,7 @@ export const REGISTRY = {
     ],
   },
   tunnel: {
-    name: 'tunnel', type: 'generator', src: TUNNEL,
+    name: 'tunnel', type: 'generator', desc: 'An infinite zoom tunnel.', src: TUNNEL,
     params: [
       { key: 'speed', type: 'float', min: 0, max: 4, default: 1, step: 0.01 },
       { key: 'rings', type: 'float', min: 0.5, max: 20, default: 6, step: 0.1 },
@@ -1195,6 +1195,9 @@ export const labelOf = (name) =>
 
 // Look up a generator or effect entry by name.
 export function getEntry(name) { return REGISTRY[name] || null; }
+
+// One-line source/effect description for the browser's info line ('' if none).
+export const descOf = (name) => REGISTRY[name]?.desc || '';
 
 // Effect class: 'color' (pointwise — works per-LED on a volumetric clip), else
 // undefined for spatial effects (coord/resample — 2D only for now).

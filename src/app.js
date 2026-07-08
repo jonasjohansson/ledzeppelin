@@ -2579,7 +2579,14 @@ function setPatchTab(which) {
   if (fx) fx.hidden = which !== 'fixtures';
   if (src) {
     src.hidden = which !== 'sources';
-    if (which === 'sources') { src.textContent = ''; src.append(layerPanel.buildSourceRail()); }
+    if (which === 'sources') {
+      src.textContent = '';
+      src.append(layerPanel.sourceBrowser({
+        draggable: true,
+        onPick: (name) => layerPanel.addSourceToActiveLayer?.(name),
+        onVideo: () => layerPanel.pickVideoActive?.(),
+      }));
+    }
   }
   const tabs = document.getElementById('patch-tabs');
   if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.ptab === which);
