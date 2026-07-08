@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SOURCE_CATEGORIES, CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from '../src/ui/source-catalog.js';
-import { generatorNames } from '../src/engine/shaders/manifest.js';
+import { generatorNames, descOf } from '../src/engine/shaders/manifest.js';
 
 test('sourceCategory maps a source to its family, else More', () => {
   assert.equal(sourceCategory('solid'), 'Basic');
@@ -29,4 +29,9 @@ test('filterSources: a query filters across ALL sources by label/name, overridin
 test('filterSources: More = uncategorised generators only', () => {
   const cat = new Set(SOURCE_CATEGORIES.flatMap(([, ns]) => ns));
   for (const n of filterSources(generatorNames(), { tab: 'More' })) assert.ok(!cat.has(n), n);
+});
+test('descOf returns a short description for a source, else empty', () => {
+  assert.ok(descOf('solid').length > 0);
+  assert.ok(descOf('flowfield').length > 0);
+  assert.equal(descOf('nope-xyz'), '');
 });
