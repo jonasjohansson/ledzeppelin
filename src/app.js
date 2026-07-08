@@ -1,5 +1,5 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures, effectiveColorFormat } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
@@ -7,7 +7,7 @@ import { packVolumetrics, packColorFx } from './engine/fields.js';
 import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
-import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { createFixturePanel, loadShow, saveShow, COLOR_FORMATS } from './ui/fixtures.js';
 import { stampFixture, stampDevice } from './model/templates.js';
 import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
@@ -985,6 +985,27 @@ function positionEditor(sel) {
   }
   portSel.disabled = !isHead;
   portSel.addEventListener('change', () => moveRun({ port: Number(portSel.value) }));
+  // Per-FIXTURE colour format — WLED's per-output model: format lives here, on the
+  // output, not on the container device. '' = inherit the controller's colour order.
+  // Unlike device/output (a per-run property set by the head), format is genuinely
+  // per-fixture, so it stays editable for every chain member.
+  const type = (show.fixtureTypes || []).find((t) => t.id === sel.typeId);
+  const fmtSel = oel('select');
+  for (const o of COLOR_FORMATS) {
+    const val = o.value ?? o;
+    const op = oel('option', { value: val, textContent: o.label ?? o });
+    if (val === (sel.colorFormat || '')) op.selected = true;
+    fmtSel.append(op);
+  }
+  fmtSel.addEventListener('change', () => {
+    const next = structuredClone(show);
+    const f = next.fixtures.find((x) => x.id === sel.id);
+    if (f) f.colorFormat = fmtSel.value;
+    apply(next);
+  });
+  // The format ACTUALLY sent (own format wins, else device order, else type order) —
+  // computed exactly as the pipeline does, so the user never has to guess.
+  const sending = effectiveColorFormat(sel.colorFormat, dev?.colorOrder, sel.colorOrder);
   // Two collapsible groups (same accent-header + rule + chevron as the Clip
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
@@ -1150,6 +1171,8 @@ function positionEditor(sel) {
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Colour format' }), fmtSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Sending' }), oel('span', { className: 'fx-readonly', textContent: sending, title: 'the colour format actually sent (own format, else controller order)' })]),
         ]),
         // CHAIN status + wiring — is this fixture daisy-chained, and where in the run.
         chainStatusRow(sel),

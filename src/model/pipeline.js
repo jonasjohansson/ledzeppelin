@@ -5,6 +5,7 @@ import { isDmxFixture, dmxChannelsOf } from './dmx.js';
 import { fixtureCentreUV } from './fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from './bezier.js';
 import { project, cameraFromView3d } from './project3d.js';
+import { effectiveColorFormat } from './show.js';
 
 // True when a fixture's polyline carries 3D points (any point has a defined
 // third component) — the signal to resample by 3D arc length and project.
@@ -118,8 +119,7 @@ export function buildPipelineInputs(show) {
       // the controller's colour order (the common case — its strips are wired alike).
       // 'NONE' is a channels-only (par) format with no pixel colour order — treat it
       // as "inherit" here so a par toggled to pixel output still gets a valid order.
-      const fmt = f.colorFormat && f.colorFormat !== 'NONE' ? f.colorFormat : null;
-      segments.push({ start: devLocal, count: pts.length, colorOrder: fmt || d.colorOrder || f.colorOrder });
+      segments.push({ start: devLocal, count: pts.length, colorOrder: effectiveColorFormat(f.colorFormat, d.colorOrder, f.colorOrder) });
       devLocal += pts.length;
       cursor += pts.length;
     }

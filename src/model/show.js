@@ -248,6 +248,16 @@ export function syncFixtureTypes(show) {
 export const typeInstanceCount = (show, typeId) =>
   (show.fixtures || []).filter((f) => f.typeId === typeId).length;
 
+// The colour format actually SENT for a fixture: its own colorFormat wins (unless
+// 'NONE'/empty), else the device's colour order, else the fixture-type's order.
+// 'NONE' (channels-only / par) has no pixel order so it falls through to inherit.
+// Pure — shared by the pipeline (segment colour order) and the fixture inspector
+// (the "sending: …" echo) so the two never disagree.
+export function effectiveColorFormat(fixtureColorFormat, deviceColorOrder, typeColorOrder) {
+  const fmt = fixtureColorFormat && fixtureColorFormat !== 'NONE' ? fixtureColorFormat : null;
+  return fmt || deviceColorOrder || typeColorOrder || 'RGB';
+}
+
 // EXPLICIT template push (C1): overwrite the SPEC fields of every placed fixture
 // with `typeId` from its template. Instances stay standalone (the invariant) —
 // this is the one deliberate "fan out the template" action. Copies exactly the

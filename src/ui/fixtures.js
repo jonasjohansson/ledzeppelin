@@ -21,7 +21,7 @@ export const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG',
 // Per-FIXTURE colour FORMAT options: '' inherits the controller's order; the rest
 // pin this fixture's format. Every controller order plus the amber (A) variants, so
 // RGB, RGBW and RGBWA strips can share one controller.
-const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
+export const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
   'RGBA', 'RGBWA', 'RGBAW',
   { value: 'NONE', label: 'None (channels only)' }];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
@@ -486,8 +486,16 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
       ] : []),
-      // Format = the colour byte order (physical wiring spec — the only one most rigs need).
-      field('Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Colour order = the colour byte order (physical wiring spec — the only one most
+      // rigs need). A fixture on this device can PIN its own format (RGBW on an RGB
+      // controller, etc.); when any does, this order is only a fallback for the rest —
+      // so surface that override inline instead of leaving it silent.
+      (() => {
+        const orderField = field('Colour order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x })));
+        const overridden = (show.fixtures || []).some((f) => f.output?.deviceId === d.id && f.colorFormat && f.colorFormat !== 'NONE');
+        if (overridden) orderField.querySelector('span').append(el('span', { className: 'seg-hint', textContent: ' · order set per-fixture' }));
+        return orderField;
+      })(),
       // Identity colour — the swatch/bars in the Output list + the canvas Tint mode.
       // Auto-assigned from the palette on creation; override it here.
       (() => {
@@ -606,7 +614,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         title: n
           ? `overwrite the spec (size, wiring, format, channels) of the ${n} placed fixture${n === 1 ? '' : 's'} of this type with this template`
           : 'no placed fixtures use this type',
-        onclick: () => { if (onPushType) onPushType(t.id); else commit(pushTypeToFixtures(show, t.id)); },
+        onclick: () => {
+          // Destructive: this overwrites every placed instance's pixelCount/format/wiring
+          // from the template, flattening any per-fixture customisation (e.g. custom rib
+          // pixel counts). Confirm, naming how many fixtures will be overwritten.
+          const cnt = typeInstanceCount(show, t.id);
+          if (!window.confirm(`Overwrite the spec (size, wiring, format, channels) of ${cnt} placed fixture${cnt === 1 ? '' : 's'} of this type? This replaces any per-fixture customisation.`)) return;
+          if (onPushType) onPushType(t.id); else commit(pushTypeToFixtures(show, t.id));
+        },
       });
     };
     if (isDmx) { dmxChannelEditor(t, upd, rows); rows.push(pushRow()); return el('div', { className: 'fx-card fx-detail' }, rows); }
@@ -615,9 +630,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
     rows.push(field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))));
     rows.push(field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })));
-    // Colour format: '' inherits the controller's order; pick RGBW here for a
+    // Colour channels: '' inherits the controller's order; pick RGBW here for a
     // white-channel strip (mixes freely with RGB fixtures on the same controller).
-    rows.push(field('Colour Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
+    rows.push(field('Colour channels', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {
