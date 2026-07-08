@@ -428,7 +428,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 }
 /* Tiny uppercase caption under a top-bar icon — says what the button does at a glance;
    the title tooltip still carries the full description. */
-.g-label { font-size: 6px; line-height: 1; letter-spacing: .02em; text-transform: uppercase;
+.g-label { font-size: var(--fs-micro); line-height: 1; letter-spacing: .02em; text-transform: uppercase;
   color: var(--faint); white-space: nowrap; pointer-events: none; }
 .g-icon:hover .g-label { color: inherit; }
 .g-icon.on .g-label, .g-icon.open .g-label { color: inherit; }
@@ -842,8 +842,8 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Devices list = Inventory-style sections (one per controller). The title grows so
    its pixel badge right-aligns; the header is a drop target + selects the controller. */
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
-.out-sec .insp-sec-head { border-bottom: none; height: 28px; }   /* no hairline; a taller hit target */
-.insp-sec-head.out-unassigned { height: 28px; }
+.out-sec .insp-sec-head { border-bottom: none; height: 24px; }   /* no hairline; matches the inspector section-header height */
+.insp-sec-head.out-unassigned { height: 24px; }
 .out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); box-shadow: inset 3px 0 0 var(--accent); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
@@ -961,55 +961,10 @@ body.gui-hidden #show-ui-pill { display: block; }
 .output-row[draggable="true"] { cursor: grab; }
 .output-row[draggable="true"]:active { cursor: grabbing; }
 .out-group.drop-hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.out-dev .out-group-dev { color: var(--text); font-weight: var(--fw-med); }   /* controller header reads as the heading */
-.out-sub { position: static; margin: 2px 0 2px 14px; padding: 3px 0; border-top: none; }   /* nested output, not sticky */
 .out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
 .out-caret { color: var(--faint); font-size: var(--fs-micro); width: 10px; }
 .out-group-dev { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .out-group-dev:hover { text-decoration: underline; }
-.out-group-port { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); opacity: .8; }
-.out-group .out-chain { color: var(--accent); }
-.out-group .out-over { color: var(--warn); }
-
-/* === Output Fixtures list (merged tab) =====================================
-   Same card chrome as the Inventory rows (full-width cells: fill + hairline), so
-   the two tabs read alike. A controller is a CONTAINER; its fixtures nest beneath
-   it — indented, with a left guide line, so it's clear they live inside it. The
-   selected row fills with the warm "selected" surface. */
-.out-node { display: flex; align-items: center; gap: 8px; padding: 3px 8px; margin: 0;
-  background: var(--panel-2); border: 1px solid var(--line);
-  cursor: pointer; user-select: none; box-sizing: border-box; }
-/* Tile rows seamlessly (match the Inventory list density — no gaps, no per-row
-   rounded notches); overlap 1px borders into one hairline. */
-.out-node + .out-node { margin-top: -1px; }
-.out-node:hover { border-color: var(--line-2); }
-.out-node.selected { background: var(--accent-soft); border-color: var(--accent-line); }
-.out-node.selected .out-name { color: var(--accent-text); }
-.out-node.drop-hover { background: var(--accent-soft); border-color: var(--accent-line); }
-.out-node[draggable="true"] { cursor: grab; }
-.out-node[draggable="true"]:active { cursor: grabbing; }
-/* Controllers tile flush; the .out-group border-top hairline separates each one
-   (no floating gap — consistent with the gapless mosaic). */
-.out-dev { margin-top: 0; }
-.out-dev:first-of-type { margin-top: 0; }
-/* Fixtures INSIDE a controller: indented under it (no guide line). */
-.out-fix.nested { margin-left: 16px; }
-.out-port { margin-left: 16px; min-height: 0; }    /* per-output sub-line (multi-output devices) */
-.out-node-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.out-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.out-name { flex: 1 1 auto; min-width: 0; color: var(--text); font: var(--fs-ctrl) var(--mono);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.out-fix .out-name { color: var(--muted); font-size: var(--fs-ctrl); }   /* same size as the device name */
-.out-port .out-name { color: var(--muted); font-size: var(--fs-body); }
-.out-name-row .out-name:hover { color: var(--accent); }
-.out-binding { display: flex; align-items: center; gap: 5px; color: var(--faint); font: var(--fs-micro) var(--mono); }
-.out-binding:hover { color: var(--muted); }
-.out-tri { flex: 0 0 auto; width: 9px; color: var(--faint); font-size: var(--fs-micro); }
-.out-badge { flex: 0 0 auto; color: var(--muted); font: var(--fs-micro) var(--mono); font-variant-numeric: tabular-nums; }
-.out-badge.out-over { color: var(--warn); }
-
-.out-stagger { padding: 2px 0 6px; }
-.out-stagger-foot { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
 
 /* Per-device patch ruler — proportional fixture segments over the address space. */
 .patch-bar { display: flex; gap: 1px; height: 18px; margin: 2px 0 6px; border-radius: 0; overflow: hidden; background: var(--line); }
