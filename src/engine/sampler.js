@@ -157,9 +157,10 @@ void main(){
   vec4 base = vec4(0.0, 0.0, 0.0, 1.0);
   if (!(c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0)) base = texture(uCanvas, c);
   vec3 rgb = base.rgb;
+  vec3 ledPos = texelFetch(uPos, t, 0).xyz;   // per-LED world xyz — fetch once, not per clip
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
-    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz, c);
+    vec4 f = fieldColor(i, ledPos, c);
     // Phase-1 colour effects: fold the clip's chain over the STRAIGHT colour, re-premult.
     if (f.a > 0.0) { vec3 s = colorFx(f.rgb / f.a, i); f.rgb = s * f.a; }
     float op = uVolMeta[i].z;
