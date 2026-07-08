@@ -484,6 +484,7 @@ const layerPanel = createLayerPanel({
   onCompositionSelect: () => setInspectorTab('composition'), // switch to the Composition tab
   getISFExamples: () => isfExamples,
   onAddISF: (file) => projectIO.importISFExample(file),   // deferred — projectIO is constructed later at boot
+  showSources: () => setPatchTab('sources'),   // clicking an empty clip slot reveals the sidebar Sources browser
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),

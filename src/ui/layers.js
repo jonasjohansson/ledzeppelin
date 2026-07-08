@@ -493,7 +493,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, clipTrigsFor, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, clipTrigsFor, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF, showSources }) {
   if (transport?.now) animClock = transport.now;
   animBpm = () => getShow().composition?.bpm ?? 120;
   dashLinks = () => getShow().composition?.dashboard?.links || [];
@@ -777,7 +777,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     box.append(Section('Effects', 'comp-fx', (b) => {
       for (let fx = 0; fx < fxs.length; fx++) b.append(compEffectBlock(fx, fxs));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addCompositionEffect(show(), name)));
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addCompositionEffect(show(), name)));
       b.append(addBtn);
     }, undefined, fxs.length === 0));
     return box;
@@ -880,13 +880,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       const slot = el('div', { className: 'clip-cell clip-empty', title: 'add a source' }, [
         el('div', { className: 'clip-empty-plus', textContent: '+' }),
       ]);
-      slot.addEventListener('click', () => openPicker(slot, 'source', (name) => {
-        const next = index >= 0 ? addClipAt(show(), id, index, name) : addClip(show(), id, name);
-        const lay = next.composition.layers.find((x) => x.id === id);
-        selectedClipId = (index >= 0 ? lay?.clips[index] : lay?.clips[lay.clips.length - 1])?.id;
-        onClipSelect?.();
-        commit(next);
-      }, { onVideo: () => pickVideo(id) }));
+      // No popover — the sidebar Sources tab IS the source browser. Clicking an empty
+      // slot reveals it; drag a source onto this slot (below) to place it precisely.
+      slot.addEventListener('click', () => showSources?.());
       deckZone(slot, (pl) => pl.kind === 'clip', (pl) => {
         selectedClipId = pl.clipId; selectedLayerId = id;
         commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, index));
@@ -1065,7 +1061,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     box.append(Section('Effects', 'layer-effects', (b) => {
       for (let fx = 0; fx < layerFx.length; fx++) b.append(layerEffectBlock(id, fx, layerFx));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addLayerEffect(show(), id, name)));
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addLayerEffect(show(), id, name)));
       b.append(addBtn);
     }, undefined, layerFx.length === 0));
     // (Delete is the ✕ in the header now — the bottom "Delete Layer" link was removed.)
@@ -1471,7 +1467,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     box.append(Section('Effects', 'effects', (b) => {
       for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addClipEffect(show(), id, clip.id, name)),
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addClipEffect(show(), id, clip.id, name)),
         { colorOnly: !!getEntry(clip.generator)?.volumetric });
       b.append(addBtn);
     }, undefined, clipFx.length === 0));
@@ -1556,25 +1552,19 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   }
   // Source picker grouping (built-in generators) — SOURCE_CATEGORIES is imported
   // from ./source-catalog.js; uncategorised generators fall into "More".
-  function openPicker(anchor, kind, onPick, opts = {}) {
+  // The EFFECT picker popover (sources use the sidebar Sources tab, not a popover).
+  function openPicker(anchor, onPick, opts = {}) {
     closePicker();
-    const pop = el('div', { className: 'pick-pop' + (kind === 'source' ? ' pick-grouped' : '') });
+    const pop = el('div', { className: 'pick-pop' });
     const item = (name) => {
-      const thumb = kind === 'source' ? thumbnails[name] : null;
       const row = el('div', { className: 'pick-item' });
-      if (thumb) row.append(el('img', { className: 'lib-thumb', src: thumb, alt: '', draggable: false }));
       row.append(el('span', { className: 'lib-label', textContent: labelOf(name) }));
       row.onclick = (e) => { e.stopPropagation(); closePicker(); onPick(name); };
       return row;
     };
     const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
-    if (kind === 'source') {
-      pop.classList.add('src-browser-pop');
-      pop.append(sourceBrowser({ onPick: (n) => { closePicker(); onPick(n); }, onVideo: opts.onVideo }));
-    } else {
-      const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
-      pop.append(grid(names));
-    }
+    const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
+    pop.append(grid(names));
     placePopover(pop, anchor);          // anchor + viewport-clamp (kit)
     pickPop = pop;
     pickDismiss = dismissOnOutside(pop, closePicker);   // click-outside + Esc (kit)
