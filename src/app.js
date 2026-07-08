@@ -78,7 +78,7 @@ function defaultShow() {
   show.fixtures = [{
     id: 'f1', typeId: 'generic',
     input: { transform: tf, points: pointsFromTransform(tf, cv) },
-    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 96 },
+    output: { deviceId: 'c1', port: 0, pixelOffset: 0, pixelCount: 96 },
   }];
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
@@ -704,7 +704,7 @@ function selectFixture(fxId, ev, opts = {}) {
   if (fxId != null && !multiMod) {
     outputTab = 'fixtures';
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
-    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
+    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 0}`); }
     panel.selectFixture?.(fxId);
   }
   renderOutput(); redrawOverlay();
@@ -951,7 +951,7 @@ function positionEditor(sel) {
   // every member together.
   const ch = chainOf(show, sel.id);
   const isHead = !ch || ch.index === 0;
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const moveRun = (patch) => {
     const key = runKeyOf(sel);
     const next = structuredClone(show);
@@ -977,9 +977,10 @@ function positionEditor(sel) {
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const nOut = Math.max(1, Math.round(dev?.outputs ?? 4));
   const portSel = oel('select');
-  for (let p = 1; p <= nOut; p++) {
-    const o = oel('option', { value: String(p), textContent: `Output ${p}` });
-    if (p === (sel.output?.port ?? 1)) o.selected = true;
+  // Ports are 0-based WLED bus indices (value); the label is 1-based for humans.
+  for (let p = 0; p < nOut; p++) {
+    const o = oel('option', { value: String(p), textContent: `Output ${p + 1}` });
+    if (p === (sel.output?.port ?? 0)) o.selected = true;
     portSel.append(o);
   }
   portSel.disabled = !isHead;
@@ -1397,7 +1398,7 @@ function multiPositionEditor(ids) {
     ...show.devices.map((d) => ({ value: d.id, label: `${d.name || d.id} (${d.id})` }))];
   const devIds = [...new Set(list.map((f) => f.output?.deviceId).filter(Boolean))];
   const nOut = Math.max(1, 4, ...devIds.map((id) => Math.round(show.devices.find((d) => d.id === id)?.outputs ?? 4)));
-  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i + 1), label: `Output ${i + 1}` }));
+  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i), label: `Output ${i + 1}` }));   // value = 0-based bus, label 1-based
 
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
@@ -1587,11 +1588,11 @@ function chainStatusRow(sel) {
   const ch = chainOf(show, sel.id);
   const idxOf = (id) => show.fixtures.findIndex((x) => x.id === id);
   const nameOf = (id) => { const i = idxOf(id); return i >= 0 ? fixtureLabel(show.fixtures[i], i) : id; };
-  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${f?.output?.port ?? 1})`; };
+  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${(f?.output?.port ?? 0) + 1})`; };   // o = 1-based output label (port is 0-based)
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const devName = dev?.name || dev?.id || 'controller';
   // Pixel load + capacity on this fixture's output (0 max = unlimited).
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const key = runKeyOf(sel);
   const runPx = show.fixtures.filter((f) => runKeyOf(f) === key).reduce((m, f) => m + (f.pixelCount || 0), 0);
   const cap = Number(dev?.maxPerOutput) || 0;
@@ -1616,7 +1617,7 @@ function chainStatusRow(sel) {
   // End of chain with nothing to offer — the output is full, or there are simply no
   // other fixtures to wire after this one → nothing to pick, so disable the picker.
   toSel.disabled = !next && (full || candidates.length === 0);
-  if (full) toSel.title = `${devName} Output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  if (full) toSel.title = `${devName} Output ${(sel.output?.port ?? 0) + 1} is full (${runPx}/${cap}px)`;
   else if (!next && candidates.length === 0) toSel.title = 'no other fixtures to wire after this one';
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
@@ -2279,7 +2280,7 @@ function placeFixtureCopies(srcList) {
   const load = new Map();
   for (const f of next.fixtures) {
     const d = f.output?.deviceId; if (!d) continue;
-    const k = loadKey(d, f.output?.port ?? 1);
+    const k = loadKey(d, f.output?.port ?? 0);
     load.set(k, (load.get(k) || 0) + (f.pixelCount || 0));
   }
   const pickPort = (copy) => {
@@ -2288,12 +2289,12 @@ function placeFixtureCopies(srcList) {
     const budget = Number(device?.maxPerOutput) || 0;
     const nOut = Math.max(1, Math.round(Number(device?.outputs) || 1));
     const px = copy.pixelCount || 0;
-    const start = copy.output?.port ?? 1;
+    const start = copy.output?.port ?? 0;
     let port = start;
     if (budget > 0) {
       port = null;
       for (let i = 0; i < nOut; i++) {
-        const p = ((start - 1 + i) % nOut) + 1;   // source output first, then roll forward (wrapping)
+        const p = (start + i) % nOut;   // 0-based: source output first, then roll forward (wrapping)
         if ((load.get(loadKey(devId, p)) || 0) + px <= budget) { port = p; break; }
       }
       port = port ?? start;   // every output full → overflow the source output

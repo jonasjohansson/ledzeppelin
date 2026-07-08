@@ -161,7 +161,7 @@ export function createOutputList(hooks) {
       const did = f.output?.deviceId || '';
       let dg = devMap.get(did);
       if (!dg) { dg = { deviceId: did, groups: [], gmap: new Map() }; devMap.set(did, dg); devOrder.push(dg); }
-      const port = f.output?.port ?? 1, key = `${did}:${port}`;
+      const port = f.output?.port ?? 0, key = `${did}:${port}`;
       let g = dg.gmap.get(key);
       if (!g) { g = { key, deviceId: did, port, items: [] }; dg.gmap.set(key, g); dg.groups.push(g); }
       g.items.push({ f, i });
@@ -216,7 +216,7 @@ export function createOutputList(hooks) {
         (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
       const pxBadge = head.querySelector('.fx-badge');
       if (pxBadge && loads.length) {
-        pxBadge.title = loads.map((l) => `out ${l.port}: ${l.px}${gcap ? `/${gcap}` : ''}px${overPorts.has(l.port) ? ' ⚠' : ''}`).join('  ·  ')
+        pxBadge.title = loads.map((l) => `out ${l.port + 1}: ${l.px}${gcap ? `/${gcap}` : ''}px${overPorts.has(l.port) ? ' ⚠' : ''}`).join('  ·  ')
           + (devOver ? `\n⚠ over the ~40 fps budget on that line — still works, just fewer fps` : '');
       }
       // Online/offline/checking dot (same machinery as the old Devices list): the panel
@@ -250,10 +250,10 @@ export function createOutputList(hooks) {
       const multiOut = dg.groups.length > 1;
       for (const g of dg.groups) {
         const load = loads.find((l) => l.port === g.port);
-        const overTitle = overPorts.has(g.port) ? `output ${g.port} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
+        const overTitle = overPorts.has(g.port) ? `output ${g.port + 1} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
         // Row accent = the fixture's OWN identity colour (controller hue · this
         // output's shade), matching the canvas tint — not the flat device colour.
-        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, cmap.runColor(f.output?.deviceId || '', f.output?.port ?? 1), overTitle));
+        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port + 1}` : null, cmap.runColor(f.output?.deviceId || '', f.output?.port ?? 0), overTitle));
       }
       outputListEl.append(sec);
     }

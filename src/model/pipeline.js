@@ -95,7 +95,7 @@ export function buildPipelineInputs(show) {
   for (const d of show.devices) {
     const mine = show.fixtures.filter((f) => f.output?.deviceId === d.id);
     const fs = mine.filter((f) => !isDmxFixture(f))
-      .sort((a, b) => ((a.output?.port ?? 1) - (b.output?.port ?? 1)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
+      .sort((a, b) => ((a.output?.port ?? 0) - (b.output?.port ?? 0)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
     const dmxFs = mine.filter(isDmxFixture);
     if (!fs.length && !dmxFs.length) continue;
 

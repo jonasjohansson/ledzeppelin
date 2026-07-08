@@ -11,15 +11,15 @@
 // `show.chainSettings`, keyed by `${deviceId}:${port}`.
 
 const settingsOf = (show) => (show && typeof show.chainSettings === 'object' && show.chainSettings) || {};
-export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 1}`;
-export const runLabel = (deviceId, port) => `${deviceId || 'unassigned'} · port ${port}`;
+export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 0}`;
+export const runLabel = (deviceId, port) => `${deviceId || 'unassigned'} · port ${Number(port) + 1}`;   // 1-based label; port is a 0-based WLED bus index
 
 // All runs: [{ key, deviceId, port, members:[fixtureId… in wiring order], stagger, axis }].
 export function runsOf(show) {
   const map = new Map();
   for (const f of show?.fixtures || []) {
     const key = runKey(f);
-    if (!map.has(key)) map.set(key, { key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members: [] });
+    if (!map.has(key)) map.set(key, { key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 0, members: [] });
     map.get(key).members.push(f.id);
   }
   const cs = settingsOf(show);
@@ -56,7 +56,7 @@ export function controllerColorMap(show) {
   const hue = new Map(devIds.map((id, i) => [id, (i * 137.508) % 360]));
   const ports = new Map();   // deviceId -> Set of distinct ports in use
   for (const f of fixtures) {
-    const d = f.output?.deviceId || '', p = f.output?.port ?? 1;
+    const d = f.output?.deviceId || '', p = f.output?.port ?? 0;
     if (!ports.has(d)) ports.set(d, new Set());
     ports.get(d).add(p);
   }
@@ -90,9 +90,9 @@ export function chainOf(show, fixtureId) {
   if (members.length < 2) return null;
   const cs = settingsOf(show)[key] || {};
   return {
-    key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members,
+    key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 0, members,
     index: members.indexOf(fixtureId), stagger: Number(cs.stagger) || 0, axis: cs.axis === 'y' ? 'y' : 'x',
-    name: runLabel(f.output?.deviceId, f.output?.port ?? 1),
+    name: runLabel(f.output?.deviceId, f.output?.port ?? 0),
   };
 }
 
@@ -140,7 +140,7 @@ export function wireAfter(show, fixtureId, afterFxId) {
   const fi = fixtures.findIndex((f) => f.id === fixtureId);
   if (ai < 0 || fi < 0) return show;
   const after = fixtures[ai];
-  const moved = { ...fixtures[fi], output: { ...fixtures[fi].output, deviceId: after.output?.deviceId, port: after.output?.port ?? 1 } };
+  const moved = { ...fixtures[fi], output: { ...fixtures[fi].output, deviceId: after.output?.deviceId, port: after.output?.port ?? 0 } };
   fixtures.splice(fi, 1);
   fixtures.splice(fixtures.findIndex((f) => f.id === afterFxId) + 1, 0, moved);   // re-find after the splice
   return { ...show, fixtures };
@@ -162,8 +162,8 @@ export function wireFirst(show, fixtureId) {
 
 // The next free port number on a device (for "chain these onto their own output").
 export function freePort(show, deviceId) {
-  const used = new Set((show?.fixtures || []).filter((f) => (f.output?.deviceId || '') === deviceId).map((f) => f.output?.port ?? 1));
-  let p = 1; while (used.has(p)) p++; return p;
+  const used = new Set((show?.fixtures || []).filter((f) => (f.output?.deviceId || '') === deviceId).map((f) => f.output?.port ?? 0));
+  let p = 0; while (used.has(p)) p++; return p;   // 0-based (WLED bus index) — matches scan/import
 }
 
 // Compat: drop the legacy stored `show.chains` list (chains are derived now) +

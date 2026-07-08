@@ -1,4 +1,4 @@
-import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures } from '../model/show.js';
+import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures, deviceOutputConfig } from '../model/show.js';
 import { fixtureLabel, fixtureRange, pointsFromTransform } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
@@ -241,13 +241,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
   function saveToDeviceRow(d, online = true, offTitle = '') {
     const show = getShow();
     const nOut = (show.deviceTypes || []).find((m) => m.id === d.typeId)?.outputs ?? d.outputs ?? 1;
-    const outs = [];
-    for (let p = 1; p <= nOut; p++) {
-      const len = (show.fixtures || [])
-        .filter((f) => (f.output?.deviceId || '') === d.id && (f.output?.port ?? 1) === p)
-        .reduce((m, f) => m + (f.pixelCount || 0), 0);
-      outs.push({ len, order: d.colorOrder || 'GRB' });
-    }
+    // Dense per-output array indexed by the fixture's 0-based port (= WLED bus
+    // index): pushConfig writes outs[i] → bus i, so a port-0 fixture is counted and
+    // every port maps to its own bus (no off-by-one). See deviceOutputConfig.
+    const outs = deviceOutputConfig(show.fixtures, d.id, nOut, d.colorOrder || 'GRB');
     const note = pushStatus.get(d.id);
     const btn = el('button', {
       className: 'ctrl-btn', textContent: 'save to device', disabled: !online,
