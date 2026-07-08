@@ -2590,6 +2590,10 @@ function setPatchTab(which) {
   }
   const tabs = document.getElementById('patch-tabs');
   if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.ptab === which);
+  // The add-fixture / add-device / library actions belong to the Output (patch) view —
+  // hide them on the Sources tab, where they'd be meaningless.
+  const acts = tabs?.querySelector('.island-acts');
+  if (acts) acts.hidden = which !== 'fixtures';
   try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
 }
 document.getElementById('patch-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setPatchTab(b.dataset.ptab); });

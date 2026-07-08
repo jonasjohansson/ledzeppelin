@@ -1,34 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SOURCE_CATEGORIES, CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources } from '../src/ui/source-catalog.js';
+import { CATEGORY_COLORS, CATEGORY_TABS, sourceCategory, filterSources, is3D } from '../src/ui/source-catalog.js';
 import { generatorNames, descOf } from '../src/engine/shaders/manifest.js';
 
-test('sourceCategory maps a source to its family, else More', () => {
-  assert.equal(sourceCategory('solid'), 'Basic');
-  assert.equal(sourceCategory('flowfield'), 'Volumetric');
-  assert.equal(sourceCategory('nope-xyz'), 'More');
+test('sourceCategory: volumetric → 3D, else 2D', () => {
+  assert.equal(sourceCategory('solid'), '2D');
+  assert.equal(sourceCategory('plasma'), '2D');
+  assert.equal(sourceCategory('flowfield'), '3D');
+  assert.equal(sourceCategory('noise3d'), '3D');
 });
-test('CATEGORY_TABS = All + families + More', () => {
-  assert.deepEqual(CATEGORY_TABS, ['All', 'Basic', 'Pattern', 'Motion', 'Liquid', 'Organic', 'Volumetric', 'More']);
-  for (const t of CATEGORY_TABS) assert.ok(CATEGORY_COLORS[t] || t === 'All', `color for ${t}`);
+test('CATEGORY_TABS = 2D / 3D / Shaders, each coloured', () => {
+  assert.deepEqual(CATEGORY_TABS, ['2D', '3D', 'Shaders']);
+  for (const t of CATEGORY_TABS) assert.ok(CATEGORY_COLORS[t], `color for ${t}`);
 });
-test('filterSources: a tab returns its members (in order); All returns everything', () => {
+test('filterSources: 3D = volumetric, 2D = the rest, Shaders = none (ISF added by the browser)', () => {
   const all = generatorNames();
-  assert.deepEqual(filterSources(all, { tab: 'Basic' }), ['solid', 'gradient', 'line'].filter((n) => all.includes(n)));
-  assert.ok(filterSources(all, { tab: 'Volumetric' }).includes('flowfield'));
-  assert.equal(filterSources(all, { tab: 'All' }).length, all.length);
-  assert.equal(new Set(filterSources(all, { tab: 'All' })).size, all.length);
+  const threeD = filterSources(all, { tab: '3D' });
+  const twoD = filterSources(all, { tab: '2D' });
+  assert.ok(threeD.includes('flowfield') && threeD.every(is3D));
+  assert.ok(twoD.includes('solid') && twoD.includes('plasma') && !twoD.some(is3D));
+  assert.equal(threeD.length + twoD.length, all.length);   // partition, no overlap/loss
+  assert.deepEqual(filterSources(all, { tab: 'Shaders' }), []);
 });
 test('filterSources: a query filters across ALL sources by label/name, overriding tab', () => {
   const all = generatorNames();
-  const hits = filterSources(all, { tab: 'Basic', query: 'noise' });
+  const hits = filterSources(all, { tab: '2D', query: 'noise' });
   assert.ok(hits.includes('noise'));
-  assert.ok(hits.includes('noise3d'));
+  assert.ok(hits.includes('noise3d'));   // across tabs despite tab=2D
   assert.ok(!hits.includes('solid'));
-});
-test('filterSources: More = uncategorised generators only', () => {
-  const cat = new Set(SOURCE_CATEGORIES.flatMap(([, ns]) => ns));
-  for (const n of filterSources(generatorNames(), { tab: 'More' })) assert.ok(!cat.has(n), n);
 });
 test('descOf returns a short description for a source, else empty', () => {
   assert.ok(descOf('solid').length > 0);

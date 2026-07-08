@@ -1,38 +1,26 @@
-// Source families for the browser/picker tabs + the pure filtering logic. No DOM —
-// unit-tested. Category source-of-truth (moved out of layers.js so it's shared + testable).
-import { labelOf } from '../engine/shaders/manifest.js';
+// Source tabs for the browser/picker + the pure filtering logic. No DOM — unit-tested.
+// Tabs: 2D (canvas generators) · 3D (volumetric per-LED fields) · Shaders (imported ISF).
+import { labelOf, getEntry } from '../engine/shaders/manifest.js';
 
-export const SOURCE_CATEGORIES = [
-  ['Basic', ['solid', 'gradient', 'line']],
-  ['Pattern', ['grid', 'checkers', 'spectrum']],
-  ['Motion', ['sine', 'pulse', 'radial', 'plasma', 'tunnel']],
-  ['Liquid', ['domainwarp', 'metaballs']],
-  ['Organic', ['noise']],
-  ['Volumetric', ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield']],
-];
-export const CATEGORY_COLORS = {
-  Basic: '#8a94a6', Pattern: '#5cb8e8', Motion: '#e8a35c', Liquid: '#5ce8c8',
-  Organic: '#6ee07d', Volumetric: '#b98cff', More: '#737a84',
-};
-export const CATEGORY_TABS = ['All', ...SOURCE_CATEGORIES.map(([l]) => l), 'More'];
+// A generator is 3D if its registry entry is volumetric (a per-LED world-space field);
+// everything else is a 2D canvas generator. ISF imports are their own 'Shaders' tab and
+// are NOT generators (the browser injects them), so they don't appear here.
+export const is3D = (name) => !!getEntry(name)?.volumetric;
 
-export function sourceCategory(name) {
-  for (const [label, names] of SOURCE_CATEGORIES) if (names.includes(name)) return label;
-  return 'More';
-}
-export function filterSources(allNames, { tab = 'All', query = '' } = {}) {
+export const CATEGORY_TABS = ['2D', '3D', 'Shaders'];
+// Muted per-tab hues — a small card dot + a 2px active-tab underline, never a filled tab.
+export const CATEGORY_COLORS = { '2D': '#5cb8e8', '3D': '#b98cff', Shaders: '#e8a35c' };
+
+// The tab a generator belongs to ('2D' or '3D'; ISF/'Shaders' is handled by the browser).
+export function sourceCategory(name) { return is3D(name) ? '3D' : '2D'; }
+
+// Ordered generator names to SHOW for a tab + query. A non-empty query filters across ALL
+// generators by label/name (overriding the tab). '2D' = non-volumetric; '3D' = volumetric;
+// 'Shaders' = none here (the browser adds the ISF examples for that tab).
+export function filterSources(allNames, { tab = '2D', query = '' } = {}) {
   const q = (query || '').trim().toLowerCase();
   if (q) return allNames.filter((n) => labelOf(n).toLowerCase().includes(q) || n.toLowerCase().includes(q));
-  if (tab === 'All') {
-    const ordered = [];
-    for (const [, names] of SOURCE_CATEGORIES) for (const n of names) if (allNames.includes(n) && !ordered.includes(n)) ordered.push(n);
-    for (const n of allNames) if (!ordered.includes(n)) ordered.push(n);
-    return ordered;
-  }
-  if (tab === 'More') {
-    const cat = new Set(SOURCE_CATEGORIES.flatMap(([, ns]) => ns));
-    return allNames.filter((n) => !cat.has(n));
-  }
-  const entry = SOURCE_CATEGORIES.find(([label]) => label === tab);
-  return entry ? entry[1].filter((n) => allNames.includes(n)) : [];
+  if (tab === '3D') return allNames.filter(is3D);
+  if (tab === 'Shaders') return [];
+  return allNames.filter((n) => !is3D(n));   // '2D'
 }
