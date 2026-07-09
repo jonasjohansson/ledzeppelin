@@ -312,6 +312,21 @@ test('packColorFx: drops non-color effects and caps at 4/clip', () => {
   assert.deepEqual([...fxId.slice(0, 4)], [FX_IDS.invert, FX_IDS.rgb, FX_IDS.threshold, FX_IDS.hue]);
 });
 
+test('packColorFx: appends the LAYER effect chain after the clip chain (layer colour fx reach 3D clips)', () => {
+  const act = [{
+    generator: 'flowfield',
+    effects: ['invert'], params: { 'invert.amount': 1 },
+    layerEffects: ['displace', 'hue'],                 // displace = non-colour → filtered; hue → appended
+    layerParams: { 'hue.shift': 0.5, 'hue.speed': 0 },  // resolved from the LAYER namespace
+  }];
+  const { fxId, fxParam } = packColorFx(act);
+  assert.equal(fxId[0], FX_IDS.invert);   // clip effect first
+  assert.equal(fxId[1], FX_IDS.hue);      // layer's colour effect appended (displace dropped)
+  assert.equal(fxId[2], 0);
+  assert.equal(fxParam[0], 1);            // invert amount (clip params)
+  assert.equal(fxParam[4], 0.5);          // hue shift resolved from LAYER params (slot 1 → base 4)
+});
+
 test('evalColorFx: invert flips, threshold binarizes, rgb scales, strobe gates', () => {
   const near3 = (a, b) => a.forEach((v, i) => assert.ok(Math.abs(v - b[i]) < 1e-6, `${a}!=${b}`));
   near3(evalColorFx([0.2, 0.4, 0.6], FX_IDS.invert, [1, 0, 0, 0], 0), [0.8, 0.6, 0.4]);
