@@ -25,10 +25,10 @@ const clip = (s, lid, cid) => layer(s, lid).clips.find((c) => c.id === cid);
 // --- address parsing: the five forms, 1-based deck indices --------------------
 
 test('clip SOURCE param: 0..1 maps onto the manifest range of THAT clip generator', () => {
-  // line.speed: min 0, max 5 → 0.5 → 2.5. /layer/1 = TOP row = l1; clip 1 = c1.
+  // line.speed: min -5, max 5 (speed is symmetric now) → 0.5 → 0 (the middle). l1/c1.
   const r = routeOsc(show2(), null, '/layer/1/clip/1/speed', 0.5);
   assert.ok(r && r.show);
-  assert.equal(clip(r.show, 'l1', 'c1').params['line.speed'], 2.5);
+  assert.equal(clip(r.show, 'l1', 'c1').params['line.speed'], 0);
 });
 
 test('layer index 2 reaches the BOTTOM deck row (array start)', () => {
@@ -81,7 +81,7 @@ test('incoming values clamp to 0..1 before mapping', () => {
   let r = routeOsc(show2(), null, '/layer/1/clip/1/speed', 7);
   assert.equal(clip(r.show, 'l1', 'c1').params['line.speed'], 5);    // max
   r = routeOsc(show2(), null, '/layer/1/clip/1/speed', -3);
-  assert.equal(clip(r.show, 'l1', 'c1').params['line.speed'], 0);    // min
+  assert.equal(clip(r.show, 'l1', 'c1').params['line.speed'], -5);    // min (speed symmetric)
 });
 
 test('bool params: ≥0.5 = true, <0.5 = false', () => {

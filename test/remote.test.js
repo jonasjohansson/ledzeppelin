@@ -45,13 +45,13 @@ test('buildRemoteManifest emits master layers (opacity + bypass + clip grid)', (
 
 test('buildRemoteManifest resolves ticked custom params with label + range + value', () => {
   let s = show2();
-  s = toggleRemoteControl(s, '/layer/1/clip/1/speed');   // line.speed: 0..5, default 1
+  s = toggleRemoteControl(s, '/layer/1/clip/1/speed');   // line.speed: -5..5 (symmetric), default 1
   const m = buildRemoteManifest(s);
   assert.equal(m.controls.length, 1);
   const c = m.controls[0];
   assert.equal(c.address, '/layer/1/clip/1/speed');
   assert.equal(c.kind, 'param');
-  assert.equal(c.min, 0); assert.equal(c.max, 5); assert.equal(c.value, 1);
+  assert.equal(c.min, -5); assert.equal(c.max, 5); assert.equal(c.value, 1);
   assert.match(c.label, /Speed/);
 });
 
