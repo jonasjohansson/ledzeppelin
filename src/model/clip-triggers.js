@@ -20,14 +20,23 @@ export function createClipTriggers() {
     fire(clipId, sec) { if (clipId != null) push(clipId, sec); },
 
     // clips: active triggerable clips (each {id, audioTrigger?}). bandOf(name)→0..1.
-    // nowMs: monotonic ms (detector clock). nowSec: elapsed seconds (bus stamp).
-    poll(clips, bandOf, nowMs, nowSec) {
+    // nowMs: monotonic ms (detector clock). nowSec: elapsed seconds (bus stamp). bpm: tempo
+    // for mode:'bpm' clips (fire on the beat grid).
+    poll(clips, bandOf, nowMs, nowSec, bpm = 120) {
       const fired = [];
       for (const c of clips || []) {
         const at = c && c.audioTrigger;
         if (!at || !at.enabled) continue;
-        const sig = sigOf(at);
         let d = detectors.get(c.id);
+        // BPM: fire once every `division` beats, on the beat grid (from elapsed time).
+        if (at.mode === 'bpm') {
+          const div = Math.max(0.0625, at.division || 1);
+          const beatIdx = Math.floor(nowSec * (Math.max(1, bpm) / 60) / div);
+          if (!d || d.mode !== 'bpm') { detectors.set(c.id, { mode: 'bpm', lastBeat: beatIdx }); continue; }  // arm silently (no fire on switch)
+          if (beatIdx !== d.lastBeat) { d.lastBeat = beatIdx; push(c.id, nowSec); fired.push(c.id); }
+          continue;
+        }
+        const sig = sigOf(at);
         if (!d || d.sig !== sig) { d = { det: (at.mode === 'level') ? createLevelGateDetector(at) : createOnsetDetector(at), sig }; detectors.set(c.id, d); }
         if (at.mode === 'level' && d.det.setThreshold) d.det.setThreshold(at.threshold);   // live-tune, no rebuild
         if (d.det.push(bandOf(at.band || 'bass'), nowMs)) { push(c.id, nowSec); fired.push(c.id); }
