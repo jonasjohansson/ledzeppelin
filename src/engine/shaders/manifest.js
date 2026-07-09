@@ -2132,6 +2132,17 @@ export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
 
 // Look up a generator or effect entry by name.
+// Speed is DIRECTIONAL: allow it to go negative so motion runs backwards. Symmetrise
+// every 'speed' param's range (min = -max) so 0 sits in the middle of the slider and
+// dragging left reverses the ∫speed·dt phase clock (and any uT·speed field — the phase
+// integrator has no ≥0 clamp). Defaults stay positive, so sources still move forward
+// out of the box; you drag past 0 to reverse.
+for (const _e of Object.values(REGISTRY)) {
+  for (const _p of (_e.params || [])) {
+    if (_p && _p.key === 'speed' && _p.type === 'float' && (_p.min ?? 0) >= 0) _p.min = -Math.abs(_p.max ?? 1);
+  }
+}
+
 export function getEntry(name) { return REGISTRY[name] || null; }
 
 // One-line source/effect description for the browser's info line ('' if none).
