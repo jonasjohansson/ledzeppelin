@@ -51,6 +51,28 @@ float vnoise3(vec3 p){
 }
 float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
   for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
+// caustics (id 7)
+float caust_ridge(float n){ return 1.0 - abs(2.0 * n - 1.0); }
+float caust_field(vec3 q, float tm, float warp){
+  vec3 wv = vec3(
+    vnoise3(q * 0.5 + vec3(0.0, 1.3, tm * 0.30)),
+    vnoise3(q * 0.5 + vec3(4.1, 1.7, tm * 0.27)),
+    vnoise3(q * 0.5 + vec3(9.2, 5.3, tm * 0.33))) - 0.5;
+  q += wv * warp;
+  float a = caust_ridge(vnoise3(q        + vec3(tm,       tm * 0.4, 0.0)));
+  float b = caust_ridge(vnoise3(q * 1.93 - vec3(tm * 0.7, 0.0,      tm * 0.5)));
+  return max(a, b) * 0.6 + a * b * 1.4;
+}
+// aurora (id 8)
+float aur_wave(float x, float t){ return sin(x + t) + 0.5 * sin(x * 2.13 - t * 1.31 + 1.7) + 0.25 * sin(x * 4.31 + t * 0.73 + 4.2); }
+float aur_layer(float run, float warp, float freq, float ph){ float c = 0.5 + 0.5 * cos(run * freq * 6.2831853 + warp + ph); return c * c * c; }
+// shockburst (id 10)
+float shock_burst(float d, float front, float th, float so, int rc, float sp, float fade){
+  float v = 0.0; float env = exp(-front * fade);
+  for (int k = 0; k < 4; k++){ if (k >= rc) break; float ringR = front - float(k) * sp; if (ringR < 0.0) continue;
+    float soK = clamp(so + float(k) * 0.25, 0.0, 1.0); v = max(v, pow(0.55, float(k)) * env * vband(d - ringR, th, soK)); }
+  return v;
+}
 
 // From-Canvas tint: when uVolMeta[i].w is set, colour the field's intensity with
 // the composited 2D canvas at this LED's UV instead of the flat param colour.
@@ -101,6 +123,52 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv){
     float hw = 0.02 + uVolB[i].y * 0.48;       // thickness
     float tt = clamp((abs(nrm - 0.5) - hw * 0.5) / max(hw - hw * 0.5, 1e-5), 0.0, 1.0);
     float v = 1.0 - tt * tt * (3.0 - 2.0 * tt);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }
+  if (id == 7) {        // caustics
+    float scale = uVolA[i].x, speed = uVolA[i].y, gain = uVolA[i].z, warp = uVolA[i].w;
+    float bright = uVolB[i].x, axis = uVolB[i].y, drift = uVolB[i].z;
+    vec3 ax = axis < 0.5 ? vec3(1.0, 0.0, 0.0) : (axis < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+    vec3 q = (p - ax * (uT * drift)) * scale;
+    float raw = caust_field(q, uT * speed, warp);
+    float v = clamp(pow(clamp(raw, 0.0, 1.0), gain) * bright, 0.0, 1.0);
+    vec3 col = mix(uVolColB[i], volTint(i, cuv, uVolColA[i]), v);
+    return vec4(col * v, v);
+  }
+  if (id == 8) {           // aurora
+    float run  = vaxis(p, uVolA[i].x);
+    float hgt  = (uVolA[i].x > 0.5 && uVolA[i].x < 1.5) ? p.x : p.y;
+    float t    = uT * uVolA[i].y; float sc = uVolA[i].z; float soft = uVolA[i].w;
+    float height = uVolB[i].x; float spread = uVolB[i].y; float seed = uVolB[i].z * 17.0;
+    float warp = spread * (aur_wave(run * 3.0 + seed, t) + 1.5 * (vfbm3(vec3(run * 2.0 + seed, t * 0.3, seed)) - 0.5));
+    float l0 = aur_layer(run, warp, sc, seed);
+    float l1 = aur_layer(run, warp * 1.3, sc * 1.7, t * 0.6 + seed * 2.0);
+    float l2 = aur_layer(run, warp * 0.7, sc * 0.53, -t * 0.4 + seed * 3.0);
+    float ribs = 1.0 - (1.0 - l0) * (1.0 - l1 * 0.7) * (1.0 - l2 * 0.5);
+    float hg  = hgt / max(1e-3, height);
+    float env = (1.0 - smoothstep(1.0 - max(soft, 1e-3), 1.0, hg)) * smoothstep(0.0, 0.12, hg);
+    float a = ribs * env * 0.85;
+    vec3 col = volTint(i, cuv, mix(uVolColB[i], uVolColA[i], clamp(hg, 0.0, 1.0)));
+    return vec4(col * a, a);
+  }
+  if (id == 9) {           // pacifica
+    float sc = uVolA[i].x, sp = uVolA[i].y, dep = uVolA[i].w, cr = uVolB[i].x;
+    vec3 axv = uVolA[i].z < 0.5 ? vec3(1.0,0.0,0.0) : (uVolA[i].z < 1.5 ? vec3(0.0,1.0,0.0) : vec3(0.0,0.0,1.0));
+    vec3 b = p - axv * (sp * uT);
+    float h = 0.50 * vfbm3(b * sc + vec3(0.0, uT * 0.05, 0.0));
+    h += 0.28 * vfbm3(b * (sc * 2.0) + vec3(17.0 + uT * 0.09, 17.0, 17.0));
+    h += 0.22 * vfbm3(b * (sc * 3.7) + vec3(43.0, 43.0, 43.0 + uT * 0.07));
+    h = clamp(h, 0.0, 1.0);
+    vec3 water = mix(uVolColA[i], uVolColB[i], smoothstep(0.35, 0.75, h));
+    float cap = smoothstep(0.72, 0.95, h) * cr; vec3 col = water + uVolColB[i] * cap;
+    float v = clamp((0.40 + 0.60 * h) * dep, 0.0, 1.0);
+    return vec4(volTint(i, cuv, col) * v, v);
+  }
+  if (id == 10) {  // shockburst
+    float d = length(p - uVolA[i].xyz);
+    float th = uVolB[i].x, so = uVolB[i].y; int rc = int(uVolB[i].z + 0.5); float sp = uVolB[i].w;
+    float fade = uVolColB[i].x; float speed = uVolA[i].w; float v = 0.0;
+    for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, shock_burst(d, uVolTrigs[i*8+k] * speed, th, so, rc, sp, fade)); }
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }
   // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).

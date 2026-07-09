@@ -514,6 +514,66 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const CAUSTICS_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float speed; uniform float gain; uniform float warp;
+uniform float brightness; uniform float uT; uniform vec3 color; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float x00 = mix(vhash3(i), vhash3(i + vec3(1,0,0)), f.x); float x10 = mix(vhash3(i + vec3(0,1,0)), vhash3(i + vec3(1,1,0)), f.x);
+  float x01 = mix(vhash3(i + vec3(0,0,1)), vhash3(i + vec3(1,0,1)), f.x); float x11 = mix(vhash3(i + vec3(0,1,1)), vhash3(i + vec3(1,1,1)), f.x);
+  return mix(mix(x00,x10,f.y), mix(x01,x11,f.y), f.z); }
+float caust_ridge(float n){ return 1.0 - abs(2.0 * n - 1.0); }
+float caust_field(vec3 q, float tm, float warp){ vec3 wv = vec3(vnoise3(q*0.5+vec3(0.0,1.3,tm*0.30)), vnoise3(q*0.5+vec3(4.1,1.7,tm*0.27)), vnoise3(q*0.5+vec3(9.2,5.3,tm*0.33))) - 0.5;
+  q += wv * warp; float a = caust_ridge(vnoise3(q + vec3(tm, tm*0.4, 0.0))); float b = caust_ridge(vnoise3(q*1.93 - vec3(tm*0.7, 0.0, tm*0.5))); return max(a,b)*0.6 + a*b*1.4; }
+void main(){ vec3 p = vec3(uv.x, uv.y, uv.y); float raw = caust_field(p * scale, uT * speed, warp);
+  float v = clamp(pow(clamp(raw,0.0,1.0), gain) * brightness, 0.0, 1.0); frag = vec4(mix(colorB, color, v) * v, 1.0); }`;
+
+const AURORA_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float speed; uniform float scale; uniform float softness;
+uniform float height; uniform float spread; uniform float seed; uniform float uT; uniform vec3 colorA; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453); }
+float vnoise3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  float x00=mix(vhash3(i),vhash3(i+vec3(1,0,0)),f.x),x10=mix(vhash3(i+vec3(0,1,0)),vhash3(i+vec3(1,1,0)),f.x);
+  float x01=mix(vhash3(i+vec3(0,0,1)),vhash3(i+vec3(1,0,1)),f.x),x11=mix(vhash3(i+vec3(0,1,1)),vhash3(i+vec3(1,1,1)),f.x);
+  return mix(mix(x00,x10,f.y),mix(x01,x11,f.y),f.z); }
+float vfbm3(vec3 p){ float n=0.0,amp=0.5,fr=1.0; for(int i=0;i<4;i++){ n+=amp*vnoise3(p*fr); fr*=2.0; amp*=0.5; } return n; }
+float vaxis(vec3 p, float axis){ return axis<0.5?p.x:(axis<1.5?p.y:p.z); }
+float aur_wave(float x,float t){ return sin(x+t)+0.5*sin(x*2.13-t*1.31+1.7)+0.25*sin(x*4.31+t*0.73+4.2); }
+float aur_layer(float run,float warp,float freq,float ph){ float c=0.5+0.5*cos(run*freq*6.2831853+warp+ph); return c*c*c; }
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y); float run=vaxis(p,axis); float hgt=(axis>0.5&&axis<1.5)?p.x:p.y;
+  float t=uT*speed; float sd=seed*17.0;
+  float warp=spread*(aur_wave(run*3.0+sd,t)+1.5*(vfbm3(vec3(run*2.0+sd,t*0.3,sd))-0.5));
+  float l0=aur_layer(run,warp,scale,sd),l1=aur_layer(run,warp*1.3,scale*1.7,t*0.6+sd*2.0),l2=aur_layer(run,warp*0.7,scale*0.53,-t*0.4+sd*3.0);
+  float ribs=1.0-(1.0-l0)*(1.0-l1*0.7)*(1.0-l2*0.5);
+  float hg=hgt/max(1e-3,height); float env=(1.0-smoothstep(1.0-max(softness,1e-3),1.0,hg))*smoothstep(0.0,0.12,hg);
+  float a=ribs*env*0.85; frag=vec4(mix(colorB,colorA,clamp(hg,0.0,1.0))*a,1.0); }`;
+
+const PACIFICA_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float speed; uniform float axis; uniform float depth; uniform float crest; uniform float uT; uniform vec3 colorA; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7)))*43758.5453); }
+float vnoise3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  float x00=mix(vhash3(i),vhash3(i+vec3(1,0,0)),f.x),x10=mix(vhash3(i+vec3(0,1,0)),vhash3(i+vec3(1,1,0)),f.x);
+  float x01=mix(vhash3(i+vec3(0,0,1)),vhash3(i+vec3(1,0,1)),f.x),x11=mix(vhash3(i+vec3(0,1,1)),vhash3(i+vec3(1,1,1)),f.x);
+  return mix(mix(x00,x10,f.y),mix(x01,x11,f.y),f.z); }
+float vfbm3(vec3 p){ float n=0.0,amp=0.5,fr=1.0; for(int i=0;i<4;i++){ n+=amp*vnoise3(p*fr); fr*=2.0; amp*=0.5; } return n; }
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y);
+  vec3 axv = axis<0.5?vec3(1.0,0.0,0.0):(axis<1.5?vec3(0.0,1.0,0.0):vec3(0.0,0.0,1.0)); vec3 b=p-axv*(speed*uT);
+  float h=0.50*vfbm3(b*scale+vec3(0.0,uT*0.05,0.0)); h+=0.28*vfbm3(b*(scale*2.0)+vec3(17.0+uT*0.09,17.0,17.0)); h+=0.22*vfbm3(b*(scale*3.7)+vec3(43.0,43.0,43.0+uT*0.07));
+  h=clamp(h,0.0,1.0); vec3 water=mix(colorA,colorB,smoothstep(0.35,0.75,h)); float cap=smoothstep(0.72,0.95,h)*crest; vec3 col=water+colorB*cap;
+  float v=clamp((0.40+0.60*h)*depth,0.0,1.0); frag=vec4(col*v,1.0); }`;
+
+const SHOCKBURST_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float centerX; uniform float centerY; uniform float centerZ; uniform float speed; uniform float thickness; uniform float softness; uniform float ringCount; uniform float spacing; uniform float fade; uniform float uT; uniform vec3 color;
+${VOL_BAND}
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y); float d=length(p-vec3(centerX,centerY,centerZ)); int rc=int(ringCount+0.5);
+  float front=fract(uT*speed*0.4)*1.4; float env=exp(-front*fade); float v=0.0;
+  for(int k=0;k<4;k++){ if(k>=rc) break; float ringR=front-float(k)*spacing; if(ringR<0.0) continue; float soK=clamp(softness+float(k)*0.25,0.0,1.0); v=max(v,pow(0.55,float(k))*env*vband(d-ringR,thickness,soK)); }
+  frag=vec4(color*v,1.0); }`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -811,6 +871,228 @@ void main(){
   frag = texture(uTex, uv + disp);
 }`;
 
+// --- WLED-inspired 2D generators (chase/scan family) -------------------------
+// Stateless single-pass ports of WLED motion effects: strip index -> uv.x, uv.y
+// unused so the strip lights uniformly. Motion via uPhase (the speed param feeds
+// the phase clock). Analytic trails: exp(-max(0,d-width)/trail).
+const RUNNING_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float bands; uniform float width; uniform float uPhase;
+uniform vec3 color; uniform vec3 colorB;
+void main(){
+  float u = fract(uv.x * max(1.0, bands) - uPhase);
+  float e = 0.02;
+  float v = 1.0 - smoothstep(width, width + e, u);
+  frag = vec4(mix(colorB, color, v), 1.0);
+}`;
+
+const CHASE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float count; uniform float width; uniform float rainbow; uniform float uPhase;
+uniform vec3 color; uniform vec3 colorB;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float n = max(1.0, count);
+  float p = fract(uPhase);
+  float cell = fract((uv.x - p) * n);
+  float e = 0.02;
+  float v = 1.0 - smoothstep(width, width + e, cell);
+  vec3 dot = (rainbow > 0.5) ? hue(fract(uv.x - uPhase)) : color;
+  frag = vec4(mix(colorB, dot, v), 1.0);
+}`;
+
+const LARSON_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float dual; uniform float uPhase;
+uniform vec3 color;
+float eye(float x, float p){
+  float d = abs(x - p);
+  return exp(-max(0.0, d - width) / max(trail, 1e-3));
+}
+void main(){
+  float p = abs(fract(uPhase) - 0.5) * 2.0;
+  float v = eye(uv.x, p);
+  if (dual > 0.5) v = max(v, eye(uv.x, 1.0 - p));
+  frag = vec4(color * v, 1.0);
+}`;
+
+const COMET_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float uPhase;
+uniform vec3 color;
+void main(){
+  float p = fract(uPhase);
+  float d = fract(p - uv.x);
+  float v = exp(-max(0.0, d - width) / max(trail, 1e-3));
+  frag = vec4(color * v, 1.0);
+}`;
+
+const COLORWIPE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float uPhase;
+uniform vec3 colorA; uniform vec3 colorB;
+void main(){
+  float t = fract(uPhase);
+  float soft = max(width, 1e-3);
+  vec3 col;
+  if (t < 0.5){
+    float edge = t * 2.0;
+    float m = smoothstep(edge + soft, edge, uv.x);
+    col = mix(colorB, colorA, m);
+  } else {
+    float edge = (t - 0.5) * 2.0;
+    float m = smoothstep(edge + soft, edge, uv.x);
+    col = mix(colorA, colorB, m);
+  }
+  frag = vec4(col, 1.0);
+}`;
+
+const SINELON_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float rainbow; uniform float uPhase;
+uniform vec3 color;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float p = 0.5 + 0.5 * sin(uPhase * 6.2831853);
+  float d = abs(uv.x - p);
+  float v = exp(-max(0.0, d - width) / max(trail, 1e-3));
+  vec3 c = (rainbow > 0.5) ? hue(fract(uPhase * 0.25)) : color;
+  frag = vec4(c * v, 1.0);
+}`;
+
+// --- WLED-inspired 2D generators (basic / colour family) ---------------------
+const RAINBOW_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float h = fract(uPhase);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)), 1.0);
+}`;
+
+const RAINBOWCYCLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float cycles;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float h = fract(uv.x * max(0.0, cycles) + uPhase);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)), 1.0);
+}`;
+
+const COLORWAVES_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float hueSpread;
+uniform float depth;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+float pingpong(float t){ return abs(fract(t * 0.5) * 2.0 - 1.0); }
+void main(){
+  float h = pingpong(uv.x * hueSpread + uPhase);
+  float b = sin((uv.x * 6.0 + uPhase * 2.0) * 6.2831853) * 0.5 + 0.5;
+  float bri = b * b;
+  float d = clamp(depth, 0.0, 1.0);
+  bri = bri * d + (1.0 - d);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)) * bri, 1.0);
+}`;
+
+const BREATHE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform vec3 color;
+void main(){
+  float s = sin(uPhase * 6.2831853) * 0.5 + 0.5;
+  float lum = 0.12 + 0.88 * s;
+  frag = vec4(color * lum, 1.0);
+}`;
+
+const THEATER_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float count;
+uniform float duty;
+uniform float rainbow;
+uniform float sat;
+uniform vec3 color;
+uniform vec3 bg;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float cell = fract(uv.x * max(1.0, count) - uPhase);
+  float lit  = step(cell, clamp(duty, 0.0, 1.0));
+  vec3 on = (rainbow > 0.5) ? mix(vec3(1.0), hue(fract(uPhase)), clamp(sat, 0.0, 1.0)) : color;
+  frag = vec4(mix(bg, on, lit), 1.0);
+}`;
+
+const SINEWAVE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float freq;
+uniform float sharp;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float b = sin((uv.x * max(0.0, freq) - uPhase) * 6.2831853) * 0.5 + 0.5;
+  b = pow(b, mix(1.0, 4.0, clamp(sharp, 0.0, 1.0)));
+  float h = fract(uv.x * 0.5 + uPhase * 0.3);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)) * b, 1.0);
+}`;
+
+// --- Warp starfield (procedural hyperspace star streaks) ---------------------
+const STARFIELD_SRC = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 frag;
+uniform float uT;
+uniform float uPhase;
+uniform float aspect;
+uniform float density;
+uniform float warp;
+uniform float twinkle;
+uniform vec3  color;
+const float TAU = 6.28318530718;
+vec2 h21(float n){ return fract(sin(vec2(n*127.1, n*311.7)) * 43758.5453); }
+void main(){
+  vec2  p   = (uv - 0.5) * vec2(aspect, 1.0);
+  float r   = length(p);
+  float ang = atan(p.y, p.x) / TAU + 0.5;
+  float acc = 0.0;
+  float hot = 0.0;
+  for (int L = 0; L < 3; L++){
+    float fl    = float(L);
+    float cells = max(4.0, density * (0.5 + fl * 0.6));
+    float sp    = 0.6 + fl * 0.35;
+    float seed  = fl * 17.3 + 3.1;
+    float ca  = ang * cells;
+    float cid = floor(ca);
+    float fa  = fract(ca) - 0.5;
+    vec2  rnd = h21(cid + seed);
+    float jit = (rnd.x - 0.5) * 0.7;
+    float pph = rnd.y;
+    float z     = fract(uPhase * sp + pph);
+    float starR = z * z * 1.25;
+    float perp = (fa - jit) * (TAU / cells) * r;
+    float line = smoothstep(0.010, 0.0, abs(perp));
+    float tail  = 0.03 + warp * (0.05 + 0.35 * z);
+    float head  = smoothstep(starR + 0.02, starR - 0.005, r);
+    float trail = smoothstep(starR - tail, starR, r);
+    float radial = head * trail;
+    float bright = pow(z, 1.3);
+    float birth  = smoothstep(0.0, 0.06, z);
+    float die    = 1.0 - smoothstep(0.92, 1.0, z);
+    float tw     = mix(1.0, 0.55 + 0.45 * sin(uT * 6.0 + cid * 1.7 + fl),
+                       clamp(twinkle, 0.0, 1.0));
+    float s = line * radial * bright * birth * die * tw;
+    acc += s;
+    hot += s * smoothstep(0.6, 1.0, z);
+  }
+  float core = exp(-r * 9.0) * 0.12;
+  acc = clamp(acc, 0.0, 1.0);
+  vec3 col = color * acc + vec3(1.0) * (hot * 0.6) + color * core;
+  frag = vec4(col, 1.0);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -1010,6 +1292,14 @@ export const REGISTRY = {
       { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
+  caustics: { name: 'caustics', type: 'generator', desc: '3D: dancing underwater caustic light — rippling veins.', volumetric: true, src: CAUSTICS_THUMB,
+    params: [ { key:'scale',type:'float',min:0.5,max:12,default:4 }, { key:'speed',type:'float',min:0,max:3,default:0.5 }, { key:'gain',type:'float',min:1,max:6,default:2.5 }, { key:'warp',type:'float',min:0,max:2,default:0.6 }, { key:'brightness',type:'float',min:0,max:3,default:1.4 }, { key:'axis',type:'float',min:0,max:2,default:2,step:1 }, { key:'drift',type:'float',min:-1,max:1,default:0 }, { key:'color',type:'color',default:'#5ff0ff' }, { key:'colorB',type:'color',default:'#06264f' }, { key:'fromCanvas',type:'bool',default:false } ] },
+  aurora: { name: 'aurora', type: 'generator', desc: '3D: drifting northern-lights curtains.', volumetric: true, src: AURORA_THUMB,
+    params: [ {key:'axis',type:'float',min:0,max:2,default:0,step:1}, {key:'speed',type:'float',min:0,max:2,default:0.3}, {key:'scale',type:'float',min:0.5,max:12,default:4}, {key:'softness',type:'float',min:0,max:1,default:0.6}, {key:'height',type:'float',min:0.1,max:2,default:0.7}, {key:'spread',type:'float',min:0,max:3,default:1.2}, {key:'seed',type:'float',min:0,max:1,default:0}, {key:'colorA',type:'color',default:'#33ff88'}, {key:'colorB',type:'color',default:'#ff2e88'}, {key:'fromCanvas',type:'bool',default:false} ] },
+  pacifica: { name: 'pacifica', type: 'generator', desc: '3D: a calm luminous ocean — layered swells with occasional crests.', volumetric: true, src: PACIFICA_THUMB,
+    params: [ {key:'scale',type:'float',min:0.5,max:8,default:2.5}, {key:'speed',type:'float',min:0,max:2,default:0.25}, {key:'axis',type:'float',min:0,max:2,default:1,step:1}, {key:'depth',type:'float',min:0,max:2,default:1}, {key:'crest',type:'float',min:0,max:1,default:0.5}, {key:'colorA',type:'color',default:'#052a45'}, {key:'colorB',type:'color',default:'#3fdccb'}, {key:'fromCanvas',type:'bool',default:false} ] },
+  shockburst: { name: 'shockburst', type: 'generator', desc: '3D: concentric shells bursting per trigger (triggerable).', volumetric: true, src: SHOCKBURST_THUMB, triggerable: true,
+    params: [ {key:'centerX',type:'float',min:0,max:1,default:0.5}, {key:'centerY',type:'float',min:0,max:1,default:0.5}, {key:'centerZ',type:'float',min:0,max:1,default:0}, {key:'speed',type:'float',min:0.1,max:4,default:1}, {key:'thickness',type:'float',min:0.01,max:1,default:0.08}, {key:'softness',type:'float',min:0,max:1,default:0.5}, {key:'ringCount',type:'float',min:1,max:4,default:3,step:1}, {key:'spacing',type:'float',min:0.02,max:0.5,default:0.12}, {key:'fade',type:'float',min:0,max:3,default:0.6}, {key:'color',type:'color',default:'#ffffff'}, {key:'fromCanvas',type:'bool',default:false} ] },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1143,6 +1433,130 @@ export const REGISTRY = {
       { key: 'colorB', type: 'color', default: '#ffffff' },
     ],
   },
+  // --- WLED-inspired 2D generators ------------------------------------------
+  running: {
+    name: 'running', type: 'generator', desc: 'WLED: scrolling on/off colour bars (Running).', src: RUNNING_SRC,
+    params: [
+      { key: 'bands', type: 'float', min: 1, max: 32, default: 6, step: 1 },
+      { key: 'width', type: 'float', min: 0.05, max: 0.95, default: 0.5 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.6 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  chase: {
+    name: 'chase', type: 'generator', desc: 'WLED: dots chasing along the strip (Chase / Chase Rainbow).', src: CHASE_SRC,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 12, default: 3, step: 1 },
+      { key: 'width', type: 'float', min: 0.02, max: 0.6, default: 0.18 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.7 },
+      { key: 'rainbow', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  larson: {
+    name: 'larson', type: 'generator', desc: 'WLED: bouncing scanner eye with a fading trail (Larson / Cylon / KITT).', src: LARSON_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.01, max: 0.6, default: 0.14 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.5 },
+      { key: 'dual', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ff2020' },
+    ],
+  },
+  comet: {
+    name: 'comet', type: 'generator', desc: 'WLED: a single head streaking around the strip with a decaying tail (Comet).', src: COMET_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.02, max: 0.8, default: 0.25 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.7 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  colorwipe: {
+    name: 'colorwipe', type: 'generator', desc: 'WLED: fills the strip with one colour then wipes over with the next (Color Wipe).', src: COLORWIPE_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.3, default: 0.02 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.4 },
+      { key: 'colorA', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  sinelon: {
+    name: 'sinelon', type: 'generator', desc: 'WLED: a dot eased back and forth on a sine, leaving a coloured trail (Sinelon).', src: SINELON_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.01, max: 0.6, default: 0.16 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.5 },
+      { key: 'rainbow', type: 'bool', default: true },
+      { key: 'color', type: 'color', default: '#20a0ff' },
+    ],
+  },
+  rainbow: {
+    name: 'rainbow', type: 'generator', desc: 'WLED: whole-strip hue that cycles over time.', src: RAINBOW_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.3 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  rainbowcycle: {
+    name: 'rainbowcycle', type: 'generator', desc: 'WLED: a rainbow spread across the strip, scrolling.', src: RAINBOWCYCLE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.3 },
+      { key: 'cycles', type: 'float', min: 0.25, max: 16, default: 1, step: 0.25 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  colorwaves: {
+    name: 'colorwaves', type: 'generator', desc: 'WLED: folded rainbow waves with a breathing brightness field.', src: COLORWAVES_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.5 },
+      { key: 'hueSpread', type: 'float', min: 0, max: 6, default: 2, step: 0.1 },
+      { key: 'depth', type: 'float', min: 0, max: 1, default: 0.6 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  breathe: {
+    name: 'breathe', type: 'generator', desc: 'WLED: a solid colour breathing in and out.', src: BREATHE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.2 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  theater: {
+    name: 'theater', type: 'generator', desc: 'WLED: marquee theater chase, optional rainbow dots.', src: THEATER_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'count', type: 'float', min: 1, max: 48, default: 12, step: 1 },
+      { key: 'duty', type: 'float', min: 0.05, max: 0.9, default: 0.34 },
+      { key: 'rainbow', type: 'bool', default: false },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'bg', type: 'color', default: '#000000' },
+    ],
+  },
+  sinewave: {
+    name: 'sinewave', type: 'generator', desc: 'WLED: a moving sine wave under a scrolling rainbow.', src: SINEWAVE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'freq', type: 'float', min: 0.5, max: 16, default: 3 },
+      { key: 'sharp', type: 'float', min: 0, max: 1, default: 0.3 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  starfield: {
+    name: 'starfield', type: 'generator',
+    desc: 'Warp-speed star streaks flying toward a vanishing point.',
+    src: STARFIELD_SRC,
+    params: [
+      { key: 'speed',   type: 'float', min: 0,  max: 4,   default: 1,   step: 0.01 },
+      { key: 'density', type: 'float', min: 20, max: 400, default: 140, step: 1    },
+      { key: 'warp',    type: 'float', min: 0,  max: 3,   default: 1,   step: 0.01 },
+      { key: 'twinkle', type: 'float', min: 0,  max: 1,   default: 0.3, step: 0.01 },
+      { key: 'color',   type: 'color', default: '#bcd4ff' },
+    ],
+  },
   shockwave: {
     name: 'shockwave', type: 'effect', triggerable: true, src: SHOCKWAVE,
     params: [
@@ -1184,11 +1598,16 @@ const LABELS = {
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
   bodywave: 'Body Wave', planepulse: 'Plane Pulse', flowfield: 'Flow Field',
+  caustics: 'Caustics', aurora: 'Aurora', pacifica: 'Pacifica', shockburst: 'Shockwave (3D)',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
   domainwarp: 'Domain Warp', metaballs: 'Metaballs', plasma: 'Plasma', tunnel: 'Tunnel',
   shockwave: 'Shockwave', basswarp: 'Bass Warp',
+  running: 'Running', chase: 'Chase', larson: 'Larson', comet: 'Comet',
+  colorwipe: 'Color Wipe', sinelon: 'Sinelon', rainbow: 'Rainbow',
+  rainbowcycle: 'Rainbow Cycle', colorwaves: 'Color Waves', breathe: 'Breathe',
+  theater: 'Theater', sinewave: 'Sine Wave', starfield: 'Starfield',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
