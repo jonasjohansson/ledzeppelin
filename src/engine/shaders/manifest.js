@@ -514,6 +514,66 @@ void main(){
   frag = vec4(color * v, 1.0);
 }`;
 
+const CAUSTICS_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float speed; uniform float gain; uniform float warp;
+uniform float brightness; uniform float uT; uniform vec3 color; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float x00 = mix(vhash3(i), vhash3(i + vec3(1,0,0)), f.x); float x10 = mix(vhash3(i + vec3(0,1,0)), vhash3(i + vec3(1,1,0)), f.x);
+  float x01 = mix(vhash3(i + vec3(0,0,1)), vhash3(i + vec3(1,0,1)), f.x); float x11 = mix(vhash3(i + vec3(0,1,1)), vhash3(i + vec3(1,1,1)), f.x);
+  return mix(mix(x00,x10,f.y), mix(x01,x11,f.y), f.z); }
+float caust_ridge(float n){ return 1.0 - abs(2.0 * n - 1.0); }
+float caust_field(vec3 q, float tm, float warp){ vec3 wv = vec3(vnoise3(q*0.5+vec3(0.0,1.3,tm*0.30)), vnoise3(q*0.5+vec3(4.1,1.7,tm*0.27)), vnoise3(q*0.5+vec3(9.2,5.3,tm*0.33))) - 0.5;
+  q += wv * warp; float a = caust_ridge(vnoise3(q + vec3(tm, tm*0.4, 0.0))); float b = caust_ridge(vnoise3(q*1.93 - vec3(tm*0.7, 0.0, tm*0.5))); return max(a,b)*0.6 + a*b*1.4; }
+void main(){ vec3 p = vec3(uv.x, uv.y, uv.y); float raw = caust_field(p * scale, uT * speed, warp);
+  float v = clamp(pow(clamp(raw,0.0,1.0), gain) * brightness, 0.0, 1.0); frag = vec4(mix(colorB, color, v) * v, 1.0); }`;
+
+const AURORA_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float axis; uniform float speed; uniform float scale; uniform float softness;
+uniform float height; uniform float spread; uniform float seed; uniform float uT; uniform vec3 colorA; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7))) * 43758.5453); }
+float vnoise3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  float x00=mix(vhash3(i),vhash3(i+vec3(1,0,0)),f.x),x10=mix(vhash3(i+vec3(0,1,0)),vhash3(i+vec3(1,1,0)),f.x);
+  float x01=mix(vhash3(i+vec3(0,0,1)),vhash3(i+vec3(1,0,1)),f.x),x11=mix(vhash3(i+vec3(0,1,1)),vhash3(i+vec3(1,1,1)),f.x);
+  return mix(mix(x00,x10,f.y),mix(x01,x11,f.y),f.z); }
+float vfbm3(vec3 p){ float n=0.0,amp=0.5,fr=1.0; for(int i=0;i<4;i++){ n+=amp*vnoise3(p*fr); fr*=2.0; amp*=0.5; } return n; }
+float vaxis(vec3 p, float axis){ return axis<0.5?p.x:(axis<1.5?p.y:p.z); }
+float aur_wave(float x,float t){ return sin(x+t)+0.5*sin(x*2.13-t*1.31+1.7)+0.25*sin(x*4.31+t*0.73+4.2); }
+float aur_layer(float run,float warp,float freq,float ph){ float c=0.5+0.5*cos(run*freq*6.2831853+warp+ph); return c*c*c; }
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y); float run=vaxis(p,axis); float hgt=(axis>0.5&&axis<1.5)?p.x:p.y;
+  float t=uT*speed; float sd=seed*17.0;
+  float warp=spread*(aur_wave(run*3.0+sd,t)+1.5*(vfbm3(vec3(run*2.0+sd,t*0.3,sd))-0.5));
+  float l0=aur_layer(run,warp,scale,sd),l1=aur_layer(run,warp*1.3,scale*1.7,t*0.6+sd*2.0),l2=aur_layer(run,warp*0.7,scale*0.53,-t*0.4+sd*3.0);
+  float ribs=1.0-(1.0-l0)*(1.0-l1*0.7)*(1.0-l2*0.5);
+  float hg=hgt/max(1e-3,height); float env=(1.0-smoothstep(1.0-max(softness,1e-3),1.0,hg))*smoothstep(0.0,0.12,hg);
+  float a=ribs*env*0.85; frag=vec4(mix(colorB,colorA,clamp(hg,0.0,1.0))*a,1.0); }`;
+
+const PACIFICA_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float scale; uniform float speed; uniform float axis; uniform float depth; uniform float crest; uniform float uT; uniform vec3 colorA; uniform vec3 colorB;
+float vhash3(vec3 p){ return fract(sin(dot(p, vec3(127.1,311.7,74.7)))*43758.5453); }
+float vnoise3(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  float x00=mix(vhash3(i),vhash3(i+vec3(1,0,0)),f.x),x10=mix(vhash3(i+vec3(0,1,0)),vhash3(i+vec3(1,1,0)),f.x);
+  float x01=mix(vhash3(i+vec3(0,0,1)),vhash3(i+vec3(1,0,1)),f.x),x11=mix(vhash3(i+vec3(0,1,1)),vhash3(i+vec3(1,1,1)),f.x);
+  return mix(mix(x00,x10,f.y),mix(x01,x11,f.y),f.z); }
+float vfbm3(vec3 p){ float n=0.0,amp=0.5,fr=1.0; for(int i=0;i<4;i++){ n+=amp*vnoise3(p*fr); fr*=2.0; amp*=0.5; } return n; }
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y);
+  vec3 axv = axis<0.5?vec3(1.0,0.0,0.0):(axis<1.5?vec3(0.0,1.0,0.0):vec3(0.0,0.0,1.0)); vec3 b=p-axv*(speed*uT);
+  float h=0.50*vfbm3(b*scale+vec3(0.0,uT*0.05,0.0)); h+=0.28*vfbm3(b*(scale*2.0)+vec3(17.0+uT*0.09,17.0,17.0)); h+=0.22*vfbm3(b*(scale*3.7)+vec3(43.0,43.0,43.0+uT*0.07));
+  h=clamp(h,0.0,1.0); vec3 water=mix(colorA,colorB,smoothstep(0.35,0.75,h)); float cap=smoothstep(0.72,0.95,h)*crest; vec3 col=water+colorB*cap;
+  float v=clamp((0.40+0.60*h)*depth,0.0,1.0); frag=vec4(col*v,1.0); }`;
+
+const SHOCKBURST_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float centerX; uniform float centerY; uniform float centerZ; uniform float speed; uniform float thickness; uniform float softness; uniform float ringCount; uniform float spacing; uniform float fade; uniform float uT; uniform vec3 color;
+${VOL_BAND}
+void main(){ vec3 p=vec3(uv.x,uv.y,uv.y); float d=length(p-vec3(centerX,centerY,centerZ)); int rc=int(ringCount+0.5);
+  float front=fract(uT*speed*0.4)*1.4; float env=exp(-front*fade); float v=0.0;
+  for(int k=0;k<4;k++){ if(k>=rc) break; float ringR=front-float(k)*spacing; if(ringR<0.0) continue; float soK=clamp(softness+float(k)*0.25,0.0,1.0); v=max(v,pow(0.55,float(k))*env*vband(d-ringR,thickness,soK)); }
+  frag=vec4(color*v,1.0); }`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -1010,6 +1070,14 @@ export const REGISTRY = {
       { key: 'fromCanvas', type: 'bool', default: false },
     ],
   },
+  caustics: { name: 'caustics', type: 'generator', desc: '3D: dancing underwater caustic light — rippling veins.', volumetric: true, src: CAUSTICS_THUMB,
+    params: [ { key:'scale',type:'float',min:0.5,max:12,default:4 }, { key:'speed',type:'float',min:0,max:3,default:0.5 }, { key:'gain',type:'float',min:1,max:6,default:2.5 }, { key:'warp',type:'float',min:0,max:2,default:0.6 }, { key:'brightness',type:'float',min:0,max:3,default:1.4 }, { key:'axis',type:'float',min:0,max:2,default:2,step:1 }, { key:'drift',type:'float',min:-1,max:1,default:0 }, { key:'color',type:'color',default:'#5ff0ff' }, { key:'colorB',type:'color',default:'#06264f' }, { key:'fromCanvas',type:'bool',default:false } ] },
+  aurora: { name: 'aurora', type: 'generator', desc: '3D: drifting northern-lights curtains.', volumetric: true, src: AURORA_THUMB,
+    params: [ {key:'axis',type:'float',min:0,max:2,default:0,step:1}, {key:'speed',type:'float',min:0,max:2,default:0.3}, {key:'scale',type:'float',min:0.5,max:12,default:4}, {key:'softness',type:'float',min:0,max:1,default:0.6}, {key:'height',type:'float',min:0.1,max:2,default:0.7}, {key:'spread',type:'float',min:0,max:3,default:1.2}, {key:'seed',type:'float',min:0,max:1,default:0}, {key:'colorA',type:'color',default:'#33ff88'}, {key:'colorB',type:'color',default:'#ff2e88'}, {key:'fromCanvas',type:'bool',default:false} ] },
+  pacifica: { name: 'pacifica', type: 'generator', desc: '3D: a calm luminous ocean — layered swells with occasional crests.', volumetric: true, src: PACIFICA_THUMB,
+    params: [ {key:'scale',type:'float',min:0.5,max:8,default:2.5}, {key:'speed',type:'float',min:0,max:2,default:0.25}, {key:'axis',type:'float',min:0,max:2,default:1,step:1}, {key:'depth',type:'float',min:0,max:2,default:1}, {key:'crest',type:'float',min:0,max:1,default:0.5}, {key:'colorA',type:'color',default:'#052a45'}, {key:'colorB',type:'color',default:'#3fdccb'}, {key:'fromCanvas',type:'bool',default:false} ] },
+  shockburst: { name: 'shockburst', type: 'generator', desc: '3D: concentric shells bursting per trigger (triggerable).', volumetric: true, src: SHOCKBURST_THUMB, triggerable: true,
+    params: [ {key:'centerX',type:'float',min:0,max:1,default:0.5}, {key:'centerY',type:'float',min:0,max:1,default:0.5}, {key:'centerZ',type:'float',min:0,max:1,default:0}, {key:'speed',type:'float',min:0.1,max:4,default:1}, {key:'thickness',type:'float',min:0.01,max:1,default:0.08}, {key:'softness',type:'float',min:0,max:1,default:0.5}, {key:'ringCount',type:'float',min:1,max:4,default:3,step:1}, {key:'spacing',type:'float',min:0.02,max:0.5,default:0.12}, {key:'fade',type:'float',min:0,max:3,default:0.6}, {key:'color',type:'color',default:'#ffffff'}, {key:'fromCanvas',type:'bool',default:false} ] },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1184,6 +1252,7 @@ const LABELS = {
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
   bodywave: 'Body Wave', planepulse: 'Plane Pulse', flowfield: 'Flow Field',
+  caustics: 'Caustics', aurora: 'Aurora', pacifica: 'Pacifica', shockburst: 'Shockwave (3D)',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',

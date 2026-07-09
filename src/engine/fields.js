@@ -160,10 +160,80 @@ export function flowfield(p, t, {
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
+// Caustics — dancing underwater light. A domain-warped ridge-noise field
+// (two ridged octaves combined) drifting in time; brightness curves the raw
+// field, then mixes colorB→color by intensity. GLSL twin: sampler id==7.
+function caustRidge(n) { return 1 - Math.abs(2 * n - 1); }
+function caustField(qx, qy, qz, tm, warp) {
+  const wx = vnoise3(qx * 0.5 + 0.0, qy * 0.5 + 1.3, qz * 0.5 + tm * 0.30) - 0.5;
+  const wy = vnoise3(qx * 0.5 + 4.1, qy * 0.5 + 1.7, qz * 0.5 + tm * 0.27) - 0.5;
+  const wz = vnoise3(qx * 0.5 + 9.2, qy * 0.5 + 5.3, qz * 0.5 + tm * 0.33) - 0.5;
+  qx += wx * warp; qy += wy * warp; qz += wz * warp;
+  const a = caustRidge(vnoise3(qx + tm, qy + tm * 0.4, qz + 0.0));
+  const b = caustRidge(vnoise3(qx * 1.93 - tm * 0.7, qy * 1.93 + 0.0, qz * 1.93 - tm * 0.5));
+  return Math.max(a, b) * 0.6 + a * b * 1.4;
+}
+export function caustics(p, t, { scale = 4, speed = 0.5, gain = 2.5, warp = 0.6, brightness = 1.4, axis = 2, drift = 0, color = [0.37, 0.94, 1], colorB = [0.024, 0.15, 0.31] } = {}) {
+  const dv = t * drift;
+  const px = p[0] - (axis < 0.5 ? dv : 0);
+  const py = p[1] - (axis >= 0.5 && axis < 1.5 ? dv : 0);
+  const pz = p[2] - (axis >= 1.5 ? dv : 0);
+  const raw = caustField(px * scale, py * scale, pz * scale, t * speed, warp);
+  const v = clamp01(Math.pow(clamp01(raw), gain) * brightness);
+  const r = colorB[0] + (color[0] - colorB[0]) * v, g = colorB[1] + (color[1] - colorB[1]) * v, b = colorB[2] + (color[2] - colorB[2]) * v;
+  return [r * v, g * v, b * v, v];
+}
+
+// Aurora — drifting northern-lights curtains. Layered cosine ribs warped by a
+// travelling wave + fbm, gated by a height envelope; colour ramps colorB→colorA
+// with height. GLSL twin: sampler id==8.
+function aur_wave(x, t) { return Math.sin(x + t) + 0.5 * Math.sin(x * 2.13 - t * 1.31 + 1.7) + 0.25 * Math.sin(x * 4.31 + t * 0.73 + 4.2); }
+function aur_layer(run, warp, freq, ph) { const c = 0.5 + 0.5 * Math.cos(run * freq * Math.PI * 2 + warp + ph); return c * c * c; }
+export function aurora(p, t, { axis = 0, speed = 0.3, scale = 4, softness = 0.6, height = 0.7, spread = 1.2, seed = 0, colorA = [0.2, 1, 0.53], colorB = [1, 0.18, 0.53] } = {}) {
+  const run = axisCoord(p, axis); const hgt = (axis > 0.5 && axis < 1.5) ? p[0] : p[1];
+  const tt = t * speed; const sd = seed * 17;
+  const warp = spread * (aur_wave(run * 3 + sd, tt) + 1.5 * (fbm3(run * 2 + sd, tt * 0.3, sd) - 0.5));
+  const l0 = aur_layer(run, warp, scale, sd), l1 = aur_layer(run, warp * 1.3, scale * 1.7, tt * 0.6 + sd * 2), l2 = aur_layer(run, warp * 0.7, scale * 0.53, -tt * 0.4 + sd * 3);
+  const ribs = 1 - (1 - l0) * (1 - l1 * 0.7) * (1 - l2 * 0.5);
+  const hg = hgt / Math.max(1e-3, height);
+  const env = (1 - sstep(1 - Math.max(softness, 1e-3), 1, hg)) * sstep(0, 0.12, hg);
+  const a = ribs * env * 0.85; const g = clamp01(hg);
+  const r = colorB[0] + (colorA[0] - colorB[0]) * g, gg = colorB[1] + (colorA[1] - colorB[1]) * g, bb = colorB[2] + (colorA[2] - colorB[2]) * g;
+  return [r * a, gg * a, bb * a, a];
+}
+
+// Pacifica — a calm luminous ocean. Three fbm swell octaves scrolling along an
+// axis build a height field; colorA→colorB by height, plus crest highlights.
+// GLSL twin: sampler id==9.
+export function pacifica(p, t, { scale = 2.5, speed = 0.25, axis = 1, depth = 1, crest = 0.5, colorA = [0.02, 0.165, 0.271], colorB = [0.247, 0.863, 0.796] } = {}) {
+  const ax = axis < 0.5 ? [1, 0, 0] : axis < 1.5 ? [0, 1, 0] : [0, 0, 1];
+  const bx = p[0] - ax[0] * speed * t, by = p[1] - ax[1] * speed * t, bz = p[2] - ax[2] * speed * t;
+  let h = 0.50 * fbm3(bx * scale, by * scale + t * 0.05, bz * scale);
+  h += 0.28 * fbm3(bx * scale * 2.0 + 17 + t * 0.09, by * scale * 2.0 + 17, bz * scale * 2.0 + 17);
+  h += 0.22 * fbm3(bx * scale * 3.7 + 43, by * scale * 3.7 + 43, bz * scale * 3.7 + 43 + t * 0.07);
+  h = clamp01(h);
+  const mixC = (a, c, k) => [a[0] + (c[0] - a[0]) * k, a[1] + (c[1] - a[1]) * k, a[2] + (c[2] - a[2]) * k];
+  const water = mixC(colorA, colorB, sstep(0.35, 0.75, h)); const cap = sstep(0.72, 0.95, h) * crest;
+  const col = [water[0] + colorB[0] * cap, water[1] + colorB[1] * cap, water[2] + colorB[2] * cap];
+  const v = clamp01((0.40 + 0.60 * h) * depth);
+  return [col[0] * v, col[1] * v, col[2] * v, v];
+}
+
+// Shockburst — concentric shells bursting per trigger. Each recent trigger age
+// spawns `ringCount` nested expanding rings (fading with front distance);
+// brightest wins. Triggerable. GLSL twin: sampler id==10.
+export function shockburst(p, trigAges = [], { center = [0.5, 0.5, 0], speed = 1, thickness = 0.08, softness = 0.5, ringCount = 3, spacing = 0.12, fade = 0.6, color = [1, 1, 1] } = {}) {
+  const dx = p[0] - center[0], dy = p[1] - center[1], dz = p[2] - center[2]; const d = Math.hypot(dx, dy, dz); const rc = Math.round(ringCount); let v = 0;
+  for (const age of trigAges) { const front = age * speed; const env = Math.exp(-front * fade);
+    for (let k = 0; k < 4; k++) { if (k >= rc) break; const ringR = front - k * spacing; if (ringR < 0) continue;
+      const soK = clamp01(softness + k * 0.25); const bv = Math.pow(0.55, k) * env * band(d - ringR, thickness, soK); if (bv > v) v = bv; } }
+  return [color[0] * v, color[1] * v, color[2] * v, v];
+}
+
 // --- Sampler packing ---------------------------------------------------------
 
 // Stable field ids — the GLSL dispatcher in sampler.js switches on these.
-export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5, flowfield: 6 };
+export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5, flowfield: 6, caustics: 7, aurora: 8, pacifica: 9, shockburst: 10 };
 
 export const isVolumetricName = (name) => name in FIELD_IDS;
 
@@ -230,6 +300,22 @@ export function packVolumetrics(active) {
       b.set([P('turbulence'), P('thickness'), P('trail'), P('seed')], i * 4);
       colB.set([P('speed'), 0, 0], i * 3);
       colA.set(C('color'), i * 3);
+    } else if (id === FIELD_IDS.caustics) {
+      a.set([P('scale'), P('speed'), P('gain'), P('warp')], i * 4);
+      b.set([P('brightness'), P('axis'), P('drift'), 0], i * 4);
+      colA.set(C('color'), i * 3); colB.set(C('colorB'), i * 3);
+    } else if (id === FIELD_IDS.aurora) {
+      a.set([P('axis'), P('speed'), P('scale'), P('softness')], i * 4);
+      b.set([P('height'), P('spread'), P('seed'), 0], i * 4);
+      colA.set(C('colorA'), i * 3); colB.set(C('colorB'), i * 3);
+    } else if (id === FIELD_IDS.pacifica) {
+      a.set([P('scale'), P('speed'), P('axis'), P('depth')], i * 4);
+      b.set([P('crest'), 0, 0, 0], i * 4);
+      colA.set(C('colorA'), i * 3); colB.set(C('colorB'), i * 3);
+    } else if (id === FIELD_IDS.shockburst) {
+      a.set([P('centerX'), P('centerY'), P('centerZ'), P('speed')], i * 4);
+      b.set([P('thickness'), P('softness'), P('ringCount'), P('spacing')], i * 4);
+      colB.set([P('fade'), 0, 0], i * 3); colA.set(C('color'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
       b.set([P('thickness'), P('softness'), P('speed'), 0], i * 4);
@@ -334,6 +420,22 @@ export function evalPacked(packed, i, p, t, trigAges = []) {
       turbulence: B[0], thickness: B[1], trail: B[2], seed: B[3],
       speed: packed.colB[i * 3], color: cA,
     });
+  }
+  if (id === FIELD_IDS.caustics) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return caustics(p, t, { scale: A[0], speed: A[1], gain: A[2], warp: A[3], brightness: B[0], axis: B[1], drift: B[2], color: cA, colorB: cB });
+  }
+  if (id === FIELD_IDS.aurora) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return aurora(p, t, { axis: A[0], speed: A[1], scale: A[2], softness: A[3], height: B[0], spread: B[1], seed: B[2], colorA: cA, colorB: cB });
+  }
+  if (id === FIELD_IDS.pacifica) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return pacifica(p, t, { scale: A[0], speed: A[1], axis: A[2], depth: A[3], crest: B[0], colorA: cA, colorB: cB });
+  }
+  if (id === FIELD_IDS.shockburst) {
+    const B = packed.b.subarray(i * 4, i * 4 + 4);
+    return shockburst(p, trigAges, { center: [A[0], A[1], A[2]], speed: A[3], thickness: B[0], softness: B[1], ringCount: B[2], spacing: B[3], fade: packed.colB[i * 3], color: cA });
   }
   const B = packed.b.subarray(i * 4, i * 4 + 4);
   const base = { center: [A[0], A[1], A[2]], thickness: B[0], softness: B[1], color: cA };
