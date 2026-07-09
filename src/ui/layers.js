@@ -44,7 +44,7 @@ import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
-import { Slider } from './controls.js';
+import { Slider, Segmented } from './controls.js';
 import { placePopover, dismissOnOutside } from './kit/popover.js';
 import { confirmDelete } from './confirm.js';
 import { createClipSpectrum } from './spectrum.js';
@@ -71,8 +71,16 @@ const fmtLive = (v) => (Number(v) || 0).toFixed(2);
 const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride) =>
   Slider(label, value, { min, max, onInput, default: defaultValue, step: stepOverride });
 
+// An axis param (0=x,1=y,2=z) — a discrete choice, so render X/Y/Z inline buttons
+// (segmented, per the house rule) rather than a slider. Used across the volumetric fields.
+const isAxisParam = (p) => p.key === 'axis' && (p.max ?? 1) === 2;
+
 // Build a control for one manifest param.
 function paramControl(p, value, onInput) {
+  if (isAxisParam(p)) {
+    const cur = () => (value == null ? (p.default ?? 0) : value);
+    return Segmented(prettyParam(p.key), [[0, 'X'], [1, 'Y'], [2, 'Z']], cur, (v) => onInput(v));
+  }
   if (p.type === 'color') {
     const i = el('input', { type: 'color', className: 'fx-color', value: value || '#ffffff' });
     i.addEventListener('input', () => onInput(i.value));
@@ -174,7 +182,7 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
 //   oscAddress: the param's CANONICAL always-active OSC address (shown in the
 //   External controls as a copyable chip), when the scheme covers it.
 function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, oscAddress }) {
-  if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
+  if (p.type === 'color' || p.type === 'bool' || isAxisParam(p)) return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
   const isAudio = anim?.mode === 'audio';
