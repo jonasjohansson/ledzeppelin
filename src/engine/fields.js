@@ -368,17 +368,23 @@ export function packColorFx(active) {
   const fxId = new Float32Array(16);
   const fxParam = new Float32Array(64);
   for (let i = 0; i < n; i++) {
-    const { effects, params } = active[i];
+    const { effects, params, layerEffects, layerParams } = active[i];
     let j = 0;
-    for (const name of (effects || [])) {
-      if (j >= FX_MAXPER) break;
-      if (FX_IDS[name] == null || FX_IDS[name] === 0) continue;
-      const [id, p] = fxSlot(name, params);
-      const slot = i * FX_MAXPER + j;
-      fxId[slot] = id;
-      fxParam.set(p, slot * 4);
-      j++;
-    }
+    // Pack a colour-fx list (auto-filtering non-colour effects) into this clip's slots,
+    // resolving params from the given map. Called for the clip chain, then the layer chain.
+    const packList = (list, pmap) => {
+      for (const name of (list || [])) {
+        if (j >= FX_MAXPER) break;
+        if (FX_IDS[name] == null || FX_IDS[name] === 0) continue;
+        const [id, p] = fxSlot(name, pmap);
+        const slot = i * FX_MAXPER + j;
+        fxId[slot] = id;
+        fxParam.set(p, slot * 4);
+        j++;
+      }
+    };
+    packList(effects, params);            // the clip's own colour effects first…
+    packList(layerEffects, layerParams);  // …then the layer's (params from the layer namespace)
   }
   return { fxId, fxParam };
 }

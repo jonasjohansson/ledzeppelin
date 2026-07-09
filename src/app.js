@@ -2886,6 +2886,10 @@ function loopBody(ts) {
         if (!c || !getEntry(c.generator)?.volumetric) continue;
         act.push({
           id: c.id, generator: c.generator, params: c.params, blend: L.blend, effects: c.effects,
+          // The LAYER's effect chain too — packColorFx appends its colour-class effects to
+          // this clip's per-LED fx (mirroring the 2D clip→layer order), so a layer effect
+          // reaches its 3D clips. Non-colour layer effects are auto-filtered.
+          layerEffects: L.effects, layerParams: L.params,
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
