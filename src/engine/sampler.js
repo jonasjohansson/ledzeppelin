@@ -15,7 +15,16 @@ import { makeTarget, program } from './gl.js';
 // Uniform packing per clip i (see packVolumetrics in fields.js):
 //   uVolMeta[i] = (fieldId, blendMode, opacity, 0)
 //   uVolA/B[i]  = field params   uVolColA/B[i] = colours
-const SAMPLE_FS = `#version 300 es
+// The sampler fragment shader is split into three verbatim GLSL pieces so that
+// fieldColor's id-chain can be built with ONLY the field blocks actually in use:
+//   FS_PRE      — uniforms + all helper funcs + the fieldColor signature.
+//   FIELD_BLOCKS — id → that field's `if (id == N) { … }` block.
+//   FS_POST     — fieldColor's default return + close, then colorFx() + main().
+// The full 12-field chain overflows the Raspberry Pi's V3D GPU (every `if (id==N)`
+// is reachable because id is a runtime uniform, so nothing is dead-stripped) and
+// crashes the WebGL context in a loop; compiling only the live fields keeps the
+// shader small. Uncalled helpers in FS_PRE are dead-stripped by the compiler.
+const FS_PRE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uCanvas;
 uniform sampler2D uMap;
@@ -84,41 +93,49 @@ vec3 volTint(int i, vec2 cuv, vec3 flatCol) { return uVolMeta[i].w > 0.5 ? textu
 // LED's audio band index (0/1/2), used only by the audiobars field.
 vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
   int id = int(uVolMeta[i].x + 0.5);
-  if (id == 11) {          // audiobars: A=(gain, floor, -, -); colA=bass, colB=high, mid=mix.
+`;
+
+// id → the field's exact GLSL block, copied verbatim from the original monolithic
+// shader (keep each a GLSL twin of fields.js). buildSampleFS splices in only the
+// blocks for the fields in use. Spherepulse (id 3) was the trailing fallthrough
+// (no `if`) — wrapped here in `if (id == 3) { … }` so it can be omitted like any
+// other block; the default `return vec4(0.0)` now lives in FS_POST.
+const FIELD_BLOCKS = {
+  11: `  if (id == 11) {          // audiobars: A=(gain, floor, -, -); colA=bass, colB=high, mid=mix.
     int band = int(bnd + 0.5);
     float level = band == 0 ? uAudioBands.x : (band == 2 ? uAudioBands.z : uAudioBands.y);
     float v = clamp(uVolA[i].y + level * uVolA[i].x, 0.0, 1.0);
     vec3 col = band == 0 ? uVolColA[i] : (band == 2 ? uVolColB[i] : mix(uVolColA[i], uVolColB[i], 0.5));
     return vec4(col * v, v);
-  }
-  if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
+  }`,
+  0: `  if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
     float v = vband(vaxis(p, uVolA[i].x) - uVolA[i].y, uVolA[i].z, uVolA[i].w);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
+  }`,
+  1: `  if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
     float g = fract(vaxis(p, uVolA[i].x) - uVolA[i].y);
     return vec4(mix(uVolColA[i], uVolColB[i], g), 1.0);
-  }
-  if (id == 2) {           // noise 3d: A = (scale, speed, axis, drift)
+  }`,
+  2: `  if (id == 2) {           // noise 3d: A = (scale, speed, axis, drift)
     // Directional drift (twin of fields.js noise3d): sample at p − axisVec·(t·drift).
     // drift 0 subtracts an exact 0 → byte-identical to the pre-drift field.
     vec3 ax = uVolA[i].z < 0.5 ? vec3(1.0, 0.0, 0.0) : (uVolA[i].z < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
     float v = clamp(vfbm3((p - ax * (uT * uVolA[i].w)) * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  if (id == 4) {           // body wave: A = (axis, wavelength, amplitude, offset), B = (speed, -, -, -)
+  }`,
+  4: `  if (id == 4) {           // body wave: A = (axis, wavelength, amplitude, offset), B = (speed, -, -, -)
     float coord = vaxis(p, uVolA[i].x);
     float wave = sin((coord - uVolA[i].w + uT * uVolB[i].x) * 6.2831853 / uVolA[i].y) * uVolA[i].z;
     float v = vband(wave, uVolA[i].z * 0.2, 0.5);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
+  }`,
+  5: `  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
     float coord = vaxis(p, uVolA[i].x);
     float v = 0.0;
     for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  if (id == 6) {           // flow field: A=(windX,windY,windZ,scale), B=(turbulence,thickness,trail,seed), colB.x=speed
+  }`,
+  6: `  if (id == 6) {           // flow field: A=(windX,windY,windZ,scale), B=(turbulence,thickness,trail,seed), colB.x=speed
     vec3 wind = uVolA[i].xyz; float wm = length(wind);
     vec3 dir = wm < 1e-5 ? vec3(0.0) : wind / wm;
     float s = uVolB[i].w * 11.0;   // seed
@@ -134,8 +151,8 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
     float tt = clamp((abs(nrm - 0.5) - hw * 0.5) / max(hw - hw * 0.5, 1e-5), 0.0, 1.0);
     float v = 1.0 - tt * tt * (3.0 - 2.0 * tt);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  if (id == 7) {        // caustics
+  }`,
+  7: `  if (id == 7) {        // caustics
     float scale = uVolA[i].x, speed = uVolA[i].y, gain = uVolA[i].z, warp = uVolA[i].w;
     float bright = uVolB[i].x, axis = uVolB[i].y, drift = uVolB[i].z;
     vec3 ax = axis < 0.5 ? vec3(1.0, 0.0, 0.0) : (axis < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
@@ -144,8 +161,8 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
     float v = clamp(pow(clamp(raw, 0.0, 1.0), gain) * bright, 0.0, 1.0);
     vec3 col = mix(uVolColB[i], volTint(i, cuv, uVolColA[i]), v);
     return vec4(col * v, v);
-  }
-  if (id == 8) {           // aurora
+  }`,
+  8: `  if (id == 8) {           // aurora
     float run  = vaxis(p, uVolA[i].x);
     float hgt  = (uVolA[i].x > 0.5 && uVolA[i].x < 1.5) ? p.x : p.y;
     float t    = uT * uVolA[i].y; float sc = uVolA[i].z; float soft = uVolA[i].w;
@@ -160,8 +177,8 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
     float a = ribs * env * 0.85;
     vec3 col = volTint(i, cuv, mix(uVolColB[i], uVolColA[i], clamp(hg, 0.0, 1.0)));
     return vec4(col * a, a);
-  }
-  if (id == 9) {           // pacifica
+  }`,
+  9: `  if (id == 9) {           // pacifica
     float sc = uVolA[i].x, sp = uVolA[i].y, dep = uVolA[i].w, cr = uVolB[i].x;
     vec3 axv = uVolA[i].z < 0.5 ? vec3(1.0,0.0,0.0) : (uVolA[i].z < 1.5 ? vec3(0.0,1.0,0.0) : vec3(0.0,0.0,1.0));
     vec3 b = p - axv * (sp * uT);
@@ -173,24 +190,29 @@ vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
     float cap = smoothstep(0.72, 0.95, h) * cr; vec3 col = water + uVolColB[i] * cap;
     float v = clamp((0.40 + 0.60 * h) * dep, 0.0, 1.0);
     return vec4(volTint(i, cuv, col) * v, v);
-  }
-  if (id == 10) {  // shockburst
+  }`,
+  10: `  if (id == 10) {  // shockburst
     float d = length(p - uVolA[i].xyz);
     float th = uVolB[i].x, so = uVolB[i].y; int rc = int(uVolB[i].z + 0.5); float sp = uVolB[i].w;
     float fade = uVolColB[i].x; float speed = uVolA[i].w; float v = 0.0;
     for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, shock_burst(d, uVolTrigs[i*8+k] * speed, th, so, rc, sp, fade)); }
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
-  }
-  // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
+  }`,
+  3: `  // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
   // (radius = age·speed — the same field re-evaluated, brightest wins).
-  float d = length(p - uVolA[i].xyz);
-  float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
-  for (int k = 0; k < 8; k++) {
-    if (k >= uVolTrigCount[i]) break;
-    v = max(v, vband(d - uVolTrigs[i*8+k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
-  }
-  return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  if (id == 3) {
+    float d = length(p - uVolA[i].xyz);
+    float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
+    for (int k = 0; k < 8; k++) {
+      if (k >= uVolTrigCount[i]) break;
+      v = max(v, vband(d - uVolTrigs[i*8+k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
+    }
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+};
+
+const FS_POST = `  return vec4(0.0);
 }
 
 // Per-LED colour-effect chain for volumetric clip 'clip' (4 slots). Operates on a
@@ -256,17 +278,33 @@ void main(){
   frag = vec4(rgb, base.a);
 }`;
 
-// The SAMPLE_FS program is expensive to compile+link, and during a live fixture
-// DRAG the sampler is rebuilt every frame (positions move) — so we compile it
-// ONCE per GL context and share it across every sampler instance (mirrors the
-// compositor's program cache). Keyed by the gl object; a `gl.isProgram` guard
-// recompiles automatically after WebGL context-loss (the old program handle is
-// invalidated by the driver, so isProgram → false ⇒ fresh compile). Because the
-// program is shared, dispose() must NOT delete it — it outlives any one sampler.
-const SAMPLE_PROGRAMS = new WeakMap();   // gl → linked SAMPLE_FS program
-function samplerProgram(gl) {
-  let p = SAMPLE_PROGRAMS.get(gl);
-  if (!p || !gl.isProgram(p)) { p = program(gl, SAMPLE_FS); SAMPLE_PROGRAMS.set(gl, p); }
+// Assemble the sampler fragment shader for a specific set of field ids: FS_PRE +
+// the id-chain blocks for exactly those fields + FS_POST. An empty set yields a
+// shader whose fieldColor just returns vec4(0.0) — a fraction of the full 12-field
+// program, which is what keeps the V3D GPU from crashing. Unknown ids are skipped.
+export function buildSampleFS(ids) {
+  return FS_PRE + ids.map((id) => FIELD_BLOCKS[id] || '').join('\n') + FS_POST;
+}
+
+// The sampler program is expensive to compile+link, and during a live fixture DRAG
+// the sampler is rebuilt every frame (positions move) — so we compile ONCE per GL
+// context PER FIELD SET and share it across sampler instances (mirrors the
+// compositor's program cache). Keyed by the sorted, de-duped field-id list; a
+// `gl.isProgram` guard recompiles automatically after WebGL context-loss (the old
+// program handle is invalidated by the driver, so isProgram → false ⇒ fresh
+// compile). Because programs are shared, dispose() must NOT delete them — they
+// outlive any one sampler.
+const SAMPLE_PROGRAMS = new WeakMap();   // gl → Map<fieldKey, linked program>
+function fieldKeyOf(ids) { return [...new Set(ids)].sort((a, b) => a - b).join(','); }
+function samplerProgram(gl, ids = []) {
+  let byKey = SAMPLE_PROGRAMS.get(gl);
+  if (!byKey) { byKey = new Map(); SAMPLE_PROGRAMS.set(gl, byKey); }
+  const key = fieldKeyOf(ids);
+  let p = byKey.get(key);
+  if (!p || !gl.isProgram(p)) {
+    p = program(gl, buildSampleFS(key ? key.split(',').map(Number) : []));
+    byKey.set(key, p);
+  }
   return p;
 }
 
@@ -274,8 +312,9 @@ function samplerProgram(gl) {
 // the uv pairs) feeds the volumetric field pass; absent/empty falls back to a
 // canvas-plane position derived from nothing (all zeros) and volumetric clips
 // simply read the origin — callers should always pass it (see pipeline.js).
-export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions, sampleBands) {
+export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions, sampleBands, fieldIds = []) {
   const n = sampleUVs.length / 2;
+  const fieldKey = fieldKeyOf(fieldIds);   // sorted+deduped key; app.js diffs it to detect field-set changes
   // Wrap the LED list into a 2D grid so very large rigs don't blow past the GPU's
   // max texture WIDTH (a 1-row n-wide texture fails once n exceeds it). Width is
   // capped well under MAX_TEXTURE_SIZE; height grows as needed.
@@ -310,7 +349,7 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, W, H);
-  const prog = samplerProgram(gl);   // shared, compiled once per GL context (see samplerProgram)
+  const prog = samplerProgram(gl, fieldIds);   // shared, compiled once per GL context PER FIELD SET (see samplerProgram)
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
   const locPos = gl.getUniformLocation(prog, 'uPos');
@@ -355,7 +394,7 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   const queue = [];                           // FIFO of pbo indices awaiting readback (oldest first)
   let lastValid = null;
 
-  return { n,
+  return { n, fieldKey,
     dispose() {
       gl.deleteTexture(map);
       gl.deleteTexture(posTex);
