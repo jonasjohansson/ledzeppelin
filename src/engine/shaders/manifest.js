@@ -1108,6 +1108,373 @@ void main(){
   frag = vec4(col, 1.0);
 }`;
 
+// --- WLED effect pack 2: twinkle / fire / pride-matrix-ripple + blur --------
+
+const TWINKLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase; uniform float density; uniform float fade; uniform float count;
+uniform vec3 color; uniform vec3 colorB;
+float h11(float x){ return fract(sin(x*127.1)*43758.5453); }
+void main(){
+  float N = max(1.0, count);
+  float cell = floor(clamp(uv.x, 0.0, 0.999999) * N);
+  float r1 = h11(cell + 0.5);              // per-cell phase offset
+  float r2 = h11(cell + 91.7);             // per-cell speed jitter (organic, not lockstep)
+  float clk = fract(uPhase * (0.5 + r2) + r1);
+  float w = clamp(density, 0.001, 1.0);    // fraction of the cycle each cell is lit ≈ fraction lit
+  float env = 0.0;
+  if (clk < w){
+    float u = clk / w;                     // 0..1 across the lit window
+    float attack = smoothstep(0.0, 0.12, u);          // quick rise
+    float decay  = 1.0 - smoothstep(0.12, 1.0, u);    // slow fall (WLED fade_out feel)
+    env = attack * pow(max(decay, 0.0), mix(0.7, 3.5, clamp(fade, 0.0, 1.0)));
+  }
+  frag = vec4(mix(colorB, color, env), 1.0);
+}`;
+
+const TWINKLEFOX_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase; uniform float density; uniform float fade; uniform float count; uniform float cat;
+uniform vec3 color; uniform vec3 colorB;
+float h11(float x){ return fract(sin(x*127.1)*43758.5453); }
+void main(){
+  float N = max(1.0, count);
+  float cell = floor(clamp(uv.x, 0.0, 0.999999) * N);
+  float r1 = h11(cell + 0.5);
+  float r2 = h11(cell + 91.7);
+  float r3 = h11(cell + 47.3);             // per-cell warm-hue pick
+  float clk = fract(uPhase * (0.45 + r2) + r1);
+  float w = clamp(density, 0.001, 1.0);
+  float env = 0.0, u = 0.0;
+  if (clk < w){
+    u = clk / w;
+    if (cat > 0.5){
+      env = 1.0 - u;                       // twinklecat: instant on, fade off
+    } else {
+      float attack = smoothstep(0.0, 0.18, u);         // twinklefox: fast attack
+      float decay  = 1.0 - smoothstep(0.18, 1.0, u);   // slow decay
+      env = attack * pow(max(decay, 0.0), mix(0.7, 3.0, clamp(fade, 0.0, 1.0)));
+    }
+  }
+  vec3 base = mix(color, colorB, r3);      // each star warm-white .. amber
+  vec3 c = base * env;
+  float cool = smoothstep(0.45, 1.0, u);   // incandescent: shift toward red as it dims
+  c.g *= 1.0 - 0.45 * cool;
+  c.b *= 1.0 - 0.80 * cool;
+  frag = vec4(c, 1.0);
+}`;
+
+const COLORTWINKLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase; uniform float density; uniform float fade; uniform float count; uniform float spread; uniform float sat;
+float h11(float x){ return fract(sin(x*127.1)*43758.5453); }
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float N = max(1.0, count);
+  float cell = floor(clamp(uv.x, 0.0, 0.999999) * N);
+  float r1 = h11(cell + 0.5);
+  float r2 = h11(cell + 91.7);
+  float r3 = h11(cell + 47.3);             // per-star hue seed
+  float clk = fract(uPhase * (0.5 + r2) + r1);
+  float w = clamp(density, 0.001, 1.0);
+  float env = 0.0;
+  if (clk < w){
+    float u = clk / w;
+    float attack = smoothstep(0.0, 0.12, u);
+    float decay  = 1.0 - smoothstep(0.12, 1.0, u);
+    env = attack * pow(max(decay, 0.0), mix(0.7, 3.5, clamp(fade, 0.0, 1.0)));
+  }
+  float hh = fract(r3 * clamp(spread, 0.0, 1.0) + uPhase * 0.05);
+  vec3 col = mix(vec3(1.0), hue(hh), clamp(sat, 0.0, 1.0));
+  frag = vec4(col * env, 1.0);
+}`;
+
+const SPARKLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase; uniform float density; uniform float fade; uniform float count; uniform float hyper;
+uniform vec3 color; uniform vec3 colorB;
+float h11(float x){ return fract(sin(x*127.1)*43758.5453); }
+void main(){
+  float N = max(1.0, count);
+  float cell = floor(clamp(uv.x, 0.0, 0.999999) * N);
+  float r1 = h11(cell + 0.5);
+  float r2 = h11(cell + 91.7);
+  float r3 = h11(cell + 47.3);             // which cells are allowed to spark
+  float w = mix(0.04, 0.18, clamp(fade, 0.0, 1.0));   // short flash window
+  float clk = fract(uPhase * (0.7 + r2) + r1);
+  float gate = clamp(density, 0.0, 1.0) * (hyper > 0.5 ? 3.0 : 1.0);
+  float env = 0.0;
+  if (r3 < gate && clk < w){
+    float u = clk / w;
+    env = pow(1.0 - u, mix(1.0, 2.5, clamp(fade, 0.0, 1.0)));   // instant on, quick fade
+  }
+  frag = vec4(mix(colorB, color, env), 1.0);
+}`;
+
+const GLITTER_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase; uniform float density; uniform float fade; uniform float count; uniform float cycles; uniform float sat;
+uniform vec3 color;
+float h11(float x){ return fract(sin(x*127.1)*43758.5453); }
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  // Base: a scrolling rainbow wash (the thing glitter sits on).
+  float hh = fract(uv.x * max(0.0, cycles) + uPhase * 0.15);
+  vec3 wash = mix(vec3(1.0), hue(hh), clamp(sat, 0.0, 1.0));
+  // Overlay: brief bright sparks added on top.
+  float N = max(1.0, count);
+  float cell = floor(clamp(uv.x, 0.0, 0.999999) * N);
+  float r1 = h11(cell + 0.5);
+  float r2 = h11(cell + 91.7);
+  float r3 = h11(cell + 47.3);
+  float w = mix(0.03, 0.12, clamp(fade, 0.0, 1.0));
+  float clk = fract(uPhase * (0.9 + r2) + r1);
+  float env = 0.0;
+  if (r3 < clamp(density, 0.0, 1.0) && clk < w){
+    env = pow(1.0 - clk / w, 1.5);
+  }
+  vec3 col = wash + color * env;           // glitter_base: additive pops
+  frag = vec4(min(col, vec3(1.0)), 1.0);
+}`;
+
+const FIRE2012_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;    // integrated speed -> upward scroll (speed is the phase rate, not a uniform)
+uniform float height;    // how high the flames climb before cooling to black
+uniform float intensity; // heat / how fiercely the fire roars
+uniform vec3 colorLo;    // ember colour (low heat)
+uniform vec3 colorHi;    // hot-flame colour (blows out to white at the tips)
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+float fbm(vec2 p){ float n=0.0, amp=0.5, fr=1.0;
+  for(int i=0;i<5;i++){ n+=amp*vnoise(p*fr); fr*=2.0; amp*=0.5; } return n; }
+// heat 0..1 -> black -> ember -> hot -> white-hot tip (the WLED fire palette, parametrised)
+vec3 fireRamp(float t, vec3 lo, vec3 hi){
+  t = clamp(t, 0.0, 1.0);
+  vec3 c = mix(vec3(0.0), lo, smoothstep(0.0, 0.35, t));
+  c = mix(c, hi, smoothstep(0.35, 0.80, t));
+  c = mix(c, vec3(1.0), smoothstep(0.82, 1.00, t));
+  return c;
+}
+void main(){
+  float y = uv.y;                                   // base at the BOTTOM (v=0); flames rise
+  // slow horizontal sway so the tongues lick side to side as they climb
+  float sway = (fbm(vec2(uv.y * 2.5 - uPhase * 1.3, 3.7)) - 0.5) * 0.25;
+  // upward-scrolling turbulence: subtract phase from sample-y so features rise
+  vec2 p = vec2((uv.x + sway) * 3.0, uv.y * 4.0 - uPhase * 2.0);
+  float n = fbm(p);
+  n = mix(n, fbm(p * 2.1 + 4.7), 0.4);              // finer flicker detail
+  // vertical cooling: hot at the base, faded to nothing by 'height'
+  float cool = 1.0 - clamp(y / max(0.06, height), 0.0, 1.0);
+  cool = pow(cool, 1.4);
+  // ignition floor keeps the very base solidly lit (WLED's bottom spark zone)
+  float ignite = (1.0 - smoothstep(0.0, 0.10, y)) * 0.6;
+  float heat = cool * (0.35 + 1.10 * intensity) * (0.35 + 1.05 * n) + ignite;
+  heat = clamp(heat, 0.0, 1.0);
+  vec3 col = fireRamp(heat, colorLo, colorHi);
+  frag = vec4(col * smoothstep(0.03, 0.16, heat), 1.0);  // fade cleanly to black at the tips
+}`;
+
+const CANDLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT; uniform float speed; uniform float intensity;
+uniform vec3 color;      // warm candle colour (whole flame is one colour, like WLED candle)
+float hash(float n){ return fract(sin(n)*43758.5453); }
+float tnoise(float x){ float i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+  return mix(hash(i), hash(i+1.0), f); }
+void main(){
+  float t = uT * max(0.01, speed);
+  // layered flicker: slow wander + faster tremble (a candle is never fully steady)
+  float flick = 0.6*tnoise(t*3.0) + 0.3*tnoise(t*7.0 + 11.0) + 0.1*tnoise(t*17.0 + 23.0);
+  // occasional deeper dip (a draft catching the flame)
+  float dip = smoothstep(0.82, 1.0, tnoise(t*1.3 + 5.0));
+  float base = 1.0 - clamp(intensity, 0.0, 1.0) * 0.7;   // how far it can dim
+  float bri = mix(base, 1.0, flick) - 0.5 * intensity * dip;
+  frag = vec4(color * clamp(bri, 0.0, 1.0), 1.0);
+}`;
+
+const FIREFLICKER_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT; uniform float speed; uniform float intensity;
+uniform vec3 color;      // base ember colour that each LED darkens away from
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+float tnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
+  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y); }
+void main(){
+  float t = uT * max(0.01, speed) * 6.0;
+  // per-LED flicker along the strip (uv.x); each position trembles independently
+  float n = tnoise(vec2(uv.x * 64.0, t));
+  float flicker = n * clamp(intensity, 0.0, 1.0);
+  vec3 col = color * (1.0 - flicker);   // WLED subtracts a random amount from the base colour
+  frag = vec4(max(col, 0.0), 1.0);
+}`;
+
+const LIGHTNING_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uT; uniform float speed; uniform float intensity;
+uniform vec3 color;      // bolt colour (default cool white-blue)
+float hash(float n){ return fract(sin(n)*43758.5453); }
+void main(){
+  // slice time into strike slots; each slot fires ONE bolt at a hashed offset
+  float rate = max(0.05, speed);
+  float slotT = uT * rate;
+  float slot = floor(slotT);
+  float f = fract(slotT);
+  float strikeAt = 0.05 + 0.50 * hash(slot*1.7 + 3.1);   // when in the slot it strikes
+  float segCtr   = hash(slot*2.3 + 7.7);                 // bolt centre along the strip
+  float segHalf  = 0.08 + 0.35 * hash(slot*3.9 + 1.3);   // half-length of the lit run
+  float dt = f - strikeAt;                               // time since this slot's strike
+  // multi-stroke envelope: fast attack, exponential decay, rapid return-stroke re-flash
+  float env = 0.0;
+  if (dt >= 0.0) {
+    float e = exp(-dt * 22.0);
+    float restrike = 0.5 + 0.5 * sin(dt * 90.0);         // the 2-3 flickers of a real bolt
+    env = e * mix(0.6, 1.0, restrike);
+  }
+  env *= step(0.35, hash(slot*5.1 + 0.7));               // some slots stay dark -> irregular gaps
+  // spatial: light a ragged segment with soft edges (branching feel)
+  float d = abs(uv.x - segCtr);
+  float seg = smoothstep(segHalf, segHalf*0.4, d);
+  float branch = 0.6 + 0.4 * step(0.5, hash(floor(uv.x*40.0) + slot*13.0));
+  float v = env * seg * branch * (0.6 + 0.8 * clamp(intensity, 0.0, 1.0));
+  frag = vec4(color * clamp(v, 0.0, 1.0), 1.0);
+}`;
+
+// Pride 2015 — Mark Kriegsman's ever-changing rainbow.
+const PRIDE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;   // master clock (speed-scaled by the engine)
+uniform float depth;    // brightness modulation depth (WLED brightdepth) 0..1
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+float bs(float rate, float lo, float hi){ return mix(lo, hi, 0.5+0.5*sin(uPhase*rate)); } // beatsin analogue
+void main(){
+  float i = uv.x;                                   // position along the strip
+  // Kriegsman's breathing oscillators (relative rates preserved)
+  float sat       = bs(0.87, 0.863, 0.980);         // beatsin88(87,220,250)/255
+  float brightdep = bs(3.41, 0.376, 0.878) * clamp(depth,0.0,1.0); // beatsin88(341,96,224)/255
+  float briFreq   = bs(2.03, 4.0, 10.0);            // brightnessthetainc (cycles across strip)
+  float msMul     = bs(1.47, 23.0, 60.0);           // pseudotime rate
+  float hueSpread = bs(1.13, 0.0, 3.0);             // hueinc (hue cycles across strip)
+  // travelling phases
+  float pseudotime = uPhase * msMul * 0.30;         // sPseudotime advance
+  float sHue       = uPhase * 0.50;                 // sHue16 drift
+  float h = fract(sHue + i * hueSpread);            // hue scrolls + spreads
+  float b = 0.5 + 0.5 * sin((pseudotime + i * briFreq) * 6.2831853);
+  b = b * b;                                        // WLED squares b16
+  float bri = b * brightdep + (1.0 - brightdep);    // troughs to (1-brightdep), peaks to 1
+  vec3 col = mix(vec3(1.0), hue(h), sat);           // saturation = mix toward white
+  frag = vec4(col * bri, 1.0);
+}`;
+
+// Matrix — digital rain. Columns = uv.x buckets, code falls down uv.y.
+const MATRIX_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;      // fall clock (speed-scaled by the engine)
+uniform float cols;        // number of rain columns
+uniform float rows;        // vertical cells (glyph steps)
+uniform float trail;       // trail length in cells
+uniform float density;     // fraction of columns raining 0..1
+uniform vec3 headColor;    // bright leading glyph
+uniform vec3 trailColor;   // fading code behind it
+float hash(float n){ return fract(sin(n*127.1)*43758.5453); }
+void main(){
+  float nc = max(1.0, floor(cols + 0.5));
+  float nr = max(1.0, floor(rows + 0.5));
+  float col = floor(clamp(uv.x,0.0,0.9999) * nc);
+  float yd  = 1.0 - uv.y;                              // 0 at top, 1 at bottom (falls down)
+  float ry  = floor(clamp(yd,0.0,0.9999) * nr);        // this pixel's cell row
+  float off = hash(col + 0.5);                         // per-column phase offset
+  float spd = 0.5 + hash(col + 11.3);                  // 0.5..1.5x fall speed
+  float on  = step(1.0 - clamp(density,0.0,1.0), hash(col + 3.7)); // some columns dark
+  float p    = fract(uPhase * spd + off);
+  float head = floor(p * nr);                          // head cell (falling down)
+  float d = head - ry; if (d < 0.0) d += nr;           // cells behind the head (wraps)
+  float tl = max(1.0, floor(trail + 0.5));
+  vec3 c = vec3(0.0);
+  if (on > 0.5) {
+    if (d < 0.5)        c = headColor;                 // the bright leading glyph
+    else if (d <= tl)   c = trailColor * clamp(1.0 - (d - 1.0) / tl, 0.0, 1.0); // decaying trail
+  }
+  frag = vec4(c, 1.0);
+}`;
+
+// Ripple — multiple expanding rings from time-hashed random origins.
+const RIPPLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;    // ripple clock (speed-scaled by the engine)
+uniform float count;     // simultaneous ripples (slots)
+uniform float width;     // ring band thickness
+uniform float sat;       // ring colour saturation
+uniform vec3 bg;         // background wash (WLED fills SEGCOLOR(1); default black)
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+float hash(float n){ return fract(sin(n*127.1)*43758.5453); }
+void main(){
+  float x = uv.x;
+  float n = max(1.0, floor(count + 0.5));
+  vec3 acc = bg;
+  for (int i = 0; i < 12; i++) {
+    if (float(i) >= n) break;
+    float fi = float(i);
+    float phase = uPhase + hash(fi + 0.13);            // this slot's staggered clock
+    float cyc   = floor(phase);                        // which ripple (re-randomises origin)
+    float a     = fract(phase);                        // age 0..1 of the current ripple
+    float seed  = fi * 7.0 + cyc * 13.0;
+    float x0    = hash(seed + 1.0);                    // random origin along the strip
+    float hcol  = hash(seed + 2.0);                    // random hue
+    float radius = a;                                  // edge expands 0..1 outward
+    float env   = (a < 0.06) ? (a / 0.06)              // fast rise (triwave up)
+                             : pow(1.0 - (a - 0.06) / 0.94, 1.5); // long decay (map down)
+    float band  = smoothstep(width, 0.0, abs(abs(x - x0) - radius));
+    vec3 col    = mix(vec3(1.0), hue(hcol), clamp(sat,0.0,1.0));
+    acc = max(acc, col * band * env);                  // rings stack; brightest wins
+  }
+  frag = vec4(acc, 1.0);
+}`;
+
+// Blur — a cheap single-pass disc blur (post-process EFFECT). Samples uTex at 13
+// taps (centre + two hex rings) offset in UV space; `aspect` (auto-injected w/h)
+// keeps the blur circular. Neighbourhood effect (samples uTex) -> spatial ->
+// 2D-only (no `kind`, so it's hidden on volumetric clips).
+const BLUR = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform sampler2D uTex;
+uniform float aspect;      // auto-injected canvas w/h
+uniform float radius;      // tap spread in UV units
+uniform float amount;      // wet/dry mix 0..1
+uniform float direction;   // 0 both, 1 horizontal, 2 vertical
+
+// (unit-direction.xy, weight): centre implicit, ring A r=0.5, ring B r=1.0
+const vec3 kBlur[12] = vec3[12](
+  vec3( 0.500,  0.000, 0.75), vec3( 0.250,  0.433, 0.75), vec3(-0.250,  0.433, 0.75),
+  vec3(-0.500,  0.000, 0.75), vec3(-0.250, -0.433, 0.75), vec3( 0.250, -0.433, 0.75),
+  vec3( 0.866,  0.500, 0.40), vec3( 0.000,  1.000, 0.40), vec3(-0.866,  0.500, 0.40),
+  vec3(-0.866, -0.500, 0.40), vec3( 0.000, -1.000, 0.40), vec3( 0.866, -0.500, 0.40)
+);
+
+void main(){
+  vec4 c0 = texture(uTex, uv);
+  // per-axis UV scale: /aspect on x undoes the canvas stretch so the blur is round;
+  // direction mask collapses the kernel to a line for H / V.
+  vec2 sc = vec2(radius / max(aspect, 1e-4), radius);
+  vec2 mask = (direction < 0.5) ? vec2(1.0)
+            : (direction < 1.5) ? vec2(1.0, 0.0)
+                                : vec2(0.0, 1.0);
+  sc *= mask;
+
+  vec4 acc = c0;          // centre tap, weight 1.0
+  float wsum = 1.0;
+  for (int i = 0; i < 12; i++){
+    float w = kBlur[i].z;
+    acc  += texture(uTex, uv + kBlur[i].xy * sc) * w;   // LINEAR + CLAMP targets: safe
+    wsum += w;
+  }
+  vec4 blurred = acc / wsum;
+  frag = mix(c0, blurred, clamp(amount, 0.0, 1.0));   // amount 0 == exact pass-through
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -1574,6 +1941,128 @@ export const REGISTRY = {
       { key: 'color',   type: 'color', default: '#bcd4ff' },
     ],
   },
+  // --- WLED effect pack 2 generators: twinkle / fire / pride-matrix-ripple ---
+  twinkle: {
+    name: 'twinkle', type: 'generator', desc: 'WLED: single-colour stars fading in and out on a dark field (Twinkle).', src: TWINKLE_SRC,
+    params: [
+      { key: 'density', type: 'float', min: 0.02, max: 1, default: 0.25 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.8 },
+      { key: 'fade', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'count', type: 'float', min: 8, max: 400, default: 120, step: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  twinklefox: {
+    name: 'twinklefox', type: 'generator', desc: 'WLED: warm stars with a fast bloom and a slow incandescent cool-to-red fade (Twinklefox / Twinklecat).', src: TWINKLEFOX_SRC,
+    params: [
+      { key: 'density', type: 'float', min: 0.02, max: 1, default: 0.35 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.6 },
+      { key: 'fade', type: 'float', min: 0, max: 1, default: 0.6 },
+      { key: 'count', type: 'float', min: 8, max: 400, default: 120, step: 1 },
+      { key: 'cat', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ffd9a0' },
+      { key: 'colorB', type: 'color', default: '#ff6a1a' },
+    ],
+  },
+  colortwinkles: {
+    name: 'colortwinkles', type: 'generator', desc: 'WLED: multicolour stars, each a random hue, twinkling on black (Colortwinkles).', src: COLORTWINKLE_SRC,
+    params: [
+      { key: 'density', type: 'float', min: 0.02, max: 1, default: 0.3 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.8 },
+      { key: 'fade', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'count', type: 'float', min: 8, max: 400, default: 120, step: 1 },
+      { key: 'spread', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  sparkle: {
+    name: 'sparkle', type: 'generator', desc: 'WLED: brief bright pops flashing over a solid base wash (Sparkle / Sparkle+).', src: SPARKLE_SRC,
+    params: [
+      { key: 'density', type: 'float', min: 0, max: 1, default: 0.15 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1.5 },
+      { key: 'fade', type: 'float', min: 0, max: 1, default: 0.3 },
+      { key: 'count', type: 'float', min: 8, max: 400, default: 120, step: 1 },
+      { key: 'hyper', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#16324f' },
+    ],
+  },
+  glitter: {
+    name: 'glitter', type: 'generator', desc: 'WLED: white glitter sparkling over a scrolling rainbow wash (Glitter).', src: GLITTER_SRC,
+    params: [
+      { key: 'density', type: 'float', min: 0, max: 1, default: 0.12 },
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'fade', type: 'float', min: 0, max: 1, default: 0.3 },
+      { key: 'count', type: 'float', min: 8, max: 400, default: 120, step: 1 },
+      { key: 'cycles', type: 'float', min: 0.25, max: 8, default: 1, step: 0.25 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  fire2012: {
+    name: 'fire2012', type: 'generator', desc: 'WLED: the iconic Fire 2012 — flames rising from a hot base, cooling to black.', src: FIRE2012_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.6 },
+      { key: 'height', type: 'float', min: 0.1, max: 1.5, default: 0.8, step: 0.01 },
+      { key: 'intensity', type: 'float', min: 0, max: 1, default: 0.55, step: 0.01 },
+      { key: 'colorLo', type: 'color', default: '#ff2a00' },
+      { key: 'colorHi', type: 'color', default: '#ffcf40' },
+    ],
+  },
+  candle: {
+    name: 'candle', type: 'generator', desc: 'WLED: a warm candle flame gently flickering around a steady glow.', src: CANDLE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 1 },
+      { key: 'intensity', type: 'float', min: 0, max: 1, default: 0.4, step: 0.01 },
+      { key: 'color', type: 'color', default: '#ffb347' },
+    ],
+  },
+  fireflicker: {
+    name: 'fireflicker', type: 'generator', desc: 'WLED: Fire Flicker — every LED trembles independently around a warm base.', src: FIREFLICKER_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 1 },
+      { key: 'intensity', type: 'float', min: 0, max: 1, default: 0.5, step: 0.01 },
+      { key: 'color', type: 'color', default: '#ff7020' },
+    ],
+  },
+  lightning: {
+    name: 'lightning', type: 'generator', desc: 'WLED: Lightning — brief bright bolts striking random runs of the strip.', src: LIGHTNING_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0.05, max: 3, default: 0.6, step: 0.01 },
+      { key: 'intensity', type: 'float', min: 0, max: 1, default: 0.7, step: 0.01 },
+      { key: 'color', type: 'color', default: '#cfe4ff' },
+    ],
+  },
+  pride: {
+    name: 'pride', type: 'generator', desc: 'WLED: Pride 2015 — Kriegsman’s ever-changing flowing rainbow.', src: PRIDE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.4 },
+      { key: 'depth', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  matrix: {
+    name: 'matrix', type: 'generator', desc: 'WLED: Matrix digital rain — falling green code with decaying trails.', src: MATRIX_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.6 },
+      { key: 'cols', type: 'float', min: 2, max: 64, default: 16, step: 1 },
+      { key: 'rows', type: 'float', min: 4, max: 64, default: 24, step: 1 },
+      { key: 'trail', type: 'float', min: 1, max: 32, default: 8, step: 1 },
+      { key: 'density', type: 'float', min: 0, max: 1, default: 0.9 },
+      { key: 'headColor', type: 'color', default: '#afffaf' },
+      { key: 'trailColor', type: 'color', default: '#1b8227' },
+    ],
+  },
+  ripple: {
+    name: 'ripple', type: 'generator', desc: 'WLED: Ripple — expanding rings from random origins along the strip.', src: RIPPLE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.5 },
+      { key: 'count', type: 'float', min: 1, max: 12, default: 5, step: 1 },
+      { key: 'width', type: 'float', min: 0.005, max: 0.2, default: 0.04 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'bg', type: 'color', default: '#000000' },
+    ],
+  },
   shockwave: {
     name: 'shockwave', type: 'effect', triggerable: true, src: SHOCKWAVE,
     params: [
@@ -1593,6 +2082,15 @@ export const REGISTRY = {
       { key: 'scale', type: 'float', min: 1, max: 40, default: 9, step: 0.5 },
       { key: 'speed', type: 'float', min: 0, max: 6, default: 1.2, step: 0.01 },
       { key: 'swirl', type: 'float', min: 0, max: 2, default: 0.4, step: 0.01 },
+    ],
+  },
+  blur: {
+    name: 'blur', type: 'effect', src: BLUR,
+    desc: 'Soft box/gaussian blur — diffuses the image (WLED Blurz / Soap).',
+    params: [
+      { key: 'radius', type: 'float', min: 0, max: 0.15, default: 0.03, step: 0.001 },
+      { key: 'amount', type: 'float', min: 0, max: 1, default: 1, step: 0.01 },
+      { key: 'direction', type: 'float', min: 0, max: 2, default: 0, step: 1 },
     ],
   },
 };
@@ -1625,6 +2123,10 @@ const LABELS = {
   colorwipe: 'Color Wipe', sinelon: 'Sinelon', rainbow: 'Rainbow',
   rainbowcycle: 'Rainbow Cycle', colorwaves: 'Color Waves', breathe: 'Breathe',
   theater: 'Theater', sinewave: 'Sine Wave', starfield: 'Starfield',
+  twinkle: 'Twinkle', twinklefox: 'Twinklefox', colortwinkles: 'Color Twinkles',
+  sparkle: 'Sparkle', glitter: 'Glitter',
+  fire2012: 'Fire 2012', candle: 'Candle', fireflicker: 'Fire Flicker', lightning: 'Lightning',
+  pride: 'Pride 2015', matrix: 'Matrix', ripple: 'Ripple', blur: 'Blur',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
