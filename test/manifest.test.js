@@ -36,7 +36,7 @@ test('defaultParams of an unknown name is empty', () => {
 });
 
 test('registry contains the expected generators and effects', () => {
-  assert.deepEqual(generatorNames().sort(), ['aurora', 'axisgradient', 'bodywave', 'breathe', 'caustics', 'chase', 'checkers', 'colorwaves', 'colorwipe', 'comet', 'domainwarp', 'flowfield', 'gradient', 'grid', 'larson', 'line', 'metaballs', 'noise', 'noise3d', 'pacifica', 'planepulse', 'planesweep', 'plasma', 'pulse', 'radial', 'rainbow', 'rainbowcycle', 'running', 'shockburst', 'sine', 'sinelon', 'sinewave', 'solid', 'spectrum', 'spherepulse', 'starfield', 'theater', 'tunnel']);
+  assert.deepEqual(generatorNames().sort(), ['audiobars', 'aurora', 'axisgradient', 'bodywave', 'breathe', 'caustics', 'chase', 'checkers', 'colorwaves', 'colorwipe', 'comet', 'domainwarp', 'flowfield', 'gradient', 'grid', 'larson', 'line', 'metaballs', 'noise', 'noise3d', 'pacifica', 'planepulse', 'planesweep', 'plasma', 'pulse', 'radial', 'rainbow', 'rainbowcycle', 'running', 'shockburst', 'sine', 'sinelon', 'sinewave', 'solid', 'spectrum', 'spherepulse', 'starfield', 'theater', 'tunnel']);
   assert.deepEqual(effectNames().sort(),
     ['basswarp', 'cascade', 'color', 'colorize', 'displace', 'feedback', 'hue', 'invert', 'repeat', 'rgb', 'segmenter', 'shockwave', 'strobe', 'threshold', 'trails']);
   for (const name of ['line', 'gradient', 'solid', 'checkers', 'grid', 'pulse', 'displace', 'repeat', 'strobe', 'segmenter', 'hue', 'colorize', 'trails', 'feedback']) {

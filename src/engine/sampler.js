@@ -20,6 +20,8 @@ precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uCanvas;
 uniform sampler2D uMap;
 uniform sampler2D uPos;      // per-LED world xyz (same W×H layout as uMap)
+uniform sampler2D uBand;     // per-LED audio band index 0/1/2 (same W×H layout) — audiobars
+uniform vec3 uAudioBands;    // live mic band levels (bass, mid, high) 0..1 — audiobars
 uniform int uVolCount;       // active volumetric clips (0 = plain pass-through)
 uniform float uT;            // seconds (noise3d drift)
 uniform float uVolTrigs[32];   // 4 slots × 8 — seconds since each trigger, per volumetric clip
@@ -78,9 +80,17 @@ float shock_burst(float d, float front, float th, float so, int rc, float sp, fl
 // the composited 2D canvas at this LED's UV instead of the flat param colour.
 vec3 volTint(int i, vec2 cuv, vec3 flatCol) { return uVolMeta[i].w > 0.5 ? texture(uCanvas, cuv).rgb : flatCol; }
 
-// One packed clip's field at world point p → PREMULTIPLIED rgba.
-vec4 fieldColor(int i, vec3 p, vec2 cuv){
+// One packed clip's field at world point p -> PREMULTIPLIED rgba. bnd is this
+// LED's audio band index (0/1/2), used only by the audiobars field.
+vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
   int id = int(uVolMeta[i].x + 0.5);
+  if (id == 11) {          // audiobars: A=(gain, floor, -, -); colA=bass, colB=high, mid=mix.
+    int band = int(bnd + 0.5);
+    float level = band == 0 ? uAudioBands.x : (band == 2 ? uAudioBands.z : uAudioBands.y);
+    float v = clamp(uVolA[i].y + level * uVolA[i].x, 0.0, 1.0);
+    vec3 col = band == 0 ? uVolColA[i] : (band == 2 ? uVolColB[i] : mix(uVolColA[i], uVolColB[i], 0.5));
+    return vec4(col * v, v);
+  }
   if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
     float v = vband(vaxis(p, uVolA[i].x) - uVolA[i].y, uVolA[i].z, uVolA[i].w);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
@@ -226,9 +236,10 @@ void main(){
   if (!(c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0)) base = texture(uCanvas, c);
   vec3 rgb = base.rgb;
   vec3 ledPos = texelFetch(uPos, t, 0).xyz;   // per-LED world xyz — fetch once, not per clip
+  float ledBand = texelFetch(uBand, t, 0).r;  // per-LED audio band index (audiobars)
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
-    vec4 f = fieldColor(i, ledPos, c);
+    vec4 f = fieldColor(i, ledPos, c, ledBand);
     // Phase-1 colour effects: fold the clip's chain over the STRAIGHT colour, re-premult.
     if (f.a > 0.0) { vec3 s = colorFx(f.rgb / f.a, i); f.rgb = s * f.a; }
     float op = uVolMeta[i].z;
@@ -263,7 +274,7 @@ function samplerProgram(gl) {
 // the uv pairs) feeds the volumetric field pass; absent/empty falls back to a
 // canvas-plane position derived from nothing (all zeros) and volumetric clips
 // simply read the origin — callers should always pass it (see pipeline.js).
-export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions) {
+export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions, sampleBands) {
   const n = sampleUVs.length / 2;
   // Wrap the LED list into a 2D grid so very large rigs don't blow past the GPU's
   // max texture WIDTH (a 1-row n-wide texture fails once n exceeds it). Width is
@@ -275,6 +286,9 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   // isn't a whole multiple of W). Shared by the initial build and in-place update.
   const packUVs = (src) => (W * H === n) ? src : (() => { const a = new Float32Array(W * H * 2); a.set(src); return a; })();
   const packPos = (src) => { const a = new Float32Array(W * H * 3); if (src?.length) a.set(src.subarray(0, Math.min(src.length, a.length))); return a; };
+  // Per-LED audio band index (scalar) for the audiobars field — one channel,
+  // padded to the full W×H grid; a missing array reads as band 0 (bass).
+  const packBand = (src) => { const a = new Float32Array(W * H); if (src?.length) a.set(src.subarray(0, Math.min(src.length, a.length))); return a; };
 
   const map = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, map);
@@ -288,11 +302,20 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, packPos(samplePositions));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  // Per-LED audio band index — a one-channel R32F texture, same W×H layout as
+  // uMap/uPos (audiobars reads it to pick this LED's frequency band).
+  const bandTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, bandTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, W, H, 0, gl.RED, gl.FLOAT, packBand(sampleBands));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, W, H);
   const prog = samplerProgram(gl);   // shared, compiled once per GL context (see samplerProgram)
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
   const locPos = gl.getUniformLocation(prog, 'uPos');
+  const locBand = gl.getUniformLocation(prog, 'uBand');
+  const locAudioBands = gl.getUniformLocation(prog, 'uAudioBands');
   const locVolCount = gl.getUniformLocation(prog, 'uVolCount');
   const locT = gl.getUniformLocation(prog, 'uT');
   const locVolTrigs = gl.getUniformLocation(prog, 'uVolTrigs[0]');
@@ -336,6 +359,7 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
     dispose() {
       gl.deleteTexture(map);
       gl.deleteTexture(posTex);
+      gl.deleteTexture(bandTex);
       gl.deleteTexture(target.tex);
       gl.deleteFramebuffer(target.fbo);
       // NB: `prog` is the SHARED, cached SAMPLE_FS program (samplerProgram) — it
@@ -351,12 +375,14 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
     // texSubImage2D reuses the existing W×H storage (same n ⇒ same W/H). Callers
     // MUST only invoke this when the new n equals this sampler's n (see app.js);
     // a mismatch is rejected so a stale caller can fall back to a full rebuild.
-    update(uvs /* Float32Array len 2N */, positions) {
+    update(uvs /* Float32Array len 2N */, positions, bands) {
       if ((uvs.length / 2) !== n) return false;
       gl.bindTexture(gl.TEXTURE_2D, map);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RG, gl.FLOAT, packUVs(uvs));
       gl.bindTexture(gl.TEXTURE_2D, posTex);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGB, gl.FLOAT, packPos(positions));
+      gl.bindTexture(gl.TEXTURE_2D, bandTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RED, gl.FLOAT, packBand(bands));
       gl.bindTexture(gl.TEXTURE_2D, null);
       return true;
     },
@@ -375,6 +401,10 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
       gl.uniform1i(locMap, 1);
       gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, posTex);
       gl.uniform1i(locPos, 2);
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, bandTex);
+      gl.uniform1i(locBand, 3);
+      const ab = vol?.audioBands;
+      gl.uniform3f(locAudioBands, ab ? ab[0] : 0, ab ? ab[1] : 0, ab ? ab[2] : 0);
       const n2 = vol?.count || 0;
       gl.uniform1i(locVolCount, n2);
       if (n2 > 0) {
