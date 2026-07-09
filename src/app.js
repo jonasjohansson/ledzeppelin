@@ -3,7 +3,7 @@ import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureT
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
-import { packVolumetrics, packColorFx } from './engine/fields.js';
+import { packVolumetrics, packColorFx, FIELD_IDS } from './engine/fields.js';
 import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
@@ -144,6 +144,8 @@ let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureType
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
 let samplerDirty = false;   // set during a live fixture drag → rebuild the sampler next frame so lit content follows in realtime
+let curFieldIds = [];       // volumetric field ids active THIS frame → the sampler compiles a shader with only these fields (V3D size fix)
+const fieldKeyOf = (ids) => [...new Set(ids)].sort((a, b) => a - b).join(',');   // same sorted+deduped key sampler.js uses for fieldKey
 // --- Output live controls: Freeze (hold the last frame) + Panic (force all output dark).
 //     The master DIMMER is the composition opacity (a fader in the deck's master row),
 //     applied in the compositor — not duplicated here. ---
@@ -221,7 +223,7 @@ function rebuild(next) {
   const { sampleUVs, samplePositions, sampleBands, route, spans } = buildPipelineInputs(show);
   curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
@@ -244,11 +246,15 @@ function refreshSampler() {
   // valid frames every frame ⇒ no frozen wall / dark preview during the drag).
   // Only when n actually changed (or there's no sampler yet) do we tear down and
   // rebuild the target + PBO ring via makeSampler.
-  if (sampler && n > 0 && sampler.n === n && sampler.update?.(sampleUVs, samplePositions, sampleBands)) {
+  // Only take the in-place update path when BOTH the LED count AND the active field
+  // set are unchanged — a different field set needs a freshly compiled program, so
+  // fall through to a full rebuild (which passes curFieldIds to makeSampler).
+  if (sampler && n > 0 && sampler.n === n && sampler.fieldKey === fieldKeyOf(curFieldIds)
+      && sampler.update?.(sampleUVs, samplePositions, sampleBands)) {
     // updated in place
   } else {
     sampler?.dispose?.();
-    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands) : null;
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
   }
   lastSpans = spans; recomputeHiddenSpans();
 }
@@ -2898,6 +2904,12 @@ function loopBody(ts) {
         // band keys in frameSignals are the EXTERNAL (mic) source (see updateAudio).
         // A test hook (__lz.setAudioBands) can force these when there's no mic.
         audioBands: audioBandsOverride || [signals.bass || 0, signals.mid || 0, signals.high || 0] };
+      // The field ids live THIS frame — the sampler compiles a shader with ONLY these
+      // blocks (V3D size fix). Computed even when empty so clearing all volumetric
+      // clips recompiles back to the tiny no-field shader. A changed set flags the
+      // sampler stale so refreshSampler rebuilds its program for the new fields.
+      curFieldIds = act.map((a) => FIELD_IDS[a.generator]).filter((v) => v != null);
+      if (sampler && sampler.fieldKey !== fieldKeyOf(curFieldIds)) samplerDirty = true;
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no
