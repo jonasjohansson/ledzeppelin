@@ -1717,6 +1717,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-thumb-add { display: flex; align-items: center; justify-content: center; color: var(--faint); font: 20px/1 var(--mono); background: var(--panel-2); }
 .src-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--faint)); }
 .src-label { font: var(--fs-micro) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Source + effect NAMES read as uppercase (mono/OCR aesthetic) — browser cards,
+   picker items, clip label bar, and the effect-chain rows. */
+.src-label, .lib-label, .ly-fxname, .clip-label-bar span { text-transform: uppercase; }
 .src-isf .src-label, .src-video .src-label { color: var(--faint); }
 
 .src-desc { flex: none; min-height: 16px; padding: 4px 2px 0; border-top: 1px solid var(--line);
