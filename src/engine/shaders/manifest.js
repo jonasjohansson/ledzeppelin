@@ -574,6 +574,21 @@ void main(){ vec3 p=vec3(uv.x,uv.y,uv.y); float d=length(p-vec3(centerX,centerY,
   for(int k=0;k<4;k++){ if(k>=rc) break; float ringR=front-float(k)*spacing; if(ringR<0.0) continue; float soK=clamp(softness+float(k)*0.25,0.0,1.0); v=max(v,pow(0.55,float(k))*env*vband(d-ringR,thickness,soK)); }
   frag=vec4(color*v,1.0); }`;
 
+// Audio Bars thumbnail — three vertical bars pulsing out of phase (bass / mid /
+// high), coloured colorA / mix / colorB. NB: the `floor` param uniform shadows
+// GLSL's floor() builtin, so the integer bar index is taken via fract() instead.
+const AUDIOBARS_THUMB = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float gain; uniform float floor; uniform float uT; uniform vec3 colorA; uniform vec3 colorB;
+void main(){
+  float bar = clamp(uv.x, 0.0, 0.999) * 3.0;
+  float idx = bar - fract(bar);                       // 0, 1, or 2 (no floor() — see note)
+  float lvl = 0.5 + 0.5 * sin(uT * 3.0 + idx * 2.0943951);   // per-bar pulse, 120° apart
+  float v = clamp(floor + lvl * gain, 0.0, 1.0);
+  vec3 c = idx < 0.5 ? colorA : (idx > 1.5 ? colorB : mix(colorA, colorB, 0.5));
+  frag = vec4(c * v, 1.0);
+}`;
+
 const DOMAINWARP = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float uPhase;
@@ -1300,6 +1315,8 @@ export const REGISTRY = {
     params: [ {key:'scale',type:'float',min:0.5,max:8,default:2.5}, {key:'speed',type:'float',min:0,max:2,default:0.25}, {key:'axis',type:'float',min:0,max:2,default:1,step:1}, {key:'depth',type:'float',min:0,max:2,default:1}, {key:'crest',type:'float',min:0,max:1,default:0.5}, {key:'colorA',type:'color',default:'#052a45'}, {key:'colorB',type:'color',default:'#3fdccb'}, {key:'fromCanvas',type:'bool',default:false} ] },
   shockburst: { name: 'shockburst', type: 'generator', desc: '3D: concentric shells bursting per trigger (triggerable).', volumetric: true, src: SHOCKBURST_THUMB, triggerable: true,
     params: [ {key:'centerX',type:'float',min:0,max:1,default:0.5}, {key:'centerY',type:'float',min:0,max:1,default:0.5}, {key:'centerZ',type:'float',min:0,max:1,default:0}, {key:'speed',type:'float',min:0.1,max:4,default:1}, {key:'thickness',type:'float',min:0.01,max:1,default:0.08}, {key:'softness',type:'float',min:0,max:1,default:0.5}, {key:'ringCount',type:'float',min:1,max:4,default:3,step:1}, {key:'spacing',type:'float',min:0.02,max:0.5,default:0.12}, {key:'fade',type:'float',min:0,max:3,default:0.6}, {key:'color',type:'color',default:'#ffffff'}, {key:'fromCanvas',type:'bool',default:false} ] },
+  audiobars: { name: 'audiobars', type: 'generator', desc: 'Audio → fixtures: each fixture pulses with its band.', volumetric: true, src: AUDIOBARS_THUMB,
+    params: [ {key:'gain',type:'float',min:0,max:4,default:1.5}, {key:'floor',type:'float',min:0,max:1,default:0.05}, {key:'colorA',type:'color',default:'#ff3b30'}, {key:'colorB',type:'color',default:'#0a84ff'} ] },
   displace: {
     name: 'displace', type: 'effect', src: DISPLACE,
     params: [
@@ -1598,7 +1615,7 @@ const LABELS = {
   checkers: 'Checkered', grid: 'Grid', pulse: 'Pulse', radial: 'Radial', video: 'Video',
   planesweep: 'Plane Sweep', axisgradient: 'Axis Gradient', noise3d: 'Noise 3D', spherepulse: 'Sphere Pulse',
   bodywave: 'Body Wave', planepulse: 'Plane Pulse', flowfield: 'Flow Field',
-  caustics: 'Caustics', aurora: 'Aurora', pacifica: 'Pacifica', shockburst: 'Shockwave (3D)',
+  caustics: 'Caustics', aurora: 'Aurora', pacifica: 'Pacifica', shockburst: 'Shockwave (3D)', audiobars: 'Audio Bars',
   displace: 'Displace', repeat: 'Repeat', strobe: 'Strobe',
   segmenter: 'Segmenter', cascade: 'Cascade', hue: 'Hue', colorize: 'Colorize',
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',

@@ -230,10 +230,24 @@ export function shockburst(p, trigAges = [], { center = [0.5, 0.5, 0], speed = 1
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
+// Audio Bars — each LED pulses on its fixture's assigned frequency band. `band`
+// is this LED's band index (0=bass, 1=mid, 2=high); `audioBands` = live mic
+// levels [bass, mid, high] 0..1. Brightness v = clamp(floor + level·gain); colour
+// is colorA on bass, colorB on high, their midpoint on mid. PREMULTIPLIED rgba.
+// Stateless — any attack/decay smoothing lives on the audio-signal side.
+export function audiobars(band, audioBands = [0, 0, 0], { gain = 1, floor = 0, colorA = [1, 0, 0], colorB = [0, 0, 1] } = {}) {
+  const b = Math.round(band);
+  const level = b === 0 ? audioBands[0] : b === 2 ? audioBands[2] : audioBands[1];
+  const v = clamp01(floor + level * gain);
+  const col = b === 0 ? colorA : b === 2 ? colorB
+    : [(colorA[0] + colorB[0]) / 2, (colorA[1] + colorB[1]) / 2, (colorA[2] + colorB[2]) / 2];
+  return [col[0] * v, col[1] * v, col[2] * v, v];
+}
+
 // --- Sampler packing ---------------------------------------------------------
 
 // Stable field ids — the GLSL dispatcher in sampler.js switches on these.
-export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5, flowfield: 6, caustics: 7, aurora: 8, pacifica: 9, shockburst: 10 };
+export const FIELD_IDS = { planesweep: 0, axisgradient: 1, noise3d: 2, spherepulse: 3, bodywave: 4, planepulse: 5, flowfield: 6, caustics: 7, aurora: 8, pacifica: 9, shockburst: 10, audiobars: 11 };
 
 export const isVolumetricName = (name) => name in FIELD_IDS;
 
@@ -316,6 +330,10 @@ export function packVolumetrics(active) {
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('speed')], i * 4);
       b.set([P('thickness'), P('softness'), P('ringCount'), P('spacing')], i * 4);
       colB.set([P('fade'), 0, 0], i * 3); colA.set(C('color'), i * 3);
+    } else if (id === FIELD_IDS.audiobars) {
+      // A = (gain, floor, 0, 0); colA = bass colour, colB = high colour (mid = mix).
+      a.set([P('gain'), P('floor'), 0, 0], i * 4);
+      colA.set(C('colorA'), i * 3); colB.set(C('colorB'), i * 3);
     } else { // spherepulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0)
       a.set([P('centerX'), P('centerY'), P('centerZ'), P('radius')], i * 4);
       b.set([P('thickness'), P('softness'), P('speed'), 0], i * 4);
@@ -394,11 +412,12 @@ export function evalColorFx(s, id, p, t) {
 // JS twin of the sampler's per-LED field dispatch — evaluates one PACKED clip
 // at p/t (trigAges = seconds since recent ⚡ triggers, for spherepulse shells).
 // Used by tests (and the e2e GPU-parity check) to predict sampler output.
-export function evalPacked(packed, i, p, t, trigAges = []) {
+export function evalPacked(packed, i, p, t, trigAges = [], band = 1, audioBands = [0, 0, 0]) {
   const A = packed.a.subarray(i * 4, i * 4 + 4);
   const cA = Array.from(packed.colA.subarray(i * 3, i * 3 + 3));
   const cB = Array.from(packed.colB.subarray(i * 3, i * 3 + 3));
   const id = packed.meta[i * 4];
+  if (id === FIELD_IDS.audiobars) return audiobars(band, audioBands, { gain: A[0], floor: A[1], colorA: cA, colorB: cB });
   if (id === FIELD_IDS.planesweep) return planeSweep(p, { axis: A[0], pos: A[1], thickness: A[2], softness: A[3], color: cA });
   if (id === FIELD_IDS.axisgradient) return axisGradient(p, { axis: A[0], colorA: cA, colorB: cB, scroll: A[1] });
   if (id === FIELD_IDS.noise3d) return noise3d(p, t, { scale: A[0], speed: A[1], axis: A[2], drift: A[3], color: cA });

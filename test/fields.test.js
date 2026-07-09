@@ -166,7 +166,7 @@ test('flowfield: thicker filaments cover at least as much as thin ones', () => {
 // --- manifest entries ----------------------------------------------------
 
 test('manifest: the volumetric generators exist with pinned defaults', () => {
-  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield', 'caustics', 'aurora', 'pacifica', 'shockburst']);
+  assert.deepEqual(volumetricNames(), ['planesweep', 'axisgradient', 'noise3d', 'spherepulse', 'bodywave', 'planepulse', 'flowfield', 'caustics', 'aurora', 'pacifica', 'shockburst', 'audiobars']);
   for (const n of volumetricNames()) {
     const e = getEntry(n);
     assert.equal(e.type, 'generator');

@@ -218,10 +218,10 @@ function rebuild(next) {
   //    out to all its placed copies), 2) auto-pack pixel offsets contiguous per
   //    device, 3) sync derived sample points to transforms + canvas.
   show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
-  const { sampleUVs, samplePositions, route, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, sampleBands, route, spans } = buildPipelineInputs(show);
   curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands) : null;
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
@@ -237,18 +237,18 @@ function rebuild(next) {
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
-  const { sampleUVs, samplePositions, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, sampleBands, spans } = buildPipelineInputs(show);
   const n = sampleUVs.length / 2;
   // DRAG path: the LED count is unchanged, only per-LED UV/xyz moved — refresh the
   // textures IN PLACE so the PBO readback ring stays warm (sample() keeps returning
   // valid frames every frame ⇒ no frozen wall / dark preview during the drag).
   // Only when n actually changed (or there's no sampler yet) do we tear down and
   // rebuild the target + PBO ring via makeSampler.
-  if (sampler && n > 0 && sampler.n === n && sampler.update?.(sampleUVs, samplePositions)) {
+  if (sampler && n > 0 && sampler.n === n && sampler.update?.(sampleUVs, samplePositions, sampleBands)) {
     // updated in place
   } else {
     sampler?.dispose?.();
-    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands) : null;
   }
   lastSpans = spans; recomputeHiddenSpans();
 }
@@ -2889,7 +2889,11 @@ function loopBody(ts) {
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
-      if (act.length) vol = { ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)) };
+      if (act.length) vol = { ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)),
+        // Live mic band levels (bass, mid, high) for the audiobars field. The plain
+        // band keys in frameSignals are the EXTERNAL (mic) source (see updateAudio).
+        // A test hook (__lz.setAudioBands) can force these when there's no mic.
+        audioBands: audioBandsOverride || [signals.bass || 0, signals.mid || 0, signals.high || 0] };
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no
@@ -3168,7 +3172,10 @@ armStartupRiff();
 // TEST HOOK (e2e): read-only access to the latest sampled output buffer + the
 // live show. Used by test/e2e/*.mjs (Playwright) to pin the sampler's bytes —
 // e.g. the "no volumetric clips ⇒ byte-identical" regression. Harmless in prod.
-window.__lz = { rgba: () => lastRGBA, show: () => show };
+// Test-only override for the audiobars mic bands [bass, mid, high] (headless has
+// no mic). null = use the live signals; set via __lz.setAudioBands.
+let audioBandsOverride = null;
+window.__lz = { rgba: () => lastRGBA, show: () => show, setAudioBands: (a) => { audioBandsOverride = a; } };
 
 // --- PWA: register the service worker so the editor installs as an app and runs
 // offline (cached app shell). Best-effort — needs a secure context (https or
