@@ -1316,46 +1316,38 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       const onToggle = el('input', { type: 'checkbox' });
       onToggle.checked = !!at.enabled;
       onToggle.addEventListener('change', () => setATu({ enabled: onToggle.checked }));
-      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Fire on sound' }), onToggle]));
+      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Enabled' }), onToggle]));
 
-      box.append(field('Band', selectInput(
-        ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
-        at.band || 'bass', (v) => setATu({ band: v }))));
-
-      // Onset (spike above the running average) vs Level (band level over an absolute line,
-      // dragged on the spectrum). Undoable (re-render) — swaps the slider in/out and recreates
-      // the spectrum with the right props.
+      // Onset (spike above the running average) · Level (band over an absolute line) ·
+      // BPM (fire on the tempo grid). Undoable (re-render) — swaps the controls in/out.
       const mode = at.mode || 'onset';
       box.append(field('Trigger', selectInput(
-        [{ value: 'onset', label: 'Onset' }, { value: 'level', label: 'Level' }],
+        [{ value: 'onset', label: 'Onset' }, { value: 'level', label: 'Level' }, { value: 'bpm', label: 'BPM' }],
         mode, (v) => setATu({ mode: v }))));
 
-      // Threshold — Onset: required spike above the running average (backs `sensitivity`,
-      // 0.05..2). Level: absolute 0..1 (backs `threshold`) — also draggable on the spectrum
-      // below; the slider gives keyboard/precise entry.
-      if (mode === 'onset') {
-        box.append(Slider('Threshold', at.sensitivity ?? 0.5, {
-          min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live',
-          onInput: (v) => setAT({ sensitivity: v }),
-        }));
+      if (mode === 'bpm') {
+        // Beat-grid trigger — no mic needed. Set BPM / TAP in the Composition panel.
+        box.append(field('Every', selectInput(
+          [['0.25', '¼ beat'], ['0.5', '½ beat'], ['1', '1 beat'], ['2', '2 beats'], ['4', '4 beats']].map(([v, l]) => ({ value: v, label: l })),
+          String(at.division ?? 1), (v) => setATu({ division: Number(v) }))));
+        box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip on the beat grid — set BPM / TAP in Composition' }));
       } else {
-        box.append(Slider('Threshold', at.threshold ?? 0.5, {
-          min: 0, max: 1, step: 0.01, default: 0.5, commit: 'live',
-          onInput: (v) => setAT({ threshold: v }),
-        }));
+        box.append(field('Band', selectInput(
+          ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
+          at.band || 'bass', (v) => setATu({ band: v }))));
+        // Threshold — Onset: required spike above the running average (backs `sensitivity`).
+        // Level: absolute 0..1 (backs `threshold`) — also draggable on the spectrum below.
+        if (mode === 'onset') {
+          box.append(Slider('Threshold', at.sensitivity ?? 0.5, { min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live', onInput: (v) => setAT({ sensitivity: v }) }));
+        } else {
+          box.append(Slider('Threshold', at.threshold ?? 0.5, { min: 0, max: 1, step: 0.01, default: 0.5, commit: 'live', onInput: (v) => setAT({ threshold: v }) }));
+        }
+        box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, { min: 40, max: 800, step: 10, default: 120, commit: 'live', onInput: (v) => setAT({ refractoryMs: Math.round(v) }) }));
+        box.append(el('div', { className: 'seg-hint', textContent: mode === 'level'
+          ? 'fires THIS clip while the band level is over the line — drag it on the spectrum'
+          : 'fires THIS clip on a spike above the running average in this band' }));
+        box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id), mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined, onThresholdChange: (v) => setAT({ threshold: v }) }).el);
       }
-      box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, {
-        min: 40, max: 800, step: 10, default: 120, commit: 'live',
-        onInput: (v) => setAT({ refractoryMs: Math.round(v) }),
-      }));
-      box.append(el('div', { className: 'seg-hint', textContent: mode === 'level'
-        ? 'fires THIS clip while the band level is over the line — drag it on the spectrum'
-        : 'fires THIS clip on a spike above the running average in this band' }));
-      box.append(createClipSpectrum({
-        band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id),
-        mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined,
-        onThresholdChange: (v) => setAT({ threshold: v }),
-      }).el);
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.

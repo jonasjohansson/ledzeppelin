@@ -2828,7 +2828,7 @@ function loopBody(ts) {
       const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
       if (c && getEntry(c.generator)?.triggerable) activeTrigClips.push(c);
     }
-    clipTriggers.poll(activeTrigClips, externalBand, ts, nowSec());
+    clipTriggers.poll(activeTrigClips, externalBand, ts, nowSec(), show.composition?.bpm ?? 120);
     // Drop trigger buses for clips that no longer exist in the show.
     { const live = new Set(); for (const L of (show.composition?.layers || [])) for (const c of (L.clips || [])) if (c) live.add(c.id); clipTriggers.prune(live); }
     frameSignals.__bpm = show.composition?.bpm ?? 120;
