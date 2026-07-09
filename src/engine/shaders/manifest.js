@@ -871,6 +871,228 @@ void main(){
   frag = texture(uTex, uv + disp);
 }`;
 
+// --- WLED-inspired 2D generators (chase/scan family) -------------------------
+// Stateless single-pass ports of WLED motion effects: strip index -> uv.x, uv.y
+// unused so the strip lights uniformly. Motion via uPhase (the speed param feeds
+// the phase clock). Analytic trails: exp(-max(0,d-width)/trail).
+const RUNNING_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float bands; uniform float width; uniform float uPhase;
+uniform vec3 color; uniform vec3 colorB;
+void main(){
+  float u = fract(uv.x * max(1.0, bands) - uPhase);
+  float e = 0.02;
+  float v = 1.0 - smoothstep(width, width + e, u);
+  frag = vec4(mix(colorB, color, v), 1.0);
+}`;
+
+const CHASE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float count; uniform float width; uniform float rainbow; uniform float uPhase;
+uniform vec3 color; uniform vec3 colorB;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float n = max(1.0, count);
+  float p = fract(uPhase);
+  float cell = fract((uv.x - p) * n);
+  float e = 0.02;
+  float v = 1.0 - smoothstep(width, width + e, cell);
+  vec3 dot = (rainbow > 0.5) ? hue(fract(uv.x - uPhase)) : color;
+  frag = vec4(mix(colorB, dot, v), 1.0);
+}`;
+
+const LARSON_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float dual; uniform float uPhase;
+uniform vec3 color;
+float eye(float x, float p){
+  float d = abs(x - p);
+  return exp(-max(0.0, d - width) / max(trail, 1e-3));
+}
+void main(){
+  float p = abs(fract(uPhase) - 0.5) * 2.0;
+  float v = eye(uv.x, p);
+  if (dual > 0.5) v = max(v, eye(uv.x, 1.0 - p));
+  frag = vec4(color * v, 1.0);
+}`;
+
+const COMET_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float uPhase;
+uniform vec3 color;
+void main(){
+  float p = fract(uPhase);
+  float d = fract(p - uv.x);
+  float v = exp(-max(0.0, d - width) / max(trail, 1e-3));
+  frag = vec4(color * v, 1.0);
+}`;
+
+const COLORWIPE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float uPhase;
+uniform vec3 colorA; uniform vec3 colorB;
+void main(){
+  float t = fract(uPhase);
+  float soft = max(width, 1e-3);
+  vec3 col;
+  if (t < 0.5){
+    float edge = t * 2.0;
+    float m = smoothstep(edge + soft, edge, uv.x);
+    col = mix(colorB, colorA, m);
+  } else {
+    float edge = (t - 0.5) * 2.0;
+    float m = smoothstep(edge + soft, edge, uv.x);
+    col = mix(colorA, colorB, m);
+  }
+  frag = vec4(col, 1.0);
+}`;
+
+const SINELON_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float width; uniform float trail; uniform float rainbow; uniform float uPhase;
+uniform vec3 color;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float p = 0.5 + 0.5 * sin(uPhase * 6.2831853);
+  float d = abs(uv.x - p);
+  float v = exp(-max(0.0, d - width) / max(trail, 1e-3));
+  vec3 c = (rainbow > 0.5) ? hue(fract(uPhase * 0.25)) : color;
+  frag = vec4(c * v, 1.0);
+}`;
+
+// --- WLED-inspired 2D generators (basic / colour family) ---------------------
+const RAINBOW_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float h = fract(uPhase);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)), 1.0);
+}`;
+
+const RAINBOWCYCLE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float cycles;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float h = fract(uv.x * max(0.0, cycles) + uPhase);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)), 1.0);
+}`;
+
+const COLORWAVES_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float hueSpread;
+uniform float depth;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+float pingpong(float t){ return abs(fract(t * 0.5) * 2.0 - 1.0); }
+void main(){
+  float h = pingpong(uv.x * hueSpread + uPhase);
+  float b = sin((uv.x * 6.0 + uPhase * 2.0) * 6.2831853) * 0.5 + 0.5;
+  float bri = b * b;
+  float d = clamp(depth, 0.0, 1.0);
+  bri = bri * d + (1.0 - d);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)) * bri, 1.0);
+}`;
+
+const BREATHE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform vec3 color;
+void main(){
+  float s = sin(uPhase * 6.2831853) * 0.5 + 0.5;
+  float lum = 0.12 + 0.88 * s;
+  frag = vec4(color * lum, 1.0);
+}`;
+
+const THEATER_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float count;
+uniform float duty;
+uniform float rainbow;
+uniform float sat;
+uniform vec3 color;
+uniform vec3 bg;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float cell = fract(uv.x * max(1.0, count) - uPhase);
+  float lit  = step(cell, clamp(duty, 0.0, 1.0));
+  vec3 on = (rainbow > 0.5) ? mix(vec3(1.0), hue(fract(uPhase)), clamp(sat, 0.0, 1.0)) : color;
+  frag = vec4(mix(bg, on, lit), 1.0);
+}`;
+
+const SINEWAVE_SRC = `#version 300 es
+precision highp float; in vec2 uv; out vec4 frag;
+uniform float uPhase;
+uniform float freq;
+uniform float sharp;
+uniform float sat;
+vec3 hue(float h){ return clamp(abs(mod(h*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0); }
+void main(){
+  float b = sin((uv.x * max(0.0, freq) - uPhase) * 6.2831853) * 0.5 + 0.5;
+  b = pow(b, mix(1.0, 4.0, clamp(sharp, 0.0, 1.0)));
+  float h = fract(uv.x * 0.5 + uPhase * 0.3);
+  frag = vec4(mix(vec3(1.0), hue(h), clamp(sat, 0.0, 1.0)) * b, 1.0);
+}`;
+
+// --- Warp starfield (procedural hyperspace star streaks) ---------------------
+const STARFIELD_SRC = `#version 300 es
+precision highp float;
+in vec2 uv; out vec4 frag;
+uniform float uT;
+uniform float uPhase;
+uniform float aspect;
+uniform float density;
+uniform float warp;
+uniform float twinkle;
+uniform vec3  color;
+const float TAU = 6.28318530718;
+vec2 h21(float n){ return fract(sin(vec2(n*127.1, n*311.7)) * 43758.5453); }
+void main(){
+  vec2  p   = (uv - 0.5) * vec2(aspect, 1.0);
+  float r   = length(p);
+  float ang = atan(p.y, p.x) / TAU + 0.5;
+  float acc = 0.0;
+  float hot = 0.0;
+  for (int L = 0; L < 3; L++){
+    float fl    = float(L);
+    float cells = max(4.0, density * (0.5 + fl * 0.6));
+    float sp    = 0.6 + fl * 0.35;
+    float seed  = fl * 17.3 + 3.1;
+    float ca  = ang * cells;
+    float cid = floor(ca);
+    float fa  = fract(ca) - 0.5;
+    vec2  rnd = h21(cid + seed);
+    float jit = (rnd.x - 0.5) * 0.7;
+    float pph = rnd.y;
+    float z     = fract(uPhase * sp + pph);
+    float starR = z * z * 1.25;
+    float perp = (fa - jit) * (TAU / cells) * r;
+    float line = smoothstep(0.010, 0.0, abs(perp));
+    float tail  = 0.03 + warp * (0.05 + 0.35 * z);
+    float head  = smoothstep(starR + 0.02, starR - 0.005, r);
+    float trail = smoothstep(starR - tail, starR, r);
+    float radial = head * trail;
+    float bright = pow(z, 1.3);
+    float birth  = smoothstep(0.0, 0.06, z);
+    float die    = 1.0 - smoothstep(0.92, 1.0, z);
+    float tw     = mix(1.0, 0.55 + 0.45 * sin(uT * 6.0 + cid * 1.7 + fl),
+                       clamp(twinkle, 0.0, 1.0));
+    float s = line * radial * bright * birth * die * tw;
+    acc += s;
+    hot += s * smoothstep(0.6, 1.0, z);
+  }
+  float core = exp(-r * 9.0) * 0.12;
+  acc = clamp(acc, 0.0, 1.0);
+  vec3 col = color * acc + vec3(1.0) * (hot * 0.6) + color * core;
+  frag = vec4(col, 1.0);
+}`;
+
 // Registry, keyed by name. Order within params is purely documentation.
 export const REGISTRY = {
   line: {
@@ -1211,6 +1433,130 @@ export const REGISTRY = {
       { key: 'colorB', type: 'color', default: '#ffffff' },
     ],
   },
+  // --- WLED-inspired 2D generators ------------------------------------------
+  running: {
+    name: 'running', type: 'generator', desc: 'WLED: scrolling on/off colour bars (Running).', src: RUNNING_SRC,
+    params: [
+      { key: 'bands', type: 'float', min: 1, max: 32, default: 6, step: 1 },
+      { key: 'width', type: 'float', min: 0.05, max: 0.95, default: 0.5 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.6 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  chase: {
+    name: 'chase', type: 'generator', desc: 'WLED: dots chasing along the strip (Chase / Chase Rainbow).', src: CHASE_SRC,
+    params: [
+      { key: 'count', type: 'float', min: 1, max: 12, default: 3, step: 1 },
+      { key: 'width', type: 'float', min: 0.02, max: 0.6, default: 0.18 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.7 },
+      { key: 'rainbow', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  larson: {
+    name: 'larson', type: 'generator', desc: 'WLED: bouncing scanner eye with a fading trail (Larson / Cylon / KITT).', src: LARSON_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.01, max: 0.6, default: 0.14 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.5 },
+      { key: 'dual', type: 'bool', default: false },
+      { key: 'color', type: 'color', default: '#ff2020' },
+    ],
+  },
+  comet: {
+    name: 'comet', type: 'generator', desc: 'WLED: a single head streaking around the strip with a decaying tail (Comet).', src: COMET_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.02, max: 0.8, default: 0.25 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.7 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  colorwipe: {
+    name: 'colorwipe', type: 'generator', desc: 'WLED: fills the strip with one colour then wipes over with the next (Color Wipe).', src: COLORWIPE_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.3, default: 0.02 },
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.4 },
+      { key: 'colorA', type: 'color', default: '#ffffff' },
+      { key: 'colorB', type: 'color', default: '#000000' },
+    ],
+  },
+  sinelon: {
+    name: 'sinelon', type: 'generator', desc: 'WLED: a dot eased back and forth on a sine, leaving a coloured trail (Sinelon).', src: SINELON_SRC,
+    params: [
+      { key: 'width', type: 'float', min: 0, max: 0.2, default: 0.03 },
+      { key: 'trail', type: 'float', min: 0.01, max: 0.6, default: 0.16 },
+      { key: 'speed', type: 'float', min: 0, max: 4, default: 0.5 },
+      { key: 'rainbow', type: 'bool', default: true },
+      { key: 'color', type: 'color', default: '#20a0ff' },
+    ],
+  },
+  rainbow: {
+    name: 'rainbow', type: 'generator', desc: 'WLED: whole-strip hue that cycles over time.', src: RAINBOW_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.3 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  rainbowcycle: {
+    name: 'rainbowcycle', type: 'generator', desc: 'WLED: a rainbow spread across the strip, scrolling.', src: RAINBOWCYCLE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.3 },
+      { key: 'cycles', type: 'float', min: 0.25, max: 16, default: 1, step: 0.25 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  colorwaves: {
+    name: 'colorwaves', type: 'generator', desc: 'WLED: folded rainbow waves with a breathing brightness field.', src: COLORWAVES_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 0.5 },
+      { key: 'hueSpread', type: 'float', min: 0, max: 6, default: 2, step: 0.1 },
+      { key: 'depth', type: 'float', min: 0, max: 1, default: 0.6 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  breathe: {
+    name: 'breathe', type: 'generator', desc: 'WLED: a solid colour breathing in and out.', src: BREATHE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 3, default: 0.2 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+    ],
+  },
+  theater: {
+    name: 'theater', type: 'generator', desc: 'WLED: marquee theater chase, optional rainbow dots.', src: THEATER_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'count', type: 'float', min: 1, max: 48, default: 12, step: 1 },
+      { key: 'duty', type: 'float', min: 0.05, max: 0.9, default: 0.34 },
+      { key: 'rainbow', type: 'bool', default: false },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+      { key: 'color', type: 'color', default: '#ffffff' },
+      { key: 'bg', type: 'color', default: '#000000' },
+    ],
+  },
+  sinewave: {
+    name: 'sinewave', type: 'generator', desc: 'WLED: a moving sine wave under a scrolling rainbow.', src: SINEWAVE_SRC,
+    params: [
+      { key: 'speed', type: 'float', min: 0, max: 5, default: 1 },
+      { key: 'freq', type: 'float', min: 0.5, max: 16, default: 3 },
+      { key: 'sharp', type: 'float', min: 0, max: 1, default: 0.3 },
+      { key: 'sat', type: 'float', min: 0, max: 1, default: 1 },
+    ],
+  },
+  starfield: {
+    name: 'starfield', type: 'generator',
+    desc: 'Warp-speed star streaks flying toward a vanishing point.',
+    src: STARFIELD_SRC,
+    params: [
+      { key: 'speed',   type: 'float', min: 0,  max: 4,   default: 1,   step: 0.01 },
+      { key: 'density', type: 'float', min: 20, max: 400, default: 140, step: 1    },
+      { key: 'warp',    type: 'float', min: 0,  max: 3,   default: 1,   step: 0.01 },
+      { key: 'twinkle', type: 'float', min: 0,  max: 1,   default: 0.3, step: 0.01 },
+      { key: 'color',   type: 'color', default: '#bcd4ff' },
+    ],
+  },
   shockwave: {
     name: 'shockwave', type: 'effect', triggerable: true, src: SHOCKWAVE,
     params: [
@@ -1258,6 +1604,10 @@ const LABELS = {
   color: 'Adjustments', invert: 'Invert', rgb: 'RGB', threshold: 'Threshold',
   domainwarp: 'Domain Warp', metaballs: 'Metaballs', plasma: 'Plasma', tunnel: 'Tunnel',
   shockwave: 'Shockwave', basswarp: 'Bass Warp',
+  running: 'Running', chase: 'Chase', larson: 'Larson', comet: 'Comet',
+  colorwipe: 'Color Wipe', sinelon: 'Sinelon', rainbow: 'Rainbow',
+  rainbowcycle: 'Rainbow Cycle', colorwaves: 'Color Waves', breathe: 'Breathe',
+  theater: 'Theater', sinewave: 'Sine Wave', starfield: 'Starfield',
 };
 export const labelOf = (name) =>
   LABELS[name] || (name ? name[0].toUpperCase() + name.slice(1) : name);
