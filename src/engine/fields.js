@@ -46,8 +46,9 @@ const axisCoord = (p, axis) => (axis < 0.5 ? p[0] : axis < 1.5 ? p[1] : p[2]);
 
 // Plane sweep — a coloured band around a plane ⊥ `axis` at `pos`. The
 // motivating field: animate `pos` on axis z and the band climbs a lifted arch.
-export function planeSweep(p, { axis = 2, pos = 0.5, thickness = 0.25, softness = 0.5, color = [1, 1, 1] } = {}) {
-  const v = band(axisCoord(p, axis) - pos, thickness, softness);
+export function planeSweep(p, { axis = 2, pos = 0.5, thickness = 0.25, softness = 0.5, color = [1, 1, 1], reverse = false } = {}) {
+  const c = reverse ? (1 - axisCoord(p, axis)) : axisCoord(p, axis);   // reverse flips the sweep direction
+  const v = band(c - pos, thickness, softness);
   return [color[0] * v, color[1] * v, color[2] * v, v];
 }
 
@@ -303,8 +304,8 @@ export function packVolumetrics(active) {
       b.set([P('speed'), 0, 0, 0], i * 4);
       colA.set(C('color'), i * 3);
     } else if (id === FIELD_IDS.planepulse) {
-      // A = (axis, thickness, softness, 0), B = (speed, 0, 0, 0) — pos comes from trigger age.
-      a.set([P('axis'), P('thickness'), P('softness'), 0], i * 4);
+      // A = (axis, thickness, softness, reverse), B = (speed, 0, 0, 0) — pos comes from trigger age.
+      a.set([P('axis'), P('thickness'), P('softness'), P('reverse') ? 1 : 0], i * 4);
       b.set([P('speed'), 0, 0, 0], i * 4);
       colA.set(C('color'), i * 3);
     } else if (id === FIELD_IDS.flowfield) {
@@ -433,7 +434,7 @@ export function evalPacked(packed, i, p, t, trigAges = [], band = 1, audioBands 
   }
   if (id === FIELD_IDS.planepulse) {
     const B = packed.b.subarray(i * 4, i * 4 + 4);
-    const base = { axis: A[0], thickness: A[1], softness: A[2], color: cA };
+    const base = { axis: A[0], thickness: A[1], softness: A[2], color: cA, reverse: A[3] > 0.5 };
     let out = [0, 0, 0, 0];
     for (const age of trigAges) { const s = planeSweep(p, { ...base, pos: age * B[0] }); if (s[3] > out[3]) out = s; }
     return out;

@@ -185,7 +185,7 @@ test('manifest: the volumetric generators exist with pinned defaults', () => {
     { centerX: 0.5, centerY: 0.5, centerZ: 0, radius: 0.35, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff', fromCanvas: false });
   assert.deepEqual(defaultParams('bodywave'),
     { axis: 2, wavelength: 0.5, amplitude: 0.1, offset: 0, speed: 1, color: '#ffffff', fromCanvas: false });
-  assert.deepEqual(defaultParams('planepulse'), { axis: 2, thickness: 0.15, softness: 0.5, speed: 1, color: '#ffffff', fromCanvas: false });
+  assert.deepEqual(defaultParams('planepulse'), { axis: 2, thickness: 0.15, softness: 0.5, speed: 1, reverse: false, color: '#ffffff', fromCanvas: false });
   assert.equal(REGISTRY.bodywave.volumetric, true);
   assert.equal(labelOf('bodywave'), 'Body Wave');
   assert.equal(REGISTRY.spherepulse.triggerable, true);
