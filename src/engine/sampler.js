@@ -129,8 +129,8 @@ const FIELD_BLOCKS = {
     float v = vband(wave, uVolA[i].z * 0.2, 0.5);
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
   }`,
-  5: `  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,-), B=(speed,-,-,-); a plane sweeps per trigger
-    float coord = vaxis(p, uVolA[i].x);
+  5: `  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,reverse), B=(speed,-,-,-); a plane sweeps per trigger
+    float coord = uVolA[i].w > 0.5 ? (1.0 - vaxis(p, uVolA[i].x)) : vaxis(p, uVolA[i].x);
     float v = 0.0;
     for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
     return vec4(volTint(i, cuv, uVolColA[i]) * v, v);

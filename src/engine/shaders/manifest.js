@@ -1654,6 +1654,7 @@ export const REGISTRY = {
       { key: 'thickness', type: 'float', min: 0.01, max: 1, default: 0.15 },
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'speed', type: 'float', min: 0.1, max: 4, default: 1 },
+      { key: 'reverse', type: 'bool', default: false },
       { key: 'color', type: 'color', default: '#ffffff' },
       { key: 'fromCanvas', type: 'bool', default: false },
     ],
