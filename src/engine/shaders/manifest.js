@@ -2138,6 +2138,10 @@ export const labelOf = (name) =>
 // integrator has no ≥0 clamp). Defaults stay positive, so sources still move forward
 // out of the box; you drag past 0 to reverse.
 for (const _e of Object.values(REGISTRY)) {
+  // Triggerable pulses (plane/sphere/shock) use `speed` as the EXPANSION RATE from the
+  // trigger point — a negative rate sweeps the pulse away from the fixtures (goes dark),
+  // not "backwards". So only the continuous-motion sources get a symmetric speed.
+  if (_e.triggerable) continue;
   for (const _p of (_e.params || [])) {
     if (_p && _p.key === 'speed' && _p.type === 'float' && (_p.min ?? 0) >= 0) _p.min = -Math.abs(_p.max ?? 1);
   }
