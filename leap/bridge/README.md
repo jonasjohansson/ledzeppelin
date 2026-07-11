@@ -59,7 +59,9 @@ installed on your machine and pass it explicitly:
 
 Starts a WebSocket server on `ws://127.0.0.1:6437/v6.json`. Requires the
 Ultraleap tracking service (`libtrack_server`) to already be running — the
-"Ultraleap Hand Tracking" app starts it automatically.
+"Ultraleap Hand Tracking" app starts it automatically. Grab that (and the
+Leap Controller's drivers, if you don't have them) from
+[ultraleap.com/downloads/leap-controller](https://www.ultraleap.com/downloads/leap-controller/).
 
 Then point LED Zeppelin's bridge at it (note the `/v6.json` path — **not** the
 `/v7.json` LED Zeppelin's scripts default to; see Patches):

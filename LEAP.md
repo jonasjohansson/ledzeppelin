@@ -34,7 +34,9 @@ depending on which runtime you actually have installed:
   to `leap-bridge.js` (its default below is `/v7.json`, for the legacy runtime).
 
 The original Leap Controller hardware works with both runtimes; it's the
-*software* that matters.
+*software* that matters. Driver/runtime downloads for either path (easy to
+lose track of on Ultraleap's site) are at
+[ultraleap.com/downloads/leap-controller](https://www.ultraleap.com/downloads/leap-controller/).
 
 ```powershell
 Test-NetConnection 127.0.0.1 -Port 6437   # TcpTestSucceeded : True  → server is live

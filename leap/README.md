@@ -6,12 +6,17 @@ any parameter can bind to.
 
 ## Prerequisites
 
-1. **Leap Motion Controller** (original or Ultraleap Stereo IR 170)
+1. **Leap Motion Controller** (original or Ultraleap Stereo IR 170) and its
+   drivers — downloads (easy to lose track of, since Ultraleap's site buries
+   them) are at
+   [ultraleap.com/downloads/leap-controller](https://www.ultraleap.com/downloads/leap-controller/).
 2. **Ultraleap Tracking Software** (Gemini V5+ / Hyperion V6) — or the classic
    Leap Motion SDK V4 with _"Allow Web Apps"_ enabled in the control panel.
 3. The **Ultraleap Tracking WebSocket** server running (exposes hand data at
-   `ws://127.0.0.1:6437`). If using Gemini V5+, build it from
-   [ultraleap/UltraleapTrackingWebSocket](https://github.com/ultraleap/UltraleapTrackingWebSocket).
+   `ws://127.0.0.1:6437`). If using Gemini V5+/Hyperion, build the copy vendored
+   at [`bridge/`](bridge/) — it patches crash/CPU bugs in upstream
+   [ultraleap/UltraleapTrackingWebSocket](https://github.com/ultraleap/UltraleapTrackingWebSocket),
+   see [`bridge/README.md`](bridge/README.md) for build steps.
 
 ## Quick start — browser page
 
