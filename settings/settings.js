@@ -22,6 +22,7 @@
 // events); discrete controls (select, checkboxes, swatches) post immediately.
 
 import { createSettingsPanel } from '../src/ui/settings.js';
+import { themeVars, applyVars } from '../src/ui/palette.js';
 import { loadShow, saveShow } from '../src/ui/fixtures.js';
 import { emptyShow, syncDeviceTypes, syncFixtureTypes } from '../src/model/show.js';
 
@@ -53,6 +54,7 @@ const h2 = (x) => { const m = /^#?([0-9a-f]{6})$/i.exec(x || ''); if (!m) return
 const toHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
 const mix = (a, b, w) => { const A = h2(a), B = h2(b); return toHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
 const savedAccent = () => { try { return localStorage.getItem('lz.accent') || '#e8a35c'; } catch { return '#e8a35c'; } };
+const savedTheme = () => { try { return localStorage.getItem('lz.theme') === 'light' ? 'light' : 'dark'; } catch { return 'dark'; } };
 const savedBright = () => num('lz.brightness', 0, -12, 20);
 const savedTint = () => num('lz.tint.amt', 100, 0, 220);
 const savedContrast = () => num('lz.contrast', 130, 60, 130);
@@ -61,29 +63,10 @@ const savedTranslucency = () => num('lz.translucency', 0, 0, 90);
 function applyTheme() {
   const s = document.documentElement.style;
   const hex = savedAccent();
-  s.setProperty('--accent', hex);
-  s.setProperty('--accent-soft', mix(hex, '#0a0a0a', 0.16));
-  s.setProperty('--accent-line', mix(hex, '#0a0a0a', 0.40));
-  s.setProperty('--accent-text', mix(hex, '#ffffff', 0.62));
-  // Surfaces: lift the near-black anchors by Brightness, then tint by the accent.
-  const lift = savedBright() / 100, tm = savedTint() / 100;
-  const L = (anchor) => mix('#ffffff', anchor, lift);
-  const S = (anchor, w) => mix(hex, L(anchor), w * tm);
-  s.setProperty('--bg', S('#0b0b0d', 0.03));
-  s.setProperty('--field-bg', S('#121214', 0.03));
-  const panel = S('#17171a', 0.04);
-  s.setProperty('--panel', panel);
-  s.setProperty('--panel-solid', panel);
-  s.setProperty('--panel-2', S('#1e1e22', 0.05));
-  s.setProperty('--hover', S('#2c2c31', 0.06));
-  s.setProperty('--line', S('#303034', 0.06));
-  s.setProperty('--line-2', S('#45454e', 0.07));
-  // Text contrast.
-  const f = savedContrast() / 100;
-  s.setProperty('--text', mix('#f4f5f7', '#0c0c10', f));
-  s.setProperty('--muted', mix('#a3aab4', '#0c0c10', f));
-  s.setProperty('--faint', mix('#737a84', '#0c0c10', f));
-  s.setProperty('--readout', mix('#d7dbe0', '#0c0c10', f));
+  const light = savedTheme() === 'light';
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  // Whole chrome palette from the ONE shared deriver (light = dark luminance-inverted).
+  applyVars(themeVars({ accent: hex, theme: light ? 'light' : 'dark', brightness: savedBright(), tint: savedTint(), contrast: savedContrast() }), s);
   // Text size + floating-panel translucency.
   s.setProperty('--ui-scale', String(savedScale()));
   s.setProperty('--pop-opacity', (100 - savedTranslucency()) + '%');
@@ -122,6 +105,8 @@ const panel = createSettingsPanel({
   output: {
     getFps: () => num('lz.outfps', 42, 1, 60),
     setFps: (n) => { put('lz.outfps', n); postSoon(); },
+    getWhiteMode: () => { try { return localStorage.getItem('lz.whitemode') === 'additive' ? 'additive' : 'accurate'; } catch { return 'accurate'; } },
+    setWhiteMode: (m) => { put('lz.whitemode', m === 'additive' ? 'additive' : 'accurate'); postSoon(); },
   },
   prefs: {
     getTips: () => flag('lz.tips'),
@@ -130,6 +115,7 @@ const panel = createSettingsPanel({
     setNativeCtx: (on) => { put('lz.ctxmenu', on ? '1' : '0'); post(); },
   },
   appearance: {
+    getTheme: savedTheme, setTheme: (v) => { put('lz.theme', v === 'light' ? 'light' : 'dark'); applyTheme(); post(); },
     getBrightness: savedBright, setBrightness: (v) => { put('lz.brightness', v); applyTheme(); postSoon(); },
     getTint: savedTint, setTint: (v) => { put('lz.tint.amt', v); applyTheme(); postSoon(); },
     getContrast: savedContrast, setContrast: (v) => { put('lz.contrast', v); applyTheme(); postSoon(); },

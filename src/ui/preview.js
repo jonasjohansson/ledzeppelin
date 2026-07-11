@@ -13,7 +13,7 @@ import {
   thicknessOf, setBezierControl,
 } from '../model/fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from '../model/bezier.js';
-import { FIELD_IDS, axisGradient, noise3d } from '../engine/fields.js';
+import { FIELD_IDS, axisGradient, noise3d, bodyWave } from '../engine/fields.js';
 
 // Rotate-knob offset from a selected bar's centre, in NORMALIZED canvas units
 // (so draw() and hitTest() — which use different pixel scales — agree).
@@ -588,7 +588,7 @@ export function createPreview(canvasEl, opts = {}) {
         const cx = A[o4], cy = A[o4 + 1], cz = A[o4 + 2], r = A[o4 + 3];
         const speed = gv.b[o4 + 2];
         if (r > 1e-3) rings3(cx, cy, cz, r, css(0.6 * op), 1.25 * ck);
-        const trigs = gv.trigSecs || [];
+        const trigs = (gv.volTrigs && gv.volTrigs[i]) || gv.trigSecs || [];
         for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
           const rr = (t - trigs[k]) * speed;
           if (rr > 0.02 && rr < 2) rings3(cx, cy, cz, rr, css(0.4 * op), ck);
@@ -613,6 +613,37 @@ export function createPreview(canvasEl, opts = {}) {
               ctx.fillRect(q[0] - dot / 2, q[1] - dot / 2, dot, dot);
             }
           }
+        }
+      } else if (id === FIELD_IDS.bodywave) {
+        // A = (axis, wavelength, amplitude, offset), B = (speed): dots sampled
+        // along the wave axis where the REAL field (fields.js bodyWave) reads bright.
+        const axis = A[o4], wavelength = A[o4 + 1], amplitude = A[o4 + 2], offset = A[o4 + 3];
+        const speed = gv.b[o4];
+        for (let ki = 0; ki < 6; ki++) {
+          const coord = ki / 6;
+          P[0] = axis < 0.5 ? coord : 0.5;
+          P[1] = (axis >= 0.5 && axis < 1.5) ? coord : 0.5;
+          P[2] = axis >= 1.5 ? coord : 0;
+          const wv = bodyWave(P, t, { axis, wavelength, amplitude, offset, speed, color: [1, 1, 1] });
+          if (wv[3] > 0.4) {
+            const qp = prj(P[0], P[1], P[2]);
+            if (qp) { ctx.fillStyle = css(wv[3] * op * 0.7); ctx.fillRect(qp[0] - 2 * ck, qp[1] - 2 * ck, 4 * ck, 4 * ck); }
+          }
+        }
+      } else if (id === FIELD_IDS.planepulse) {
+        // A = (axis, thickness, softness), B = (speed): one swept plane per
+        // recent ⚡ trigger — pos = (time − trigSec)·speed along the axis (the
+        // sampler's exact clock math). No trigger → nothing (dark).
+        const axis = A[o4], half = Math.max(1e-4, A[o4 + 1]) * 0.5;
+        const speed = gv.b[o4];
+        const trigs = (gv.volTrigs && gv.volTrigs[i]) || gv.trigSecs || [];
+        for (let k = Math.max(0, trigs.length - 8); k < trigs.length; k++) {
+          const pos = (t - trigs[k]) * speed;
+          if (pos < -0.05 || pos > 1.05) continue;
+          quadFill(planeQuad(axis, pos), css(0.1 * op));
+          quadOutline(planeQuad(axis, pos), css(0.5 * op), 1.25 * ck);
+          quadOutline(planeQuad(axis, pos - half), css(0.18 * op), ck);
+          quadOutline(planeQuad(axis, pos + half), css(0.18 * op), ck);
         }
       }
     }
@@ -890,6 +921,26 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   const vtxR = opts.vertexRadius ?? 12;   // handle grab radius
   let dragState = null;
   let enabled = opts.enabled ?? true;
+  // Blender-style axis lock while dragging a 3D vertex/control: X / Y / Z constrains
+  // motion to that WORLD axis (press again or Esc to clear back to plane-drag). The
+  // key listener is armed ONLY for the life of a vertex3d drag — captured so it
+  // beats the app's global shortcuts, and never touches typing elsewhere.
+  let axisKeyHandler = null;
+  function armAxisKeys() {
+    disarmAxisKeys();
+    axisKeyHandler = (ke) => {
+      if (!dragState || dragState.kind !== 'vertex3d') return;
+      const k = ke.key?.toLowerCase();
+      if (k === 'x' || k === 'y' || k === 'z') {
+        dragState.axis = dragState.axis === k ? null : k;   // same key toggles the lock off
+        ke.preventDefault(); ke.stopPropagation();
+      } else if (ke.key === 'Escape') {
+        dragState.axis = null; ke.preventDefault(); ke.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', axisKeyHandler, true);
+  }
+  function disarmAxisKeys() { if (axisKeyHandler) { window.removeEventListener('keydown', axisKeyHandler, true); axisKeyHandler = null; } }
   // Listen on a LARGER surface than the composition canvas (the pasteboard) so a
   // fixture dragged OUTSIDE the canvas stays grabbable. Coordinates are still
   // measured against canvasEl (#preview), so points outside 0..1 map correctly.
@@ -1130,9 +1181,11 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       if (hit3) onSelect?.(hit3.fxId, ev);
       if (hit3 && (hit3.vertex != null || hit3.control)) {
         // ctl: the bezier CONTROL rides the same plane/Alt gestures as a vertex
-        // — Alt-dragging it up pulls a flat strip into a standing arch.
+        // — Alt-dragging it up pulls a flat strip into a standing arch. X/Y/Z lock
+        // the drag to a world axis (armAxisKeys).
         dragState = { kind: 'vertex3d', id: hit3.fxId, index: hit3.vertex, ctl: !!hit3.control,
-          lastY: ev.clientY, cursor: 'move' };
+          lastX: ev.clientX, lastY: ev.clientY, axis: null, cursor: 'move' };
+        armAxisKeys();
       } else {
         const o = v3.orbit || {};
         dragState = ev.shiftKey
@@ -1287,8 +1340,26 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
       const [px3, py3, rw3, rh3] = localPx(ev);
       const cam3 = orbitCamera(v3d.orbit, rw3 / rh3);
       const cvH3 = (show3.composition?.canvas?.h) || 720;
+      const cvW3 = (show3.composition?.canvas?.w) || 1280;
       let next3 = show3, hint3 = null;
-      if (ev.altKey) {
+      if (dragState.axis) {
+        // AXIS LOCK: slide only along the chosen world axis. Project the axis (a
+        // tiny world step from the vertex) to screen to get its on-screen direction
+        // + pixels-per-world-unit, then map the pointer's motion onto it — stable at
+        // any camera angle. Incremental (per-frame pointer delta), like the Alt path.
+        const idx = { x: 0, y: 1, z: 2 }[dragState.axis];
+        const EPS = 0.05;
+        const step = [cur[0], cur[1], cur[2]]; step[idx] += EPS;
+        const p0 = project(cur, cam3), p1 = project(step, cam3);
+        const sdx = (p1[0] - p0[0]) * rw3, sdy = (p1[1] - p0[1]) * rh3;
+        const slen = Math.hypot(sdx, sdy) || 1e-6;
+        const projPx = ((ev.clientX - dragState.lastX) * sdx + (ev.clientY - dragState.lastY) * sdy) / slen;
+        const nc = [cur[0], cur[1], cur[2]]; nc[idx] += projPx / (slen / EPS);   // px along axis → world units
+        next3 = write(nc[0], nc[1], nc[2]);
+        hint3 = dragState.axis === 'x' ? `X ${Math.round(nc[0] * cvW3)}`
+          : dragState.axis === 'y' ? `Y ${Math.round(nc[1] * cvH3)}`
+          : `Z ${Math.round(nc[2] * cvH3)} px`;
+      } else if (ev.altKey) {
         const camDist = Math.hypot(cur[0] - cam3.pos[0], cur[1] - cam3.pos[1], cur[2] - cam3.pos[2]);
         const wpp = (2 * camDist * Math.tan((cam3.fov * Math.PI / 180) / 2)) / (rh3 || 1);
         const z = cur[2] - (ev.clientY - dragState.lastY) * wpp;   // drag up → +z
@@ -1298,11 +1369,10 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
         const hit = rayPlaneZ(unproject(px3 / rw3, py3 / rh3, cam3), cur[2]);
         if (hit) {
           next3 = write(hit[0], hit[1], cur[2]);
-          const cvW3 = (show3.composition?.canvas?.w) || 1280;
           hint3 = `${Math.round(hit[0] * cvW3)}, ${Math.round(hit[1] * cvH3)}`;
         }
       }
-      dragState.lastY = ev.clientY;
+      dragState.lastX = ev.clientX; dragState.lastY = ev.clientY;
       dragHint = hint3 ? { nx: (px3 / rw3), ny: (py3 / rh3), text: hint3 } : null;
       dragState.moved = true;
       onEdit?.(next3);
@@ -1466,6 +1536,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
     // 2D empty-click/marquee clear.
     const emptyOrbitClick = dragState.kind === 'orbit' && !dragState.moved && dragState.hitFx == null;
     const moved = dragState.moved;
+    disarmAxisKeys();   // vertex3d axis-lock keys are drag-scoped only
     dragState = null; dragHint = null;
     const v3 = view3dOf(getShow());   // back to hover feedback
     evEl.style.cursor = v3 ? (hitTest3D(ev, v3) ? 'pointer' : 'grab') : cursorFor(hitTest(ev));
@@ -1535,7 +1606,7 @@ export function enableDragPlacement(canvasEl, { getShow, onEdit, onCommit, onSel
   });
 
   return {
-    setEnabled(v) { enabled = !!v; if (!enabled) dragState = null; },
+    setEnabled(v) { enabled = !!v; if (!enabled) { dragState = null; disarmAxisKeys(); } },
     isEnabled() { return enabled; },
   };
 }

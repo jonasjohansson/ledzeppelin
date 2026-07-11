@@ -11,9 +11,13 @@
 // relays OSC + socket-JSON channel values as { type:'ext', channel, value } —
 // pass an onExt(channel, value) handler to consume them (optional; the old
 // single-argument call still works).
-export function connectBridge(route, { onExt, onManifestReq, onStatus, fps } = {}) {
+export function connectBridge(route, { onExt, onManifestReq, onStatus, fps, whiteMode } = {}) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   let outFps = Number(fps) || 42;   // global output framerate cap sent to the daemon
+  let wmode = whiteMode === 'additive' ? 'additive' : 'accurate';   // global RGBW white mode
+  // The route message carries the geometry (route) plus global render flags (fps,
+  // whiteMode) as top-level siblings — one shape, re-sent on connect and every edit.
+  const sendRoute = () => { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps, whiteMode: wmode })); } catch { /* race */ } } };
   let ws = null;
   let closed = false;     // explicit close() → stop reconnecting
   let backoff = 500;      // ms; doubles per failed attempt, capped at 5s
@@ -29,7 +33,7 @@ export function connectBridge(route, { onExt, onManifestReq, onStatus, fps } = {
       // On (re)connect, (re)send the current route so the daemon knows where bytes go.
       ws.addEventListener('open', () => {
         backoff = 500; everOpen = true; lastErr = null;
-        try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ }
+        sendRoute();
         // (Re)publish the companion manifest on connect so phones get the current
         // show immediately (and after an editor restart they aren't left stale).
         onManifestReq?.();
@@ -83,12 +87,17 @@ export function connectBridge(route, { onExt, onManifestReq, onStatus, fps } = {
     // (the daemon just reassigns its route). Used on every geometry edit.
     setRoute(next) {
       route = next;
-      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ } }
+      sendRoute();
     },
     // Set the global output framerate cap (re-sent to the daemon via a route msg).
     setOutputFps(n) {
       outFps = Math.max(1, Math.min(60, Math.round(Number(n) || 42)));
-      if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify({ type: 'route', route, fps: outFps })); } catch { /* race */ } }
+      sendRoute();
+    },
+    // Set the global RGBW white mode ('accurate' | 'additive') — same route msg.
+    setWhiteMode(m) {
+      wmode = m === 'additive' ? 'additive' : 'accurate';
+      sendRoute();
     },
     connected: () => !!ws && ws.readyState === 1,
     lastError: () => lastErr,

@@ -58,6 +58,12 @@ async function probeWled(ip, timeoutMs) {
 
 // WLED colour-order codes (cfg.hw.led.ins[].order). From WLED const.h.
 const COL_ORDER_CODE = { GRB: 0, RGB: 1, BRG: 2, RBG: 3, BGR: 4, GBR: 5 };
+const CODE_TO_ORDER = { 0: 'GRB', 1: 'RGB', 2: 'BRG', 3: 'RBG', 4: 'BGR', 5: 'GBR' };
+// LED-type codes (cfg.hw.led.ins[].type, from WLED const.h) whose strips carry a
+// dedicated WHITE channel — digital RGBW (FW1906 28, UCS8904 29, SK6812/WS2814 30,
+// TM1814 31) + analog 4/5-channel (44 RGBW, 45 RGBCCT). Used to pick a 4-byte
+// GRBW-style colour format vs plain 3-byte RGB.
+const RGBW_TYPES = new Set([28, 29, 30, 31, 44, 45]);
 
 // Push per-OUTPUT LED config (length + colour order) to a controller, MERGING
 // into its existing hw.led.ins so pins/other settings are preserved. `outs` is
@@ -95,6 +101,41 @@ export async function pushConfig(ip, outs = []) {
     return { applied, outputs: ins.length, total: start };
   } finally {
     suppressOutput(ip, 800);   // push done (ok or fail) → resume DDP after a short settle
+  }
+}
+
+// Read a controller's LED OUTPUTS (buses) so the editor can import them as
+// fixtures. Returns [{ index, len, order, rgbw, pin }] in bus order (index = the
+// WLED bus/segment position, which drives the DDP buffer offset). `order` is the
+// colour-order string; `rgbw` true when the bus carries a white channel (→ a 4-ch
+// GRBW-style format), falling back to the device-level `info.leds.rgbw` when a
+// bus omits its type. Pauses DDP + settles like pushConfig so the ESP's web
+// server can answer even if it's being streamed to. Throws on non-WLED / no buses.
+// Pure parse of WLED's `hw.led.ins` (+ device-level rgbw fallback) → the output
+// list. Exported for tests. `index` = bus position (its DDP buffer order); `rgbw`
+// prefers the bus's own type, else the device-level flag. Throws on no buses.
+export function parseOutputs(ins, infoRgbw = false) {
+  if (!Array.isArray(ins) || !ins.length) throw new Error('device reports no LED outputs');
+  return ins.map((bus, index) => ({
+    index,
+    len: Math.max(0, Math.round(Number(bus?.len) || 0)),
+    order: CODE_TO_ORDER[bus?.order] ?? 'GRB',
+    rgbw: typeof bus?.type === 'number' ? RGBW_TYPES.has(bus.type) : !!infoRgbw,
+    pin: Array.isArray(bus?.pin) ? bus.pin : (bus?.pin != null ? [bus.pin] : []),
+  }));
+}
+
+export async function getOutputs(ip) {
+  suppressOutput(ip, 6000);
+  await new Promise((r) => setTimeout(r, 700));   // let the packet flood clear so /json/cfg answers
+  try {
+    const [cfg, info] = await Promise.all([
+      wledFetch(ip, '/json/cfg'),
+      wledFetch(ip, '/json/info').catch(() => ({})),
+    ]);
+    return parseOutputs(cfg?.hw?.led?.ins, !!info?.leds?.rgbw);
+  } finally {
+    suppressOutput(ip, 800);   // resume DDP after a short settle (read done, ok or fail)
   }
 }
 

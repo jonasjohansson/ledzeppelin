@@ -19,6 +19,7 @@
 //   snap.get() → {grid, dist}      — fixture-placement snap values;
 //   snap.set({grid?, dist?})         persist + apply (main also redraws its overlay).
 //   output.getFps() / setFps(n)    — the daemon output-fps cap (lz.outfps).
+//   output.getWhiteMode() / setWhiteMode(m) — RGBW white derivation (lz.whitemode).
 //   prefs.getTips/setTips          — hover-tooltip toggle (main re-runs its title pass).
 //   prefs.getNativeCtx/setNativeCtx— native right-click menu toggle (body class in main).
 //   appearance.*                   — get/set pairs for brightness / tint / contrast /
@@ -29,7 +30,7 @@
 // confirm-before-delete) are handled internally — both windows share the key.
 
 import { el } from './dom.js';
-import { Slider } from './controls.js';
+import { Slider, Segmented } from './controls.js';
 import { listInputs } from '../model/audio.js';
 import { confirmDeletesOn, setConfirmDeletes } from './confirm.js';
 
@@ -94,6 +95,10 @@ export function createSettingsPanel(hooks) {
       min: 1, max: 60, step: 1, default: 42, commit: 'live',
       onInput: (v) => output.setFps(Math.max(1, Math.min(60, Math.round(v)))),
     }));
+    // RGBW white derivation: Accurate pulls white onto the dedicated W LED
+    // (subtracts it from RGB); Additive keeps RGB full and adds W on top.
+    mount.append(Segmented('White Mode', [['accurate', 'Accurate'], ['additive', 'Additive']],
+      () => output.getWhiteMode?.() || 'accurate', (v) => output.setWhiteMode?.(v)));
 
     // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
     const toggleRow = (label, get, set) => {
@@ -109,8 +114,12 @@ export function createSettingsPanel(hooks) {
     mount.append(toggleRow('Show tooltips on hover', prefs.getTips, (v) => prefs.setTips(v)));
     mount.append(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v)));
 
-    // --- Appearance: brightness / accent tint / contrast / text size (all live). ---
+    // --- Appearance: theme / brightness / accent tint / contrast / text size (all live). ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
+    // Theme flips the UI CHROME light/dark; display surfaces (stage/preview/output/
+    // spectrum) stay dark. Discrete choice → a select, like the audio Input above.
+    mount.append(Segmented('Theme', [['dark', 'Dark'], ['light', 'Light']],
+      () => appearance.getTheme(), (v) => appearance.setTheme(v)));
     mount.append(Slider('Brightness', appearance.getBrightness(), {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),

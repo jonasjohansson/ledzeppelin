@@ -11,15 +11,15 @@
 // `show.chainSettings`, keyed by `${deviceId}:${port}`.
 
 const settingsOf = (show) => (show && typeof show.chainSettings === 'object' && show.chainSettings) || {};
-export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 1}`;
-export const runLabel = (deviceId, port) => `${deviceId || 'unassigned'} · port ${port}`;
+export const runKey = (f) => `${f?.output?.deviceId || ''}:${f?.output?.port ?? 0}`;
+export const runLabel = (deviceId, port) => `${deviceId || 'unassigned'} · port ${Number(port) + 1}`;   // 1-based label; port is a 0-based WLED bus index
 
 // All runs: [{ key, deviceId, port, members:[fixtureId… in wiring order], stagger, axis }].
 export function runsOf(show) {
   const map = new Map();
   for (const f of show?.fixtures || []) {
     const key = runKey(f);
-    if (!map.has(key)) map.set(key, { key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members: [] });
+    if (!map.has(key)) map.set(key, { key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 0, members: [] });
     map.get(key).members.push(f.id);
   }
   const cs = settingsOf(show);
@@ -56,22 +56,27 @@ export function controllerColorMap(show) {
   const hue = new Map(devIds.map((id, i) => [id, (i * 137.508) % 360]));
   const ports = new Map();   // deviceId -> Set of distinct ports in use
   for (const f of fixtures) {
-    const d = f.output?.deviceId || '', p = f.output?.port ?? 1;
+    const d = f.output?.deviceId || '', p = f.output?.port ?? 0;
     if (!ports.has(d)) ports.set(d, new Set());
     ports.get(d).add(p);
   }
   const portList = (d) => [...(ports.get(d) || [])].sort((a, b) => a - b);
-  // Generated fallback keeps 30% saturation: hues stay tellable-apart (which
-  // controller / which output) without turning the canvas into a colour chart.
+  // Vivid enough to read at a glance: a saturation FLOOR (an assigned pastel still
+  // reads as its controller; a generated hue pops instead of washing out) plus a
+  // wide lightness ramp so which OUTPUT a fixture is on is obvious.
+  const SAT_FLOOR = 62;
   const runColor = (deviceId, port) => {
     const a = hexToHsl(assigned.get(deviceId));
-    const [h, s, baseL] = a || [hue.get(deviceId) ?? 210, 30, 60];
+    const [h, s0, baseL] = a || [hue.get(deviceId) ?? 210, SAT_FLOOR, 56];
+    const s = Math.max(s0, SAT_FLOOR);
     const ps = portList(deviceId), n = ps.length || 1, i = Math.max(0, ps.indexOf(port));
-    const l = n > 1 ? 44 + i * (32 / (n - 1)) : baseL;   // ramp 44%..76% across the device's outputs
+    const l = n > 1 ? 40 + i * (38 / (n - 1)) : baseL;   // ramp 40%..78% across the device's outputs
     return `hsl(${h.toFixed(1)}, ${s.toFixed(0)}%, ${l.toFixed(0)}%)`;
   };
+  // An ASSIGNED colour is the user's pick — return it verbatim. Only the GENERATED
+  // fallback gets the saturation floor (it was a washed-out 30%).
   const deviceColor = (deviceId) =>
-    assigned.get(deviceId) || `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, 30%, 60%)`;
+    assigned.get(deviceId) || `hsl(${(hue.get(deviceId) ?? 210).toFixed(1)}, ${SAT_FLOOR}%, 58%)`;
   return { hue, runColor, deviceColor };
 }
 
@@ -85,9 +90,9 @@ export function chainOf(show, fixtureId) {
   if (members.length < 2) return null;
   const cs = settingsOf(show)[key] || {};
   return {
-    key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 1, members,
+    key, deviceId: f.output?.deviceId || '', port: f.output?.port ?? 0, members,
     index: members.indexOf(fixtureId), stagger: Number(cs.stagger) || 0, axis: cs.axis === 'y' ? 'y' : 'x',
-    name: runLabel(f.output?.deviceId, f.output?.port ?? 1),
+    name: runLabel(f.output?.deviceId, f.output?.port ?? 0),
   };
 }
 
@@ -135,7 +140,7 @@ export function wireAfter(show, fixtureId, afterFxId) {
   const fi = fixtures.findIndex((f) => f.id === fixtureId);
   if (ai < 0 || fi < 0) return show;
   const after = fixtures[ai];
-  const moved = { ...fixtures[fi], output: { ...fixtures[fi].output, deviceId: after.output?.deviceId, port: after.output?.port ?? 1 } };
+  const moved = { ...fixtures[fi], output: { ...fixtures[fi].output, deviceId: after.output?.deviceId, port: after.output?.port ?? 0 } };
   fixtures.splice(fi, 1);
   fixtures.splice(fixtures.findIndex((f) => f.id === afterFxId) + 1, 0, moved);   // re-find after the splice
   return { ...show, fixtures };
@@ -157,8 +162,8 @@ export function wireFirst(show, fixtureId) {
 
 // The next free port number on a device (for "chain these onto their own output").
 export function freePort(show, deviceId) {
-  const used = new Set((show?.fixtures || []).filter((f) => (f.output?.deviceId || '') === deviceId).map((f) => f.output?.port ?? 1));
-  let p = 1; while (used.has(p)) p++; return p;
+  const used = new Set((show?.fixtures || []).filter((f) => (f.output?.deviceId || '') === deviceId).map((f) => f.output?.port ?? 0));
+  let p = 0; while (used.has(p)) p++; return p;   // 0-based (WLED bus index) — matches scan/import
 }
 
 // Compat: drop the legacy stored `show.chains` list (chains are derived now) +

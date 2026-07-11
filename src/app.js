@@ -1,13 +1,13 @@
 import { getGL, program, drawFullscreen } from './engine/gl.js';
-import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures } from './model/show.js';
+import { emptyShow, addDevice, addFixture, validate, repackOffsets, syncFixtureTypes, syncDeviceTypes, nextDeviceColor, pushTypeToFixtures, effectiveColorFormat } from './model/show.js';
 import { buildPipelineInputs } from './model/pipeline.js';
 import { makeSampler } from './engine/sampler.js';
 import { makeCompositor } from './engine/compositor.js';
-import { packVolumetrics } from './engine/fields.js';
+import { packVolumetrics, packColorFx, FIELD_IDS } from './engine/fields.js';
 import { getEntry } from './engine/shaders/manifest.js';
 import { connectBridge } from './bridge.js';
 import { createPreview, enableDragPlacement } from './ui/preview.js';
-import { createFixturePanel, loadShow, saveShow } from './ui/fixtures.js';
+import { createFixturePanel, loadShow, saveShow, COLOR_FORMATS } from './ui/fixtures.js';
 import { stampFixture, stampDevice } from './model/templates.js';
 import { placePopover, dismissOnOutside } from './ui/kit/popover.js';
 import { createLayerPanel } from './ui/layers.js';
@@ -32,7 +32,8 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, audioEnabled } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { updateAudio, setAudioGain, enableAudio, audioEnabled, externalBand } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { createClipTriggers } from './model/clip-triggers.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
 import { renderSourceThumbnails } from './engine/thumbs.js';
@@ -77,7 +78,7 @@ function defaultShow() {
   show.fixtures = [{
     id: 'f1', typeId: 'generic',
     input: { transform: tf, points: pointsFromTransform(tf, cv) },
-    output: { deviceId: 'c1', port: 1, pixelOffset: 0, pixelCount: 96 },
+    output: { deviceId: 'c1', port: 0, pixelOffset: 0, pixelCount: 96 },
   }];
   show = repackOffsets(syncFixtureTypes(syncDeviceTypes(show)));   // models + pack offsets + cache type spec
   // A clear two-layer starter: Checkered on the bottom, Lines on top (half
@@ -143,6 +144,8 @@ let show = tidyEmptyLayers(normalizeComposition(syncShowFixtures(syncFixtureType
 let compositor = makeCompositor(gl, canvas.width, canvas.height);
 let sampler = null, bridge = null, lastRGBA = null;
 let samplerDirty = false;   // set during a live fixture drag → rebuild the sampler next frame so lit content follows in realtime
+let curFieldIds = [];       // volumetric field ids active THIS frame → the sampler compiles a shader with only these fields (V3D size fix)
+const fieldKeyOf = (ids) => [...new Set(ids)].sort((a, b) => a - b).join(',');   // same sorted+deduped key sampler.js uses for fieldKey
 // --- Output live controls: Freeze (hold the last frame) + Panic (force all output dark).
 //     The master DIMMER is the composition opacity (a fader in the deck's master row),
 //     applied in the compositor — not duplicated here. ---
@@ -158,6 +161,8 @@ let controlPanel = null;   // Control-tab panel (assigned once built; null-safe 
 // Global output framerate cap sent to the daemon (System › Settings; persisted).
 const OUTFPS_KEY = 'lz.outfps';
 const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
+const WHITEMODE_KEY = 'lz.whitemode';
+const savedWhiteMode = () => { try { return localStorage.getItem(WHITEMODE_KEY) === 'additive' ? 'additive' : 'accurate'; } catch { return 'accurate'; } };
 let prevBindCh = {};     // last frame's channel values, for action-binding rising edges
 let bindSaveTimer = null;
 
@@ -215,14 +220,14 @@ function rebuild(next) {
   //    out to all its placed copies), 2) auto-pack pixel offsets contiguous per
   //    device, 3) sync derived sample points to transforms + canvas.
   show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
-  const { sampleUVs, samplePositions, route, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, sampleBands, route, spans } = buildPipelineInputs(show);
   curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
-  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: (live) => { panel?.refresh?.(); updateHealthBtn?.(live); }, fps: savedOutFps() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan + health icon
+  else bridge = connectBridge(route, { onExt: handleExt, onManifestReq: () => broadcastManifest(true), onStatus: (live) => { panel?.refresh?.(); updateHealthBtn?.(live); }, fps: savedOutFps(), whiteMode: savedWhiteMode() });   // canonical OSC addresses + ext channels; phone asks → publish; status → re-gate scan + health icon
   lastSpans = spans;
   recomputeHiddenSpans();
   lastRGBA = null;
@@ -234,9 +239,23 @@ function rebuild(next) {
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
-  const { sampleUVs, samplePositions, spans } = buildPipelineInputs(show);
-  sampler?.dispose?.();
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions) : null;
+  const { sampleUVs, samplePositions, sampleBands, spans } = buildPipelineInputs(show);
+  const n = sampleUVs.length / 2;
+  // DRAG path: the LED count is unchanged, only per-LED UV/xyz moved — refresh the
+  // textures IN PLACE so the PBO readback ring stays warm (sample() keeps returning
+  // valid frames every frame ⇒ no frozen wall / dark preview during the drag).
+  // Only when n actually changed (or there's no sampler yet) do we tear down and
+  // rebuild the target + PBO ring via makeSampler.
+  // Only take the in-place update path when BOTH the LED count AND the active field
+  // set are unchanged — a different field set needs a freshly compiled program, so
+  // fall through to a full rebuild (which passes curFieldIds to makeSampler).
+  if (sampler && n > 0 && sampler.n === n && sampler.fieldKey === fieldKeyOf(curFieldIds)
+      && sampler.update?.(sampleUVs, samplePositions, sampleBands)) {
+    // updated in place
+  } else {
+    sampler?.dispose?.();
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
+  }
   lastSpans = spans; recomputeHiddenSpans();
 }
 
@@ -438,7 +457,7 @@ const panel = createFixturePanel({
 // frame); the persisted show is untouched, so editing and playback don't fight.
 // startTs/lastTs are in requestAnimationFrame timestamp units (ms).
 let lastTs = 0, t0 = 0;
-let pulseTrigSecs = []; // seconds of recent ⚡ triggers (up to 8 stack as beams)
+const clipTriggers = createClipTriggers();   // per-clip ⚡/audio-onset trigger buses
 const nowSec = () => (lastTs - t0) / 1000;
 const transport = {
   direction: 'off',   // 'off' | 'forward' | 'backward' | 'shuffle'
@@ -450,11 +469,11 @@ const transport = {
   getLoop() { return this.loop; },
   setLoop(b) { this.loop = !!b; },
   toggle() { this.setDirection(this.direction === 'off' ? 'forward' : 'off'); },
-  fire() { pulseTrigSecs.push(nowSec()); if (pulseTrigSecs.length > 8) pulseTrigSecs = pulseTrigSecs.slice(-8); },
+  fire(clipId) { clipTriggers.fire(clipId, nowSec()); },
   // Restart the animation timer: clock back to 0 (Timeline sweeps, pulse autofire),
   // clear pending pulse triggers, and reset the compositor's integrated phase
   // clocks (line/hue speed sweeps) so everything re-syncs to its start.
-  reset() { t0 = lastTs; this.startTs = lastTs; pulseTrigSecs = []; compositor?.resetPhases?.(); },
+  reset() { t0 = lastTs; this.startTs = lastTs; clipTriggers.reset(); compositor?.resetPhases?.(); },
 };
 
 // The composer renders into the Resolume-style shell's three regions: the DECK
@@ -464,12 +483,14 @@ const layerPanel = createLayerPanel({
   getShow: () => show,
   setShow: (next) => setComposition(next), // composition-only: persist, no rebuild
   transport,
+  clipTrigsFor: (id) => clipTriggers.trigsFor(id),
   thumbnails,
   onClipSelect: () => setInspectorTab('clip'), // switch the left column to the Clip tab
   onLayerSelect: () => setInspectorTab('layer'), // switch to the Layer tab
   onCompositionSelect: () => setInspectorTab('composition'), // switch to the Composition tab
   getISFExamples: () => isfExamples,
   onAddISF: (file) => projectIO.importISFExample(file),   // deferred — projectIO is constructed later at boot
+  showSources: () => setPatchTab('sources'),   // clicking an empty clip slot reveals the sidebar Sources browser
   mounts: {
     deck: document.getElementById('deckbar'),
     inspectorClip: document.getElementById('insp-clip'),
@@ -700,7 +721,7 @@ function selectFixture(fxId, ev, opts = {}) {
   if (fxId != null && !multiMod) {
     outputTab = 'fixtures';
     const sf = show.fixtures.find((f) => f.id === fxId);   // keep its controller + group open after deselect
-    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 1}`); }
+    if (sf) { expandedDevices.add(sf.output?.deviceId || ''); expandedGroups.add(`${sf.output?.deviceId || ''}:${sf.output?.port ?? 0}`); }
     panel.selectFixture?.(fxId);
   }
   renderOutput(); redrawOverlay();
@@ -947,7 +968,7 @@ function positionEditor(sel) {
   // every member together.
   const ch = chainOf(show, sel.id);
   const isHead = !ch || ch.index === 0;
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const moveRun = (patch) => {
     const key = runKeyOf(sel);
     const next = structuredClone(show);
@@ -973,13 +994,35 @@ function positionEditor(sel) {
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const nOut = Math.max(1, Math.round(dev?.outputs ?? 4));
   const portSel = oel('select');
-  for (let p = 1; p <= nOut; p++) {
-    const o = oel('option', { value: String(p), textContent: `Output ${p}` });
-    if (p === (sel.output?.port ?? 1)) o.selected = true;
+  // Ports are 0-based WLED bus indices (value); the label is 1-based for humans.
+  for (let p = 0; p < nOut; p++) {
+    const o = oel('option', { value: String(p), textContent: `Output ${p + 1}` });
+    if (p === (sel.output?.port ?? 0)) o.selected = true;
     portSel.append(o);
   }
   portSel.disabled = !isHead;
   portSel.addEventListener('change', () => moveRun({ port: Number(portSel.value) }));
+  // Per-FIXTURE colour format — WLED's per-output model: format lives here, on the
+  // output, not on the container device. '' = inherit the controller's colour order.
+  // Unlike device/output (a per-run property set by the head), format is genuinely
+  // per-fixture, so it stays editable for every chain member.
+  const type = (show.fixtureTypes || []).find((t) => t.id === sel.typeId);
+  const fmtSel = oel('select');
+  for (const o of COLOR_FORMATS) {
+    const val = o.value ?? o;
+    const op = oel('option', { value: val, textContent: o.label ?? o });
+    if (val === (sel.colorFormat || '')) op.selected = true;
+    fmtSel.append(op);
+  }
+  fmtSel.addEventListener('change', () => {
+    const next = structuredClone(show);
+    const f = next.fixtures.find((x) => x.id === sel.id);
+    if (f) f.colorFormat = fmtSel.value;
+    apply(next);
+  });
+  // The format ACTUALLY sent (own format wins, else device order, else type order) —
+  // computed exactly as the pipeline does, so the user never has to guess.
+  const sending = effectiveColorFormat(sel.colorFormat, dev?.colorOrder, sel.colorOrder);
   // Two collapsible groups (same accent-header + rule + chevron as the Clip
   // inspector, so the two read as one instrument): POSITION = on-canvas geometry;
   // PATCH = which controller/output it's wired to + its pixel range + the chain.
@@ -1145,6 +1188,8 @@ function positionEditor(sel) {
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Colour format' }), fmtSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Sending' }), oel('span', { className: 'fx-readonly', textContent: sending, title: 'the colour format actually sent (own format, else controller order)' })]),
         ]),
         // CHAIN status + wiring — is this fixture daisy-chained, and where in the run.
         chainStatusRow(sel),
@@ -1393,7 +1438,7 @@ function multiPositionEditor(ids) {
     ...show.devices.map((d) => ({ value: d.id, label: `${d.name || d.id} (${d.id})` }))];
   const devIds = [...new Set(list.map((f) => f.output?.deviceId).filter(Boolean))];
   const nOut = Math.max(1, 4, ...devIds.map((id) => Math.round(show.devices.find((d) => d.id === id)?.outputs ?? 4)));
-  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i + 1), label: `Output ${i + 1}` }));
+  const portOpts = Array.from({ length: nOut }, (_, i) => ({ value: String(i), label: `Output ${i + 1}` }));   // value = 0-based bus, label 1-based
 
   return oel('div', { className: 'output-edit' }, [
     flatGroup('Position', 'position', (body) => {
@@ -1583,11 +1628,11 @@ function chainStatusRow(sel) {
   const ch = chainOf(show, sel.id);
   const idxOf = (id) => show.fixtures.findIndex((x) => x.id === id);
   const nameOf = (id) => { const i = idxOf(id); return i >= 0 ? fixtureLabel(show.fixtures[i], i) : id; };
-  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${f?.output?.port ?? 1})`; };
+  const tag = (id) => { const f = show.fixtures[idxOf(id)]; return `${nameOf(id)} (${f?.output?.deviceId || '—'}·o${(f?.output?.port ?? 0) + 1})`; };   // o = 1-based output label (port is 0-based)
   const dev = show.devices.find((d) => d.id === sel.output?.deviceId);
   const devName = dev?.name || dev?.id || 'controller';
   // Pixel load + capacity on this fixture's output (0 max = unlimited).
-  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 1}`;
+  const runKeyOf = (f) => `${f.output?.deviceId || ''}:${f.output?.port ?? 0}`;
   const key = runKeyOf(sel);
   const runPx = show.fixtures.filter((f) => runKeyOf(f) === key).reduce((m, f) => m + (f.pixelCount || 0), 0);
   const cap = Number(dev?.maxPerOutput) || 0;
@@ -1612,7 +1657,7 @@ function chainStatusRow(sel) {
   // End of chain with nothing to offer — the output is full, or there are simply no
   // other fixtures to wire after this one → nothing to pick, so disable the picker.
   toSel.disabled = !next && (full || candidates.length === 0);
-  if (full) toSel.title = `${devName} Output ${sel.output?.port ?? 1} is full (${runPx}/${cap}px)`;
+  if (full) toSel.title = `${devName} Output ${(sel.output?.port ?? 0) + 1} is full (${runPx}/${cap}px)`;
   else if (!next && candidates.length === 0) toSel.title = 'no other fixtures to wire after this one';
   toSel.addEventListener('change', () => { if (toSel.value) applyShow(wireAfter(show, toSel.value, sel.id)); });
   const capTxt = cap > 0 ? ` · ${runPx}/${cap}px${full ? ' ⚠ full' : ''}` : '';
@@ -1691,19 +1736,26 @@ function updateInspector() {
   // the panel re-mounts, which would otherwise drop focus (so each arrow press needed
   // a re-click). Re-focus the same field's input by its label after re-appending.
   const ae = document.activeElement;
-  let focusKey = null, vtxKey = null, selStart = null, selEnd = null;
-  if (ae && ae.tagName === 'INPUT' && fxBodyEl.contains(ae)) {
+  let focusKey = null, focusTag = null, vtxKey = null, selStart = null, selEnd = null;
+  // Capture text/number inputs, <select> dropdowns (device Format/Protocol/Model) AND
+  // the <input type=color> swatch — all live in a .fx-field keyed by its <span> label
+  // (or a per-vertex data-vtx), so editing a dropdown survives a re-mount too.
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && fxBodyEl.contains(ae)) {
+    focusTag = ae.tagName;
     focusKey = ae.closest('.fx-field')?.querySelector('span')?.textContent || null;
     vtxKey = ae.dataset?.vtx || null;   // per-vertex XYZ table cells key by "row:axis"
-    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number inputs don't expose selection */ }
+    try { selStart = ae.selectionStart; selEnd = ae.selectionEnd; } catch { /* number/select/color don't expose selection */ }
   }
   fxBodyEl.textContent = '';
   if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
   else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
   if (focusKey || vtxKey) {
     const fld = focusKey && [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
-    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`) : fld?.querySelector('input');
-    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number input */ } }
+    // Re-focus the SAME kind of control by its label-key (a <select> and a colour
+    // swatch can share a field with nothing else, so match on the captured tag).
+    const inp = vtxKey ? fxBodyEl.querySelector(`input[data-vtx="${vtxKey}"]`)
+      : fld?.querySelector(focusTag === 'SELECT' ? 'select' : 'input');
+    if (inp) { inp.focus(); try { if (selStart != null) inp.setSelectionRange(selStart, selEnd); } catch { /* number/select/color */ } }
   }
   updateStageInsets();
   updateAlignBtn();
@@ -2275,7 +2327,7 @@ function placeFixtureCopies(srcList) {
   const load = new Map();
   for (const f of next.fixtures) {
     const d = f.output?.deviceId; if (!d) continue;
-    const k = loadKey(d, f.output?.port ?? 1);
+    const k = loadKey(d, f.output?.port ?? 0);
     load.set(k, (load.get(k) || 0) + (f.pixelCount || 0));
   }
   const pickPort = (copy) => {
@@ -2284,12 +2336,12 @@ function placeFixtureCopies(srcList) {
     const budget = Number(device?.maxPerOutput) || 0;
     const nOut = Math.max(1, Math.round(Number(device?.outputs) || 1));
     const px = copy.pixelCount || 0;
-    const start = copy.output?.port ?? 1;
+    const start = copy.output?.port ?? 0;
     let port = start;
     if (budget > 0) {
       port = null;
       for (let i = 0; i < nOut; i++) {
-        const p = ((start - 1 + i) % nOut) + 1;   // source output first, then roll forward (wrapping)
+        const p = (start + i) % nOut;   // 0-based: source output first, then roll forward (wrapping)
         if ((load.get(loadKey(devId, p)) || 0) + px <= budget) { port = p; break; }
       }
       port = port ?? start;   // every output full → overflow the source output
@@ -2523,6 +2575,36 @@ function setOutputTab(which) {
   renderOutput();
 }
 
+// Output island VIEW tabs: 'fixtures' (the patch/output list) | 'sources' (a
+// draggable source-library palette). Distinct from outputTab (internal editor
+// mode). The rail is rebuilt each time Sources is shown so thumbnails/newly
+// imported sources appear; its items drag onto the layer slots' drop targets.
+function setPatchTab(which) {
+  which = which === 'sources' ? 'sources' : 'fixtures';
+  const fx = document.getElementById('patch-fixtures');
+  const src = document.getElementById('patch-sources');
+  if (fx) fx.hidden = which !== 'fixtures';
+  if (src) {
+    src.hidden = which !== 'sources';
+    if (which === 'sources') {
+      src.textContent = '';
+      src.append(layerPanel.sourceBrowser({
+        draggable: true,
+        onPick: (name) => layerPanel.addSourceToActiveLayer?.(name),
+        onVideo: () => layerPanel.pickVideoActive?.(),
+      }));
+    }
+  }
+  const tabs = document.getElementById('patch-tabs');
+  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.ptab === which);
+  // The add-fixture / add-device / library actions belong to the Output (patch) view —
+  // hide them on the Sources tab, where they'd be meaningless.
+  const acts = tabs?.querySelector('.island-acts');
+  if (acts) acts.hidden = which !== 'fixtures';
+  try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
+}
+document.getElementById('patch-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setPatchTab(b.dataset.ptab); });
+
 // Compat shim: there are no top-level sections anymore (everything is docked).
 function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }
 
@@ -2625,12 +2707,14 @@ if (setBus) {
       const s = JSON.parse(localStorage.getItem(SNAP_KEY) || 'null');
       if (s) { SNAP_GRID = Number(s.grid) || SNAP_GRID; SNAP_DIST = Number(s.dist) || SNAP_DIST; setSnapEnabled(!!s.on); }
     } catch { /* ignore */ }
-    // Output fps cap → push to the daemon.
+    // Output fps cap + RGBW white mode → push to the daemon.
     bridge?.setOutputFps?.(savedOutFps());
+    bridge?.setWhiteMode?.(savedWhiteMode());
     // Tooltips + native context menu (both idempotent appliers).
     prefs.applyTips();
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
     // Appearance: re-apply every CSS-var applier from the (just-written) keys.
+    document.documentElement.dataset.theme = prefs.getTheme();   // Dark|Light chrome marker
     prefs.applyAccent(prefs.savedAccent()); prefs.applyContrast();
     prefs.setUiScale(prefs.savedScale()); prefs.setTranslucency(prefs.savedTranslucency());
     redrawOverlay();
@@ -2641,6 +2725,8 @@ if (setBus) {
 
 // Restore the persisted left-column tab (Composition/Layer/Clip) across reloads.
 setInspectorTab((() => { try { return localStorage.getItem('lz.itab'); } catch { return null; } })() || 'composition');
+// Restore the Output island view tab (Output | Sources).
+setPatchTab((() => { try { return localStorage.getItem('lz.ptab'); } catch { return null; } })() || 'fixtures');
 
 // Show the fixture overlay by default (you see your rig on load) — this also puts
 // the dock in fixture-editing (output) mode via setOverlay.
@@ -2740,6 +2826,17 @@ function loopBody(ts) {
     // merges audio + external — the four band names are reserved by audio.
     setAudioGain(show.composition?.audioGain ?? 1);
     Object.assign(frameSignals, updateAudio(), chNow, dashboardSignals(show.composition));
+    // Per-clip audio triggers: poll each live triggerable clip's detector on ITS band.
+    // Use `ts` (the monotonic rAF timestamp, ms) so a transport.reset() — which rewinds
+    // `t` — can't push a detector's clock backward and suppress fires.
+    const activeTrigClips = [];
+    for (const L of (show.composition?.layers || [])) {
+      const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
+      if (c && getEntry(c.generator)?.triggerable) activeTrigClips.push(c);
+    }
+    clipTriggers.poll(activeTrigClips, externalBand, ts, nowSec(), show.composition?.bpm ?? 120);
+    // Drop trigger buses for clips that no longer exist in the show.
+    { const live = new Set(); for (const L of (show.composition?.layers || [])) for (const c of (L.clips || [])) if (c) live.add(c.id); clipTriggers.prune(live); }
     frameSignals.__bpm = show.composition?.bpm ?? 120;
     const signals = frameSignals;
     renderLayers = renderLayers.map((L) => {
@@ -2772,7 +2869,7 @@ function loopBody(ts) {
     // Crossfade is PER-LAYER now (layer.transitionMs) — pass no global override so
     // the compositor falls back to each layer's own value.
     compositor.render(renderLayers, t, {
-      trigSecs: pulseTrigSecs, videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
+      trigSecsFor: (id) => clipTriggers.trigsFor(id), videoTex: videos.videoTex, masterOpacity, transitionMs: undefined,
       compositionEffects: show.composition?.effects, compositionParams: show.composition?.params,
     });
 
@@ -2794,11 +2891,25 @@ function loopBody(ts) {
         const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
         if (!c || !getEntry(c.generator)?.volumetric) continue;
         act.push({
-          generator: c.generator, params: c.params, blend: L.blend,
+          id: c.id, generator: c.generator, params: c.params, blend: L.blend, effects: c.effects,
+          // The LAYER's effect chain too — packColorFx appends its colour-class effects to
+          // this clip's per-LED fx (mirroring the 2D clip→layer order), so a layer effect
+          // reaches its 3D clips. Non-colour layer effects are auto-filtered.
+          layerEffects: L.effects, layerParams: L.params,
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
-      if (act.length) vol = { ...packVolumetrics(act), time: t, trigSecs: pulseTrigSecs };
+      if (act.length) vol = { ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)),
+        // Live mic band levels (bass, mid, high) for the audiobars field. The plain
+        // band keys in frameSignals are the EXTERNAL (mic) source (see updateAudio).
+        // A test hook (__lz.setAudioBands) can force these when there's no mic.
+        audioBands: audioBandsOverride || [signals.bass || 0, signals.mid || 0, signals.high || 0] };
+      // The field ids live THIS frame — the sampler compiles a shader with ONLY these
+      // blocks (V3D size fix). Computed even when empty so clearing all volumetric
+      // clips recompiles back to the tiny no-field shader. A changed set flags the
+      // sampler stale so refreshSampler rebuilds its program for the new fields.
+      curFieldIds = act.map((a) => FIELD_IDS[a.generator]).filter((v) => v != null);
+      if (sampler && sampler.fieldKey !== fieldKeyOf(curFieldIds)) samplerDirty = true;
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no
@@ -2863,6 +2974,20 @@ function loop(ts) {
 }
 requestAnimationFrame(loop);
 
+// Re-open the mic the user previously had ON (persisted lz.mic), on their FIRST interaction
+// — getUserMedia needs a user gesture, so it can't run on load. One-shot; the browser won't
+// re-prompt if permission was already granted, so the FFT + clip triggers just come alive.
+try {
+  if (localStorage.getItem('lz.mic') === '1') {
+    const reopenMic = () => {
+      window.removeEventListener('pointerdown', reopenMic); window.removeEventListener('keydown', reopenMic);
+      if (!audioEnabled('external')) enableAudio('external', show.composition?.audioDevice || 'default');
+    };
+    window.addEventListener('pointerdown', reopenMic);
+    window.addEventListener('keydown', reopenMic);
+  }
+} catch { /* ignore */ }
+
 // Global safety net: surface (don't swallow) any unhandled error / promise rejection so a
 // background failure can't silently leave the app in a bad state.
 window.addEventListener('error', (e) => console.error('[uncaught]', e.error || e.message));
@@ -2879,6 +3004,11 @@ function rebuildGL() {
     uScreenTex = gl.getUniformLocation(screenProg, 'uTex');
     compositor = makeCompositor(gl, w, h);   // old resources died with the context; don't dispose
     videos.clearTextures();                  // video textures are gone → recreated on next upload
+    // The previous sampler's GL objects died with the context — null it so
+    // refreshSampler takes the full REBUILD path (never texSubImage into dead
+    // textures via update()). samplerProgram recompiles too: the cached program's
+    // handle is now invalid, so its gl.isProgram guard forces a fresh compile.
+    sampler = null;
     refreshSampler();                        // rebuild the output sampler against the new context
   } catch (e) { console.error('[gl] rebuild after restore failed:', e); }
 }
@@ -2993,16 +3123,25 @@ document.getElementById('menu-save')?.addEventListener('click', projectIO.saveSh
 // picker directly.
 let exampleProjects = [];
 fetch('./examples/projects/index.json').then((r) => r.json()).then((list) => { if (Array.isArray(list)) exampleProjects = list; }).catch(() => {});
-async function loadExampleProject(file, name) {
-  if (!window.confirm(`Load “${name}”? This replaces the current project (save first if you want to keep it).`)) return;
+async function loadExampleProject(file, name, { confirm = true } = {}) {
+  if (confirm && !window.confirm(`Load “${name}”? This replaces the current project (save first if you want to keep it).`)) return;
   try {
     const res = await fetch(`./examples/projects/${file}`);
     const parsed = await res.json();
     const next = normalizeComposition(parsed);
     if (next.composition && !next.composition.title) next.composition.title = name;
     applyFullShow(next);
-  } catch (e) { window.alert(`Couldn't load “${name}”: ${e.message}`); }
+  } catch (e) { if (confirm) window.alert(`Couldn't load “${name}”: ${e.message}`); else console.warn(`Couldn't auto-load project “${file}”:`, e.message); }
 }
+// Deep-link / kiosk boot: ?project=<file> loads a bundled example project straight away
+// (no confirm), overriding localStorage — so the Pi kiosk always comes up on a fixed show
+// (e.g. http://localhost:7070/?project=balena-voladora.json). Basename only (no traversal).
+(() => {
+  const file = new URLSearchParams(location.search).get('project');
+  if (file && !file.includes('/') && !file.includes('..')) {
+    loadExampleProject(file, file.replace(/\.[^.]+$/, ''), { confirm: false });
+  }
+})();
 const openBtn = document.getElementById('menu-open');
 openBtn?.addEventListener('click', () => {
   if (!exampleProjects.length) { projectIO.openShowPicker(); return; }
@@ -3049,7 +3188,10 @@ armStartupRiff();
 // TEST HOOK (e2e): read-only access to the latest sampled output buffer + the
 // live show. Used by test/e2e/*.mjs (Playwright) to pin the sampler's bytes —
 // e.g. the "no volumetric clips ⇒ byte-identical" regression. Harmless in prod.
-window.__lz = { rgba: () => lastRGBA, show: () => show };
+// Test-only override for the audiobars mic bands [bass, mid, high] (headless has
+// no mic). null = use the live signals; set via __lz.setAudioBands.
+let audioBandsOverride = null;
+window.__lz = { rgba: () => lastRGBA, show: () => show, setAudioBands: (a) => { audioBandsOverride = a; } };
 
 // --- PWA: register the service worker so the editor installs as an app and runs
 // offline (cached app shell). Best-effort — needs a secure context (https or

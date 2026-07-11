@@ -1,0 +1,8 @@
+# LED Zeppelin OBJ import sample — name each run  Base__leds=N__out=dev.port
+o Spine__leds=120__order=GRBW__out=quinA.0
+v 0 0 0
+v 1 0 0.2
+v 2 0 0
+o FinL__leds=48__out=quinA.1
+v 0 1 0.5
+v 0.5 1.2 0.5

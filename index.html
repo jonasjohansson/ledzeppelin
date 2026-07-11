@@ -198,8 +198,9 @@ canvas{display:block}</style>
   <div id="dock-right" class="dock-col">
     <!-- Patch island: the placement/wiring list + controller instances. -->
     <section class="island" id="grp-patch">
-      <header class="island-head">
-        <span class="island-title">Output</span>
+      <header class="island-head island-tabs" id="patch-tabs">
+        <button class="island-tab is-on" data-ptab="fixtures">Output</button>
+        <button class="island-tab" data-ptab="sources">Sources</button>
         <span class="island-acts">
           <button id="devices-add-fixture" class="island-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
           <button id="devices-add-device" class="island-act" title="Add a device"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
@@ -210,6 +211,8 @@ canvas{display:block}</style>
         <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the
              controllers with their fixtures (click a controller to edit it). -->
         <div id="patch-fixtures"><div id="output-list"></div></div>
+        <!-- Sources tab: a draggable source-library palette (mounted by app.js). -->
+        <div id="patch-sources" hidden></div>
       </div>
     </section>
   </div>

@@ -1,9 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDeviceBytes, formatStride } from '../server/output.js';
+import { buildDeviceBytes, formatStride, setWhiteMode } from '../server/output.js';
 import { buildArtnetPackets } from '../server/artnet.js';
+import { COLOR_ORDERS } from '../src/ui/fixtures.js';
 
 const px = (slice, d) => [...buildDeviceBytes(Buffer.from(slice), d)];
+
+test('controller colour orders offer the 4-channel RGBW variants', () => {
+  // A GRBW/SK6812 controller must be selectable so a fixture with no explicit
+  // colorFormat still emits its white byte (pipeline falls back to device order).
+  for (const o of ['RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB']) {
+    assert.ok(COLOR_ORDERS.includes(o), `COLOR_ORDERS missing ${o}`);
+  }
+});
 
 test('formatStride: RGB=3, RGBW=4, RGBWA=5', () => {
   assert.equal(formatStride('GRB'), 3);
@@ -16,16 +25,60 @@ test('RGB orders still pack 3 bytes/px (no regression)', () => {
   assert.deepEqual(px([10, 20, 30, 40, 50, 60], { colorOrder: 'GRB' }), [20, 10, 30, 50, 40, 60]);
 });
 
-test('RGBW appends W = min(R,G,B), RGB kept', () => {
-  assert.deepEqual(px([10, 20, 30, 60, 50, 40], { colorOrder: 'RGBW' }), [10, 20, 30, 10, 60, 50, 40, 40]);
+test('RGBW extracts W = min(R,G,B) and subtracts it from RGB', () => {
+  // px1 (10,20,30): w=10 → (0,10,20,10).  px2 (60,50,40): w=40 → (20,10,0,40).
+  assert.deepEqual(px([10, 20, 30, 60, 50, 40], { colorOrder: 'RGBW' }), [0, 10, 20, 10, 20, 10, 0, 40]);
 });
 
-test('GRBW reorders RGB and appends white', () => {
-  assert.deepEqual(px([10, 20, 30], { colorOrder: 'GRBW' }), [20, 10, 30, 10]);
+test('pure white extracts to the W channel only (RGB go dark)', () => {
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [0, 0, 0, 255]);
 });
 
-test('WRGB puts white first', () => {
-  assert.deepEqual(px([10, 20, 30], { colorOrder: 'WRGB' }), [10, 10, 20, 30]);
+test('white mode: additive keeps RGB full (W added on top), accurate subtracts', () => {
+  setWhiteMode('additive');
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [255, 255, 255, 255]);   // white = RGB + W
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'RGBW' }), [10, 20, 30, 10]);           // RGB kept, W=min
+  setWhiteMode('accurate');   // reset to default so the other tests see extraction
+  assert.deepEqual(px([255, 255, 255], { colorOrder: 'RGBW' }), [0, 0, 0, 255]);
+});
+
+test('pure red has no white to extract (RGB kept, W=0)', () => {
+  assert.deepEqual(px([255, 0, 0], { colorOrder: 'RGBW' }), [255, 0, 0, 0]);
+});
+
+test('GRBW reorders the extracted RGB residual and appends white', () => {
+  // (10,20,30): w=10 → residual (0,10,20); GRBW order → (10,0,20,10).
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'GRBW' }), [10, 0, 20, 10]);
+});
+
+test('WRGB puts white first, RGB residual after', () => {
+  // (10,20,30): w=10 → residual (0,10,20); WRGB → (10,0,10,20).
+  assert.deepEqual(px([10, 20, 30], { colorOrder: 'WRGB' }), [10, 0, 10, 20]);
+});
+
+test('buildDeviceBytes pooling: repeated calls return correct, independent results', () => {
+  // The daemon pools per-device output buffers in a small ring (keyed by the device
+  // object). Two CONSECUTIVE calls on the same device must return DIFFERENT buffers
+  // (so an in-flight UDP send of the previous frame isn't corrupted) and each must
+  // carry the correct bytes for its own input.
+  const d = { colorOrder: 'RGBW' };
+  const a = buildDeviceBytes(Buffer.from([255, 255, 255]), d, null);   // → 0,0,0,255
+  const b = buildDeviceBytes(Buffer.from([255, 0, 0]), d, null);       // → 255,0,0,0
+  assert.notEqual(a, b, 'consecutive pooled calls must not return the same buffer');
+  assert.deepEqual([...a], [0, 0, 0, 255]);
+  assert.deepEqual([...b], [255, 0, 0, 0]);
+  // Drive well past the ring depth: every return stays correct as buffers are reused.
+  for (let i = 0; i < 8; i++) {
+    const r = buildDeviceBytes(Buffer.from([10, 20, 30]), d, null);   // w=10 → 0,10,20,10
+    assert.deepEqual([...r], [0, 10, 20, 10], `iteration ${i}`);
+  }
+  // Reused buffers are zero-filled: a partial slice (fewer pixels than segments claim)
+  // leaves uncovered channels dark, never stale bytes from a prior frame.
+  const dPart = { colorOrder: 'RGB', segments: [{ start: 0, count: 2, colorOrder: 'RGB' }] };
+  buildDeviceBytes(Buffer.from([255, 255, 255, 255, 255, 255]), dPart, null);   // seed both pixels bright
+  const partial = buildDeviceBytes(Buffer.from([1, 2, 3]), dPart, null);        // only 1 px of input
+  assert.deepEqual([...partial.subarray(0, 3)], [1, 2, 3]);
+  assert.deepEqual([...partial.subarray(3, 6)], [0, 0, 0], 'uncovered pixel stays dark');
 });
 
 test('Art-Net chunks RGBW on whole-pixel universe boundaries (128 px = 512 B)', () => {

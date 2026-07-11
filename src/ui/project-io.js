@@ -19,6 +19,8 @@
 
 import { normalizeComposition, addISFClip, addISFEffect } from '../model/layers.js';
 import { parseISF, isfParams, wrapISF } from '../engine/shaders/isf.js';
+import { parseObj, objToKagora } from '../model/obj-import.js';
+import { importKagora } from '../model/kagora-import.js';
 
 export function createProjectIO(hooks) {
   const { getShow, applyFullShow, applyComposition, rebuild, layerPanel, setSection, typingIn, oel, defaultShow } = hooks;
@@ -122,6 +124,24 @@ export function createProjectIO(hooks) {
     const file = openISFInput.files[0]; openISFInput.value = '';
     if (file) importISFText(await file.text(), file.name);
   });
+  // Import a 3D model (.obj): each named run (Base__leds=N__out=dev.port) becomes a
+  // fixture. OBJ → LEDger preset → whole show (rig + a starter composition), applied
+  // like opening a project. Naming metadata rides on the object names (see obj-import).
+  async function applyObjFile(file) {
+    try {
+      const { preset, warnings } = objToKagora(parseObj(await file.text()));
+      // importKagora returns a COMPLETE, normalized show (deviceTypes + devices +
+      // fixtures + fixtureTypes + composition, already synced + canvas-fitted) — apply
+      // it WHOLE, exactly as the LEDger import panel does. Cherry-picking fields dropped
+      // deviceTypes, which the device manager + output need.
+      const { warnings: impWarnings, ...show } = importKagora(preset);
+      if (!show.fixtures.length) { window.alert('No fixtures in that OBJ. Name each run like  Tail__leds=204__out=dev.0'); return; }
+      applyFullShow(show);
+      const allWarn = [...warnings, ...(impWarnings || [])];
+      if (allWarn.length) window.alert('Imported with notes:\n• ' + allWarn.join('\n• '));
+    } catch (e) { window.alert('OBJ import failed: ' + e.message); }
+  }
+
   // Drag-and-drop an ISF shader (.fs/.isf/.frag/.glsl) onto the window; the deck cell
   // under the cursor sets where it lands.
   const isISFName = (n) => /\.(fs|isf|frag|glsl)$/i.test(n || '');
@@ -130,7 +150,8 @@ export function createProjectIO(hooks) {
     const all = [...(e.dataTransfer?.files || [])];
     const isf = all.filter((f) => isISFName(f.name));
     const json = all.filter((f) => /\.json$/i.test(f.name));
-    if (!isf.length && !json.length) return;
+    const objs = all.filter((f) => /\.obj$/i.test(f.name));
+    if (!isf.length && !json.length && !objs.length) return;
     e.preventDefault();
     // ISF shaders → a new generator clip under the drop target (layer/clip cell).
     const node = document.elementFromPoint(e.clientX, e.clientY);
@@ -146,6 +167,8 @@ export function createProjectIO(hooks) {
         else window.alert('Unrecognised .json — expected a LED Zeppelin project or composition.');
       } catch (err) { window.alert('Load failed: ' + err.message); }
     }
+    // .obj → import a 3D model as a whole rig + starter show.
+    for (const f of objs) await applyObjFile(f);
   });
   // Bundled ISF examples (source picker's "ISF" group): fetch one + import it.
   function importISFExample(file) {

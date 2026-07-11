@@ -15,20 +15,33 @@ import { makeTarget, program } from './gl.js';
 // Uniform packing per clip i (see packVolumetrics in fields.js):
 //   uVolMeta[i] = (fieldId, blendMode, opacity, 0)
 //   uVolA/B[i]  = field params   uVolColA/B[i] = colours
-const SAMPLE_FS = `#version 300 es
+// The sampler fragment shader is split into three verbatim GLSL pieces so that
+// fieldColor's id-chain can be built with ONLY the field blocks actually in use:
+//   FS_PRE      — uniforms + all helper funcs + the fieldColor signature.
+//   FIELD_BLOCKS — id → that field's `if (id == N) { … }` block.
+//   FS_POST     — fieldColor's default return + close, then colorFx() + main().
+// The full 12-field chain overflows the Raspberry Pi's V3D GPU (every `if (id==N)`
+// is reachable because id is a runtime uniform, so nothing is dead-stripped) and
+// crashes the WebGL context in a loop; compiling only the live fields keeps the
+// shader small. Uncalled helpers in FS_PRE are dead-stripped by the compiler.
+const FS_PRE = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform sampler2D uCanvas;
 uniform sampler2D uMap;
 uniform sampler2D uPos;      // per-LED world xyz (same W×H layout as uMap)
+uniform sampler2D uBand;     // per-LED audio band index 0/1/2 (same W×H layout) — audiobars
+uniform vec3 uAudioBands;    // live mic band levels (bass, mid, high) 0..1 — audiobars
 uniform int uVolCount;       // active volumetric clips (0 = plain pass-through)
 uniform float uT;            // seconds (noise3d drift)
-uniform float uTrigs[8];     // seconds since recent triggers (spherepulse shells)
-uniform int uTrigCount;
+uniform float uVolTrigs[32];   // 4 slots × 8 — seconds since each trigger, per volumetric clip
+uniform int uVolTrigCount[4];
 uniform vec4 uVolMeta[4];
 uniform vec4 uVolA[4];
 uniform vec4 uVolB[4];
 uniform vec3 uVolColA[4];
 uniform vec3 uVolColB[4];
+uniform float uFxId[16];   // 4 clips × 4 colour-effect slots (0 = none)
+uniform vec4 uFxP[16];     // per-slot params
 
 // --- field kit (twins of fields.js) ---
 float vband(float d, float th, float so){
@@ -49,35 +62,185 @@ float vnoise3(vec3 p){
 }
 float vfbm3(vec3 p){ float n = 0.0, amp = 0.5, fr = 1.0;
   for (int i = 0; i < 4; i++){ n += amp * vnoise3(p * fr); fr *= 2.0; amp *= 0.5; } return n; }
+// caustics (id 7)
+float caust_ridge(float n){ return 1.0 - abs(2.0 * n - 1.0); }
+float caust_field(vec3 q, float tm, float warp){
+  vec3 wv = vec3(
+    vnoise3(q * 0.5 + vec3(0.0, 1.3, tm * 0.30)),
+    vnoise3(q * 0.5 + vec3(4.1, 1.7, tm * 0.27)),
+    vnoise3(q * 0.5 + vec3(9.2, 5.3, tm * 0.33))) - 0.5;
+  q += wv * warp;
+  float a = caust_ridge(vnoise3(q        + vec3(tm,       tm * 0.4, 0.0)));
+  float b = caust_ridge(vnoise3(q * 1.93 - vec3(tm * 0.7, 0.0,      tm * 0.5)));
+  return max(a, b) * 0.6 + a * b * 1.4;
+}
+// aurora (id 8)
+float aur_wave(float x, float t){ return sin(x + t) + 0.5 * sin(x * 2.13 - t * 1.31 + 1.7) + 0.25 * sin(x * 4.31 + t * 0.73 + 4.2); }
+float aur_layer(float run, float warp, float freq, float ph){ float c = 0.5 + 0.5 * cos(run * freq * 6.2831853 + warp + ph); return c * c * c; }
+// shockburst (id 10)
+float shock_burst(float d, float front, float th, float so, int rc, float sp, float fade){
+  float v = 0.0; float env = exp(-front * fade);
+  for (int k = 0; k < 4; k++){ if (k >= rc) break; float ringR = front - float(k) * sp; if (ringR < 0.0) continue;
+    float soK = clamp(so + float(k) * 0.25, 0.0, 1.0); v = max(v, pow(0.55, float(k)) * env * vband(d - ringR, th, soK)); }
+  return v;
+}
 
-// One packed clip's field at world point p → PREMULTIPLIED rgba.
-vec4 fieldColor(int i, vec3 p){
+// From-Canvas tint: when uVolMeta[i].w is set, colour the field's intensity with
+// the composited 2D canvas at this LED's UV instead of the flat param colour.
+vec3 volTint(int i, vec2 cuv, vec3 flatCol) { return uVolMeta[i].w > 0.5 ? texture(uCanvas, cuv).rgb : flatCol; }
+
+// One packed clip's field at world point p -> PREMULTIPLIED rgba. bnd is this
+// LED's audio band index (0/1/2), used only by the audiobars field.
+vec4 fieldColor(int i, vec3 p, vec2 cuv, float bnd){
   int id = int(uVolMeta[i].x + 0.5);
-  if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
+`;
+
+// id → the field's exact GLSL block, copied verbatim from the original monolithic
+// shader (keep each a GLSL twin of fields.js). buildSampleFS splices in only the
+// blocks for the fields in use. Spherepulse (id 3) was the trailing fallthrough
+// (no `if`) — wrapped here in `if (id == 3) { … }` so it can be omitted like any
+// other block; the default `return vec4(0.0)` now lives in FS_POST.
+const FIELD_BLOCKS = {
+  11: `  if (id == 11) {          // audiobars: A=(gain, floor, -, -); colA=bass, colB=high, mid=mix.
+    int band = int(bnd + 0.5);
+    float level = band == 0 ? uAudioBands.x : (band == 2 ? uAudioBands.z : uAudioBands.y);
+    float v = clamp(uVolA[i].y + level * uVolA[i].x, 0.0, 1.0);
+    vec3 col = band == 0 ? uVolColA[i] : (band == 2 ? uVolColB[i] : mix(uVolColA[i], uVolColB[i], 0.5));
+    return vec4(col * v, v);
+  }`,
+  0: `  if (id == 0) {           // plane sweep: A = (axis, pos, thickness, softness)
     float v = vband(vaxis(p, uVolA[i].x) - uVolA[i].y, uVolA[i].z, uVolA[i].w);
-    return vec4(uVolColA[i] * v, v);
-  }
-  if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  1: `  if (id == 1) {           // axis gradient: A = (axis, scroll, -, -)
     float g = fract(vaxis(p, uVolA[i].x) - uVolA[i].y);
     return vec4(mix(uVolColA[i], uVolColB[i], g), 1.0);
-  }
-  if (id == 2) {           // noise 3d: A = (scale, speed, axis, drift)
+  }`,
+  2: `  if (id == 2) {           // noise 3d: A = (scale, speed, axis, drift)
     // Directional drift (twin of fields.js noise3d): sample at p − axisVec·(t·drift).
     // drift 0 subtracts an exact 0 → byte-identical to the pre-drift field.
     vec3 ax = uVolA[i].z < 0.5 ? vec3(1.0, 0.0, 0.0) : (uVolA[i].z < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
     float v = clamp(vfbm3((p - ax * (uT * uVolA[i].w)) * uVolA[i].x + vec3(uT * uVolA[i].y)), 0.0, 1.0);
-    return vec4(uVolColA[i] * v, v);
-  }
-  // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  4: `  if (id == 4) {           // body wave: A = (axis, wavelength, amplitude, offset), B = (speed, -, -, -)
+    float coord = vaxis(p, uVolA[i].x);
+    float wave = sin((coord - uVolA[i].w + uT * uVolB[i].x) * 6.2831853 / uVolA[i].y) * uVolA[i].z;
+    float v = vband(wave, uVolA[i].z * 0.2, 0.5);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  5: `  if (id == 5) {           // plane pulse: A=(axis,thickness,softness,reverse), B=(speed,-,-,-); a plane sweeps per trigger
+    float coord = uVolA[i].w > 0.5 ? (1.0 - vaxis(p, uVolA[i].x)) : vaxis(p, uVolA[i].x);
+    float v = 0.0;
+    for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, vband(coord - uVolTrigs[i*8+k] * uVolB[i].x, uVolA[i].y, uVolA[i].z)); }
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  6: `  if (id == 6) {           // flow field: A=(windX,windY,windZ,scale), B=(turbulence,thickness,trail,seed), colB.x=speed
+    vec3 wind = uVolA[i].xyz; float wm = length(wind);
+    vec3 dir = wm < 1e-5 ? vec3(0.0) : wind / wm;
+    float s = uVolB[i].w * 11.0;   // seed
+    vec3 q = p * uVolA[i].w - dir * (uVolColB[i].x * uT) + vec3(s, s * 1.7, s * 0.3);
+    vec3 w = vec3(
+      vfbm3(q + vec3(19.19, 7.3, 2.7)),
+      vfbm3(q + vec3(5.2, 41.7, 13.1)),
+      vfbm3(q + vec3(31.3, 9.1, 27.9))) * 2.0 - 1.0;
+    q += uVolB[i].x * w;                       // turbulence
+    float k = uVolB[i].z * 0.9; float along = dot(q, dir); q -= dir * along * k;   // trail
+    float nrm = vfbm3(q);
+    float hw = 0.02 + uVolB[i].y * 0.48;       // thickness
+    float tt = clamp((abs(nrm - 0.5) - hw * 0.5) / max(hw - hw * 0.5, 1e-5), 0.0, 1.0);
+    float v = 1.0 - tt * tt * (3.0 - 2.0 * tt);
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  7: `  if (id == 7) {        // caustics
+    float scale = uVolA[i].x, speed = uVolA[i].y, gain = uVolA[i].z, warp = uVolA[i].w;
+    float bright = uVolB[i].x, axis = uVolB[i].y, drift = uVolB[i].z;
+    vec3 ax = axis < 0.5 ? vec3(1.0, 0.0, 0.0) : (axis < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0));
+    vec3 q = (p - ax * (uT * drift)) * scale;
+    float raw = caust_field(q, uT * speed, warp);
+    float v = clamp(pow(clamp(raw, 0.0, 1.0), gain) * bright, 0.0, 1.0);
+    vec3 col = mix(uVolColB[i], volTint(i, cuv, uVolColA[i]), v);
+    return vec4(col * v, v);
+  }`,
+  8: `  if (id == 8) {           // aurora
+    float run  = vaxis(p, uVolA[i].x);
+    float hgt  = (uVolA[i].x > 0.5 && uVolA[i].x < 1.5) ? p.x : p.y;
+    float t    = uT * uVolA[i].y; float sc = uVolA[i].z; float soft = uVolA[i].w;
+    float height = uVolB[i].x; float spread = uVolB[i].y; float seed = uVolB[i].z * 17.0;
+    float warp = spread * (aur_wave(run * 3.0 + seed, t) + 1.5 * (vfbm3(vec3(run * 2.0 + seed, t * 0.3, seed)) - 0.5));
+    float l0 = aur_layer(run, warp, sc, seed);
+    float l1 = aur_layer(run, warp * 1.3, sc * 1.7, t * 0.6 + seed * 2.0);
+    float l2 = aur_layer(run, warp * 0.7, sc * 0.53, -t * 0.4 + seed * 3.0);
+    float ribs = 1.0 - (1.0 - l0) * (1.0 - l1 * 0.7) * (1.0 - l2 * 0.5);
+    float hg  = hgt / max(1e-3, height);
+    float env = (1.0 - smoothstep(1.0 - max(soft, 1e-3), 1.0, hg)) * smoothstep(0.0, 0.12, hg);
+    float a = ribs * env * 0.85;
+    vec3 col = volTint(i, cuv, mix(uVolColB[i], uVolColA[i], clamp(hg, 0.0, 1.0)));
+    return vec4(col * a, a);
+  }`,
+  9: `  if (id == 9) {           // pacifica
+    float sc = uVolA[i].x, sp = uVolA[i].y, dep = uVolA[i].w, cr = uVolB[i].x;
+    vec3 axv = uVolA[i].z < 0.5 ? vec3(1.0,0.0,0.0) : (uVolA[i].z < 1.5 ? vec3(0.0,1.0,0.0) : vec3(0.0,0.0,1.0));
+    vec3 b = p - axv * (sp * uT);
+    float h = 0.50 * vfbm3(b * sc + vec3(0.0, uT * 0.05, 0.0));
+    h += 0.28 * vfbm3(b * (sc * 2.0) + vec3(17.0 + uT * 0.09, 17.0, 17.0));
+    h += 0.22 * vfbm3(b * (sc * 3.7) + vec3(43.0, 43.0, 43.0 + uT * 0.07));
+    h = clamp(h, 0.0, 1.0);
+    vec3 water = mix(uVolColA[i], uVolColB[i], smoothstep(0.35, 0.75, h));
+    float cap = smoothstep(0.72, 0.95, h) * cr; vec3 col = water + uVolColB[i] * cap;
+    float v = clamp((0.40 + 0.60 * h) * dep, 0.0, 1.0);
+    return vec4(volTint(i, cuv, col) * v, v);
+  }`,
+  10: `  if (id == 10) {  // shockburst
+    float d = length(p - uVolA[i].xyz);
+    float th = uVolB[i].x, so = uVolB[i].y; int rc = int(uVolB[i].z + 0.5); float sp = uVolB[i].w;
+    float fade = uVolColB[i].x; float speed = uVolA[i].w; float v = 0.0;
+    for (int k = 0; k < 8; k++) { if (k >= uVolTrigCount[i]) break; v = max(v, shock_burst(d, uVolTrigs[i*8+k] * speed, th, so, rc, sp, fade)); }
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+  3: `  // sphere pulse: A = (cx, cy, cz, radius), B = (thickness, softness, speed, 0).
   // The static shell at A.w, plus one expanding shell per recent trigger
   // (radius = age·speed — the same field re-evaluated, brightest wins).
-  float d = length(p - uVolA[i].xyz);
-  float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
-  for (int k = 0; k < 8; k++) {
-    if (k >= uTrigCount) break;
-    v = max(v, vband(d - uTrigs[k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
+  if (id == 3) {
+    float d = length(p - uVolA[i].xyz);
+    float v = vband(d - uVolA[i].w, uVolB[i].x, uVolB[i].y);
+    for (int k = 0; k < 8; k++) {
+      if (k >= uVolTrigCount[i]) break;
+      v = max(v, vband(d - uVolTrigs[i*8+k] * uVolB[i].z, uVolB[i].x, uVolB[i].y));
+    }
+    return vec4(volTint(i, cuv, uVolColA[i]) * v, v);
+  }`,
+};
+
+const FS_POST = `  return vec4(0.0);
+}
+
+// Per-LED colour-effect chain for volumetric clip 'clip' (4 slots). Operates on a
+// STRAIGHT (un-premultiplied) colour. GLSL twin of fields.js evalColorFx.
+vec3 colorFx(vec3 s, int clip){
+  for (int j = 0; j < 4; j++) {
+    int id = int(uFxId[clip * 4 + j] + 0.5);
+    if (id == 0) continue;
+    vec4 p = uFxP[clip * 4 + j];
+    if (id == 1) {                       // hue (Rodrigues about grey axis — matches 2D hueRot)
+      float a = (p.x + p.y * uT) * 6.2831853; vec3 k = vec3(0.57735026); float cs = cos(a), sn = sin(a);
+      s = s * cs + cross(k, s) * sn + k * dot(k, s) * (1.0 - cs);
+    } else if (id == 2) {                // Adjustments: gamma→bright→contrast→sat
+      s = pow(clamp(s, 0.0, 1.0), vec3(1.0 / max(0.01, p.w))) * p.x;
+      s = (s - 0.5) * p.y + 0.5;
+      float l = dot(s, vec3(0.299, 0.587, 0.114)); s = mix(vec3(l), s, p.z);
+    } else if (id == 3) {                // invert
+      s = mix(s, 1.0 - s, clamp(p.x, 0.0, 1.0));
+    } else if (id == 4) {                // rgb gain
+      s = s * p.xyz;
+    } else if (id == 5) {                // threshold (luminance binarise)
+      s = vec3(step(p.x, dot(s, vec3(0.299, 0.587, 0.114))));
+    } else if (id == 6) {                // strobe (time gate)
+      s *= step(0.5, fract(uT * p.x));
+    }
+    s = clamp(s, 0.0, 1.0);
   }
-  return vec4(uVolColA[i] * v, v);
+  return s;
 }
 
 void main(){
@@ -94,9 +257,13 @@ void main(){
   vec4 base = vec4(0.0, 0.0, 0.0, 1.0);
   if (!(c.x < 0.0 || c.x > 1.0 || c.y < 0.0 || c.y > 1.0)) base = texture(uCanvas, c);
   vec3 rgb = base.rgb;
+  vec3 ledPos = texelFetch(uPos, t, 0).xyz;   // per-LED world xyz — fetch once, not per clip
+  float ledBand = texelFetch(uBand, t, 0).r;  // per-LED audio band index (audiobars)
   for (int i = 0; i < 4; i++) {
     if (i >= uVolCount) break;
-    vec4 f = fieldColor(i, texelFetch(uPos, t, 0).xyz);
+    vec4 f = fieldColor(i, ledPos, c, ledBand);
+    // Phase-1 colour effects: fold the clip's chain over the STRAIGHT colour, re-premult.
+    if (f.a > 0.0) { vec3 s = colorFx(f.rgb / f.a, i); f.rgb = s * f.a; }
     float op = uVolMeta[i].z;
     vec3 src = f.rgb * op; float sa = f.a * op;
     int mode = int(uVolMeta[i].y + 0.5);
@@ -111,53 +278,98 @@ void main(){
   frag = vec4(rgb, base.a);
 }`;
 
+// Assemble the sampler fragment shader for a specific set of field ids: FS_PRE +
+// the id-chain blocks for exactly those fields + FS_POST. An empty set yields a
+// shader whose fieldColor just returns vec4(0.0) — a fraction of the full 12-field
+// program, which is what keeps the V3D GPU from crashing. Unknown ids are skipped.
+export function buildSampleFS(ids) {
+  return FS_PRE + ids.map((id) => FIELD_BLOCKS[id] || '').join('\n') + FS_POST;
+}
+
+// The sampler program is expensive to compile+link, and during a live fixture DRAG
+// the sampler is rebuilt every frame (positions move) — so we compile ONCE per GL
+// context PER FIELD SET and share it across sampler instances (mirrors the
+// compositor's program cache). Keyed by the sorted, de-duped field-id list; a
+// `gl.isProgram` guard recompiles automatically after WebGL context-loss (the old
+// program handle is invalidated by the driver, so isProgram → false ⇒ fresh
+// compile). Because programs are shared, dispose() must NOT delete them — they
+// outlive any one sampler.
+const SAMPLE_PROGRAMS = new WeakMap();   // gl → Map<fieldKey, linked program>
+function fieldKeyOf(ids) { return [...new Set(ids)].sort((a, b) => a - b).join(','); }
+function samplerProgram(gl, ids = []) {
+  let byKey = SAMPLE_PROGRAMS.get(gl);
+  if (!byKey) { byKey = new Map(); SAMPLE_PROGRAMS.set(gl, byKey); }
+  const key = fieldKeyOf(ids);
+  let p = byKey.get(key);
+  if (!p || !gl.isProgram(p)) {
+    p = program(gl, buildSampleFS(key ? key.split(',').map(Number) : []));
+    byKey.set(key, p);
+  }
+  return p;
+}
+
 // samplePositions (optional, Float32Array len 3N — xyz per LED, same order as
 // the uv pairs) feeds the volumetric field pass; absent/empty falls back to a
 // canvas-plane position derived from nothing (all zeros) and volumetric clips
 // simply read the origin — callers should always pass it (see pipeline.js).
-export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions) {
+export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePositions, sampleBands, fieldIds = []) {
   const n = sampleUVs.length / 2;
+  const fieldKey = fieldKeyOf(fieldIds);   // sorted+deduped key; app.js diffs it to detect field-set changes
   // Wrap the LED list into a 2D grid so very large rigs don't blow past the GPU's
   // max texture WIDTH (a 1-row n-wide texture fails once n exceeds it). Width is
   // capped well under MAX_TEXTURE_SIZE; height grows as needed.
   const maxw = Math.max(1, Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096));
   const W = Math.max(1, Math.min(n || 1, maxw));
   const H = Math.max(1, Math.ceil((n || 1) / W));
-  // Pad the UV data (and readback buffer) to the full W×H grid.
-  const uvs = (W * H === n) ? sampleUVs : (() => { const a = new Float32Array(W * H * 2); a.set(sampleUVs); return a; })();
+  // Pad the UV / position data to the full W×H grid (a partial last row when n
+  // isn't a whole multiple of W). Shared by the initial build and in-place update.
+  const packUVs = (src) => (W * H === n) ? src : (() => { const a = new Float32Array(W * H * 2); a.set(src); return a; })();
+  const packPos = (src) => { const a = new Float32Array(W * H * 3); if (src?.length) a.set(src.subarray(0, Math.min(src.length, a.length))); return a; };
+  // Per-LED audio band index (scalar) for the audiobars field — one channel,
+  // padded to the full W×H grid; a missing array reads as band 0 (bass).
+  const packBand = (src) => { const a = new Float32Array(W * H); if (src?.length) a.set(src.subarray(0, Math.min(src.length, a.length))); return a; };
 
   const map = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, map);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, uvs);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, W, H, 0, gl.RG, gl.FLOAT, packUVs(sampleUVs));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   // Per-LED WORLD xyz for the volumetric field pass — same W×H layout as the uv
   // map. Padded like the uvs; a missing/short positions array reads as origin.
-  const posData = (() => {
-    const a = new Float32Array(W * H * 3);
-    if (samplePositions?.length) a.set(samplePositions.subarray(0, Math.min(samplePositions.length, a.length)));
-    return a;
-  })();
   const posTex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, posTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, posData);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB32F, W, H, 0, gl.RGB, gl.FLOAT, packPos(samplePositions));
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  // Per-LED audio band index — a one-channel R32F texture, same W×H layout as
+  // uMap/uPos (audiobars reads it to pick this LED's frequency band).
+  const bandTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, bandTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, W, H, 0, gl.RED, gl.FLOAT, packBand(sampleBands));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   const target = makeTarget(gl, W, H);
-  const prog = program(gl, SAMPLE_FS);
+  const prog = samplerProgram(gl, fieldIds);   // shared, compiled once per GL context PER FIELD SET (see samplerProgram)
   const locCanvas = gl.getUniformLocation(prog, 'uCanvas');
   const locMap = gl.getUniformLocation(prog, 'uMap');
   const locPos = gl.getUniformLocation(prog, 'uPos');
+  const locBand = gl.getUniformLocation(prog, 'uBand');
+  const locAudioBands = gl.getUniformLocation(prog, 'uAudioBands');
   const locVolCount = gl.getUniformLocation(prog, 'uVolCount');
   const locT = gl.getUniformLocation(prog, 'uT');
-  const locTrigs = gl.getUniformLocation(prog, 'uTrigs[0]');
-  const locTrigCount = gl.getUniformLocation(prog, 'uTrigCount');
+  const locVolTrigs = gl.getUniformLocation(prog, 'uVolTrigs[0]');
+  const locVolTrigCount = gl.getUniformLocation(prog, 'uVolTrigCount[0]');
   const locVolMeta = gl.getUniformLocation(prog, 'uVolMeta[0]');
   const locVolA = gl.getUniformLocation(prog, 'uVolA[0]');
   const locVolB = gl.getUniformLocation(prog, 'uVolB[0]');
   const locVolColA = gl.getUniformLocation(prog, 'uVolColA[0]');
   const locVolColB = gl.getUniformLocation(prog, 'uVolColB[0]');
-  const TRIG_SCRATCH = new Float32Array(8);
+  const locFxId = gl.getUniformLocation(prog, 'uFxId[0]');
+  const locFxP = gl.getUniformLocation(prog, 'uFxP[0]');
+  const VOL_TRIG_SCRATCH = new Float32Array(32);   // 4 slots × 8
+  const VOL_TRIG_COUNT_SCRATCH = new Int32Array(4);
+  const FX_ID_ZERO = new Float32Array(16);
+  const FX_P_ZERO = new Float32Array(64);
   const byteLen = W * H * 4;
   const out = new Uint8Array(byteLen);
   const trim = (buf) => (W * H === n ? buf : buf.subarray(0, n * 4));   // drop grid padding
@@ -182,15 +394,36 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
   const queue = [];                           // FIFO of pbo indices awaiting readback (oldest first)
   let lastValid = null;
 
-  return { n,
+  return { n, fieldKey,
     dispose() {
       gl.deleteTexture(map);
       gl.deleteTexture(posTex);
+      gl.deleteTexture(bandTex);
       gl.deleteTexture(target.tex);
       gl.deleteFramebuffer(target.fbo);
-      gl.deleteProgram(prog);
+      // NB: `prog` is the SHARED, cached SAMPLE_FS program (samplerProgram) — it
+      // outlives this instance, so it is deliberately NOT deleted here.
       for (const b of pbos) gl.deleteBuffer(b);
       for (const s of fences) if (s) gl.deleteSync(s);
+    },
+    // In-place refresh for when only the per-LED UV/position data changed but the
+    // LED COUNT is unchanged (the live fixture-DRAG path). Re-uploads the map and
+    // position textures WITHOUT touching the render target, the 3-PBO readback
+    // ring, its fences, the queue, or lastValid — so the ring stays WARM and
+    // sample() keeps returning valid frames every frame of the drag (no dark wall).
+    // texSubImage2D reuses the existing W×H storage (same n ⇒ same W/H). Callers
+    // MUST only invoke this when the new n equals this sampler's n (see app.js);
+    // a mismatch is rejected so a stale caller can fall back to a full rebuild.
+    update(uvs /* Float32Array len 2N */, positions, bands) {
+      if ((uvs.length / 2) !== n) return false;
+      gl.bindTexture(gl.TEXTURE_2D, map);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RG, gl.FLOAT, packUVs(uvs));
+      gl.bindTexture(gl.TEXTURE_2D, posTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGB, gl.FLOAT, packPos(positions));
+      gl.bindTexture(gl.TEXTURE_2D, bandTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RED, gl.FLOAT, packBand(bands));
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      return true;
     },
     // `vol` (optional): the active volumetric clips for this frame —
     // { count, meta, a, b, colA, colB } from packVolumetrics (fields.js) plus
@@ -207,6 +440,10 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
       gl.uniform1i(locMap, 1);
       gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, posTex);
       gl.uniform1i(locPos, 2);
+      gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, bandTex);
+      gl.uniform1i(locBand, 3);
+      const ab = vol?.audioBands;
+      gl.uniform3f(locAudioBands, ab ? ab[0] : 0, ab ? ab[1] : 0, ab ? ab[2] : 0);
       const n2 = vol?.count || 0;
       gl.uniform1i(locVolCount, n2);
       if (n2 > 0) {
@@ -216,13 +453,20 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
         gl.uniform4fv(locVolB, vol.b);
         gl.uniform3fv(locVolColA, vol.colA);
         gl.uniform3fv(locVolColB, vol.colB);
-        // uTrigs = seconds since each recent ⚡ trigger (compositor convention).
-        TRIG_SCRATCH.fill(1e6);
-        const trigs = vol.trigSecs || [];
-        const tn = Math.min(trigs.length, 8);
-        for (let i = 0; i < tn; i++) TRIG_SCRATCH[i] = (vol.time || 0) - trigs[trigs.length - tn + i];
-        gl.uniform1fv(locTrigs, TRIG_SCRATCH);
-        gl.uniform1i(locTrigCount, tn);
+        gl.uniform1fv(locFxId, vol.fxId || FX_ID_ZERO);
+        gl.uniform4fv(locFxP, vol.fxParam || FX_P_ZERO);
+        // uVolTrigs = seconds since each recent ⚡ trigger, per slot (compositor convention).
+        // Prefer per-slot vol.volTrigs[s]; fall back to replicating the global vol.trigSecs
+        // into every active slot so a single-bus caller behaves identically.
+        VOL_TRIG_SCRATCH.fill(1e6);
+        for (let s = n2; s < 4; s++) VOL_TRIG_COUNT_SCRATCH[s] = 0;   // clear unused slots
+        for (let s = 0; s < Math.min(n2, 4); s++) {
+          const trigs = (vol.volTrigs && vol.volTrigs[s]) || vol.trigSecs || [];
+          const tn = Math.min(trigs.length, 8);
+          for (let k = 0; k < tn; k++) VOL_TRIG_SCRATCH[s * 8 + k] = (vol.time || 0) - trigs[trigs.length - tn + k];
+          VOL_TRIG_COUNT_SCRATCH[s] = tn;
+        }
+        gl.uniform1fv(locVolTrigs, VOL_TRIG_SCRATCH); gl.uniform1iv(locVolTrigCount, VOL_TRIG_COUNT_SCRATCH);
       }
       gl.drawArrays(gl.TRIANGLES, 0, 3);
 

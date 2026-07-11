@@ -16,10 +16,8 @@
 import { importKagora } from '../model/kagora-import.js';
 import { validate } from '../model/show.js';
 import { isValidIPv4, fillIPs } from '../model/ip.js';
-import { saveShow } from './fixtures.js';
+import { saveShow, COLOR_ORDERS } from './fixtures.js';
 import { el } from './dom.js';
-
-const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
 
 export function createImportPanel({ getShow, applyShow, onApplied }) {
   const root = el('div', { className: 'fx-panel imp-panel' });

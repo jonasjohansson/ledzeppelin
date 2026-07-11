@@ -1,6 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPackets } from '../server/ddp.js';
+import { buildPackets, ddpDataType } from '../server/ddp.js';
+
+test('ddpDataType: RGB=0x0B, RGBW=0x1B, other=0', () => {
+  assert.equal(ddpDataType(3), 0x0b);   // RGB, 8-bit
+  assert.equal(ddpDataType(4), 0x1b);   // RGBW, 8-bit (the value WLED needs for 4-ch)
+  assert.equal(ddpDataType(5), 0);      // no standard DDP type → undefined
+});
+
+test('header byte 2 carries the data type (0 by default, 0x1B for RGBW)', () => {
+  assert.equal(buildPackets(Buffer.from([1, 2, 3]), {})[0][0][2], 0);
+  const rgbw = buildPackets(Buffer.from([1, 2, 3, 4]), { dataType: ddpDataType(4) });
+  assert.equal(rgbw[0][0][2], 0x1b);
+});
 // buildPackets now returns GATHER LISTS [header(10B), chunk] (sent via dgram's
 // array form — no concat copy). Each test reads the header from pkt[0] and the
 // payload from pkt[1].

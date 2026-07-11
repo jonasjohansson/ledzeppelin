@@ -1,8 +1,8 @@
-import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures } from '../model/show.js';
-import { fixtureLabel, fixtureRange } from '../model/fixture-transform.js';
+import { makeFixtureType, typeInstanceCount, makeDeviceType, deviceTypeInstanceCount, pushTypeToFixtures, deviceOutputConfig } from '../model/show.js';
+import { fixtureLabel, fixtureRange, pointsFromTransform } from '../model/fixture-transform.js';
 import { Section } from './section.js';
 import { controllerColorMap } from '../model/chains.js';
-import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig } from '../wled.js';
+import { getDeviceState, setDeviceState, identify, scanDevices, pushDeviceConfig, getDeviceOutputs } from '../wled.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
 import { Slider } from './controls.js';
 import { NumInput, TextInput } from './kit/field.js';
@@ -13,14 +13,16 @@ import { DISTRIBUTIONS, gridCellOrder } from '../model/grid.js';
 import { isValidIPv4 } from '../model/ip.js';
 
 const STORAGE_KEY = 'ledzeppelin.show';
-// Controller colour ORDER: the RGB wiring order (the per-fixture Color Format below
-// can override this and add a White channel).
-const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG'];
+// Controller colour ORDER: the channel wiring order. The RGB reorderings plus the
+// 4-channel RGBW variants (White = min(R,G,B) at output) so a GRBW/SK6812 controller
+// can send its white byte directly; the per-fixture Color Format below still overrides.
+export const COLOR_ORDERS = ['RGB', 'GRB', 'BGR', 'RBG', 'GBR', 'BRG',
+  'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB'];
 // Per-FIXTURE colour FORMAT options: '' inherits the controller's order; the rest
-// pin this fixture's format, including RGBW variants (White = min(R,G,B) at output)
-// so RGB and RGBW strips can share one controller.
-const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
-  'RGBW', 'GRBW', 'BGRW', 'RBGW', 'WRGB', 'WGRB', 'RGBA', 'RGBWA', 'RGBAW',
+// pin this fixture's format. Every controller order plus the amber (A) variants, so
+// RGB, RGBW and RGBWA strips can share one controller.
+export const COLOR_FORMATS = [{ value: '', label: 'From controller' }, ...COLOR_ORDERS,
+  'RGBA', 'RGBWA', 'RGBAW',
   { value: 'NONE', label: 'None (channels only)' }];
 const hexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [255, 255, 255]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 
@@ -239,13 +241,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
   function saveToDeviceRow(d, online = true, offTitle = '') {
     const show = getShow();
     const nOut = (show.deviceTypes || []).find((m) => m.id === d.typeId)?.outputs ?? d.outputs ?? 1;
-    const outs = [];
-    for (let p = 1; p <= nOut; p++) {
-      const len = (show.fixtures || [])
-        .filter((f) => (f.output?.deviceId || '') === d.id && (f.output?.port ?? 1) === p)
-        .reduce((m, f) => m + (f.pixelCount || 0), 0);
-      outs.push({ len, order: d.colorOrder || 'GRB' });
-    }
+    // Dense per-output array indexed by the fixture's 0-based port (= WLED bus
+    // index): pushConfig writes outs[i] → bus i, so a port-0 fixture is counted and
+    // every port maps to its own bus (no off-by-one). See deviceOutputConfig.
+    const outs = deviceOutputConfig(show.fixtures, d.id, nOut, d.colorOrder || 'GRB');
     const note = pushStatus.get(d.id);
     const btn = el('button', {
       className: 'ctrl-btn', textContent: 'save to device', disabled: !online,
@@ -318,15 +317,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     if (scanState.error) wrap.append(el('div', { className: 'fx-err', textContent: `scan failed: ${scanState.error}` }));
     const known = new Set((show.devices || []).map((d) => d.ip));
     // A found controller → one click to add it (with the right protocol/port).
-    const foundRow = (label, ip, badges, makeDevice) => {
+    const uniqueDeviceId = (next) => { let n = (next.devices.length || 0) + 1, id; do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id)); return id; };
+    const foundRow = (label, ip, badges, makeDevice, wledIp) => {
       const added = known.has(ip);
       const add = el('button', { className: 'ctrl-btn' + (added ? ' is-added' : ''), textContent: added ? '✓' : 'add', title: added ? 'already added' : 'add this device', disabled: added });
       add.onclick = () => {
         const next = structuredClone(show);
         // Unique id: increment until unused (a mid-list delete can make
         // `length + 1` collide with an existing id — and this id drives selection).
-        let n = (next.devices.length || 0) + 1, id;
-        do { id = `c${n}`; n++; } while (next.devices.some((x) => x.id === id));
+        const id = uniqueDeviceId(next);
         next.devices.push(makeDevice(next, id));
         selDeviceId = id; lastSel = 'device';
         commit(next);
@@ -334,11 +333,55 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         // #output-list re-renders + selects the new device immediately (issue #4).
         onDeviceAdded?.(id);
       };
-      // Name (truncates) · IP chip (fixed slot so rows column-align) · detail chips · add.
+      const buttons = [add];
+      // WLED only: "+ outputs" also imports a fixture per configured LED output
+      // (skipping empty ones) — reads the controller's bus config over the daemon
+      // proxy, then lays each output out as a horizontal bar sized to its pixels.
+      if (wledIp && !added) {
+        const addOut = el('button', { className: 'ctrl-btn', textContent: '+ outputs', title: 'add this controller AND a fixture per configured LED output' });
+        addOut.onclick = async () => {
+          addOut.disabled = true; const orig = addOut.textContent; addOut.textContent = '…';
+          const res = await getDeviceOutputs(wledIp);
+          if (!res.ok || !Array.isArray(res.data)) {   // daemon down / not WLED / no buses → plain Add still works
+            addOut.textContent = orig; addOut.disabled = false;
+            addOut.title = `couldn't read outputs: ${res.error || 'no data'}`;
+            return;
+          }
+          const outs = res.data.filter((o) => (o.len || 0) > 0);   // skip length-0 (unused) outputs
+          const next = structuredClone(getShow());
+          const id = uniqueDeviceId(next);
+          const dev = makeDevice(next, id);
+          dev.outputs = res.data.length;                           // instance owns its output count (8-bus ⇒ reads as DigOcta)
+          if (outs[0]?.order) dev.colorOrder = outs[0].order;
+          const byOut = (next.deviceTypes || []).find((t) => Number(t.outputs) === res.data.length);
+          if (byOut) dev.typeId = byOut.id;                        // pick the matching QuinLED model by bus count
+          next.devices.push(dev);
+          const cv = next.composition?.canvas || { w: 1280, h: 720 };
+          const PXPM = 100, LPM = 60;                              // drawn scale: canvas-px per metre; strips are 60 led/m
+          let fn = 1;
+          outs.forEach((o, k) => {
+            while (next.fixtures.some((x) => x.id === `f${fn}`)) fn++;
+            const meters = o.len / LPM;
+            const tf = { x: cv.w / 2, y: 60 + k * 40, w: meters * PXPM, h: 10, rotation: 0 };
+            next.fixtures.push({
+              id: `f${fn++}`, name: `Out ${o.index + 1}`,
+              pixelCount: o.len, ledsPerMeter: LPM, meters,
+              colorFormat: o.rgbw ? o.order + 'W' : '',           // 4-ch (e.g. GRBW) for a white-channel strip, else inherit
+              input: { transform: tf, points: pointsFromTransform(tf, cv) },
+              output: { deviceId: id, port: o.index, pixelOffset: 0 },   // port = WLED bus index (DDP buffer order)
+            });
+          });
+          selDeviceId = id; lastSel = 'device';
+          commit(next);
+          onDeviceAdded?.(id);
+        };
+        buttons.push(addOut);
+      }
+      // Name (truncates) · IP chip (fixed slot so rows column-align) · detail chips · add(+outputs).
       return el('div', { className: 'output-row scan-row' }, [
         el('span', { textContent: label || ip, title: label || ip }),
         el('span', { className: 'fx-badge scan-ip', textContent: ip }),
-        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b, title: b })), add,
+        ...badges.map((b) => el('span', { className: 'fx-badge', textContent: b, title: b })), ...buttons,
       ]);
     };
     const res = scanState.result;
@@ -350,7 +393,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
           const dts = next.deviceTypes || [];
           const typeId = (dts.find((t) => t.id === 'digquad') || dts[0])?.id;
           return { id, name: d.name || id, ip: d.ip, colorOrder: 'GRB', port: 4048, typeId };
-        }));
+        }, d.ip));
       }
     }
     // Art-Net nodes (ArtPoll) — added as Art-Net devices (universe 0, port 6454).
@@ -443,8 +486,16 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         field('Universe', numInputCommit(d.universe ?? 0, (x) => upd({ universe: Math.max(0, Math.round(x)) }))),
         artnetSpanHint(show, d),
       ] : []),
-      // Format = the colour byte order (physical wiring spec — the only one most rigs need).
-      field('Format', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x }))),
+      // Colour order = the colour byte order (physical wiring spec — the only one most
+      // rigs need). A fixture on this device can PIN its own format (RGBW on an RGB
+      // controller, etc.); when any does, this order is only a fallback for the rest —
+      // so surface that override inline instead of leaving it silent.
+      (() => {
+        const orderField = field('Colour order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x })));
+        const overridden = (show.fixtures || []).some((f) => f.output?.deviceId === d.id && f.colorFormat && f.colorFormat !== 'NONE');
+        if (overridden) orderField.querySelector('span').append(el('span', { className: 'seg-hint', textContent: ' · order set per-fixture' }));
+        return orderField;
+      })(),
       // Identity colour — the swatch/bars in the Output list + the canvas Tint mode.
       // Auto-assigned from the palette on creation; override it here.
       (() => {
@@ -563,7 +614,14 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         title: n
           ? `overwrite the spec (size, wiring, format, channels) of the ${n} placed fixture${n === 1 ? '' : 's'} of this type with this template`
           : 'no placed fixtures use this type',
-        onclick: () => { if (onPushType) onPushType(t.id); else commit(pushTypeToFixtures(show, t.id)); },
+        onclick: () => {
+          // Destructive: this overwrites every placed instance's pixelCount/format/wiring
+          // from the template, flattening any per-fixture customisation (e.g. custom rib
+          // pixel counts). Confirm, naming how many fixtures will be overwritten.
+          const cnt = typeInstanceCount(show, t.id);
+          if (!window.confirm(`Overwrite the spec (size, wiring, format, channels) of ${cnt} placed fixture${cnt === 1 ? '' : 's'} of this type? This replaces any per-fixture customisation.`)) return;
+          if (onPushType) onPushType(t.id); else commit(pushTypeToFixtures(show, t.id));
+        },
       });
     };
     if (isDmx) { dmxChannelEditor(t, upd, rows); rows.push(pushRow()); return el('div', { className: 'fx-card fx-detail' }, rows); }
@@ -572,9 +630,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     // Height = number of rows; 1 = a plain strip, >1 = a matrix/panel.
     rows.push(field('Height', numInputCommit(t.rows ?? 1, (x) => upd((nt) => { nt.rows = x; }))));
     rows.push(field('Pixels', el('span', { className: 'fx-readonly', textContent: String(t.pixelCount) })));
-    // Colour format: '' inherits the controller's order; pick RGBW here for a
+    // Colour channels: '' inherits the controller's order; pick RGBW here for a
     // white-channel strip (mixes freely with RGB fixtures on the same controller).
-    rows.push(field('Colour Format', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
+    rows.push(field('Colour channels', selectInput(COLOR_FORMATS, t.colorFormat || '', (x) => upd((nt) => { nt.colorFormat = x; }))));
     // Wiring (Distribution) only matters for a matrix — which corner pixel #0 sits
     // in, row/column order, and snake vs. straight. Shown as a visual 4×4 glyph grid.
     if (isGrid) {

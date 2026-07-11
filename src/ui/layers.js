@@ -19,8 +19,9 @@
 // kept for app.js compatibility).
 
 import {
-  generatorNames, effectNames, getEntry, labelOf,
+  generatorNames, effectNames, effectKind, getEntry, labelOf, descOf,
 } from '../engine/shaders/manifest.js';
+import { CATEGORY_COLORS, sourceCategory } from './source-catalog.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
   setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
@@ -38,14 +39,15 @@ import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
-import { AUDIO_BANDS, enableAudio } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
+import { AUDIO_BANDS, enableAudio, audioEnabled, disableExternal } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
 import { el, field, selectInput, shiftDown, coarseSnap } from './dom.js';
-import { Slider } from './controls.js';
+import { Slider, Segmented } from './controls.js';
 import { placePopover, dismissOnOutside } from './kit/popover.js';
 import { confirmDelete } from './confirm.js';
+import { createClipSpectrum } from './spectrum.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
@@ -69,8 +71,16 @@ const fmtLive = (v) => (Number(v) || 0).toFixed(2);
 const sliderField = (label, value, min, max, onInput, defaultValue, stepOverride) =>
   Slider(label, value, { min, max, onInput, default: defaultValue, step: stepOverride });
 
+// An axis param (0=x,1=y,2=z) — a discrete choice, so render X/Y/Z inline buttons
+// (segmented, per the house rule) rather than a slider. Used across the volumetric fields.
+const isAxisParam = (p) => p.key === 'axis' && (p.max ?? 1) === 2;
+
 // Build a control for one manifest param.
 function paramControl(p, value, onInput) {
+  if (isAxisParam(p)) {
+    const cur = () => (value == null ? (p.default ?? 0) : value);
+    return Segmented(prettyParam(p.key), [[0, 'X'], [1, 'Y'], [2, 'Z']], cur, (v) => onInput(v));
+  }
   if (p.type === 'color') {
     const i = el('input', { type: 'color', className: 'fx-color', value: value || '#ffffff' });
     i.addEventListener('input', () => onInput(i.value));
@@ -172,7 +182,7 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
 //   oscAddress: the param's CANONICAL always-active OSC address (shown in the
 //   External controls as a copyable chip), when the scheme covers it.
 function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, oscAddress }) {
-  if (p.type === 'color' || p.type === 'bool') return paramControl(p, value, onValue);
+  if (p.type === 'color' || p.type === 'bool' || isAxisParam(p)) return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
   const isAudio = anim?.mode === 'audio';
@@ -491,7 +501,7 @@ let remoteHook = { has: () => false, toggle: () => {} };
 // drives the play-through of the clip deck as a timeline. The panel renders a
 // play/stop + loop bar and exposes setPlayhead(i) so app.js can move the
 // highlight as the playhead advances (cheap class toggle, no re-render).
-export function createLayerPanel({ getShow, setShow, onChange, transport, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF }) {
+export function createLayerPanel({ getShow, setShow, onChange, transport, clipTrigsFor, mounts, thumbnails = {}, onClipSelect, onLayerSelect, onCompositionSelect, getISFExamples, onAddISF, showSources }) {
   if (transport?.now) animClock = transport.now;
   animBpm = () => getShow().composition?.bpm ?? 120;
   dashLinks = () => getShow().composition?.dashboard?.links || [];
@@ -775,7 +785,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     box.append(Section('Effects', 'comp-fx', (b) => {
       for (let fx = 0; fx < fxs.length; fx++) b.append(compEffectBlock(fx, fxs));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addCompositionEffect(show(), name)));
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addCompositionEffect(show(), name)));
       b.append(addBtn);
     }, undefined, fxs.length === 0));
     return box;
@@ -878,13 +888,9 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
       const slot = el('div', { className: 'clip-cell clip-empty', title: 'add a source' }, [
         el('div', { className: 'clip-empty-plus', textContent: '+' }),
       ]);
-      slot.addEventListener('click', () => openPicker(slot, 'source', (name) => {
-        const next = index >= 0 ? addClipAt(show(), id, index, name) : addClip(show(), id, name);
-        const lay = next.composition.layers.find((x) => x.id === id);
-        selectedClipId = (index >= 0 ? lay?.clips[index] : lay?.clips[lay.clips.length - 1])?.id;
-        onClipSelect?.();
-        commit(next);
-      }, { onVideo: () => pickVideo(id) }));
+      // No popover — the sidebar Sources tab IS the source browser. Clicking an empty
+      // slot reveals it; drag a source onto this slot (below) to place it precisely.
+      slot.addEventListener('click', () => showSources?.());
       deckZone(slot, (pl) => pl.kind === 'clip', (pl) => {
         selectedClipId = pl.clipId; selectedLayerId = id;
         commit(moveClipToLayer(show(), pl.layerId ?? id, pl.clipId, id, index));
@@ -1063,7 +1069,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     box.append(Section('Effects', 'layer-effects', (b) => {
       for (let fx = 0; fx < layerFx.length; fx++) b.append(layerEffectBlock(id, fx, layerFx));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addLayerEffect(show(), id, name)));
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addLayerEffect(show(), id, name)));
       b.append(addBtn);
     }, undefined, layerFx.length === 0));
     // (Delete is the ✕ in the header now — the bottom "Delete Layer" link was removed.)
@@ -1268,12 +1274,80 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     }
     box.append(clipHead);
 
-    // Triggerable sources (Pulse) get a prominent Trigger button here.
+    // Triggerable sources (Pulse) get a prominent Trigger button here, plus this
+    // clip's own audio-onset config — the ⚡ and the mic both fire THIS clip's bus.
     if (gen?.triggerable && transport?.fire) {
       box.append(el('button', {
         className: 'clip-trigger', textContent: '⚡ trigger',
-        title: 'fire the pulse', onclick: () => transport.fire(),
+        title: 'fire the pulse', onclick: () => transport.fire(clip.id),
       }));
+
+      // Per-clip Audio Trigger — writes clip.audioTrigger via the same commit path
+      // as every other clip field (patchClipAudioTrigger → commitLive, mirroring
+      // patchClipName). setAT merges a patch onto the current config.
+      const at = clip.audioTrigger || {};
+      // Sliders stream LIVE (commitLive, no re-render); the discrete enable/band
+      // edits are undoable single actions (commit).
+      const setAT = (patch) => commitLive(patchClipAudioTrigger(show(), id, clip.id, patch));
+      const setATu = (patch) => commit(patchClipAudioTrigger(show(), id, clip.id, patch));
+
+      box.append(el('div', { className: 'fx-pts', textContent: 'audio trigger' }));
+
+      // Shared mic on/off — the FFT + EVERY clip trigger read this one input. The click is
+      // the user gesture getUserMedia needs; the choice persists (lz.mic) so the mic
+      // re-opens on the next launch (see app.js first-gesture reopen).
+      const micOn = audioEnabled('external');
+      const micBtn = el('button', {
+        className: 'clip-trigger' + (micOn ? ' on' : ''),
+        textContent: micOn ? '● mic on' : '○ enable mic',
+        title: micOn ? 'microphone capturing — click to turn off' : 'turn on the shared microphone input',
+        onclick: async () => {
+          if (audioEnabled('external')) { disableExternal(); try { localStorage.setItem('lz.mic', '0'); } catch { /* ignore */ } }
+          else {
+            const ok = await enableAudio('external', show().composition?.audioDevice || 'default');
+            try { localStorage.setItem('lz.mic', ok ? '1' : '0'); } catch { /* ignore */ }
+            if (ok === false) { micBtn.title = 'could not open the mic — check the browser microphone permission'; }
+          }
+          render();
+        },
+      });
+      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Microphone' }), micBtn]));
+
+      const onToggle = el('input', { type: 'checkbox' });
+      onToggle.checked = !!at.enabled;
+      onToggle.addEventListener('change', () => setATu({ enabled: onToggle.checked }));
+      box.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Enabled' }), onToggle]));
+
+      // Onset (spike above the running average) · Level (band over an absolute line) ·
+      // BPM (fire on the tempo grid). Undoable (re-render) — swaps the controls in/out.
+      const mode = at.mode || 'onset';
+      box.append(field('Trigger', selectInput(
+        [{ value: 'onset', label: 'Onset' }, { value: 'level', label: 'Level' }, { value: 'bpm', label: 'BPM' }],
+        mode, (v) => setATu({ mode: v }))));
+
+      if (mode === 'bpm') {
+        // Beat-grid trigger — no mic needed. Set BPM / TAP in the Composition panel.
+        box.append(field('Every', selectInput(
+          [['0.25', '¼ beat'], ['0.5', '½ beat'], ['1', '1 beat'], ['2', '2 beats'], ['4', '4 beats']].map(([v, l]) => ({ value: v, label: l })),
+          String(at.division ?? 1), (v) => setATu({ division: Number(v) }))));
+        box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip on the beat grid — set BPM / TAP in Composition' }));
+      } else {
+        box.append(field('Band', selectInput(
+          ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
+          at.band || 'bass', (v) => setATu({ band: v }))));
+        // Threshold — Onset: required spike above the running average (backs `sensitivity`).
+        // Level: absolute 0..1 (backs `threshold`) — also draggable on the spectrum below.
+        if (mode === 'onset') {
+          box.append(Slider('Threshold', at.sensitivity ?? 0.5, { min: 0.05, max: 2, step: 0.05, default: 0.5, commit: 'live', onInput: (v) => setAT({ sensitivity: v }) }));
+        } else {
+          box.append(Slider('Threshold', at.threshold ?? 0.5, { min: 0, max: 1, step: 0.01, default: 0.5, commit: 'live', onInput: (v) => setAT({ threshold: v }) }));
+        }
+        box.append(Slider('Hold (ms)', at.refractoryMs ?? 120, { min: 40, max: 800, step: 10, default: 120, commit: 'live', onInput: (v) => setAT({ refractoryMs: Math.round(v) }) }));
+        box.append(el('div', { className: 'seg-hint', textContent: mode === 'level'
+          ? 'fires THIS clip while the band level is over the line — drag it on the spectrum'
+          : 'fires THIS clip on a spike above the running average in this band' }));
+        box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id), mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined, onThresholdChange: (v) => setAT({ threshold: v }) }).el);
+      }
     }
 
     // Playback: how long the layer's autopilot dwells on this clip.
@@ -1393,7 +1467,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     box.append(Section('Effects', 'effects', (b) => {
       for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, 'effect', (name) => commit(addClipEffect(show(), id, clip.id, name)));
+      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addClipEffect(show(), id, clip.id, name)),
+        { colorOnly: !!getEntry(clip.generator)?.volumetric });
       b.append(addBtn);
     }, undefined, clipFx.length === 0));
     return box;
@@ -1475,58 +1550,21 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     pickPop.remove(); pickPop = null;
     if (pickDismiss) { pickDismiss(); pickDismiss = null; }
   }
-  // Source picker grouping (built-in generators) — uncategorised ones fall into "More".
-  const SOURCE_CATEGORIES = [
-    ['Basic', ['solid', 'gradient', 'line']],
-    ['Pattern', ['grid', 'checkers', 'spectrum']],
-    ['Motion', ['sine', 'pulse', 'radial']],
-    ['Organic', ['noise']],
-    // Per-LED 3D fields (evaluated at each LED's world xyz in the sampler pass,
-    // not drawn on the canvas). Max 4 active at once.
-    ['Volumetric', ['planesweep', 'axisgradient', 'noise3d', 'spherepulse']],
-  ];
-  function openPicker(anchor, kind, onPick, opts = {}) {
+  // Source picker grouping (built-in generators) — SOURCE_CATEGORIES is imported
+  // from ./source-catalog.js; uncategorised generators fall into "More".
+  // The EFFECT picker popover (sources use the sidebar Sources tab, not a popover).
+  function openPicker(anchor, onPick, opts = {}) {
     closePicker();
-    const pop = el('div', { className: 'pick-pop' + (kind === 'source' ? ' pick-grouped' : '') });
+    const pop = el('div', { className: 'pick-pop' });
     const item = (name) => {
-      const thumb = kind === 'source' ? thumbnails[name] : null;
       const row = el('div', { className: 'pick-item' });
-      if (thumb) row.append(el('img', { className: 'lib-thumb', src: thumb, alt: '', draggable: false }));
       row.append(el('span', { className: 'lib-label', textContent: labelOf(name) }));
       row.onclick = (e) => { e.stopPropagation(); closePicker(); onPick(name); };
       return row;
     };
     const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
-    if (kind === 'source') {
-      // Grouped, 2-column grid (easier to scan than one long list).
-      const all = generatorNames(); const seen = new Set();
-      for (const [label, names] of SOURCE_CATEGORIES) {
-        const have = names.filter((n) => all.includes(n)); if (!have.length) continue;
-        have.forEach((n) => seen.add(n));
-        pop.append(el('div', { className: 'pick-group', textContent: label }), grid(have));
-      }
-      const rest = all.filter((n) => !seen.has(n));   // any uncategorised generator still shows
-      if (rest.length) pop.append(el('div', { className: 'pick-group', textContent: 'More' }), grid(rest));
-      // Bundled ISF example shaders — pick one to import it as a clip/effect.
-      const examples = (getISFExamples && getISFExamples()) || [];
-      if (examples.length && onAddISF) {
-        const g = el('div', { className: 'pick-grid' });
-        for (const file of examples) {
-          const row = el('div', { className: 'pick-item' });
-          row.append(el('span', { className: 'lib-label', textContent: file.replace(/\.[^.]+$/, '') }));
-          row.onclick = (e) => { e.stopPropagation(); closePicker(); onAddISF(file); };
-          g.append(row);
-        }
-        pop.append(el('div', { className: 'pick-group', textContent: 'ISF' }), g);
-      }
-      if (opts.onVideo) {
-        const vid = el('div', { className: 'pick-item pick-video', textContent: '+ video…' });
-        vid.onclick = (e) => { e.stopPropagation(); closePicker(); opts.onVideo(); };
-        pop.append(vid);
-      }
-    } else {
-      pop.append(grid(effectNames()));
-    }
+    const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
+    pop.append(grid(names));
     placePopover(pop, anchor);          // anchor + viewport-clamp (kit)
     pickPop = pop;
     pickDismiss = dismissOnOutside(pop, closePicker);   // click-outside + Esc (kit)
@@ -1548,6 +1586,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     });
     inp.click();
   }
+
+  // Add a source to the ACTIVE layer (the one pickVideo falls back to) — used by the
+  // Sources tab's click-to-add. Drag-to-a-slot uses the slot's own drop target.
+  function addSourceToActiveLayer(name) {
+    const l = layerOfClip(selectedClipId) || topLayer();
+    if (l) commit(addClip(show(), l.id, name));
+  }
+  function pickVideoActive() { pickVideo(null); }   // pickVideo already falls back to the active/top layer
 
   // Wire an element as a drop target that accepts the module drag payload.
   function makeDropTarget(node, onDrop) {
@@ -1670,10 +1716,78 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, mounts
     return true;
   }
 
+  // TD-style source BROWSER: family tabs + search + dense card grid + a description
+  // line. Shared by the Output-pane Sources tab (draggable, click-adds-to-active-layer)
+  // and the '+' clip picker (click → onPick). Filtering/categories are pure (source-catalog).
+  function sourceBrowser({ onPick, draggable = false, onVideo } = {}) {
+    const root = el('div', { className: 'src-browser' });
+    const listEl = el('div', { className: 'src-list' });   // one scroll; groups are headers, not tabs
+    const descEl = el('div', { className: 'src-desc' });
+    const setDesc = (name) => { descEl.textContent = name ? (descOf(name) || sourceCategory(name)) : ''; };
+
+    const card = (name) => {
+      const cat = sourceCategory(name);
+      const c = el('div', { className: 'src-card', title: labelOf(name), draggable: !!draggable });
+      c.style.setProperty('--cat', CATEGORY_COLORS[cat] || 'var(--faint)');
+      const thumb = thumbnails[name];
+      if (thumb) c.append(el('img', { className: 'src-thumb', src: thumb, alt: '', draggable: false }));
+      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: labelOf(name) }));
+      c.addEventListener('mouseenter', () => setDesc(name));
+      if (onPick) c.addEventListener('click', () => onPick(name));
+      if (draggable) {
+        c.addEventListener('dragstart', (e) => { drag = { kind: 'source', name }; e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', name); } catch { /* */ } });
+        c.addEventListener('dragend', () => { drag = null; });
+      }
+      return c;
+    };
+    const isfCard = (file) => {
+      const c = el('div', { className: 'src-card src-isf', title: file });
+      c.style.setProperty('--cat', CATEGORY_COLORS.Shaders);
+      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
+      c.addEventListener('click', () => onAddISF(file));
+      return c;
+    };
+    const videoCard = () => {
+      const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
+      // A placeholder tile so the card is the same size as the thumbnail cards.
+      v.append(el('div', { className: 'src-thumb src-thumb-add', textContent: '+' }), el('span', { className: 'src-label', textContent: 'video…' }));
+      v.addEventListener('click', () => onVideo());
+      return v;
+    };
+
+    // A subgroup = a labelled HEADER + its card grid, appended into the single scroll list.
+    const section = (label, cards) => {
+      if (!cards.length) return;
+      const g = el('div', { className: 'src-group' });
+      const head = el('div', { className: 'src-group-head', textContent: label });
+      head.style.setProperty('--cat', CATEGORY_COLORS[label] || 'var(--faint)');
+      g.append(head);
+      const grid = el('div', { className: 'src-grid' });
+      cards.forEach((c) => grid.append(c));
+      g.append(grid);
+      listEl.append(g);
+    };
+    const render = () => {
+      listEl.textContent = '';
+      const gens = generatorNames();
+      const twoD = gens.filter((n) => sourceCategory(n) === '2D').map(card);
+      if (onVideo) twoD.push(videoCard());
+      const threeD = gens.filter((n) => sourceCategory(n) === '3D').map(card);
+      const examples = (getISFExamples && getISFExamples()) || [];
+      const shaders = onAddISF ? examples.map(isfCard) : [];
+      section('2D', twoD); section('3D', threeD); section('Shaders', shaders);
+      if (!listEl.childNodes.length) listEl.append(el('div', { className: 'seg-hint', textContent: 'no sources' }));
+    };
+
+    root.append(listEl, descEl);
+    render();
+    return root;
+  }
+
   render();
   // getSelectedClipId: app.js resolves /selected/… canonical OSC addresses
   // against the inspector's current clip at message time.
-  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop };
+  return { el: root, refresh: render, setPlayhead, updateLive, deleteActiveClip, deleteSelectedEffect, deleteSelectedLayer, getSelectedClipId: () => selectedClipId, closeModPop: closeAnimPop, addSourceToActiveLayer, pickVideoActive, sourceBrowser };
 }
 
 // Rename a clip (small local helper — there is no dedicated model fn, so we
@@ -1683,6 +1797,17 @@ function patchClipName(show, layerId, clipId, name) {
   const layers = (show.composition?.layers || []).map((l) => {
     if (l.id !== layerId) return l;
     return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId ? { ...c, name } : c) };
+  });
+  return { ...show, composition: { ...show.composition, layers } };
+}
+
+// Merge a patch onto a clip's per-clip audioTrigger config (band/sensitivity/hold/
+// enabled). Same immutable clip-patch shape as patchClipName; fed to commitLive.
+function patchClipAudioTrigger(show, layerId, clipId, patch) {
+  const layers = (show.composition?.layers || []).map((l) => {
+    if (l.id !== layerId) return l;
+    return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId
+      ? { ...c, audioTrigger: { ...(c.audioTrigger || {}), ...patch } } : c) };
   });
   return { ...show, composition: { ...show.composition, layers } };
 }

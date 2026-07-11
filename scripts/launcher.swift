@@ -16,6 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ note: Notification) {
         let dir = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS")
         daemon.executableURL = dir.appendingPathComponent("ledzeppelin-daemon")
+        // Packaged-app behaviour: quit when the last window closes (LZ_AUTOQUIT) so a
+        // windowless daemon can't linger, and take over a running instance on launch
+        // (LZ_TAKEOVER) so an update actually applies. CLI/dev runs set neither.
+        var env = ProcessInfo.processInfo.environment
+        env["LZ_AUTOQUIT"] = "1"; env["LZ_TAKEOVER"] = "1"
+        daemon.environment = env
         // Daemon dies (crash or clean exit) → the app has nothing left to do.
         daemon.terminationHandler = { _ in DispatchQueue.main.async { NSApp.terminate(nil) } }
         do { try daemon.run() } catch {

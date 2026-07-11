@@ -9,10 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { serveStatic } from './static.js';
-import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides } from './output.js';
+import { sendFrame, suppressOutput, setBlackout, getBlackout, setBrightnessOverride, getBrightnessOverrides, setWhiteMode, getDeviceOutputHealth } from './output.js';
+import { ddpDataType } from './ddp.js';
 import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
-import { getState, postState, scanSubnet, pushConfig } from './wled.js';
+import { getState, postState, scanSubnet, pushConfig, getOutputs } from './wled.js';
 import { createApiHandler, readJson, authorized, problem, statusBody, parseManifest, clipsBody, controlsBody } from './api.js';
 
 // Proxy a WLED JSON-API call (GET state, POST partial state) for the browser.
@@ -77,12 +78,18 @@ const http = createServer(async (req, res) => {
     return res.end(JSON.stringify({
       ok: true,
       version: VERSION,
+      pid: process.pid,   // so a newer instance can take over (SIGTERM) — see the port-in-use handler
       uptimeSec: Math.round(process.uptime()),
       fpsOut,
       clients: wss.clients.size,
       lastFrameMsAgo: lastFrameAt ? Date.now() - lastFrameAt : null,
       lastFreshMsAgo: lastFreshAt ? Date.now() - lastFreshAt : null,
       outputStale,
+      // Per-device output errors — a SPARSE map (ip → {sendErrors, lastErrorMsAgo,
+      // lastError}); absent/empty means every controller's sends are flushing to the
+      // OS. Catches gross send failures (no route, bad IP), not silent-but-reachable
+      // controllers (UDP send success ≠ delivery — see output.js).
+      deviceErrors: getDeviceOutputHealth(),
       osc: OSC_PORT,
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
     }));
@@ -92,6 +99,31 @@ const http = createServer(async (req, res) => {
       .find((i) => i && i.family === 'IPv4' && !i.internal)?.address || null;
     res.setHeader('content-type', 'application/json');
     return res.end(JSON.stringify({ lan, port: PORT, osc: OSC_PORT }));
+  }
+  // DEBUG: dump the effective wire format the daemon is CURRENTLY sending, so a
+  // stride/colour-order mismatch (e.g. 3-byte RGB going to a 4-byte RGBW controller,
+  // or MIXED strides on one controller → polka-dot corruption) is visible offline at
+  // http://localhost:7070/api/debug/route — no light-strip guessing.
+  if (url.pathname === '/api/debug/route') {
+    res.setHeader('content-type', 'application/json');
+    const summary = (lastRoute || []).map((d) => {
+      const segs = d.segments?.length ? d.segments : [{ count: (d.byteEnd - d.byteStart) / 3, colorOrder: d.colorOrder }];
+      const strideOf = (s) => (s.colorOrder || d.colorOrder || 'RGB').length;
+      const strides = [...new Set(segs.map(strideOf))];
+      const uniform = strides.length === 1 ? strides[0] : 0;
+      const ddpByte2 = ddpDataType(uniform);
+      return {
+        ip: d.ip, protocol: d.protocol || 'ddp', deviceOrder: d.colorOrder,
+        pixels: (d.byteEnd - d.byteStart) / 3,
+        wireBytes: segs.reduce((n, s) => n + s.count * strideOf(s), 0),
+        mixedStride: strides.length > 1,   // TRUE → guaranteed misalignment on a WLED controller
+        // The DDP header byte-2 we send: 0x1B = RGBW, 0x0B = RGB, 0 = undefined.
+        // WLED reads this to pick bytes/pixel; must be 0x1B for a 4-byte RGBW strip.
+        ddpDataType: '0x' + ddpByte2.toString(16).padStart(2, '0').toUpperCase(),
+        segments: segs.map((s) => ({ count: s.count, order: s.colorOrder || d.colorOrder, stride: strideOf(s) })),
+      };
+    });
+    return res.end(JSON.stringify(summary, null, 2));
   }
   // Set the OSC listen PORT live (the Mapping window's OSC-input field). Rebinds.
   if (url.pathname === '/api/osc/port' && req.method === 'POST') {
@@ -110,6 +142,14 @@ const http = createServer(async (req, res) => {
   if (url.pathname === '/api/wled/scan') {
     res.setHeader('content-type', 'application/json');
     try { res.end(JSON.stringify(await scanSubnet())); }
+    catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
+    return;
+  }
+  if (url.pathname === '/api/wled/outputs') {
+    res.setHeader('content-type', 'application/json');
+    const ip = url.searchParams.get('ip');
+    if (!ip) { res.writeHead(400); return res.end(JSON.stringify({ error: 'missing ip' })); }
+    try { res.end(JSON.stringify(await getOutputs(ip))); }
     catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
     return;
   }
@@ -172,7 +212,24 @@ let lastRoute = null;
 let lastFps = OUTPUT_FPS;
 let editorWs = null;
 const editorConnected = () => !!editorWs && editorWs.readyState === 1;
+// Auto-quit (packaged app only, LZ_AUTOQUIT=1 from the launcher): once the last
+// editor window closes, the daemon has no reason to linger — exit so it can't
+// become a stale process that holds the port and blocks the next launch/update.
+// A grace window survives a reload (Force-update briefly drops the socket). Dev
+// (`npm start`) and headless/API runs don't set the flag, so they stay up.
+const AUTOQUIT = process.env.LZ_AUTOQUIT === '1';
+let quitTimer = null, everHadClient = false;
+function armAutoQuit() {
+  if (!AUTOQUIT) return;
+  clearTimeout(quitTimer);
+  if (everHadClient && wss.clients.size === 0) {
+    quitTimer = setTimeout(() => {
+      if (wss.clients.size === 0) { console.log('[ws] last window closed — exiting'); process.exit(0); }
+    }, 8000);
+  }
+}
 wss.on('connection', (ws) => {
+  everHadClient = true; clearTimeout(quitTimer);
   console.log('[ws] client connected');
   if (lastManifest) { try { ws.send(lastManifest); } catch { /* closing */ } }   // hand a new phone the last known show
   // Hold the LATEST frame + route and emit DDP on the daemon's OWN fixed-rate
@@ -216,6 +273,7 @@ wss.on('connection', (ws) => {
         // Optional global output framerate cap (clamped); rebuild the pacer if it changed.
         const fps = Math.max(1, Math.min(60, Math.round(Number(m.fps) || OUTPUT_FPS)));
         if (fps !== outFps) { outFps = fps; console.log(`[ws] output fps → ${outFps}`); startTimer(); }
+        setWhiteMode(m.whiteMode);   // global RGBW white mode ('accurate' | 'additive')
         // Only the editor sends routes → mark it (control API); announce the
         // editor coming online to /api/v1/events subscribers.
         const hadEditor = editorConnected();
@@ -242,6 +300,7 @@ wss.on('connection', (ws) => {
     if (timer) clearInterval(timer);
     if (editorWs === ws) { editorWs = null; pushApiStatus(); }   // the editor left — relayed API writes now 503
     console.log('[ws] client disconnected');
+    armAutoQuit();   // last window gone → exit after the grace window (packaged app only)
   });
 });
 setInterval(() => { fpsOut = frames; if (frames) { console.log(`[ws] ${frames} fps out`); frames = 0; } }, 1000);
@@ -341,12 +400,35 @@ function portInUse(port) {
     setTimeout(() => done(false), 300);
   });
 }
-// If the port's busy, LED Zeppelin is most likely already running there — a
-// double-click should just OPEN that instance, not crash ("nothing happens").
+// Ask a running instance who it is (version + pid) so a NEWER launch can take over.
+async function fetchHealth(port) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 500);
+  try { const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: ctrl.signal }); return await r.json(); }
+  catch { return null; } finally { clearTimeout(t); }
+}
+async function waitForPortFree(port, ms) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { if (!(await portInUse(port))) return true; await new Promise((r) => setTimeout(r, 150)); }
+  return !(await portInUse(port));
+}
+// Port busy → LED Zeppelin is probably already there. The PACKAGED app (launcher sets
+// LZ_TAKEOVER=1) TAKES OVER: SIGTERM the running daemon — which makes its launcher
+// quit too — then binds the port itself, so an UPDATE actually applies and a
+// stale/stuck instance can't wedge the port forever. Dev/CLI just opens the existing
+// instance (no takeover — don't kill a running app from a terminal).
 if (await portInUse(PORT)) {
-  console.error(`port ${PORT} in use — LED Zeppelin already running? opening ${httpUrl}`);
-  if (wantOpen()) openBrowser(httpUrl);
-  process.exit(0);
+  const health = process.env.LZ_TAKEOVER === '1' ? await fetchHealth(PORT) : null;
+  if (health?.pid) {
+    console.error(`port ${PORT} held by pid ${health.pid} (v${health.version}) — taking over`);
+    try { process.kill(health.pid, 'SIGTERM'); } catch { /* already gone */ }
+    if (!(await waitForPortFree(PORT, 4000))) { try { process.kill(health.pid, 'SIGKILL'); } catch { /* */ } await waitForPortFree(PORT, 2000); }
+  }
+  if (await portInUse(PORT)) {   // still busy (not ours, or couldn't reclaim) → just open it
+    console.error(`port ${PORT} in use — LED Zeppelin already running? opening ${httpUrl}`);
+    if (wantOpen()) openBrowser(httpUrl);
+    process.exit(0);
+  }
 }
 // Backstop for any late bind race / unexpected throw (Bun emits listen errors in a
 // way the server's 'error' event + try/catch don't reliably catch).

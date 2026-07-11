@@ -56,10 +56,13 @@ test('wireFirst makes a fixture the head of its run', () => {
   assert.equal(chainOf(s, 'c').index, 0);
 });
 
-test('freePort returns the next unused output on a device', () => {
-  assert.equal(freePort(baseShow(), 'd1'), 2);
-  assert.equal(freePort({ fixtures: [fx('a'), fx('b', 'd1', 2)] }, 'd1'), 3);
-  assert.equal(freePort(baseShow(), 'd9'), 1);
+test('freePort returns the next unused 0-based output (WLED bus index) on a device', () => {
+  // Ports are 0-based WLED bus indices (matching scan/import), so a fresh device
+  // starts at bus 0 and freePort skips buses already in use / fills the first gap.
+  const s = { fixtures: [fx('a', 'd1', 0), fx('b', 'd1', 1)] };
+  assert.equal(freePort(s, 'd1'), 2);                                              // 0 + 1 used → 2
+  assert.equal(freePort({ fixtures: [fx('a', 'd1', 0), fx('b', 'd1', 2)] }, 'd1'), 1); // gap at bus 1
+  assert.equal(freePort(s, 'd9'), 0);                                              // empty device → bus 0
 });
 
 test('pruneChains strips the legacy chains list + settings for dead runs', () => {
@@ -106,6 +109,6 @@ test('controllerColorMap still ramps per-output lightness for assigned colours',
     fixtures: [fx('a', 'd1', 1), fx('b', 'd1', 2)],
   };
   const { runColor } = controllerColorMap(show);
-  assert.equal(runColor('d1', 1), 'hsl(0.0, 100%, 44%)');      // 2 ports → 44%..76% ramp
-  assert.equal(runColor('d1', 2), 'hsl(0.0, 100%, 76%)');
+  assert.equal(runColor('d1', 1), 'hsl(0.0, 100%, 40%)');      // 2 ports → 40%..78% ramp
+  assert.equal(runColor('d1', 2), 'hsl(0.0, 100%, 78%)');
 });

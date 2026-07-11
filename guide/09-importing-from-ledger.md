@@ -53,8 +53,10 @@ So either drop reminds you of, or you go straight to, the same place: the Librar
 window's importer.
 
 > Other drops behave differently: a project `.json` loads rig + visuals, a
-> composition `.json` loads visuals only, and an ISF shader (`.fs`/`.isf`/`.frag`/`.glsl`)
-> becomes a new generator clip. See [Canvas, sources & effects](06-canvas-sources-effects.md).
+> composition `.json` loads visuals only, an ISF shader (`.fs`/`.isf`/`.frag`/`.glsl`)
+> becomes a new generator clip, and a 3D model (`.obj`) imports as a rig — see
+> [Import from 3D (OBJ)](#import-from-3d-obj) below.
+> See also [Canvas, sources & effects](06-canvas-sources-effects.md).
 
 ## Preview and warnings
 
@@ -121,6 +123,31 @@ once.
 A successful import is a **single undoable step**: press **⌘Z** to restore your prior
 rig and composition. A persistent banner confirms what landed —
 `Imported N controllers, M fixtures (total px). Rig replaced — ⌘Z to undo.`
+
+## Import from 3D (OBJ)
+
+If your rig lives in a 3D tool (Blender, Cinema 4D, Rhino, Fusion…) rather than
+LEDger, you can bring it in as a Wavefront **`.obj`**. Each named object becomes a
+fixture, with its LED data carried in the **object's name** using `__key=value`
+tokens:
+
+| Token | Required | Meaning |
+| --- | --- | --- |
+| `leds=N` | **yes** | pixel count on that run (a run with no `leds=` is skipped) |
+| `lpm=N` | no | LEDs per metre (density); default `60` |
+| `order=RGB` | no | colour order; a 4-letter value like `GRBW` is treated as a white/amber colour **format** |
+| `out=dev.port` | no | wire the run to controller `dev`, output `port` (runs sharing a port daisy-chain in file order) |
+| `dir=rev` | no | reverse the point order (pixel 0 at the other end) |
+
+So a run named `Spine__leds=120__order=GRBW__out=quinA.0` is a 120-pixel GRBW run on
+controller `quinA`, output 0.
+
+To import: **export your model as OBJ, Y-up** (each run as its own object, and use a
+polyline / edge path so the point order matches the pixel order), then **drag the
+`.obj` onto the LED Zeppelin window**. It's applied like opening a project — a device
+per `dev`, a fixture per run, sized to the model's footprint. Any skipped runs or
+notes appear in an **imported with notes** dialog. See `test/fixtures/whale-sample.obj`
+for a minimal example.
 
 ## After import
 

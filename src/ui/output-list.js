@@ -28,7 +28,7 @@
 
 import { fixtureLabel, fixtureRange, fixtureNumbers } from '../model/fixture-transform.js';
 import { isDmxFixture } from '../model/dmx.js';
-import { freePort } from '../model/chains.js';
+import { freePort, controllerColorMap } from '../model/chains.js';
 
 export function createOutputList(hooks) {
   const {
@@ -39,6 +39,34 @@ export function createOutputList(hooks) {
   } = hooks;
 
   let dragFxIds = [];                   // fixture id(s) being dragged onto a device/output (drag-to-assign)
+
+  // Liveness dot state for a controller — the panel caches each device's last health
+  // check; this maps it to the dot's class/title. Shared by render (full build) and
+  // repaintDots (an in-place update on a ping resolve, no full re-render).
+  const dotStateFor = (gdev) => {
+    const st = panel.deviceState?.(gdev.id);
+    const dotState = gdev.protocol === 'artnet' ? 'artnet'
+      : !gdev.ip ? 'noip'
+      : (panel.isPinging?.(gdev.id) || !st) ? 'check'
+      : st.ok ? 'online' : 'offline';
+    return { dotState, dotTitle: { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState] };
+  };
+  // Repaint JUST the liveness dots in place. A health ping resolving means only a
+  // controller's reachability changed — so update each dot's class/title rather than
+  // running the full render() (which rebuilds the whole patch list AND re-mounts the
+  // floating inspector, churning the editor / stealing focus mid-edit during a show).
+  function repaintDots() {
+    if (!outputListEl) return;
+    const byId = new Map((getShow().devices || []).map((d) => [d.id, d]));
+    for (const dot of outputListEl.querySelectorAll('.dev-dot')) {
+      const gdev = byId.get(dot.dataset.devid);
+      if (!gdev) continue;
+      const { dotState, dotTitle } = dotStateFor(gdev);
+      dot.className = `dev-dot dev-${dotState}`;
+      dot.title = dotTitle;
+    }
+  }
+
   // Assign the given fixtures to a device (+ optional output port) and re-pack — the
   // drag-to-assign / drag-to-unassign action (deviceId '' = back to the Unassigned pool).
   function assignFixturesTo(fxIds, deviceId, port) {
@@ -117,9 +145,17 @@ export function createOutputList(hooks) {
       });
       const ftype = (show.fixtureTypes || []).find((t) => t.id === f.typeId);
       const dn = num.get(f.id); const nIdx = dn != null ? dn - 1 : i;   // display number (falls back to array index)
-      const label = ftype?.name ? `${fixtureLabel(f, nIdx)} ${ftype.name}` : fixtureLabel(f, nIdx);
+      // Prefer the fixture's OWN name (Rib 1 / Tail / Fin L…) over the shared type
+      // name — a rig of one type still reads per-strip. Falls back to the type name.
+      const nm = f.name || ftype?.name;
+      const label = nm ? `${fixtureLabel(f, nIdx)} ${nm}` : fixtureLabel(f, nIdx);
       const nameEl = oel('span', { className: 'lr-name', textContent: label });     // flex-grow name
-      if (ftype) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${typeSizeSuffix(ftype)})` }));   // greyed size, appended to the name
+      // Size suffix reflects THIS fixture's spec (instances own it — a shared type's
+      // default px would be wrong), not the template's.
+      const sizeSuffix = isDmxFixture(f) ? (ftype ? typeSizeSuffix(ftype) : '')
+        : (Number(f.rows ?? ftype?.rows) || 1) > 1 ? `${f.cols ?? ftype?.cols}×${f.rows ?? ftype?.rows}`
+        : `${f.pixelCount ?? ftype?.pixelCount ?? 1}px`;
+      if (sizeSuffix) nameEl.append(oel('span', { className: 'lr-suffix', textContent: ` (${sizeSuffix})` }));   // greyed size, appended to the name
       row.append(nameEl);
       if (outLabel) {
         const ob = oel('span', { className: 'fx-badge' + (outOverTitle ? ' out-over' : ''), textContent: outLabel });
@@ -153,7 +189,7 @@ export function createOutputList(hooks) {
       const did = f.output?.deviceId || '';
       let dg = devMap.get(did);
       if (!dg) { dg = { deviceId: did, groups: [], gmap: new Map() }; devMap.set(did, dg); devOrder.push(dg); }
-      const port = f.output?.port ?? 1, key = `${did}:${port}`;
+      const port = f.output?.port ?? 0, key = `${did}:${port}`;
       let g = dg.gmap.get(key);
       if (!g) { g = { key, deviceId: did, port, items: [] }; dg.gmap.set(key, g); dg.groups.push(g); }
       g.items.push({ f, i });
@@ -178,6 +214,7 @@ export function createOutputList(hooks) {
       for (const g of dg.groups) g.items.sort((a, b) => (a.f.output?.pixelOffset ?? 0) - (b.f.output?.pixelOffset ?? 0));
     }
     const num = fixtureNumbers(show);   // id → display number (#1,#2,… in this same order)
+    const cmap = controllerColorMap(show);   // per-fixture identity colour (controller hue · output shade)
 
     for (const dg of devOrder) {
       // UNASSIGNED — a plain heading (not a foldable group), still a drop target: drop
@@ -207,22 +244,20 @@ export function createOutputList(hooks) {
         (e) => selectDevice(dg.deviceId, e));   // click the header → edit the controller (popover)
       const pxBadge = head.querySelector('.fx-badge');
       if (pxBadge && loads.length) {
-        pxBadge.title = loads.map((l) => `out ${l.port}: ${l.px}${gcap ? `/${gcap}` : ''}px${overPorts.has(l.port) ? ' ⚠' : ''}`).join('  ·  ')
+        pxBadge.title = loads.map((l) => `out ${l.port + 1}: ${l.px}${gcap ? `/${gcap}` : ''}px${overPorts.has(l.port) ? ' ⚠' : ''}`).join('  ·  ')
           + (devOver ? `\n⚠ over the ~40 fps budget on that line — still works, just fewer fps` : '');
       }
       // Online/offline/checking dot (same machinery as the old Devices list): the panel
       // caches each controller's last health check; renderOutput just paints it. Art-Net
       // nodes have no WLED API (no dot state to poll); a device with no IP reads "no IP".
       if (gdev) {
-        const st = panel.deviceState?.(gdev.id);
-        const dotState = gdev.protocol === 'artnet' ? 'artnet'
-          : !gdev.ip ? 'noip'
-          : (panel.isPinging?.(gdev.id) || !st) ? 'check'
-          : st.ok ? 'online' : 'offline';
-        const dotTitle = { online: 'online', offline: 'offline', check: 'checking…', noip: 'no IP set', artnet: 'Art-Net node' }[dotState];
+        const { dotState, dotTitle } = dotStateFor(gdev);
         // Dot sits before the title (the old .insp-tri anchor is gone — headers no
         // longer fold, so anchoring after the triangle silently dropped the dot).
-        head.prepend(oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle }));
+        // Tagged with its device id so a ping resolve can repaint it in place (repaintDots).
+        const dot = oel('i', { className: `dev-dot dev-${dotState}`, title: dotTitle });
+        dot.dataset.devid = gdev.id;
+        head.prepend(dot);
       }
       // Controller identity colour swatch, just before the title (assigned in
       // syncDeviceTypes / editable in the device editor; Tint mode uses the same colour).
@@ -241,8 +276,10 @@ export function createOutputList(hooks) {
       const multiOut = dg.groups.length > 1;
       for (const g of dg.groups) {
         const load = loads.find((l) => l.port === g.port);
-        const overTitle = overPorts.has(g.port) ? `output ${g.port} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
-        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port}` : null, gdev?.color, overTitle));
+        const overTitle = overPorts.has(g.port) ? `output ${g.port + 1} carries ${load.px}/${gcap}px — over the ~40 fps budget` : null;
+        // Row accent = the fixture's OWN identity colour (controller hue · this
+        // output's shade), matching the canvas tint — not the flat device colour.
+        for (const { f, i } of g.items) body.append(fixtureRow(f, i, multiOut ? `out ${g.port + 1}` : null, cmap.runColor(f.output?.deviceId || '', f.output?.port ?? 0), overTitle));
       }
       outputListEl.append(sec);
     }
@@ -255,9 +292,10 @@ export function createOutputList(hooks) {
     const daemonUp = bridgeConnected();
     // Probe each WLED controller's status ONCE (one-shot per id) so the dots above
     // reflect real online/offline — only when a daemon is up (no daemon → no network).
-    // Each resolved ping re-renders this list to repaint its dot. The Inventory popout
-    // never reaches here, so it never pings.
-    if (daemonUp) panel.pingDevices?.(show.devices, render);
+    // Each resolved ping repaints ONLY its dot in place (repaintDots) — NOT a full
+    // render() — so background health checks never rebuild the patch list / inspector
+    // mid-edit. The Inventory popout never reaches here, so it never pings.
+    if (daemonUp) panel.pingDevices?.(show.devices, repaintDots);
     outputListEl.append(oel('button', {
       className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
       title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',

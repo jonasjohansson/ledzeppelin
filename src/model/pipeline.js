@@ -5,6 +5,8 @@ import { isDmxFixture, dmxChannelsOf } from './dmx.js';
 import { fixtureCentreUV } from './fixture-transform.js';
 import { isBezierFixture, bezierToPoints } from './bezier.js';
 import { project, cameraFromView3d } from './project3d.js';
+import { effectiveColorFormat } from './show.js';
+import { fixtureBandIndex } from './audio-bands.js';
 
 // True when a fixture's polyline carries 3D points (any point has a defined
 // third component) — the signal to resample by 3D arc length and project.
@@ -83,6 +85,10 @@ export function buildPipelineInputs(show) {
   // UV (a time-delay trick) but never the world position — fields see the
   // fixture where it physically stands.
   const poss = [];
+  // Per-LED audio band index (0=bass, 1=mid, 2=high), same order + length as the
+  // LEDs — feeds the "Audio Bars" volumetric source (each fixture pulses on its
+  // band). Derived from the fixture's name (or its audioBand override).
+  const bands = [];
   const spans = [];
   const fixtureOrder = [];
   const route = [];
@@ -95,7 +101,7 @@ export function buildPipelineInputs(show) {
   for (const d of show.devices) {
     const mine = show.fixtures.filter((f) => f.output?.deviceId === d.id);
     const fs = mine.filter((f) => !isDmxFixture(f))
-      .sort((a, b) => ((a.output?.port ?? 1) - (b.output?.port ?? 1)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
+      .sort((a, b) => ((a.output?.port ?? 0) - (b.output?.port ?? 0)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
     const dmxFs = mine.filter(isDmxFixture);
     if (!fs.length && !dmxFs.length) continue;
 
@@ -113,13 +119,13 @@ export function buildPipelineInputs(show) {
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
       for (const [x, y, z] of pos) { poss.push(x, y, z); }
+      { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) bands.push(bi); }
       // Colour format per segment: a fixture's own colorFormat WINS when set (so an
       // RGBW strip can sit on the same controller as RGB ones); otherwise inherit
       // the controller's colour order (the common case — its strips are wired alike).
       // 'NONE' is a channels-only (par) format with no pixel colour order — treat it
       // as "inherit" here so a par toggled to pixel output still gets a valid order.
-      const fmt = f.colorFormat && f.colorFormat !== 'NONE' ? f.colorFormat : null;
-      segments.push({ start: devLocal, count: pts.length, colorOrder: fmt || d.colorOrder || f.colorOrder });
+      segments.push({ start: devLocal, count: pts.length, colorOrder: effectiveColorFormat(f.colorFormat, d.colorOrder, f.colorOrder) });
       devLocal += pts.length;
       cursor += pts.length;
     }
@@ -135,6 +141,7 @@ export function buildPipelineInputs(show) {
       fixtureOrder.push(f);
       uvs.push(u + ox, v + oy);
       poss.push(u, v, 0);   // DMX fixture: its centre, on the canvas plane
+      bands.push(fixtureBandIndex(f.name, f.audioBand));
       const cfg = f.input.dmx;
       // `fixed` is COPIED (not referenced) so a per-frame layer-binding update can
       // mutate the route's overrides without touching the saved show. `bind` maps a
@@ -178,8 +185,9 @@ export function buildPipelineInputs(show) {
     fixtureOrder.push(f);
     for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
     for (const [x, y, z] of pos) { poss.push(x, y, z); }
+    { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) bands.push(bi); }
     cursor += pts.length;
   }
 
-  return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), route, fixtureOrder, spans };
+  return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), sampleBands: new Float32Array(bands), route, fixtureOrder, spans };
 }

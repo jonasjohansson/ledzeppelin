@@ -287,6 +287,10 @@ export function importKagora(preset) {
       const co = stripColorOrder(s);
       const ft = makeFixtureType(lpm, px / lpm, co, `kf_${tid}`, t?.name || `${px}px`);
       ft.pixelCount = px;             // pin to Kagora's exact value (guard rounding)
+      // Forward a white/amber-channel colour format (e.g. GRBW) when the stripType
+      // declares one, so a 4-channel strip survives the round-trip; plain RGB strips
+      // (no colorFormat) are untouched and keep inheriting the controller's order.
+      if (t?.colorFormat) ft.colorFormat = t.colorFormat;
       fixtureTypes.push(ft);
       seenStripType.set(tid, ft.id);
     }
