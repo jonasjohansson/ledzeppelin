@@ -14,14 +14,27 @@ ws://127.0.0.1:6437   ──▶    (this script)    ──▶    ws://127.0.0.1:
 `leap-bridge.js` is a standalone Node script (not part of the `npm` scripts). It
 auto-reconnects to both ends, so you can start it before either is ready.
 
-## ⚠️ Runtime: needs the LEGACY runtime, not Gemini
+## ⚠️ Runtime: needs the LEGACY protocol, not Gemini's own one
 
-The bridge speaks the legacy LeapJS WebSocket protocol on **port 6437**
-(`ws://127.0.0.1:6437/v7.json`), provided only by the **older Leap Motion runtime
-(V2 "Desktop" / Orion)**. **Ultraleap Gemini (V5) does NOT expose port 6437** —
-there's no "Allow Web Apps" toggle in its panel, so the bridge sits on
-`ECONNREFUSED 127.0.0.1:6437` forever. The original Leap Controller hardware works
-with both runtimes; it's the *software* that matters — install the legacy runtime.
+The bridge speaks the legacy LeapJS WebSocket protocol on **port 6437**. Ultraleap
+Gemini (V5+, the current "Ultraleap Hand Tracking" install) dropped this
+protocol — no "Allow Web Apps" toggle, `ECONNREFUSED 127.0.0.1:6437` forever —
+so you need something in front of it that re-speaks v6/v7. Two ways to get that,
+depending on which runtime you actually have installed:
+
+- **Legacy runtime (V2 "Desktop" / Orion)** exposes it natively at
+  `ws://127.0.0.1:6437/v7.json` — nothing extra to build.
+- **Modern Gemini/Hyperion runtime** (what "Ultraleap Hand Tracking" installs
+  today) needs [`leap/bridge/`](leap/bridge/) built and running first — a
+  small vendored, patched C WebSocket server
+  ([`ultraleap/UltraleapTrackingWebSocket`](https://github.com/ultraleap/UltraleapTrackingWebSocket))
+  that re-exposes port 6437 at `/v6.json`. See [`leap/bridge/README.md`](leap/bridge/README.md)
+  for the build steps and why it's patched (upstream crashes on connect and
+  pegs a CPU core). If you're on this path, pass `--leap ws://127.0.0.1:6437/v6.json`
+  to `leap-bridge.js` (its default below is `/v7.json`, for the legacy runtime).
+
+The original Leap Controller hardware works with both runtimes; it's the
+*software* that matters.
 
 ```powershell
 Test-NetConnection 127.0.0.1 -Port 6437   # TcpTestSucceeded : True  → server is live
