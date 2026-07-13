@@ -368,20 +368,18 @@ body.mode-3d #stageinner canvas#stage { opacity: .1; }
    toggles + the runtime zoom pill) — framed + inset by a dock gutter like the other
    islands. Highest dock layer so its buttons are never clipped. */
 #topbar {
-  position: fixed; top: var(--dock-gap); left: var(--dock-gap); right: var(--dock-gap);
+  position: fixed; bottom: var(--dock-gap); left: var(--dock-gap); right: var(--dock-gap);   /* FOOTER */
   height: var(--topbar-h); z-index: 8;
   /* 3 columns: menus (left) · toggles (centred) · right cluster — the side columns are
      equal (1fr) so the toggle group is truly centred, and the columns RESERVE space so
      nothing overlaps; if the total exceeds the width the bar scrolls its own content. */
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 0 8px;
-  box-sizing: border-box; background: transparent; border: none;   /* overlay, not a solid bar — the groups float as islands */
-  overflow: visible;
+  box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line);   /* footer bar */
+  overflow-x: auto; overflow-y: hidden;
 }
 #topbar .corner-row { display: inline-flex; align-items: center; gap: 2px; }
 #corner-menus { justify-self: start; }
-/* Center view-controls float as an ISLAND over the top of the canvas (Resolume-style). */
-#corner-toggles { justify-self: center; position: relative; z-index: 9; transform: translateY(12px);
-  background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0,0,0,.5); padding: 3px 7px; }
+#corner-toggles { justify-self: center; }
 #corner-right { justify-self: end; }   /* bug + install at the far right */
 
 /* INSTALLED PWA — window-controls-overlay: the OS folds its title bar into the window,
@@ -455,7 +453,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
 #dock {
   /* Top offset = topbar height + ONE gutter; the dock's own padding supplies that
      gutter, so the gap above the islands matches the side/inter-island gaps (6px). */
-  position: fixed; top: calc(var(--topbar-h) + var(--dock-gap)); left: 0; right: 0; bottom: 0; z-index: 6;
+  position: fixed; top: var(--dock-gap); left: 0; right: 0; bottom: calc(var(--topbar-h) + var(--dock-gap)); z-index: 6;
   display: flex; gap: var(--dock-gap); align-items: stretch;
   padding: var(--dock-gap); box-sizing: border-box; background: var(--bg); pointer-events: none;
 }
@@ -708,7 +706,7 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 #corner-toggles button { text-transform: capitalize; }
 /* Layout-view switcher — 3 connected glyph buttons (Canvas / Split / Editor). */
 #topbar .view-seg { display: inline-flex; }
-#topbar .view-seg button { padding: 0; width: 26px; text-align: center; font-size: 12px; text-transform: none; }
+#topbar .view-seg button { padding: 4px 6px; min-width: 32px; text-align: center; font-size: 20px; line-height: 1; text-transform: none; }   /* full-size like the other toolbar icons */
 #topbar .view-seg button + button { border-left: 0; }
 #topbar .view-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
 /* Active toggle / open menu = a clearly FILLED pill (the fill IS the on/off signal). */
@@ -1307,7 +1305,9 @@ input[type=checkbox]:checked::after {
    Flex `order` reorders the DOM [label, value, slider, cog]. */
 /* Value · − · + · slider read as ONE connected segmented control (no gaps,
    shared borders); the label gaps before it and the cog sits apart after. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); }
+/* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
+   start at the same x — Duration and modulated params line up identically. */
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); position: relative; padding-left: 24px; }
 .ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* Resolume-style: names left-aligned so they scan down one hard left edge */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
@@ -1319,7 +1319,8 @@ input[type=checkbox]:checked::after {
 }
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
-.ly-row .anim-cog-wrap { order: -1; margin-right: 8px; }   /* modulate cog on the LEFT of the row */
+/* Cog sits in the reserved left gutter — absolute so it never shifts the label. */
+.ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; display: flex; align-items: center; margin: 0; }
 
 /* --- Control tactility (professional pass): press feedback, clearer selection,
    accent focus rings, one transition curve. Additive — no layout change. --- */
@@ -1359,14 +1360,12 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
   -webkit-appearance: none; appearance: none; height: var(--ctrl-h); cursor: pointer; box-sizing: border-box;
   border: 1px solid var(--line); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;   /* joins the + (shared border) */
-  /* Quiet well + a THIN centred track (accent fill to the value, faint neutral after)
-     + a bright 2px value marker — a fader, not a full-height orange progress block.
-     Layer order = top→bottom: marker, accent fill, neutral track, then the well. */
-  background:
-    linear-gradient(var(--accent), var(--accent)) var(--fill, 50%) center/2px 64% no-repeat,
-    linear-gradient(var(--accent), var(--accent)) left center/var(--fill, 50%) 3px no-repeat,
-    linear-gradient(color-mix(in srgb, var(--text) 10%, transparent), color-mix(in srgb, var(--text) 10%, transparent)) left center/100% 3px no-repeat,
-    linear-gradient(var(--field-bg), var(--field-bg)) 0 0/100% 100% no-repeat;
+  /* Full-height fill to the value (dim accent) capped by a 2px bright accent edge. */
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
+    var(--accent) calc(var(--fill, 50%) - 2px),
+    var(--accent) var(--fill, 50%),
+    var(--field-bg) var(--fill, 50%));
 }
 .ly-row input[type=range]::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; }
 .ly-row input[type=range]::-webkit-slider-thumb {
