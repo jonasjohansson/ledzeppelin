@@ -1127,7 +1127,11 @@ input[type=checkbox]:checked::after {
 .anim-cog {
   flex: 0 0 auto; padding: 0 6px; min-width: 26px; line-height: var(--lh-ctrl); font-size: 15px;
   color: var(--faint); border-color: var(--line);
+  opacity: 0; transition: opacity .08s;   /* Resolume-style: hidden until the row is hovered */
 }
+/* Reveal on row hover, or whenever the param is actually modulated (so an active
+   modulation is always visible), or on keyboard focus. */
+.anim-param:hover .anim-cog, .anim-cog.on, .anim-cog.audio, .anim-cog:focus-visible { opacity: 1; }
 .anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 .anim-cog.audio { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
 /* MODE PICKER FLYOUT (#anim-pop): the cog opens a small singleton panel docked
@@ -1302,7 +1306,7 @@ input[type=checkbox]:checked::after {
 /* Value · − · + · slider read as ONE connected segmented control (no gaps,
    shared borders); the label gaps before it and the cog sits apart after. */
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); }
-.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: right; }   /* names sit right, snug against the value column */
+.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* Resolume-style: names left-aligned so they scan down one hard left edge */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
 .ly-row .ly-step {

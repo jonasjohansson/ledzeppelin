@@ -1,0 +1,15 @@
+[Unit]
+Description=LED Zeppelin kiosk watchdog (self-heal white screen / GPU wedge)
+After=ledzeppelin.service
+Wants=ledzeppelin.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/lz-watchdog.sh
+Restart=always
+RestartSec=10
+# The watchdog itself must never be blamed for the reboot it triggers.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
