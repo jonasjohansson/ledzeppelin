@@ -462,18 +462,25 @@ body.hide-toolbar-labels #topbar .g-label { display: none; }   /* Settings › T
 #dock-left  { flex: 0 0 var(--left-w, 282px); min-width: 244px; }
 #dock-center{ flex: 1 1 auto; min-width: 0; }
 
-/* --- Two-screen shell: SCREEN 1 = the app (100vh); scroll down to SCREEN 2 = the
-   Settings / Mapping / Library panels (embedded iframes, replacing the popups). --- */
+/* --- Two-screen shell: SCREEN 1 = the app (100vh); scroll down to SCREEN 2 = one panel
+   with Settings / Library / Mapping as TABS (embedded iframes, replacing the popups).
+   Scroll up or press Esc to return. --- */
 html { scroll-behavior: smooth; }
 #screen-app { position: relative; height: 100vh; }
 #screen-app > #topbar { position: absolute; }   /* was fixed-to-viewport → now scrolls with screen 1 */
 #screen-app > #dock { position: absolute; }
-#screen-panels { position: relative; background: var(--bg); display: flex; flex-direction: column; gap: var(--dock-gap); padding: 0 var(--dock-gap) var(--dock-gap); }
+#screen-panels { position: relative; background: var(--bg); padding: var(--dock-gap); box-sizing: border-box; }
 .scroll-panel { height: calc(100vh - 2 * var(--dock-gap)); display: flex; flex-direction: column; min-height: 0;
   background: var(--panel); border: 1px solid var(--line); box-sizing: border-box; overflow: hidden; }
-.scroll-panel > header { flex: 0 0 auto; padding: var(--s4) var(--s5); background: var(--panel-2); border-bottom: 1px solid var(--line);
+/* Tab bar — shares the app's tab look: accent text on active, no fill. */
+.panel-tabs { flex: 0 0 auto; display: flex; align-items: stretch; background: var(--panel-2); border-bottom: 1px solid var(--line); }
+.panel-tab { padding: var(--s4) var(--s6); background: none; border: none; box-shadow: none; cursor: pointer;
   font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint); }
-.scroll-panel > iframe { flex: 1 1 auto; width: 100%; border: 0; background: var(--panel-2); display: block; }
+.panel-tab:hover { color: var(--text); }
+.panel-tab.on { color: var(--accent); }
+.panel-bodies { flex: 1 1 auto; position: relative; min-height: 0; }
+.panel-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--panel-2); display: none; }
+.panel-frame.on { display: block; }
 /* RIGHT sidebar is split in two equal side-by-side panes (Device editor | Devices/Inventory). */
 #dock-right { flex: 0 0 var(--side-w, 268px); min-width: 220px; gap: var(--dock-gap); }
 #grp-patch { flex: 1 1 0; }

@@ -47,10 +47,12 @@ import { createVideoRuntime } from './ui/video.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
-// --- Two-screen shell: the app (topbar + dock) is SCREEN 1 (100vh); scrolling down
-// reveals SCREEN 2 (100vh) with Settings / Mapping / Library embedded as iframes —
-// replaces the separate popup windows. The iframes are the same self-contained apps
-// (settings/ · mappings/ · inventory/) that already sync via BroadcastChannel. ---
+// --- Two-screen shell: SCREEN 1 = the app (topbar + dock, 100vh). Scroll down (or click
+// a menu) for SCREEN 2 — a single 100vh panel with Settings / Library / Mapping as TABS,
+// replacing the popup windows. The iframes are the same self-contained apps
+// (settings/ · inventory/ · mappings/) that already sync via BroadcastChannel; each
+// loads lazily on first activation. Scroll back up — or press Escape — to return. ---
+let showScreen2 = () => {};   // showScreen2(tabId?) — scroll to SCREEN 2, optionally selecting a tab
 (() => {
   const topbar = document.getElementById('topbar');
   const dock = document.getElementById('dock');
@@ -58,12 +60,54 @@ import { createVideoRuntime } from './ui/video.js';
   const screenApp = document.createElement('div'); screenApp.id = 'screen-app';
   topbar.parentNode.insertBefore(screenApp, topbar);
   screenApp.append(topbar, dock);
+
+  const TABS = [
+    { id: 'settings', label: 'Settings', src: 'settings/' },
+    { id: 'library',  label: 'Library',  src: 'inventory/' },
+    { id: 'mapping',  label: 'Mapping',  src: 'mappings/' },
+  ];
   const panels = document.createElement('div'); panels.id = 'screen-panels';
   panels.innerHTML =
-    '<section id="panel-settings" class="scroll-panel"><header>Settings</header><iframe title="Settings" loading="lazy" src="settings/"></iframe></section>'
-    + '<section id="panel-mapping" class="scroll-panel"><header>Mapping</header><iframe title="Mapping" loading="lazy" src="mappings/"></iframe></section>'
-    + '<section id="panel-library" class="scroll-panel"><header>Library</header><iframe title="Library" loading="lazy" src="inventory/"></iframe></section>';
+    '<section class="scroll-panel"><header class="panel-tabs" role="tablist">'
+    + TABS.map((t, i) => `<button type="button" role="tab" class="panel-tab${i ? '' : ' on'}" data-tab="${t.id}">${t.label}</button>`).join('')
+    + '</header><div class="panel-bodies">'
+    + TABS.map((t, i) => `<iframe class="panel-frame${i ? '' : ' on'}" title="${t.label}" data-tab="${t.id}" data-src="${t.src}"${i ? '' : ` src="${t.src}"`}></iframe>`).join('')
+    + '</div></section>';
   screenApp.after(panels);
+
+  const tabs = [...panels.querySelectorAll('.panel-tab')];
+  const frames = [...panels.querySelectorAll('.panel-frame')];
+  const activate = (name) => {
+    for (const t of tabs) t.classList.toggle('on', t.dataset.tab === name);
+    for (const f of frames) {
+      const on = f.dataset.tab === name;
+      f.classList.toggle('on', on);
+      if (on && !f.getAttribute('src')) f.setAttribute('src', f.dataset.src);   // lazy-load on first open
+    }
+  };
+  tabs.forEach((t) => t.addEventListener('click', () => activate(t.dataset.tab)));
+
+  showScreen2 = (name) => { if (name) activate(name); panels.scrollIntoView({ behavior: 'smooth' }); };
+  const backToApp = () => screenApp.scrollIntoView({ behavior: 'smooth' });
+
+  // Escape returns to SCREEN 1 when we're on SCREEN 2. Listen on the parent AND (once
+  // loaded, same-origin) inside each iframe, so Esc works even with focus in a panel.
+  const onEsc = (e) => {
+    if (e.key === 'Escape' && !e.defaultPrevented && window.scrollY > window.innerHeight * 0.25) backToApp();
+  };
+  window.addEventListener('keydown', onEsc);
+  // Each embedded app prints its own title (SETTINGS / LIBRARY / MAPPINGS) — redundant now
+  // that the tab labels it, so hide it in-frame. Settings/Library heads hold only the title
+  // (drop the whole head); Mappings' head also holds the MIDI toolbar (drop just the title).
+  const EMBED_CSS = { settings: '.set-head', library: '.inv-head', mapping: '.map-title' };
+  frames.forEach((f) => f.addEventListener('load', () => {
+    try {
+      const doc = f.contentDocument; if (!doc) return;
+      doc.addEventListener('keydown', onEsc);
+      const sel = EMBED_CSS[f.dataset.tab];
+      if (sel) { const s = doc.createElement('style'); s.textContent = `${sel}{display:none!important}`; doc.head.appendChild(s); }
+    } catch { /* cross-origin — ignore */ }
+  }));
 })();
 
 const canvas = document.getElementById('stage');
@@ -2662,12 +2706,12 @@ controlPanel = createControlPanel({
 // the same window on repeat clicks; the page is a responsive full route.
 const POPUP_FEATURES = 'width=860,height=920';
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-mapping')?.addEventListener('click', () => document.getElementById('panel-mapping')?.scrollIntoView({ behavior: 'smooth' }));
+document.getElementById('menu-mapping')?.addEventListener('click', () => showScreen2('mapping'));
 // Library opens the standalone TEMPLATE-LIBRARY editor in its own popup window
 // (returns null if a popup blocker fires). Live type-merge sync runs over
 // 'lz-inventory' (below).
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-inventory')?.addEventListener('click', () => document.getElementById('panel-library')?.scrollIntoView({ behavior: 'smooth' }));
+document.getElementById('menu-inventory')?.addEventListener('click', () => showScreen2('library'));
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
 document.getElementById('devices-add-device')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'device'));
@@ -2691,7 +2735,7 @@ outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { re
 // (src/ui/settings.js createSettingsPanel) with popout hooks and broadcasts
 // every edit as { type: 'settings-changed' } on BroadcastChannel('lz-settings').
 function openSettingsWindow() { try { return window.open('settings/', 'lz-settings', 'width=560,height=860'); } catch { return null; } }
-document.getElementById('menu-settings')?.addEventListener('click', () => document.getElementById('panel-settings')?.scrollIntoView({ behavior: 'smooth' }));
+document.getElementById('menu-settings')?.addEventListener('click', () => showScreen2('settings'));
 
 // Adopt the popout's edits. Two ownership domains:
 //   · show-owned fields — Settings edits ONLY composition.audioDevice and
