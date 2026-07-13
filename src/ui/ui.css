@@ -1150,6 +1150,10 @@ input[type=checkbox]:checked::after {
      overflowing the bottom edge — the JS top-clamp pins to top:6 in that case. */
   max-height: calc(100vh - 12px); overflow-y: auto;
 }
+/* Inline variant: the picker renders inside the param row (below it), not as a
+   docked flyout — indented to line up under the param content. */
+#anim-pop.anim-pop-inline { position: static; z-index: auto; box-shadow: none; width: auto;
+  margin: 3px 0 5px 24px; max-height: none; animation: none; }
 @keyframes anim-pop-in { from { opacity: 0; transform: translateX(-6px); } }
 @media (prefers-reduced-motion: reduce) { #anim-pop { animation: none; } }
 /* Header: the param's name, in the quiet caps style of .fx-menu-label. */

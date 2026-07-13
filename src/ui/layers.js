@@ -284,7 +284,7 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
   });
   const open = () => {
     closeAnimPop();                           // singleton — opening elsewhere moves it
-    const pop = el('div', { id: 'anim-pop' }, [
+    const pop = el('div', { id: 'anim-pop', className: 'anim-pop-inline' }, [
       el('div', { className: 'anim-pop-head', textContent: label || 'Modulation' }),
       item('basic', 'Basic', 'hold a value, or sweep between two'),
       item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
@@ -305,20 +305,10 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
         onclick: (e) => { e.stopPropagation(); closeAnimPop(); remoteHook.toggle(oscAddress); },
       }, [el('span', { className: 'fx-tick-box' }), 'Control']));
     }
-    // POSITION: x = the left dock's right edge + a small gap; y = the clicked
-    // row's top — both clamped to the viewport, so it sits BESIDE the sidebar
-    // level with the row it edits. Rows hosted outside #dock-left fall back to
-    // the kit's anchored-at-the-cog placement.
-    const row = wrap.parentElement || wrap;   // the .ly-param row the cog lives in
-    const dock = document.getElementById('dock-left');
-    document.body.append(pop);                // attach first so offsetWidth/Height measure
-    if (dock && dock.contains(row)) {
-      const d = dock.getBoundingClientRect(), r = row.getBoundingClientRect();
-      pop.style.left = Math.max(6, Math.min(d.right + 6, window.innerWidth - 6 - pop.offsetWidth)) + 'px';
-      pop.style.top = Math.max(6, Math.min(r.top, window.innerHeight - 6 - pop.offsetHeight)) + 'px';
-    } else {
-      placePopover(pop, wrap);
-    }
+    // INLINE: render the mode picker in the PARAM container (below the row) so the
+    // options appear in place, not as a flyout docked beside the sidebar. (Append to
+    // .anim-param, NOT the cog wrapper — the cog wrapper is absolutely positioned.)
+    (wrap.closest('.anim-param') || wrap.parentElement || wrap).appendChild(pop);
     animPopEl = pop; animPopOwner = wrap;
     // The cog is OUTSIDE the body-appended panel — exempt it from the outside-
     // click dismiss so its own click reaches the toggle (close) handler below.
