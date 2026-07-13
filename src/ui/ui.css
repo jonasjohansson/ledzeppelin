@@ -1126,10 +1126,13 @@ input[type=checkbox]:checked::after {
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
 .anim-cog {
-  flex: 0 0 auto; padding: 0; min-width: 0; line-height: var(--lh-ctrl); font-size: 13px;
-  color: var(--faint); border: none !important; background: none !important;   /* just the glyph, no box */
-  opacity: 0; transition: opacity .08s;   /* appears on row hover, in the gutter beside the name */
+  flex: 0 0 auto; padding: 0; min-width: 0; width: 14px; height: 14px; font-size: 13px;
+  display: flex; align-items: center; justify-content: center; line-height: 1;   /* glyph vertically centred */
+  color: var(--faint); border: none !important; background: none !important; outline: none !important; box-shadow: none !important;   /* just the glyph, no box */
+  opacity: 0; transition: opacity .08s; cursor: pointer;   /* appears on row hover, beside the name */
 }
+.anim-cog:focus-visible { outline: none !important; }
+.ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
    modulation is always visible), or on keyboard focus. */
 .anim-param:hover .anim-cog, .anim-cog.on, .anim-cog.audio, .anim-cog:focus-visible { opacity: 1; }
@@ -1852,6 +1855,7 @@ button { text-transform: uppercase; }              /* all app-authored button la
 .fx-menu-item { text-transform: none; }            /* EXCEPT preset menus — user-authored names */
 .lr-name { text-transform: none; }                 /* fixture/clip display names — user-authored */
 .menu-item { text-transform: uppercase; }          /* dropdown menu entries */
-.fx-field > span:first-child { text-transform: uppercase; }   /* parameter labels */
+/* Parameter/field labels stay Title Case (labelOf/prettyParam already title-case) —
+   consistent with the modulatable param rows; caps is reserved for section headers. */
 .fx-badge { text-transform: uppercase; }           /* count/range badges ('px' → 'PX' is fine) */
 .knob-label { text-transform: uppercase; }         /* dashboard knob captions ('Link 1' …) */

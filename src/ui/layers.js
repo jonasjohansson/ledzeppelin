@@ -215,6 +215,9 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
     const shown = value == null ? (p.default ?? min) : value;
     const row = sliderField(prettyParam(p.key), shown, min, max, onValue, p.default ?? min, p.step);
     row.prepend(cog);   // modulate button on the LEFT of the row
+    // Clicking the parameter NAME opens the mode picker too (pointer cursor on the name).
+    const nameEl = row.querySelector('.ly-plabel');
+    if (nameEl) { nameEl.classList.add('ly-plabel-mod'); nameEl.addEventListener('click', (e) => { e.stopPropagation(); cog.querySelector('.anim-cog')?.click(); }); }
     wrap.append(row);
     return wrap;
   }
@@ -227,9 +230,9 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   if (isAudio) wrap.classList.add('is-audio');
   if (isExternal) wrap.classList.add('is-external');
   if (isDashboard) wrap.classList.add('is-dashboard');
-  const head = el('div', { className: 'ly-param anim-head' }, [
-    cog, el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout,   // cog on the LEFT
-  ]);
+  const headName = el('span', { className: 'ly-plabel ly-plabel-mod', textContent: prettyParam(p.key) });
+  headName.addEventListener('click', (e) => { e.stopPropagation(); cog.querySelector('.anim-cog')?.click(); });
+  const head = el('div', { className: 'ly-param anim-head' }, [ cog, headName, readout ]);   // cog on the LEFT
   wrap.append(head);
   if (isDashboard) {
     // No track — tag the readout so the live loop still updates the shown value.
