@@ -208,17 +208,15 @@ canvas{display:block}</style>
       <header class="island-head island-tabs" id="patch-tabs">
         <button class="island-tab is-on" data-ptab="fixtures">Output</button>
         <button class="island-tab" data-ptab="sources">Sources</button>
-        <span class="island-acts">
-          <button id="devices-inventory" class="island-act" title="Library — fixture & controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
-        </span>
       </header>
       <div class="island-body">
-        <!-- the merged patch view: the + Controller / + Fixture add toolbar sits right
-             under the OUTPUT tab, then the controllers with their fixtures below. -->
+        <!-- the merged patch view: the + Controller / + Fixture / Library toolbar sits
+             right under the OUTPUT tab, then the controllers with their fixtures below. -->
         <div id="patch-fixtures">
           <div class="out-toolbar">
             <button id="devices-add-device" class="out-add" title="Add a controller"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg><span>Controller</span></button>
             <button id="devices-add-fixture" class="out-add" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg><span>Fixture</span></button>
+            <button id="devices-inventory" class="out-add" title="Library — fixture & controller templates"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg><span>Library</span></button>
           </div>
           <div id="output-list"></div>
         </div>
