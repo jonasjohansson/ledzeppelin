@@ -23,30 +23,24 @@
      hairlines one step stronger. */
   /* WARM gray ramp — the surfaces carry a desaturated accent tint (brown-gray, not
      the old blue-gray) so the warm accent has presence across the whole sidebar. */
-  --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
-  /* Display surfaces (stage pasteboard) stay dark in BOTH themes — LED content wants a
-     dark backdrop. Constant, NOT flipped by the Dark/Light theme toggle. */
-  --stage-bg:#0d0d0f;
-  --panel-solid:#201d19;       /* menus/popovers share the panel surface */
-  --line:#3a342d; --line-2:#4c4538;       /* hairline borders (warm) */
-  --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84;
-  /* WARM MONOCHROME (Jonas): ONE warm accent everywhere — the old blue/green/cyan
-     all collapse to it, so the UI reads as near-black + one warm orange + red for
-     danger. See [[ui-aesthetic-ocr-disguise]]. (Per-controller canvas hues in
-     controllerColorMap are separate — functional fixture identity, kept.) */
-  --accent:#e8a35c;            /* the one warm accent (was blue) */
-  --accent-soft:#33271a;       /* warm selected/active background (lifted with the panels) */
-  --accent-text:#f1d6bb;       /* text on accent surfaces */
-  --accent-line:#54402b;       /* active border */
-  --readout:#d7dbe0;           /* numeric readouts — neutral (one step under --text) */
+  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#d4a24a'}) so a
+     pre-JS / FOUC flash matches the runtime (palette.js writes these inline on <html>).
+     Keep in sync: re-run themeVars if the accent default or anchors change. */
+  --bg:#181615; --panel:#1f1d1c; --panel-2:#272524; --hover:#363332;
+  --stage-bg:#0d0d0f;          /* display surfaces stay dark in BOTH themes (LED content wants black) */
+  --panel-solid:#1f1d1c;       /* menus/popovers share the panel surface */
+  --line:#3a3735; --line-2:#4f4c4e;       /* hairline borders (neutral) */
+  --text:#ffffff; --muted:#ccccd2; --faint:#959599;
+  --accent:#d4a24a;            /* the one desaturated amber-gold accent */
+  --accent-soft:#2a2214;       /* selected/active background tint */
+  --accent-text:#e4c58f;       /* text on accent surfaces */
+  --accent-line:#5b4724;       /* active border */
+  --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
-  --warn:#cfa14f;              /* soft amber — advisory (over an fps budget), not an error */
+  --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
-  --accent-dark:#07151f;       /* dark text/glyph ON an accent-filled surface */
-  /* Surfaces + form chrome — ALIASED to the matte set above so every panel, card,
-     row and input shares ONE blue-tinted palette (was a second neutral-gray set
-     that made identical controls look mismatched). */
-  --field-bg:#161310;                 /* recessed input fill (one step under --panel, warm) */
+  --accent-dark:#221c12;       /* dark glyph ON a bright accent-filled surface */
+  --field-bg:#181616;                 /* recessed input fill */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -68,6 +62,7 @@
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
   --radius:0px; --radius-sm:0px;   /* square corners */
+  --left-w:282px;    /* left inspector column width (was an undefined var + magic fallback) */
   --side-w:268px;    /* right panel (Devices/Inventory) width — single pane (editor is the left Device tab) */
   --side2-w:300px;   /* second sidebar (selected fixture/device editor) width */
   --layer-w:128px;   /* layer-head column AND the Composition tab width (must match) */
@@ -75,6 +70,7 @@
   --clip-h:84px;     /* clip-cell + layer-head row height (the deck row module) — squareish */
   --row-h:26px;      /* ONE row height — every label·control row (input, select, slider, bool) */
   --ctrl-h:22px;     /* ONE control height — fields/selects/buttons inside rows (row-h minus breath) */
+  --col-gutter:14px; /* inspector label/cog gutter (the section-triangle position) */
   --col-label:84px;  /* param label column (fixed-width fields) */
   --col-val:44px;    /* param value / readout column */
   --slider-w:120px;  /* fixed slider width — matte-style: label fills left, value far right */
@@ -897,7 +893,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .fx-field { display: flex; flex-direction: row; align-items: center; gap: 10px; min-width: 0; min-height: var(--row-h); font-size: var(--fs-body); color: var(--muted); }
 /* Fixed label column so the name stays readable (text/number inputs otherwise
    claim their intrinsic width and squeeze the label down to an ellipsis). */
-.fx-field > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-field > span:first-child { flex: 0 0 var(--col-label, 84px); color: var(--muted); letter-spacing: var(--ls-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-field > input, .fx-field > select { flex: 1 1 0; min-width: 0; width: auto; text-align: right; }   /* values right-align against the label column */
 .fx-field input, .fx-field select {
   background: var(--field-bg); color: var(--text); border: 1px solid var(--field-border);
@@ -946,7 +942,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .knob-label { font: var(--fs-micro) var(--sans); color: var(--faint); }
 .dash-name { width: 100%; text-align: center; background: transparent; border: 0; color: var(--muted);
   font: var(--fs-micro) var(--sans); padding: 1px 0; min-width: 0; }
-.dash-name:hover, .dash-name:focus { color: var(--text); background: var(--panel-2); border-radius: 3px; outline: none; }
+.dash-name:hover, .dash-name:focus { color: var(--text); background: var(--panel-2); border-radius: 0; outline: none; }
 .dash-name.dash-auto { color: var(--accent); }   /* auto-named from what it drives */
 /* The pixel/colour block shown inline among the parameters (params order around it). */
 .fx-param-pixels { min-height: var(--row-h); display: flex; align-items: center; padding: 0 8px;
@@ -1011,7 +1007,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .ctrl-btn:disabled:hover { border-color: var(--line-2); color: var(--text); }
 .ctrl-range:disabled { opacity: .35; cursor: default; }
 .ctrl-bri { display: flex; align-items: center; gap: 8px; min-height: var(--row-h); }
-.ctrl-bri > span:first-child { flex: 0 0 var(--col-label, 92px); color: var(--muted); font: var(--fs-body) var(--mono); }
+.ctrl-bri > span:first-child { flex: 0 0 var(--col-label, 84px); color: var(--muted); font: var(--fs-body) var(--mono); }
 .ctrl-range { flex: 1 1 0; min-width: 0; accent-color: var(--accent); }
 .ctrl-val { flex: 0 0 30px; text-align: right; font: var(--fs-ctrl) var(--mono); color: var(--text); }
 
@@ -1021,7 +1017,7 @@ button {
 }
 /* No blue browser focus rings on controls (keyboard focus shows on the thumb). */
 input[type=range]:focus, button:focus, select:focus { outline: none; }
-input[type=range]:focus-visible, select:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }
+input[type=range]:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }   /* select handled by the accent focus rule below */
 
 /* Custom checkbox to match the dark theme. */
 input[type=checkbox] {
@@ -1140,16 +1136,16 @@ input[type=checkbox]:checked::after {
    with the label gutter and its underline runs FULL-BLEED to the panel edges. */
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-head {
-  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s3) 5px calc(14px + var(--s3));
+  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s3) 5px calc(var(--col-gutter) + var(--s3));
 }
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
 #grp-props .insp-sec:not(.out-sec) .insp-tri { display: none; }
 /* Every inspector field/row shares the 14px label gutter so labels align across plain
    fields (Title/BPM/Width), slider rows (Master, params) and the Color row. */
-#grp-props .fx-field { padding-left: 14px; }
+#grp-props .fx-field { padding-left: var(--col-gutter); }
 /* Row divider lines also run full-bleed. */
 #grp-props .insp-sec-body > .ly-param.ly-row, #grp-props .insp-sec-body > .anim-param { margin-left: calc(-1 * var(--s3)); margin-right: calc(-1 * var(--s3)); padding-right: var(--s3); }
-#grp-props .insp-sec-body > .ly-param.ly-row { padding-left: calc(14px + var(--s3)); }   /* direct row: own 14px gutter + bleed offset */
+#grp-props .insp-sec-body > .ly-param.ly-row { padding-left: calc(var(--col-gutter) + var(--s3)); }   /* direct row: own 14px gutter + bleed offset */
 #grp-props .insp-sec-body > .anim-param { padding-left: var(--s3); }   /* wrapper: the inner .ly-row already carries the 14px gutter */
 #grp-props .island-body { padding-top: 3px; }   /* less dead space at the top */
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
@@ -1344,7 +1340,7 @@ input[type=checkbox]:checked::after {
    shared borders); the label gaps before it and the cog sits apart after. */
 /* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
    start at the same x — Duration and modulated params line up identically. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 30px; position: relative; padding-left: 14px; }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 30px; position: relative; padding-left: var(--col-gutter); }
 /* Controls fill the FULL row height — no top/bottom breath. */
 .ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 30px; }
 .ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* fixed label column, left-aligned, flush with the group title → value + slider columns stay consistent */
@@ -1360,7 +1356,7 @@ input[type=checkbox]:checked::after {
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
 /* Cog sits in the ~14px left gutter (the section-triangle position) — absolute so it
    never shifts the label; appears next to the name on row hover. */
-.ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; display: flex; align-items: center; justify-content: center; margin: 0; }
+.ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: var(--col-gutter); display: flex; align-items: center; justify-content: center; margin: 0; }
 
 /* --- Control tactility (professional pass): press feedback, clearer selection,
    accent focus rings, one transition curve. Additive — no layout change. --- */
