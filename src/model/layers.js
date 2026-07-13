@@ -664,6 +664,21 @@ export function setClipEffectParam(show, layerId, clipId, fxIndex, key, value) {
   });
 }
 
+// Set (or clear) a per-parameter animation on an ISF effect item at fxIndex. Anim
+// lives on the item (keyed by input NAME), mirroring setClipEffectParam — the render
+// loop resolves item.anim → live params each frame (app.js), same as clip.anim.
+export function setClipEffectAnim(show, layerId, clipId, fxIndex, key, spec) {
+  return updateClip(show, layerId, clipId, (clip) => {
+    const effects = (clip.effects || []).slice();
+    const item = effects[fxIndex];
+    if (!item || !item.isf) return clip;
+    const anim = { ...(item.anim || {}) };
+    if (spec) anim[key] = spec; else delete anim[key];
+    effects[fxIndex] = { ...item, anim };
+    return { ...clip, effects };
+  });
+}
+
 // Append a clip effect and seed its default params (prefixed).
 export function addClipEffect(show, layerId, clipId, name) {
   return updateClip(show, layerId, clipId, (clip) => ({

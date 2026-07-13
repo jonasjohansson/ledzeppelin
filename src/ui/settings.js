@@ -99,6 +99,11 @@ export function createSettingsPanel(hooks) {
     // (subtracts it from RGB); Additive keeps RGB full and adds W on top.
     mount.append(Segmented('White Mode', [['accurate', 'Accurate'], ['additive', 'Additive']],
       () => output.getWhiteMode?.() || 'accurate', (v) => output.setWhiteMode?.(v)));
+    // On-screen stage preview. OFF skips the fullscreen composite draw (the stage goes
+    // static black) — LED output is unaffected. Turn it off to lighten the render on a
+    // Raspberry Pi and stop VNC mirroring the full-motion stage. (Also ?preview=0 in URL.)
+    mount.append(Segmented('Preview', [['on', 'On'], ['off', 'Off']],
+      () => (output.getPreview?.() ?? true) ? 'on' : 'off', (v) => output.setPreview?.(v === 'on')));
 
     // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
     const toggleRow = (label, get, set) => {

@@ -24,7 +24,7 @@ import {
 import { CATEGORY_COLORS, sourceCategory } from './source-catalog.js';
 import {
   addClip, addClipAt, addVideoClip, removeClip, moveClip, moveClipToLayer, duplicateClip, setActiveClip, changeClipGenerator,
-  setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam,
+  setClipParam, addClipEffect, removeClipEffect, moveClipEffect, setClipEffectParam, setClipEffectAnim,
   addLayerEffect, removeLayerEffect, moveLayerEffect, setLayerParam,
   addCompositionEffect, removeCompositionEffect, moveCompositionEffect,
   setCompositionParam, mergeCompositionParams, setCompositionAnim,
@@ -214,7 +214,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   if (!animated) {
     const shown = value == null ? (p.default ?? min) : value;
     const row = sliderField(prettyParam(p.key), shown, min, max, onValue, p.default ?? min, p.step);
-    row.append(cog);
+    row.prepend(cog);   // modulate button on the LEFT of the row
     wrap.append(row);
     return wrap;
   }
@@ -228,7 +228,7 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
   if (isExternal) wrap.classList.add('is-external');
   if (isDashboard) wrap.classList.add('is-dashboard');
   const head = el('div', { className: 'ly-param anim-head' }, [
-    el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout, cog,
+    cog, el('span', { className: 'ly-plabel', textContent: prettyParam(p.key) }), readout,   // cog on the LEFT
   ]);
   wrap.append(head);
   if (isDashboard) {
@@ -1488,8 +1488,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     block.append(head);
     for (const p of item.isf.params || []) {
       if (!(p.type === 'float' || p.type === 'long' || p.type === 'bool' || p.type === 'color')) continue;
-      block.append(paramControl(p, item.params?.[p.key] ?? p.default,
-        (v) => commitLive(setClipEffectParam(show(), id, clip.id, fx, p.key, v))));
+      // Numeric params get the modulate cog (animatableParam falls back to a static
+      // control for color/bool automatically); anim lives on the effect item.
+      block.append(animatableParam({
+        key: p.key, p, value: item.params?.[p.key] ?? p.default, anim: item.anim?.[p.key],
+        onValue: (v) => commitLive(setClipEffectParam(show(), id, clip.id, fx, p.key, v)),
+        onAnim: (spec) => commit(setClipEffectAnim(show(), id, clip.id, fx, p.key, spec)),
+        onAnimLive: (spec) => commitLive(setClipEffectAnim(show(), id, clip.id, fx, p.key, spec)),
+      }));
     }
     return block;
   }

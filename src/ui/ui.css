@@ -1313,7 +1313,7 @@ input[type=checkbox]:checked::after {
 }
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
-.ly-row .anim-cog-wrap { order: 5; margin-left: 8px; }
+.ly-row .anim-cog-wrap { order: -1; margin-right: 8px; }   /* modulate cog on the LEFT of the row */
 /* A param moved off its default reads in a soft accent tint (vs the muted default),
    so changed values stand out at a glance. Focus still wins with the bright accent. */
 .ly-param.is-modified .ly-plabel { color: var(--accent-text); }

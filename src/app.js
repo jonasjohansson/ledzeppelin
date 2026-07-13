@@ -163,6 +163,15 @@ const OUTFPS_KEY = 'lz.outfps';
 const savedOutFps = () => { try { return Math.max(1, Math.min(60, Number(localStorage.getItem(OUTFPS_KEY)) || 42)); } catch { return 42; } };
 const WHITEMODE_KEY = 'lz.whitemode';
 const savedWhiteMode = () => { try { return localStorage.getItem(WHITEMODE_KEY) === 'additive' ? 'additive' : 'accurate'; } catch { return 'accurate'; } };
+// On-screen stage preview. OFF (Settings › Preview, or ?preview=0 on the kiosk URL)
+// skips the fullscreen composite blit and holds the stage at static black. The whale
+// still renders + samples every frame, so LED output is UNAFFECTED — this only drops
+// the screen-res draw and gives VNC nothing to stream (a big Pi / remote-edit win).
+// ?preview seeds the pref once so the kiosk can force it without opening Settings.
+const PREVIEW_KEY = 'lz.preview';
+try { const q = new URLSearchParams(location.search).get('preview'); if (q != null) localStorage.setItem(PREVIEW_KEY, (q === '0' || q === 'off') ? '0' : '1'); } catch { /* ignore */ }
+const savedPreview = () => { try { return localStorage.getItem(PREVIEW_KEY) !== '0'; } catch { return true; } };
+let previewEnabled = savedPreview();
 let prevBindCh = {};     // last frame's channel values, for action-binding rising edges
 let bindSaveTimer = null;
 
@@ -2710,6 +2719,8 @@ if (setBus) {
     // Output fps cap + RGBW white mode → push to the daemon.
     bridge?.setOutputFps?.(savedOutFps());
     bridge?.setWhiteMode?.(savedWhiteMode());
+    previewEnabled = savedPreview();   // Preview On/Off flipped in the Settings popout
+
     // Tooltips + native context menu (both idempotent appliers).
     prefs.applyTips();
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
@@ -2842,10 +2853,15 @@ function loopBody(ts) {
     renderLayers = renderLayers.map((L) => {
       const lp = resolveParams(L.params, L.anim, t, signals, L.id);
       let clips = L.clips;
-      if (clips && clips.some((c) => c && c.anim && Object.keys(c.anim).length)) {
+      // A clip needs per-frame resolution if it has clip-level anim OR any ISF effect
+      // whose item carries its own anim (ISF params live on the effect item, keyed by
+      // input name — outside clip.anim's prefixed-key scheme).
+      const isfAnimated = (c) => c && c.effects && c.effects.some((e) => e && e.isf && e.anim && Object.keys(e.anim).length);
+      const needsResolve = (c) => c && ((c.anim && Object.keys(c.anim).length) || isfAnimated(c));
+      if (clips && clips.some(needsResolve)) {
         clips = clips.map((c) => {
-          const a = c.anim;
-          if (!(a && Object.keys(a).length)) return c;
+          if (!needsResolve(c)) return c;
+          const a = c.anim || {};
           const params = resolveParams(c.params, a, t, signals, c.id);
           // Animated TRANSFORM (keys tf.x/tf.y/tf.scale/tf.rotation) + OPACITY (tf.opacity).
           let transform = c.transform, opacity = c.opacity;
@@ -2854,7 +2870,14 @@ function loopBody(ts) {
             for (const f of ['x', 'y', 'scale', 'rotation']) if (a['tf.' + f]) transform[f] = animatedValue(a['tf.' + f], t, signals);
           }
           if (a['tf.opacity']) opacity = animatedValue(a['tf.opacity'], t, signals);
-          return { ...c, params, transform, opacity };
+          // ISF effect params: resolve each item's own anim (instanceKey namespaced per
+          // effect slot so External hold-state doesn't collide with the clip's params).
+          let effects = c.effects;
+          if (isfAnimated(c)) {
+            effects = effects.map((e, i) => (e && e.isf && e.anim && Object.keys(e.anim).length)
+              ? { ...e, params: resolveParams(e.params, e.anim, t, signals, c.id + ':fx' + i) } : e);
+          }
+          return { ...c, params, transform, opacity, effects };
         });
       }
       return (lp === L.params && clips === L.clips) ? L : { ...L, params: lp, clips };
@@ -2934,17 +2957,24 @@ function loopBody(ts) {
     // no point spending CPU drawing thousands of LEDs you can't see.
     if (overlayVisible) preview?.draw(show, lastRGBA, selectedFixtureIds, showGrid ? SNAP_GRID : 0, snapGuides, marqueeRect);
 
-    // Draw composited output to the real screen so there's something visible.
+    // Draw composited output to the real screen. Preview OFF (Pi perf / VNC) skips the
+    // fullscreen textured blit and holds the stage at static black — the whale is
+    // rendered + sampled above regardless, so only the on-screen draw is dropped.
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, canvas.width, canvas.height);
-    gl.clearColor(0, 0, 0, 0);          // transparent so the checkerboard shows through
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.disable(gl.BLEND);
-    gl.useProgram(screenProg);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, compositor.tex);
-    gl.uniform1i(uScreenTex, 0);
-    drawFullscreen(gl);
+    if (previewEnabled) {
+      gl.clearColor(0, 0, 0, 0);          // transparent so the checkerboard shows through
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.disable(gl.BLEND);
+      gl.useProgram(screenProg);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, compositor.tex);
+      gl.uniform1i(uScreenTex, 0);
+      drawFullscreen(gl);
+    } else {
+      gl.clearColor(0, 0, 0, 1);          // static black — nothing for VNC to stream
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
   }
   frames++;
   if (ts - last > 500) {

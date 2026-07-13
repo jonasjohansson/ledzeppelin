@@ -6,6 +6,7 @@ import {
   changeClipGenerator, setClipParam, setClipAnim, mergeClipParams,
   setClipTransform, setClipOpacity, setClipDuration, playheadClip,
   addClipEffect, removeClipEffect, moveClipEffect,
+  addISFEffect, setClipEffectParam, setClipEffectAnim,
   makeLayer, addLayer, removeLayer, moveLayer, patchLayer,
   setLayerParam, addLayerEffect, removeLayerEffect, moveLayerEffect,
   clampCanvasSize, setCanvasSize, CANVAS_MIN, CANVAS_MAX, CANVAS_PRESETS,
@@ -499,6 +500,24 @@ test('mergeClipParams clearAnim drops anims on patched keys only (else keeps the
   s = mergeClipParams(s, lid, cid, { 'displace.amt': 0.2 });
   clip = s.composition.layers[0].clips[0];
   assert.ok(clip.anim['displace.amt']);
+});
+
+test('setClipEffectAnim sets then clears anim on an ISF effect item (name-keyed, params untouched)', () => {
+  let show = deckShow();
+  const lid = show.composition.layers[0].id;
+  const cid = show.composition.layers[0].clips[0].id;
+  const isf = { id: 'blurx', name: 'Blur', params: [{ key: 'radius', type: 'float', min: 0, max: 10, default: 2 }] };
+  show = addISFEffect(show, lid, cid, isf);
+  assert.equal(show.composition.layers[0].clips[0].effects[0].params.radius, 2);   // seeded default
+  const spec = { mode: 'timeline', from: 0, to: 10, durationMs: 1000, direction: 'forward' };
+  show = setClipEffectAnim(show, lid, cid, 0, 'radius', spec);
+  let item = show.composition.layers[0].clips[0].effects[0];
+  assert.deepEqual(item.anim.radius, spec);     // anim lives on the item, keyed by input name
+  assert.equal(item.params.radius, 2);          // static value untouched (render resolves anim over it)
+  show = setClipEffectParam(show, lid, cid, 0, 'radius', 5);   // editing the static value keeps the anim
+  assert.ok(show.composition.layers[0].clips[0].effects[0].anim.radius);
+  show = setClipEffectAnim(show, lid, cid, 0, 'radius', null);  // clear
+  assert.equal(show.composition.layers[0].clips[0].effects[0].anim.radius, undefined);
 });
 
 // --- clip effect chain ---
