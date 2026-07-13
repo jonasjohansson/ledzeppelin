@@ -1125,15 +1125,15 @@ input[type=checkbox]:checked::after {
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
 .anim-cog {
-  flex: 0 0 auto; padding: 0 6px; min-width: 26px; line-height: var(--lh-ctrl); font-size: 15px;
-  color: var(--faint); border-color: var(--line);
+  flex: 0 0 auto; padding: 0 4px; min-width: 20px; line-height: var(--lh-ctrl); font-size: 15px;
+  color: var(--faint); border: none !important; background: none !important;   /* just the glyph, no box */
   opacity: 0; transition: opacity .08s;   /* Resolume-style: hidden until the row is hovered */
 }
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
    modulation is always visible), or on keyboard focus. */
 .anim-param:hover .anim-cog, .anim-cog.on, .anim-cog.audio, .anim-cog:focus-visible { opacity: 1; }
-.anim-cog.on { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
-.anim-cog.audio { color: var(--accent); border-color: var(--line-2); background: var(--hover); }
+.anim-cog.on { color: var(--accent); }
+.anim-cog.audio { color: var(--accent); }
 /* MODE PICKER FLYOUT (#anim-pop): the cog opens a small singleton panel docked
    at the RIGHT EDGE of the left sidebar, vertically aligned with the clicked
    param's row — a flyout sitting beside the sidebar (replaces the in-row slide
@@ -1150,10 +1150,15 @@ input[type=checkbox]:checked::after {
      overflowing the bottom edge — the JS top-clamp pins to top:6 in that case. */
   max-height: calc(100vh - 12px); overflow-y: auto;
 }
-/* Inline variant: the picker renders inside the param row (below it), not as a
-   docked flyout — indented to line up under the param content. */
+/* Inline variant: a compact HORIZONTAL row of mode chips inside the param (below the
+   row), indented to line up under the param content — no panel box, no header. */
 #anim-pop.anim-pop-inline { position: static; z-index: auto; box-shadow: none; width: auto;
-  margin: 3px 0 5px 24px; max-height: none; animation: none; }
+  margin: 1px 0 4px 24px; max-height: none; animation: none;
+  flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 2px;
+  background: none; border: none; padding: 0; }
+#anim-pop.anim-pop-inline .anim-pop-head { display: none; }
+#anim-pop.anim-pop-inline .anim-pop-item { padding: 2px 7px; font-size: var(--fs-micro); border-radius: var(--radius-sm); }
+#anim-pop.anim-pop-inline .anim-pop-item.is-current::after { content: none; }
 @keyframes anim-pop-in { from { opacity: 0; transform: translateX(-6px); } }
 @media (prefers-reduced-motion: reduce) { #anim-pop { animation: none; } }
 /* Header: the param's name, in the quiet caps style of .fx-menu-label. */
@@ -1311,7 +1316,9 @@ input[type=checkbox]:checked::after {
    shared borders); the label gaps before it and the cog sits apart after. */
 /* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
    start at the same x — Duration and modulated params line up identically. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); position: relative; padding-left: 24px; }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 28px; position: relative; padding-left: 24px; }
+/* Controls fill the FULL row height — no top/bottom breath. */
+.ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 28px; }
 .ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* Resolume-style: names left-aligned so they scan down one hard left edge */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
