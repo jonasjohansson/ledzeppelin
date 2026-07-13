@@ -1735,8 +1735,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       const cat = sourceCategory(name);
       const c = el('div', { className: 'src-card', title: labelOf(name), draggable: !!draggable });
       c.style.setProperty('--cat', CATEGORY_COLORS[cat] || 'var(--faint)');
-      const thumb = thumbnails[name];
-      if (thumb) c.append(el('img', { className: 'src-thumb', src: thumb, alt: '', draggable: false }));
       c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: labelOf(name) }));
       c.addEventListener('mouseenter', () => setDesc(name));
       if (onPick) c.addEventListener('click', () => onPick(name));
@@ -1756,7 +1754,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     const videoCard = () => {
       const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
       // A placeholder tile so the card is the same size as the thumbnail cards.
-      v.append(el('div', { className: 'src-thumb src-thumb-add', textContent: '+' }), el('span', { className: 'src-label', textContent: 'video…' }));
+      v.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: 'Video…' }));
       v.addEventListener('click', () => onVideo());
       return v;
     };

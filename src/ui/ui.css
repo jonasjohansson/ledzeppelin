@@ -1318,6 +1318,18 @@ input[type=checkbox]:checked::after {
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
 .ly-row .anim-cog-wrap { order: -1; margin-right: 8px; }   /* modulate cog on the LEFT of the row */
+
+/* --- Control tactility (professional pass): press feedback, clearer selection,
+   accent focus rings, one transition curve. Additive — no layout change. --- */
+button, .ctrl-btn, .fx-add, .seg-2-btn, .ly-step, .dir-btn, .tab, .island-tab {
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+button:active, .ctrl-btn:active, .fx-add:active, .dir-btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,.45); }
+.ly-row .ly-step:active { color: var(--accent); background: var(--panel-2); box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+.seg-2-btn.is-on { box-shadow: inset 0 0 0 1px var(--accent-line), inset 0 1px 0 rgba(0,0,0,.3); }
+button:focus-visible, .ctrl-btn:focus-visible, .seg-2-btn:focus-visible, .ly-step:focus-visible, .dir-btn:focus-visible, select:focus-visible {
+  outline: 1px solid var(--accent-line); outline-offset: 1px;
+}
 /* A param moved off its default reads in a soft accent tint (vs the muted default),
    so changed values stand out at a glance. Focus still wins with the bright accent. */
 .ly-param.is-modified .ly-plabel { color: var(--accent-text); }
@@ -1332,9 +1344,9 @@ input[type=checkbox]:checked::after {
    know to tap it, no hover required); brighter on focus. */
 input.ly-readout {
   font: inherit; box-sizing: border-box; background: var(--field-bg); color: var(--readout);
-  border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: text;
+  border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: ew-resize;
 }
-input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); }
+input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); cursor: text; }
 /* Param-row slider (Resolume style): a chunky dark track with a DIM accent fill
    to --fill, capped by a 2px BRIGHT accent edge line at the value. No round thumb
    — the thumb is a transparent grab strip; the edge line tracks the value exactly. */
@@ -1714,16 +1726,16 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-group-head { display: flex; align-items: center; gap: 6px; padding: 8px 2px 5px;
   font: var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; color: var(--faint); }
 .src-group-head::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--faint)); flex: none; }
-.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; align-content: start; }
-.src-card { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 4px; cursor: grab;
-  background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.src-card:hover { border-color: var(--cat, var(--accent)); }
+/* Sources are a NAME LIST (no thumbnail wall) — grouped rows, one hard left edge. */
+.src-grid { display: flex; flex-direction: column; gap: 0; align-content: start; }
+.src-card { position: relative; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 3px 8px; cursor: grab; border: 1px solid transparent; }
+.src-card:hover { background: var(--hover); }
 .src-card:active { cursor: grabbing; }
 .src-thumb { width: 100%; height: 46px; object-fit: cover; display: block; background: #000; }
-/* + video tile: a placeholder the same size as a thumbnail, with a centred +. */
 .src-thumb-add { display: flex; align-items: center; justify-content: center; color: var(--faint); font: 20px/1 var(--mono); background: var(--panel-2); }
-.src-dot { position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--cat, var(--faint)); }
-.src-label { font: var(--fs-micro) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-dot { position: static; width: 5px; height: 5px; border-radius: 50%; background: var(--cat, var(--faint)); flex: none; opacity: .6; }
+.src-label { font: var(--fs-ctrl) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-card:hover .src-label { color: var(--text); }
 /* Source + effect NAMES read as uppercase (mono/OCR aesthetic) — browser cards,
    picker items, clip label bar, and the effect-chain rows. */
 /* Content names read in Title Case (labelOf already title-cases) — caps is reserved

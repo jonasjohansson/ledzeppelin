@@ -93,6 +93,30 @@ export function Slider(label, value, opts = {}) {
   out.addEventListener('change', updateDirty);
   row.addEventListener('contextmenu', updateDirty);
   updateDirty();
+
+  // Drag-to-scrub the readout number (Notch/Ableton/Resolume feel): press and drag
+  // horizontally to change the value; a plain click (no drag) still focuses it to type.
+  // 1px ≈ one nudge tick; hold Shift for fine (×0.1).
+  let scrub = null;
+  out.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    scrub = { x: e.clientX, v0: Number(range.value), moved: false, id: e.pointerId };
+  });
+  out.addEventListener('pointermove', (e) => {
+    if (!scrub) return;
+    const dx = e.clientX - scrub.x;
+    if (!scrub.moved) { if (Math.abs(dx) < 3) return; scrub.moved = true; out.blur(); document.body.style.cursor = 'ew-resize'; try { out.setPointerCapture(scrub.id); } catch { /* */ } }
+    const v = clamp(scrub.v0 + dx * (shiftDown ? tick * 0.1 : tick));
+    range.value = String(v); out.value = fmt(v); paint(); if (commit === 'live') onInput(v); updateDirty();
+  });
+  const endScrub = (e) => {
+    if (!scrub) return;
+    const moved = scrub.moved; try { out.releasePointerCapture(scrub.id); } catch { /* */ }
+    document.body.style.cursor = ''; scrub = null;
+    if (moved) { e.preventDefault(); if (commit === 'release') onInput(Number(range.value)); }
+  };
+  out.addEventListener('pointerup', endScrub);
+  out.addEventListener('pointercancel', endScrub);
   // SELECT a parameter by clicking its label/empty area (focuses the row); then
   // ← / ↓ nudge down and → / ↑ nudge up by the tick. Clicks on the readout or the
   // slider keep their own native arrow behaviour (caret / drag), so only handle
