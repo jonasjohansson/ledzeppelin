@@ -1,0 +1,310 @@
+{
+ "version": 1,
+ "deviceTypes": [
+  {
+   "id": "diguno",
+   "name": "DigUno",
+   "outputs": 2,
+   "maxPerOutput": 830
+  },
+  {
+   "id": "digquad",
+   "name": "DigQuad",
+   "outputs": 4,
+   "maxPerOutput": 830
+  },
+  {
+   "id": "digocta",
+   "name": "DigOcta",
+   "outputs": 8,
+   "maxPerOutput": 830
+  },
+  {
+   "id": "generic",
+   "name": "Generic",
+   "outputs": 4,
+   "maxPerOutput": 830
+  }
+ ],
+ "devices": [
+  {
+   "id": "brainA",
+   "name": "DigQuad (A)",
+   "ip": "",
+   "port": 4048,
+   "colorOrder": "GRB",
+   "color": "#e09a4a",
+   "typeId": "digquad",
+   "outputs": 4,
+   "maxPerOutput": 830,
+   "protocol": "ddp",
+   "universe": 0,
+   "artnetSync": false,
+   "syncDelayMs": 0
+  },
+  {
+   "id": "brainB",
+   "name": "DigQuad (B)",
+   "ip": "",
+   "port": 4048,
+   "colorOrder": "GRB",
+   "color": "#d96a56",
+   "typeId": "digquad",
+   "outputs": 4,
+   "maxPerOutput": 830,
+   "protocol": "ddp",
+   "universe": 0,
+   "artnetSync": false,
+   "syncDelayMs": 0
+  }
+ ],
+ "fixtureTypes": [
+  {
+   "id": "kf_st-ws2815-30-10m",
+   "name": "WS2815 10m",
+   "ledsPerMeter": 60,
+   "meters": 5,
+   "pixelCount": 300,
+   "colorOrder": "GRB",
+   "cols": 300,
+   "rows": 1,
+   "distribution": 0,
+   "colorFormat": "",
+   "params": []
+  },
+  {
+   "id": "kf_st-ws2815-30-8m",
+   "name": "WS2815 8m",
+   "ledsPerMeter": 60,
+   "meters": 4,
+   "pixelCount": 240,
+   "colorOrder": "GRB",
+   "cols": 240,
+   "rows": 1,
+   "distribution": 0,
+   "colorFormat": "",
+   "params": []
+  },
+  {
+   "id": "generic",
+   "name": "Generic",
+   "ledsPerMeter": 60,
+   "meters": 1,
+   "pixelCount": 60,
+   "colorOrder": "GRB",
+   "cols": 60,
+   "rows": 1,
+   "distribution": 0
+  }
+ ],
+ "fixtures": [
+  {
+   "id": "sA-1",
+   "name": "sA-1",
+   "typeId": "kf_st-ws2815-30-10m",
+   "pixelCount": 300,
+   "colorOrder": "GRB",
+   "output": {
+    "deviceId": "brainA",
+    "port": 1,
+    "pixelCount": 300,
+    "pixelOffset": 0
+   },
+   "input": {
+    "mode": "bar",
+    "transform": {
+     "x": 344.74941451990634,
+     "y": 24.999219359875102,
+     "w": 639.5003903200624,
+     "h": 8,
+     "rotation": 0
+    },
+    "points": [
+     [
+      0.018824713373399967,
+      0.018824713373399925
+     ],
+     [
+      0.5003762121083867,
+      0.018824713373399925
+     ]
+    ],
+    "samples": 300
+   },
+   "ledsPerMeter": 60,
+   "meters": 5,
+   "cols": 300,
+   "rows": 1,
+   "distribution": 0,
+   "colorFormat": ""
+  },
+  {
+   "id": "sA-2",
+   "name": "sA-2",
+   "typeId": "kf_st-ws2815-30-8m",
+   "pixelCount": 240,
+   "colorOrder": "GRB",
+   "output": {
+    "deviceId": "brainA",
+    "port": 1,
+    "pixelCount": 240,
+    "pixelOffset": 300
+   },
+   "input": {
+    "mode": "bar",
+    "transform": {
+     "x": 984.2498048399688,
+     "y": 24.999219359875102,
+     "w": 639.5003903200625,
+     "h": 8,
+     "rotation": 0
+    },
+    "points": [
+     [
+      0.5003762121083867,
+      0.018824713373399925
+     ],
+     [
+      0.9819277108433735,
+      0.018824713373399925
+     ]
+    ],
+    "samples": 240
+   },
+   "ledsPerMeter": 60,
+   "meters": 4,
+   "cols": 240,
+   "rows": 1,
+   "distribution": 0,
+   "colorFormat": ""
+  },
+  {
+   "id": "sB-1",
+   "name": "sB-1",
+   "typeId": "kf_st-ws2815-30-10m",
+   "pixelCount": 300,
+   "colorOrder": "GRB",
+   "output": {
+    "deviceId": "brainB",
+    "port": 1,
+    "pixelCount": 300,
+    "pixelOffset": 0
+   },
+   "input": {
+    "mode": "bar",
+    "transform": {
+     "x": 24.999219359875102,
+     "y": 984.2498048399688,
+     "w": 639.5003903200625,
+     "h": 8,
+     "rotation": 90
+    },
+    "points": [
+     [
+      0.01882471337339991,
+      0.5003762121083867
+     ],
+     [
+      0.018824713373399943,
+      0.9819277108433735
+     ]
+    ],
+    "samples": 300
+   },
+   "ledsPerMeter": 60,
+   "meters": 5,
+   "cols": 300,
+   "rows": 1,
+   "distribution": 0,
+   "colorFormat": ""
+  }
+ ],
+ "composition": {
+  "canvas": {
+   "w": 1328,
+   "h": 1328
+  },
+  "layers": [
+   {
+    "id": "kl1",
+    "name": "Layer 1",
+    "blend": "alpha",
+    "opacity": 1,
+    "clips": [
+     {
+      "id": "kc1",
+      "name": "Color Waves",
+      "generator": "colorwaves",
+      "params": {
+       "colorwaves.speed": 0.5,
+       "colorwaves.hueSpread": 2,
+       "colorwaves.depth": 0.6,
+       "colorwaves.sat": 1
+      },
+      "effects": [],
+      "transform": {
+       "x": 0,
+       "y": 0,
+       "scale": 1,
+       "rotation": 0
+      },
+      "opacity": 1,
+      "durationMs": 4000
+     }
+    ],
+    "activeClipId": "kc1",
+    "effects": [],
+    "params": {},
+    "transitionMs": 500
+   }
+  ],
+  "bpm": 120,
+  "dashboard": {
+   "links": [
+    {
+     "id": "d1",
+     "name": "Link 1",
+     "value": 0
+    },
+    {
+     "id": "d2",
+     "name": "Link 2",
+     "value": 0
+    },
+    {
+     "id": "d3",
+     "name": "Link 3",
+     "value": 0
+    },
+    {
+     "id": "d4",
+     "name": "Link 4",
+     "value": 0
+    },
+    {
+     "id": "d5",
+     "name": "Link 5",
+     "value": 0
+    },
+    {
+     "id": "d6",
+     "name": "Link 6",
+     "value": 0
+    },
+    {
+     "id": "d7",
+     "name": "Link 7",
+     "value": 0
+    },
+    {
+     "id": "d8",
+     "name": "Link 8",
+     "value": 0
+    }
+   ]
+  },
+  "blendV2": true,
+  "opacityV2": true,
+  "title": "Kagora Sample"
+ }
+}

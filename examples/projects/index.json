@@ -1,3 +1,4 @@
 [
-  { "name": "Balena Voladora", "file": "balena-voladora.json", "note": "2× DigOcta (.110/.120) · Tail + 12 ribs + spline + 2 fins · SK6812 RGBW (GRBW) 60/m" }
+  { "name": "Balena Voladora", "file": "balena-voladora.json", "note": "2× DigOcta (.110/.120) · Tail + 12 ribs + spline + 2 fins · SK6812 RGBW (GRBW) 60/m" },
+  { "name": "Kagora Sample", "file": "kagora.json", "note": "2× DigQuad · 3× WS2815 strips (GRB) · imported from a Kagora wiring preset" }
 ]
