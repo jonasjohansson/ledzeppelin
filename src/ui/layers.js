@@ -289,18 +289,19 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
   // Compact one-line items; what each mode does lives on the HOVER title — a
   // visible description per row made this little picker read like a manual.
   const item = (mode, lbl, desc) => {
-    const btn = el('button', {
+    const kids = [];
+    if (MODE_ICONS[mode]) { const ic = el('span', { className: 'anim-pop-ic' }); ic.innerHTML = MODE_ICONS[mode]; kids.push(ic); }
+    kids.push(el('span', { className: 'anim-pop-lbl', textContent: lbl }));
+    return el('button', {
       type: 'button',
-      className: 'anim-pop-item anim-mode-ic' + (mode === cur ? ' is-current' : ''),
+      className: 'anim-pop-item' + (mode === cur ? ' is-current' : ''),
       title: lbl + ' — ' + desc,
       onclick: (e) => { e.stopPropagation(); closeAnimPop(); onPick(mode); },
-    });
-    if (MODE_ICONS[mode]) btn.innerHTML = MODE_ICONS[mode]; else btn.textContent = lbl;
-    return btn;
+    }, kids);
   };
   const open = () => {
     closeAnimPop();                           // singleton — opening elsewhere moves it
-    const pop = el('div', { id: 'anim-pop', className: 'anim-pop-inline' }, [
+    const pop = el('div', { id: 'anim-pop' }, [
       el('div', { className: 'anim-pop-head', textContent: label || 'Modulation' }),
       item('basic', 'Basic', 'hold a value, or sweep between two'),
       item('timeline', 'Timeline', 'keyframes across the clip’s duration'),
@@ -314,20 +315,26 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
     // params that have a canonical address — i.e. everything routable.)
     if (oscAddress) {
       const on = remoteHook.has(oscAddress);
-      const ctrl = el('button', {
+      pop.append(el('button', {
         type: 'button',
-        className: 'anim-pop-item anim-mode-ic anim-mode-ctrl' + (on ? ' is-on' : ''),
-        title: 'Control — show this parameter on the phone remote',
+        className: 'anim-pop-item anim-pop-tick' + (on ? ' is-on' : ''),
+        title: 'show this parameter on the Control surface',
         onclick: (e) => { e.stopPropagation(); closeAnimPop(); remoteHook.toggle(oscAddress); },
-      });
-      ctrl.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-remote"/></svg>';
-      pop.append(ctrl);
+      }, [el('span', { className: 'fx-tick-box' }), el('span', { className: 'anim-pop-lbl', textContent: 'Control' })]));
     }
-    // IN-ROW: the row's controls slide out (.is-picking hides them) and the mode icons
-    // take their place on the same row. Append into the .ly-row itself.
-    const rowEl = wrap.closest('.ly-row');
-    (rowEl || wrap.closest('.anim-param') || wrap.parentElement).appendChild(pop);
-    if (rowEl) { rowEl.classList.add('is-picking'); animPopRow = rowEl; }
+    // POSITION: docked at the LEFT sidebar's right edge, level with the clicked row —
+    // a flyout that sits BESIDE the sidebar. Rows outside #dock-left (a popout / other
+    // column) fall back to the kit's anchored-at-the-cog placement.
+    const row = wrap.closest('.ly-param') || wrap.parentElement || wrap;
+    const dock = document.getElementById('dock-left');
+    document.body.append(pop);                // attach first so offsetWidth/Height measure
+    if (dock && dock.contains(row)) {
+      const d = dock.getBoundingClientRect(), r = row.getBoundingClientRect();
+      pop.style.left = Math.max(6, Math.min(d.right + 6, window.innerWidth - 6 - pop.offsetWidth)) + 'px';
+      pop.style.top = Math.max(6, Math.min(r.top, window.innerHeight - 6 - pop.offsetHeight)) + 'px';
+    } else {
+      placePopover(pop, wrap);
+    }
     animPopEl = pop; animPopOwner = wrap;
     // The cog is OUTSIDE the body-appended panel — exempt it from the outside-
     // click dismiss so its own click reaches the toggle (close) handler below.
