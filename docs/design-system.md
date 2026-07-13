@@ -1,9 +1,10 @@
 # LED Zeppelin — Design System
 
 The one reference for keeping the UI consistent. Synthesized from a 4-lens audit
-(spacing, typography, color, components). **Identity:** near-black warm chrome,
-monospace, hairline dividers, square corners, ONE desaturated amber-gold accent,
-Resolume-dense. `src/ui/palette.js` + `src/ui/ui.css :root` are the token source.
+(spacing, typography, color, components). **Identity:** Resolume profile — neutral
+medium-dark gray chrome, monospace, hairline dividers, square corners, ONE
+teal-mint accent (`#3ecfa6`), Resolume-dense. `src/ui/palette.js` + `src/ui/ui.css
+:root` are the token source.
 
 ## Tokens — never write a raw value that a token covers
 
@@ -27,9 +28,9 @@ Scale (× `--ui-scale`): `--fs-micro:10` (eyebrows/captions/badges) · `--fs-bod
 
 `palette.js` is the runtime source of truth (writes inline vars on `<html>`); the `ui.css :root` block is the FOUC/JS-fail fallback and MUST be kept regenerated from `themeVars({accent:'#d4a24a'})` so static == runtime.
 
-Surfaces (dark, ascending): `--bg → --field-bg → --panel → --panel-2 → --hover → --line → --line-2`. Text (neutral, de-blued): `--text → --readout → --muted → --faint`. Accent: ONE `#d4a24a`; variants `--accent-soft` (selected tint), `--accent-line` (selected border), `--accent-text` (text on tint), `--accent-dark` (glyph on a bright accent fill).
+Surfaces (neutral gray, ascending): `--bg → --field-bg → --panel → --panel-2 → --hover → --line → --line-2` (no accent tint on chrome — surfaces stay true neutral). Text (neutral): `--text → --readout → --muted → --faint`. Accent: ONE teal-mint `#3ecfa6`; variants `--accent-soft` (selected tint), `--accent-line` (selected border), `--accent-text` (text on tint), `--accent-dark` (glyph on a bright accent fill), `--accent-head` (muted-teal group-header bar).
 
-**Accent law:** accent is a line / edge / glyph / thin tint / small fill. Never a big solid fill on panels, headers, rows or wide areas — solid `var(--accent)` only on small name chips + the checkbox tick.
+**Accent law:** accent is a line / edge / glyph / thin tint / small fill. Never a big solid fill on panels, rows or wide areas — solid `var(--accent)` only on small name chips + the checkbox tick. **Exception (Resolume):** inspector param-group headers ARE a filled muted-teal bar (`--accent-head`) — a deliberate group divider, the one sanctioned filled header.
 
 **One rule per state:** hover → accent glyph/text OR `--hover` fill (not both) · selected-fill → `--accent-soft` + `--accent-line` + `--accent-text` · selected-text (tabs/modes) → `--accent` · modified → `--accent-text` · focus → `--accent-line` (interactive) / `--line-2` (passive input) · disabled → `opacity:.35`. Semantic set is closed: `--danger` (error/destructive/panic), `--success` (online/live). Route panic/warn through tokens, never raw hex.
 
