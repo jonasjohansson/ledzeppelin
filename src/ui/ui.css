@@ -121,7 +121,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .tab {
   display: inline-flex; align-items: center;
   background: transparent; color: var(--muted); border: none; border-bottom: 2px solid transparent;
-  padding: 0 var(--s5); font: var(--fw-med) var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase;
+  padding: var(--s5) var(--s5); font: var(--fw-med) var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase;
   cursor: pointer;
 }
 .tab:hover { color: var(--text); }
@@ -1343,17 +1343,17 @@ input[type=checkbox]:checked::after {
 .ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 30px; position: relative; padding-left: var(--col-gutter); }
 /* Controls fill the FULL row height — no top/bottom breath. */
 .ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 30px; }
-.ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* fixed label column, left-aligned, flush with the group title → value + slider columns stay consistent */
+.ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: right; }   /* Resolume-style: names right-aligned, hugging the value column */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
 .ly-row .ly-step {
-  order: 2; flex: 0 0 auto; width: 20px; height: var(--ctrl-h); padding: 0;
+  order: 2; flex: 0 0 auto; width: 22px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center; line-height: 1;
-  background: var(--field-bg); color: var(--muted); border: 1px solid var(--line);
-  border-radius: 0; font-size: var(--fs-ctrl); cursor: pointer;
+  background: none; color: var(--muted); border: none;   /* plain +/- glyphs, no box (Resolume) */
+  font-size: var(--fs-glyph); cursor: pointer;
 }
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
-.ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
+.ly-row .ly-step:hover { color: var(--accent); }
 /* Cog sits in the ~14px left gutter (the section-triangle position) — absolute so it
    never shifts the label; appears next to the name on row hover. */
 .ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: var(--col-gutter); display: flex; align-items: center; justify-content: center; margin: 0; }
@@ -1364,7 +1364,7 @@ button, .ctrl-btn, .fx-add, .seg-2-btn, .ly-step, .dir-btn, .tab, .island-tab {
   transition: color 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 button:active, .ctrl-btn:active, .fx-add:active, .dir-btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,.45); }
-.ly-row .ly-step:active { color: var(--accent); background: var(--panel-2); box-shadow: inset 0 1px 2px rgba(0,0,0,.5); }
+.ly-row .ly-step:active { color: var(--accent); }
 .seg-2-btn.is-on { box-shadow: inset 0 0 0 1px var(--accent-line), inset 0 1px 0 rgba(0,0,0,.3); }
 button:focus-visible, .ctrl-btn:focus-visible, .seg-2-btn:focus-visible, .ly-step:focus-visible, .dir-btn:focus-visible, select:focus-visible {
   outline: 1px solid var(--accent-line); outline-offset: 1px;
@@ -1382,10 +1382,11 @@ button:focus-visible, .ctrl-btn:focus-visible, .seg-2-btn:focus-visible, .ly-ste
 /* Always reads as an editable field (touch-first — a faint recessed fill so you
    know to tap it, no hover required); brighter on focus. */
 input.ly-readout {
-  font: inherit; box-sizing: border-box; background: var(--field-bg); color: var(--readout);
-  border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 3px; margin: 0; cursor: ew-resize;
+  font: inherit; box-sizing: border-box; background: transparent; color: var(--readout);
+  border: 1px solid transparent; border-radius: var(--radius-sm); padding: 0 8px; margin: 0; cursor: ew-resize;
 }
-input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(--text); cursor: text; }
+input.ly-readout:hover { background: color-mix(in srgb, var(--field-bg) 55%, transparent); }
+input.ly-readout:focus { outline: none; background: var(--field-bg); border-color: var(--line-2); color: var(--text); cursor: text; }   /* the box appears only on click/focus */
 /* Param-row slider (Resolume style): a chunky dark track with a DIM accent fill
    to --fill, capped by a 2px BRIGHT accent edge line at the value. No round thumb
    — the thumb is a transparent grab strip; the edge line tracks the value exactly. */
@@ -1394,8 +1395,8 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
    edge-to-edge with no thumb inset — the dim fill is flush to the left. */
 .ly-row input[type=range] {
   order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
-  -webkit-appearance: none; appearance: none; height: var(--ctrl-h); cursor: pointer; box-sizing: border-box;
-  border: 1px solid var(--line); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;   /* joins the + (shared border) */
+  -webkit-appearance: none; appearance: none; cursor: pointer; box-sizing: border-box;   /* height from the shared 30px row rule */
+  border: 1px solid var(--line); border-radius: var(--radius-sm);   /* own box (steppers are borderless now) */
   /* Full-height fill to the value (dim accent) capped by a 2px bright accent edge. */
   background: linear-gradient(to right,
     color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
