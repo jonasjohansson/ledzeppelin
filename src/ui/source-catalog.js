@@ -9,7 +9,9 @@ export const is3D = (name) => !!getEntry(name)?.volumetric;
 
 export const CATEGORY_TABS = ['2D', '3D', 'Shaders'];
 // Muted per-tab hues — a small card dot + a 2px active-tab underline, never a filled tab.
-export const CATEGORY_COLORS = { '2D': '#5cb8e8', '3D': '#b98cff', Shaders: '#e8a35c' };
+// Desaturated, coordinated category marks (was saturated blue/purple/orange — a
+// per-taxonomy rainbow reads amateur). Subtle slate · mauve · amber.
+export const CATEGORY_COLORS = { '2D': '#7d8a99', '3D': '#9a8aa0', Shaders: '#b89a5e' };
 
 // The tab a generator belongs to ('2D' or '3D'; ISF/'Shaders' is handled by the browser).
 export function sourceCategory(name) { return is3D(name) ? '3D' : '2D'; }

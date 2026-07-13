@@ -28,7 +28,7 @@ function flipL(hex) {
 // luminance-inverted. field-bg is nudged toward the ramp extreme in light so inputs
 // stay the brightest surface (raised), matching the light convention of white fields.
 const SURFACES = [
-  ['--bg',       '#0b0b0d', 0.03, 0],
+  ['--bg',       '#121213', 0.03, 0],   // off pure black (less glare), neutral temperature
   ['--field-bg', '#121214', 0.03, 0.5],   // 4th = light-only extra lift toward white
   ['--panel',    '#17171a', 0.04, 0],
   ['--panel-2',  '#1e1e22', 0.05, 0],
@@ -38,7 +38,9 @@ const SURFACES = [
 ];
 // Text anchors (dark). Light mirrors them luminance-inverted; contrast mixes toward
 // the surface extreme (black in dark, white in light) in the same slider direction.
-const TEXT = [['--text', '#f4f5f7'], ['--muted', '#a3aab4'], ['--faint', '#737a84'], ['--readout', '#d7dbe0']];
+// Neutral ramp (was blue-gray, fighting the warm accent): equalized RGB, --text
+// eased off pure white to soften the near-black/pure-white glare.
+const TEXT = [['--text', '#eaeaec'], ['--muted', '#a0a0a5'], ['--faint', '#757579'], ['--readout', '#d3d3d7']];
 
 // Compute the full chrome var map for the given accent + theme + slider values.
 export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, contrast = 130 } = {}) {
