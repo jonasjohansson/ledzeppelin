@@ -492,15 +492,15 @@ body.hide-toolbar-labels #topbar .g-label { display: none; }   /* Settings › T
 /* Timeline floats BOTTOM-LEFT over the canvas, sized to its content (mirrors the device
    group top-right). Translucent so the output shows through. */
 #timeline-island {
-  position: absolute; left: var(--dock-gap); bottom: var(--dock-gap); z-index: 50;
-  width: auto; max-width: calc(100% - 2 * var(--dock-gap)); max-height: 60%;
+  position: absolute; left: var(--dock-gap); right: var(--dock-gap); bottom: var(--dock-gap); z-index: 50;
+  max-height: 60%;   /* full width between the sidebars (was content-width, bottom-left) */
   background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line-2); border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0,0,0,.5);
 }
 #timeline-island .island-body { flex: 0 0 auto; overflow: auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
-#timeline-island #deckbar { flex: 0 0 auto; width: auto; }
+#timeline-island #deckbar { flex: 1 1 auto; width: 100%; }
 /* Canvas-island tab panes (Settings / Mapping / Control) fill below the tab row and
    scroll on their own; the Canvas tab body is #stagewrap. */
 #mapping-pane, #control-pane { flex: 1 1 0; min-height: 0; }
