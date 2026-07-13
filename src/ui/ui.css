@@ -430,6 +430,7 @@ body.is-locked #dock-left, body.is-locked #dock-right, body.is-locked #timeline-
    the title tooltip still carries the full description. */
 .g-label { font-size: var(--fs-micro); line-height: 1; letter-spacing: .02em; text-transform: uppercase;
   color: var(--faint); white-space: nowrap; pointer-events: none; }
+body.hide-toolbar-labels #topbar .g-label { display: none; }   /* Settings › Toolbar labels (off by default) */
 .g-icon:hover .g-label { color: inherit; }
 .g-icon.on .g-label, .g-icon.open .g-label { color: inherit; }
 .g-icon:hover { color: var(--accent-text); }

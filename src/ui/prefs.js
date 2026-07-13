@@ -88,6 +88,12 @@ export function initPrefs({ preview, redrawOverlay }) {
     e.preventDefault();
   });
 
+  // --- Toolbar (footer) labels: OFF by default (icons only); Settings toggles them.
+  const getToolbarLabels = () => { try { return localStorage.getItem('lz.tbl') === '1'; } catch { return false; } };
+  const applyToolbarLabels = () => document.body.classList.toggle('hide-toolbar-labels', !getToolbarLabels());
+  const setToolbarLabels = (on) => { try { localStorage.setItem('lz.tbl', on ? '1' : '0'); } catch { /* private */ } applyToolbarLabels(); };
+  applyToolbarLabels();   // reflect on boot (default: hidden)
+
   // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
   const ACCENT_KEY = 'lz.accent';
   const ACCENT_DEFAULT = '#d4a24a';   // desaturated amber-gold (off the bootstrap 30°/73% orange)
@@ -194,5 +200,6 @@ export function initPrefs({ preview, redrawOverlay }) {
     getTheme: savedTheme, setTheme,
     setUiScale, savedScale, setTranslucency, savedTranslucency,
     applyTips, setNativeCtxMenu,
+    getToolbarLabels, setToolbarLabels, applyToolbarLabels,
   };
 }

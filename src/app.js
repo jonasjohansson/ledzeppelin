@@ -2723,6 +2723,7 @@ if (setBus) {
 
     // Tooltips + native context menu (both idempotent appliers).
     prefs.applyTips();
+    prefs.applyToolbarLabels();
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
     // Appearance: re-apply every CSS-var applier from the (just-written) keys.
     document.documentElement.dataset.theme = prefs.getTheme();   // Dark|Light chrome marker

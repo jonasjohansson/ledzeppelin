@@ -113,6 +113,8 @@ const panel = createSettingsPanel({
   prefs: {
     getTips: () => flag('lz.tips'),
     setTips: (on) => { put('lz.tips', on ? '1' : '0'); post(); },
+    getToolbarLabels: () => { try { return localStorage.getItem('lz.tbl') === '1'; } catch { return false; } },
+    setToolbarLabels: (on) => { put('lz.tbl', on ? '1' : '0'); post(); },
     getNativeCtx: () => flag('lz.ctxmenu'),
     setNativeCtx: (on) => { put('lz.ctxmenu', on ? '1' : '0'); post(); },
   },

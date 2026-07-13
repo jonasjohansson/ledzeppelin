@@ -120,6 +120,7 @@ export function createSettingsPanel(hooks) {
     mount.append(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } }));
     mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
     mount.append(toggleRow('Show tooltips on hover', prefs.getTips, (v) => prefs.setTips(v)));
+    mount.append(toggleRow('Toolbar labels (footer text)', prefs.getToolbarLabels, (v) => prefs.setToolbarLabels(v)));
     mount.append(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v)));
 
     // --- Appearance: theme / brightness / accent tint / contrast / text size (all live). ---
