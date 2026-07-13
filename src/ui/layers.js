@@ -262,12 +262,21 @@ function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, osc
 // #dock-left (a popout or another column) the panel anchors at the cog instead
 // (standard kit placement). Picking closes the panel and calls onPick — the
 // commit that follows re-renders the panel's rows into the chosen state.
-let animPopEl = null, animPopDismiss = null, animPopOwner = null;
+let animPopEl = null, animPopDismiss = null, animPopOwner = null, animPopRow = null;
 function closeAnimPop() {
   if (animPopDismiss) { animPopDismiss(); animPopDismiss = null; }
   if (animPopEl) { animPopEl.remove(); animPopEl = null; }
+  if (animPopRow) { animPopRow.classList.remove('is-picking'); animPopRow = null; }   // controls slide back in
   animPopOwner = null;
 }
+// Compact glyph icons for each modulation mode — so the picker fits inline in the row.
+const MODE_ICONS = {
+  basic: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8h12"/><circle cx="10" cy="8" r="2.2" fill="currentColor" stroke="none"/></svg>',
+  timeline: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M1 8c1.6-5 3.2-5 4.8 0S9.6 13 11 8s2-3 3 0"/></svg>',
+  dashboard: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.2"/><path d="M8 8V3.6" stroke-linecap="round"/></svg>',
+  'audio-external': '<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 6v4M6 3v10M10 5.5v5M14 7v2"/></svg>',
+  'audio-composition': '<svg viewBox="0 0 16 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 7.5v1M6 4v8M10 6v4M14 3v10"/></svg>',
+};
 function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource, onPick, oscAddress, label }) {
   const wrap = el('div', { className: 'anim-cog-wrap' });
   const cur = !animated ? 'basic'
@@ -276,12 +285,16 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
     : isExternal ? 'external' : 'timeline';
   // Compact one-line items; what each mode does lives on the HOVER title — a
   // visible description per row made this little picker read like a manual.
-  const item = (mode, lbl, desc) => el('button', {
-    type: 'button',
-    className: 'anim-pop-item' + (mode === cur ? ' is-current' : ''),
-    textContent: lbl, title: desc,
-    onclick: (e) => { e.stopPropagation(); closeAnimPop(); onPick(mode); },
-  });
+  const item = (mode, lbl, desc) => {
+    const btn = el('button', {
+      type: 'button',
+      className: 'anim-pop-item anim-mode-ic' + (mode === cur ? ' is-current' : ''),
+      title: lbl + ' — ' + desc,
+      onclick: (e) => { e.stopPropagation(); closeAnimPop(); onPick(mode); },
+    });
+    if (MODE_ICONS[mode]) btn.innerHTML = MODE_ICONS[mode]; else btn.textContent = lbl;
+    return btn;
+  };
   const open = () => {
     closeAnimPop();                           // singleton — opening elsewhere moves it
     const pop = el('div', { id: 'anim-pop', className: 'anim-pop-inline' }, [
@@ -298,17 +311,20 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
     // params that have a canonical address — i.e. everything routable.)
     if (oscAddress) {
       const on = remoteHook.has(oscAddress);
-      pop.append(el('button', {
+      const ctrl = el('button', {
         type: 'button',
-        className: 'anim-pop-item anim-pop-tick' + (on ? ' is-on' : ''),
-        title: 'show this parameter on the Control surface',
+        className: 'anim-pop-item anim-mode-ic anim-mode-ctrl' + (on ? ' is-on' : ''),
+        title: 'Control — show this parameter on the phone remote',
         onclick: (e) => { e.stopPropagation(); closeAnimPop(); remoteHook.toggle(oscAddress); },
-      }, [el('span', { className: 'fx-tick-box' }), 'Control']));
+      });
+      ctrl.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-remote"/></svg>';
+      pop.append(ctrl);
     }
-    // INLINE: render the mode picker in the PARAM container (below the row) so the
-    // options appear in place, not as a flyout docked beside the sidebar. (Append to
-    // .anim-param, NOT the cog wrapper — the cog wrapper is absolutely positioned.)
-    (wrap.closest('.anim-param') || wrap.parentElement || wrap).appendChild(pop);
+    // IN-ROW: the row's controls slide out (.is-picking hides them) and the mode icons
+    // take their place on the same row. Append into the .ly-row itself.
+    const rowEl = wrap.closest('.ly-row');
+    (rowEl || wrap.closest('.anim-param') || wrap.parentElement).appendChild(pop);
+    if (rowEl) { rowEl.classList.add('is-picking'); animPopRow = rowEl; }
     animPopEl = pop; animPopOwner = wrap;
     // The cog is OUTSIDE the body-appended panel — exempt it from the outside-
     // click dismiss so its own click reaches the toggle (close) handler below.

@@ -1151,15 +1151,20 @@ input[type=checkbox]:checked::after {
      overflowing the bottom edge — the JS top-clamp pins to top:6 in that case. */
   max-height: calc(100vh - 12px); overflow-y: auto;
 }
-/* Inline variant: a compact HORIZONTAL row of mode chips inside the param (below the
-   row), indented to line up under the param content — no panel box, no header. */
-#anim-pop.anim-pop-inline { position: static; z-index: auto; box-shadow: none; width: auto;
-  margin: 1px 0 4px 24px; max-height: none; animation: none;
-  flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0 2px;
+/* IN-ROW mode picker: clicking the cog slides the row's controls out and puts a
+   compact row of mode ICONS in their place, on the same row. */
+.ly-row.is-picking > input.ly-readout, .ly-row.is-picking > .ly-step, .ly-row.is-picking > input[type=range] { display: none; }
+#anim-pop.anim-pop-inline { position: static; z-index: auto; box-shadow: none; margin: 0; max-height: none; animation: none;
+  flex: 1 1 auto; flex-direction: row; flex-wrap: nowrap; align-items: stretch; justify-content: flex-end; gap: 1px;
   background: none; border: none; padding: 0; }
 #anim-pop.anim-pop-inline .anim-pop-head { display: none; }
-#anim-pop.anim-pop-inline .anim-pop-item { padding: 2px 7px; font-size: var(--fs-micro); border-radius: var(--radius-sm); }
 #anim-pop.anim-pop-inline .anim-pop-item.is-current::after { content: none; }
+.anim-mode-ic { display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; min-width: 26px;
+  color: var(--muted); border: none !important; background: none; border-radius: 0; cursor: pointer; }
+.anim-mode-ic:hover { color: var(--text); background: var(--hover); }
+.anim-mode-ic.is-current, .anim-mode-ic.is-on { color: var(--accent); }
+.anim-mode-ic svg { width: 16px; height: 16px; display: block; }
+.anim-mode-ctrl svg { fill: currentColor; }
 @keyframes anim-pop-in { from { opacity: 0; transform: translateX(-6px); } }
 @media (prefers-reduced-motion: reduce) { #anim-pop { animation: none; } }
 /* Header: the param's name, in the quiet caps style of .fx-menu-label. */
