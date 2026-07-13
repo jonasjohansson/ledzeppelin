@@ -47,6 +47,25 @@ import { createVideoRuntime } from './ui/video.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
+// --- Two-screen shell: the app (topbar + dock) is SCREEN 1 (100vh); scrolling down
+// reveals SCREEN 2 (100vh) with Settings / Mapping / Library embedded as iframes —
+// replaces the separate popup windows. The iframes are the same self-contained apps
+// (settings/ · mappings/ · inventory/) that already sync via BroadcastChannel. ---
+(() => {
+  const topbar = document.getElementById('topbar');
+  const dock = document.getElementById('dock');
+  if (!topbar || !dock || document.getElementById('screen-app')) return;
+  const screenApp = document.createElement('div'); screenApp.id = 'screen-app';
+  topbar.parentNode.insertBefore(screenApp, topbar);
+  screenApp.append(topbar, dock);
+  const panels = document.createElement('div'); panels.id = 'screen-panels';
+  panels.innerHTML =
+    '<section id="panel-settings" class="scroll-panel"><header>Settings</header><iframe title="Settings" loading="lazy" src="settings/"></iframe></section>'
+    + '<section id="panel-mapping" class="scroll-panel"><header>Mapping</header><iframe title="Mapping" loading="lazy" src="mappings/"></iframe></section>'
+    + '<section id="panel-library" class="scroll-panel"><header>Library</header><iframe title="Library" loading="lazy" src="inventory/"></iframe></section>';
+  screenApp.after(panels);
+})();
+
 const canvas = document.getElementById('stage');
 const gl = getGL(canvas);
 
@@ -2643,12 +2662,12 @@ controlPanel = createControlPanel({
 // the same window on repeat clicks; the page is a responsive full route.
 const POPUP_FEATURES = 'width=860,height=920';
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-mapping')?.addEventListener('click', openMappingsWindow);
+document.getElementById('menu-mapping')?.addEventListener('click', () => document.getElementById('panel-mapping')?.scrollIntoView({ behavior: 'smooth' }));
 // Library opens the standalone TEMPLATE-LIBRARY editor in its own popup window
 // (returns null if a popup blocker fires). Live type-merge sync runs over
 // 'lz-inventory' (below).
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-inventory')?.addEventListener('click', openInventoryWindow);
+document.getElementById('menu-inventory')?.addEventListener('click', () => document.getElementById('panel-library')?.scrollIntoView({ behavior: 'smooth' }));
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
 document.getElementById('devices-add-device')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'device'));
@@ -2672,7 +2691,7 @@ outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { re
 // (src/ui/settings.js createSettingsPanel) with popout hooks and broadcasts
 // every edit as { type: 'settings-changed' } on BroadcastChannel('lz-settings').
 function openSettingsWindow() { try { return window.open('settings/', 'lz-settings', 'width=560,height=860'); } catch { return null; } }
-document.getElementById('menu-settings')?.addEventListener('click', openSettingsWindow);
+document.getElementById('menu-settings')?.addEventListener('click', () => document.getElementById('panel-settings')?.scrollIntoView({ behavior: 'smooth' }));
 
 // Adopt the popout's edits. Two ownership domains:
 //   · show-owned fields — Settings edits ONLY composition.audioDevice and
