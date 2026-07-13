@@ -36,7 +36,10 @@ import { confirmDeletesOn, setConfirmDeletes } from './confirm.js';
 
 // Accent swatch presets (first = near-white / monochrome). Lives here because the
 // Settings panel is the only place that offers the palette.
-export const ACCENT_PRESETS = ['#eceef2', '#e8a35c', '#5cb8e8', '#6ee07d', '#5ce8c8', '#b98cff', '#e85c9e', '#e8d65c', '#ff6b6b'];
+// Curated + desaturated — a restrained set, not a full-spectrum swatch row (the
+// rainbow picker was a strong "theme-generator" tell). Near-white · amber · cool
+// slate · brick red.
+export const ACCENT_PRESETS = ['#e8eaee', '#d4a24a', '#7d8a99', '#c25a4a'];
 
 export function createSettingsPanel(hooks) {
   const { getShow, setShow, enableAudio, snap, output, prefs, appearance } = hooks;

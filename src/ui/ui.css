@@ -62,9 +62,9 @@
      "Translucency" drives this; lower = more see-through. */
   --pop-opacity: 62%;
   --fs-micro:calc(10px * var(--ui-scale)); --fs-body:calc(11px * var(--ui-scale)); --fs-ctrl:calc(12px * var(--ui-scale)); --fs-title:calc(13px * var(--ui-scale)); --fs-glyph:calc(15px * var(--ui-scale));
-  --fw-reg:400; --fw-med:400;   /* single weight — no bold in the UI text */
+  --fw-reg:400; --fw-med:600;   /* second weight ON — section headers/active/modified read heavier (hierarchy without color) */
   --lh-tight:1.2; --lh-ctrl:1.4; --lh-ui:1.45;
-  --ls-caps:.1em; --ls-ui:.04em;
+  --ls-caps:.06em; --ls-ui:.04em;   /* mono caps need less tracking than sans */
   /* Layout / control dimensions — shared tokens so components stay in sync
      (no stray hardcoded px). Change one place, every consumer follows. */
   --radius:0px; --radius-sm:0px;   /* square corners */
@@ -1345,11 +1345,14 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
   order: 4; flex: 1 1 0; width: auto; min-width: 0;   /* fill the row — no dead space before the cog */
   -webkit-appearance: none; appearance: none; height: var(--ctrl-h); cursor: pointer; box-sizing: border-box;
   border: 1px solid var(--line); border-left: 0; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;   /* joins the + (shared border) */
-  background: linear-gradient(to right,
-    color-mix(in srgb, var(--accent) 30%, var(--field-bg)) calc(var(--fill, 50%) - 2px),
-    var(--accent) calc(var(--fill, 50%) - 2px),
-    var(--accent) var(--fill, 50%),
-    var(--field-bg) var(--fill, 50%));
+  /* Quiet well + a THIN centred track (accent fill to the value, faint neutral after)
+     + a bright 2px value marker — a fader, not a full-height orange progress block.
+     Layer order = top→bottom: marker, accent fill, neutral track, then the well. */
+  background:
+    linear-gradient(var(--accent), var(--accent)) var(--fill, 50%) center/2px 64% no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left center/var(--fill, 50%) 3px no-repeat,
+    linear-gradient(color-mix(in srgb, var(--text) 10%, transparent), color-mix(in srgb, var(--text) 10%, transparent)) left center/100% 3px no-repeat,
+    linear-gradient(var(--field-bg), var(--field-bg)) 0 0/100% 100% no-repeat;
 }
 .ly-row input[type=range]::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; }
 .ly-row input[type=range]::-webkit-slider-thumb {
@@ -1723,7 +1726,9 @@ input.ly-readout:focus { outline: none; border-color: var(--line-2); color: var(
 .src-label { font: var(--fs-micro) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Source + effect NAMES read as uppercase (mono/OCR aesthetic) — browser cards,
    picker items, clip label bar, and the effect-chain rows. */
-.src-label, .lib-label, .ly-fxname, .clip-label-bar span { text-transform: uppercase; }
+/* Content names read in Title Case (labelOf already title-cases) — caps is reserved
+   for section-header eyebrows only, so it actually signals structure. */
+.src-label, .lib-label, .ly-fxname, .clip-label-bar span { text-transform: none; }
 .src-isf .src-label, .src-video .src-label { color: var(--faint); }
 
 .src-desc { flex: none; min-height: 16px; padding: 4px 2px 0; border-top: 1px solid var(--line);
