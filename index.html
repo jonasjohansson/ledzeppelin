@@ -5,12 +5,12 @@
 <meta name="description" content="LED Zeppelin — a browser-based LED show composer and pixel-mapping control surface for WLED / DDP / Art-Net rigs.">
 <meta name="color-scheme" content="dark">
 <!-- theme-color matches the app's actual background so the installed PWA chrome has no seam. -->
-<meta name="theme-color" content="#131110">
+<meta name="theme-color" content="#1c1c1c">
 <!-- Boot fade-in: paint the dark surface immediately (no white flash), keep the UI
      hidden until app.js has applied the accent/theme + painted the first frame, then
      fade in. A safety timeout reveals it even if boot stalls, so it can't stay blank. -->
 <style>
-  html { background: #131110; opacity: 0; }
+  html { background: #1c1c1c; opacity: 0; }
   html.ready { opacity: 1; transition: opacity .28s ease; }
   @media (prefers-reduced-motion: reduce) { html.ready { transition: none; } }
 </style>
@@ -38,7 +38,7 @@
 <!-- Type: MONO-FORWARD — one monospace face (Commit Mono) drives chrome + data,
      self-hosted via @font-face in ui.css (offline-safe). Preload the active face. -->
 <link rel="preload" href="./fonts/System85MonoPro-Regular.woff2" as="font" type="font/woff2" crossorigin>
-<style>html,body{margin:0;background:#131110;color:#f4f5f7;font-size:11px}
+<style>html,body{margin:0;background:#1c1c1c;color:#f4f5f7;font-size:11px}
 canvas{display:block}</style>
 <link rel="stylesheet" href="./src/ui/ui.css"></head>
 <body>
@@ -203,15 +203,19 @@ canvas{display:block}</style>
         <button class="island-tab is-on" data-ptab="fixtures">Output</button>
         <button class="island-tab" data-ptab="sources">Sources</button>
         <span class="island-acts">
-          <button id="devices-add-fixture" class="island-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
-          <button id="devices-add-device" class="island-act" title="Add a device"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
           <button id="devices-inventory" class="island-act" title="Library — fixture & controller templates (opens a window)"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg></button>
         </span>
       </header>
       <div class="island-body">
-        <!-- the merged patch view: + FIXTURE / + CONTROLLER / SCAN toolbar, then the
-             controllers with their fixtures (click a controller to edit it). -->
-        <div id="patch-fixtures"><div id="output-list"></div></div>
+        <!-- the merged patch view: the + Controller / + Fixture add toolbar sits right
+             under the OUTPUT tab, then the controllers with their fixtures below. -->
+        <div id="patch-fixtures">
+          <div class="out-toolbar">
+            <button id="devices-add-device" class="out-add" title="Add a controller"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg><span>Controller</span></button>
+            <button id="devices-add-fixture" class="out-add" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg><span>Fixture</span></button>
+          </div>
+          <div id="output-list"></div>
+        </div>
         <!-- Sources tab: a draggable source-library palette (mounted by app.js). -->
         <div id="patch-sources" hidden></div>
       </div>

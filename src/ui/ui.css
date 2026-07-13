@@ -23,24 +23,26 @@
      hairlines one step stronger. */
   /* WARM gray ramp — the surfaces carry a desaturated accent tint (brown-gray, not
      the old blue-gray) so the warm accent has presence across the whole sidebar. */
-  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#d4a24a'}) so a
+  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#3ecfa6'}) so a
      pre-JS / FOUC flash matches the runtime (palette.js writes these inline on <html>).
-     Keep in sync: re-run themeVars if the accent default or anchors change. */
-  --bg:#181615; --panel:#1f1d1c; --panel-2:#272524; --hover:#363332;
-  --stage-bg:#0d0d0f;          /* display surfaces stay dark in BOTH themes (LED content wants black) */
-  --panel-solid:#1f1d1c;       /* menus/popovers share the panel surface */
-  --line:#3a3735; --line-2:#4f4c4e;       /* hairline borders (neutral) */
+     Keep in sync: re-run themeVars if the accent default or anchors change.
+     Resolume profile: neutral medium-dark grays + one teal-mint accent. */
+  --bg:#1c1c1c; --panel:#242424; --panel-2:#2b2b2b; --hover:#383838;
+  --stage-bg:#101011;          /* display surfaces stay near-black in BOTH themes (LED content wants black) */
+  --panel-solid:#242424;       /* menus/popovers share the panel surface */
+  --line:#3a3a3a; --line-2:#4c4c4c;       /* hairline borders (neutral) */
   --text:#ffffff; --muted:#ccccd2; --faint:#959599;
-  --accent:#d4a24a;            /* the one desaturated amber-gold accent */
-  --accent-soft:#2a2214;       /* selected/active background tint */
-  --accent-text:#e4c58f;       /* text on accent surfaces */
-  --accent-line:#5b4724;       /* active border */
+  --accent:#3ecfa6;            /* the one teal-mint accent (Resolume) */
+  --accent-soft:#122a23;       /* selected/active background tint */
+  --accent-text:#87e1c8;       /* text on accent surfaces */
+  --accent-line:#1f5948;       /* active border */
+  --accent-head:#30564b;       /* muted teal group-header bar */
   --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
   --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
-  --accent-dark:#221c12;       /* dark glyph ON a bright accent-filled surface */
-  --field-bg:#181616;                 /* recessed input fill */
+  --accent-dark:#10221d;       /* dark glyph ON a bright accent-filled surface */
+  --field-bg:#141414;                 /* recessed input fill */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -55,7 +57,7 @@
   /* Fill opacity of the floating panels (device editor + timeline). Settings › Appearance
      "Translucency" drives this; lower = more see-through. */
   --pop-opacity: 62%;
-  --fs-micro:calc(10px * var(--ui-scale)); --fs-body:calc(11px * var(--ui-scale)); --fs-ctrl:calc(12px * var(--ui-scale)); --fs-title:calc(13px * var(--ui-scale)); --fs-glyph:calc(15px * var(--ui-scale));
+  --fs-micro:calc(11px * var(--ui-scale)); --fs-body:calc(12px * var(--ui-scale)); --fs-ctrl:calc(13px * var(--ui-scale)); --fs-title:calc(14px * var(--ui-scale)); --fs-glyph:calc(16px * var(--ui-scale));
   --fw-reg:400; --fw-med:600;   /* second weight ON — section headers/active/modified read heavier (hierarchy without color) */
   --lh-tight:1.2; --lh-ctrl:1.4; --lh-ui:1.45;
   --ls-caps:.06em; --ls-ui:.04em;   /* mono caps need less tracking than sans */
@@ -161,6 +163,13 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
+/* + Controller / + Fixture add toolbar — sits directly under the OUTPUT tab. */
+.out-toolbar { display: flex; gap: var(--dock-gap); padding: 0 0 var(--s3); }
+.out-add { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--ctrl-h); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; cursor: pointer; }
+.out-add:hover { color: var(--accent); border-color: var(--line-2); }
+.out-add .ic { width: 14px; height: 14px; fill: currentColor; }
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
 /* + Fixture / + Device side by side as square tiles. */
@@ -1152,13 +1161,17 @@ input[type=checkbox]:checked::after {
 .anim-cog svg.ic { width: 12px; height: 12px; fill: currentColor; display: block; }   /* pixel gear, centred */
 .ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
 
-/* Parameter groups don't fold — always open, no fold arrow. The header title aligns
-   with the label gutter and its underline runs FULL-BLEED to the panel edges. */
+/* Parameter groups don't fold — always open, no fold arrow. Resolume-style: the header
+   is a FULL-BLEED muted-teal bar (obvious group divider), its title sharing the left
+   indent of the CLIP tabs + clip-name field (structural left edge). */
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-head {
-  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s3) 5px calc(var(--col-gutter) + var(--s3));
+  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s5);
+  height: var(--row-h); background: var(--accent-head); border-bottom: none;
 }
-#grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: var(--accent-head); }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head .insp-sec-title { color: var(--text); }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head .insp-sec-reset { color: color-mix(in srgb, var(--text) 55%, transparent); }
 #grp-props .insp-sec:not(.out-sec) .insp-tri { display: none; }
 /* Every inspector field/row shares the 14px label gutter so labels align across plain
    fields (Title/BPM/Width), slider rows (Master, params) and the Color row. */
@@ -1360,9 +1373,9 @@ input[type=checkbox]:checked::after {
    shared borders); the label gaps before it and the cog sits apart after. */
 /* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
    start at the same x — Duration and modulated params line up identically. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 30px; position: relative; padding-left: var(--col-gutter); }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: var(--row-h); position: relative; padding-left: var(--col-gutter); }
 /* Controls fill the FULL row height — no top/bottom breath. */
-.ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 30px; }
+.ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: var(--row-h); }
 .ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: right; }   /* Resolume-style: names right-aligned, hugging the value column */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */

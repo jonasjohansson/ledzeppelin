@@ -27,14 +27,16 @@ function flipL(hex) {
 // Dark surface anchors (the tuned base) + their accent-tint weight. Light reuses them
 // luminance-inverted. field-bg is nudged toward the ramp extreme in light so inputs
 // stay the brightest surface (raised), matching the light convention of white fields.
+// Resolume-style: neutral medium-dark grays (no accent tint on chrome — the teal reads
+// only where it's an accent). Tint weights are 0 so surfaces stay true neutral gray.
 const SURFACES = [
-  ['--bg',       '#121213', 0.03, 0],   // off pure black (less glare), neutral temperature
-  ['--field-bg', '#121214', 0.03, 0.5],   // 4th = light-only extra lift toward white
-  ['--panel',    '#17171a', 0.04, 0],
-  ['--panel-2',  '#1e1e22', 0.05, 0],
-  ['--hover',    '#2c2c31', 0.06, 0],
-  ['--line',     '#303034', 0.06, 0],
-  ['--line-2',   '#45454e', 0.07, 0],
+  ['--bg',       '#1c1c1c', 0.0, 0],   // neutral dark chrome (Resolume mid-dark, not near-black)
+  ['--field-bg', '#141414', 0.0, 0.5],   // recessed input troughs — darkest; 4th = light-only lift
+  ['--panel',    '#242424', 0.0, 0],
+  ['--panel-2',  '#2b2b2b', 0.0, 0],
+  ['--hover',    '#383838', 0.0, 0],
+  ['--line',     '#3a3a3a', 0.0, 0],
+  ['--line-2',   '#4c4c4c', 0.0, 0],
 ];
 // Text anchors (dark). Light mirrors them luminance-inverted; contrast mixes toward
 // the surface extreme (black in dark, white in light) in the same slider direction.
@@ -77,9 +79,13 @@ export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, 
   // Text — contrast mixes each anchor toward the surface extreme (mirror per theme).
   for (const [k, dark] of TEXT) vars[k] = light ? mixHex(flipL(dark), '#ffffff', f) : mixHex(dark, '#0c0c10', f);
 
-  // Display surfaces (stage / preview pasteboard) stay dark in BOTH themes — the LED
-  // visuals are true-colour on black. Dark tracks Brightness/Tint (== --bg); light pins dark.
-  vars['--stage-bg'] = light ? '#0d0d0f' : vars['--bg'];
+  // Group-header bar — Resolume fills param/effect group headers with a muted teal so
+  // they read as obvious dividers. A desaturated accent over the panel gray (light: over white).
+  vars['--accent-head'] = light ? mixHex(hex, '#ffffff', 0.62) : mixHex(hex, vars['--panel-2'], 0.26);
+
+  // Display surfaces (stage / preview pasteboard) stay near-black in BOTH themes — the LED
+  // visuals are true-colour on black, and the chrome around them is now medium gray.
+  vars['--stage-bg'] = light ? '#0d0d0f' : '#101011';
   return vars;
 }
 

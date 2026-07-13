@@ -106,6 +106,17 @@ let showScreen2 = () => {};   // showScreen2(tabId?) — scroll to SCREEN 2, opt
       doc.addEventListener('keydown', onEsc);
       const sel = EMBED_CSS[f.dataset.tab];
       if (sel) { const s = doc.createElement('style'); s.textContent = `${sel}{display:none!important}`; doc.head.appendChild(s); }
+      // Iframes don't chain scroll to the parent, so at a panel's top/bottom edge the
+      // page would feel stuck. Forward the overscroll to the window so you can always
+      // scroll up (back to SCREEN 1) or down from anywhere inside a panel.
+      f.contentWindow?.addEventListener('wheel', (e) => {
+        const el = doc.scrollingElement || doc.documentElement;
+        const atTop = el.scrollTop <= 0, atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+        if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+          window.scrollBy({ top: e.deltaY, behavior: 'instant' });
+          e.preventDefault();
+        }
+      }, { passive: false });
     } catch { /* cross-origin — ignore */ }
   }));
 })();

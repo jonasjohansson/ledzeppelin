@@ -96,7 +96,7 @@ export function initPrefs({ preview, redrawOverlay }) {
 
   // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
   const ACCENT_KEY = 'lz.accent';
-  const ACCENT_DEFAULT = '#d4a24a';   // desaturated amber-gold (off the bootstrap 30°/73% orange)
+  const ACCENT_DEFAULT = '#3ecfa6';   // Resolume teal-mint (the one accent)
   const accHexToRgb = (h) => { const m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [232, 163, 92]; const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
   const accToHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
   const accMix = (a, b, w) => { const A = accHexToRgb(a), B = accHexToRgb(b); return accToHex(A[0] * w + B[0] * (1 - w), A[1] * w + B[1] * (1 - w), A[2] * w + B[2] * (1 - w)); };
