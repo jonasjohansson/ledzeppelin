@@ -706,10 +706,11 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 /* Capitalise the canvas toggles (fixtures/snap/grid/color/live). */
 #corner-toggles button { text-transform: capitalize; }
 /* Layout-view switcher — 3 connected glyph buttons (Canvas / Split / Editor). */
-#topbar .view-seg { display: inline-flex; }
-#topbar .view-seg button { padding: 4px 6px; min-width: 32px; text-align: center; font-size: 20px; line-height: 1; text-transform: none; }   /* full-size like the other toolbar icons */
-#topbar .view-seg button + button { border-left: 0; }
-#topbar .view-seg button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
+#topbar .view-seg { display: inline-flex; gap: 2px; }
+#topbar .view-seg button { border: none !important; background: none !important; box-shadow: none !important;
+  padding: 4px 6px; min-width: 30px; text-align: center; font-size: 20px; line-height: 1; text-transform: none; color: var(--muted); }   /* plain icons, no dark box */
+#topbar .view-seg button.on { color: var(--accent); }
+#topbar .view-seg button:hover { color: var(--text); }
 /* Active toggle / open menu = a clearly FILLED pill (the fill IS the on/off signal). */
 #topbar button.on, #topbar button.open {
   color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
@@ -1132,7 +1133,18 @@ input[type=checkbox]:checked::after {
   opacity: 0; transition: opacity .08s; cursor: pointer;   /* appears on row hover, beside the name */
 }
 .anim-cog:focus-visible { outline: none !important; }
+.anim-cog svg.ic { width: 12px; height: 12px; fill: currentColor; display: block; }   /* pixel gear, centred */
 .ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
+
+/* Parameter groups don't fold — always open (the ▼ stays as a static group marker so
+   labels keep aligning with the title). Output/fixture sections still fold. */
+.insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
+.insp-sec:not(.out-sec) > .insp-sec-head { cursor: default; }
+.insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
+.insp-sec:not(.out-sec) .insp-tri { transform: rotate(90deg); }
+/* Every inspector field/row shares the 14px label gutter so labels align across plain
+   fields (Title/BPM/Width), slider rows (Master, params) and the Color row. */
+#grp-props .fx-field { padding-left: 14px; }
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
    modulation is always visible), or on keyboard focus. */
 .anim-param:hover .anim-cog, .anim-cog.on, .anim-cog.audio, .anim-cog:focus-visible { opacity: 1; }

@@ -336,8 +336,9 @@ function animModeMenu({ animated, isAudio, isExternal, isDashboard, audioSource,
   // External keeps the plain accent 'on' treatment (only Audio recolours green).
   const btn = el('button', {
     className: 'anim-cog' + (animated ? ' on' : '') + (isAudio ? ' audio' : ''),
-    textContent: '⚙', title: 'animate this parameter (Basic / Timeline / Audio) · map it in System › Mapping · or expose it on the Control surface',
+    title: 'animate this parameter (Basic / Timeline / Audio) · map it in System › Mapping · or expose it on the Control surface',
   });
+  btn.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg>';   // pixel gear — centres cleanly (vs the off-metric ⚙ glyph)
   btn.onclick = (e) => { e.stopPropagation(); if (animPopOwner === wrap) closeAnimPop(); else open(); };
   wrap.append(btn);
   return wrap;
