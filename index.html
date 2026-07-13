@@ -84,6 +84,12 @@ canvas{display:block}</style>
   <symbol id="ic-panel-left" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 7h4v10H6z"/></symbol>
   <symbol id="ic-panel-right" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM14 7h4v10h-4z"/></symbol>
   <symbol id="ic-panel-bottom" viewBox="0 0 24 24"><path d="M3 4h18v2H3zm0 14h18v2H3zM3 6h2v12H3zm16 0h2v12h-2zM6 14h12v3H6z"/></symbol>
+  <!-- Layout-view switcher glyphs (Canvas maximise / Split / Editor / Float) — same
+       frame idiom as the panel toggles so the whole footer group is one visual family. -->
+  <symbol id="ic-view-canvas" viewBox="0 0 24 24"><path d="M2 4h20v2H2zm0 14h20v2H2zM2 6h2v12H2zm18 0h2v12h-2zM6 8h12v8H6z"/></symbol>
+  <symbol id="ic-view-split" viewBox="0 0 24 24"><path d="M2 4h20v2H2zm0 14h20v2H2zM2 6h2v12H2zm18 0h2v12h-2zM11 6h2v12h-2z"/></symbol>
+  <symbol id="ic-view-edit" viewBox="0 0 24 24"><path d="M2 4h20v2H2zm0 14h20v2H2zM2 6h2v12H2zm18 0h2v12h-2zM6 8h12v2H6zm0 4h12v2H6z"/></symbol>
+  <symbol id="ic-view-overlay" viewBox="0 0 24 24"><path d="M2 3h13v2H2zm0 10h13v2H2zM2 5h2v8H2zm11 0h2v8h-2z"/><path d="M9 9h13v2H9zm0 10h13v2H9zM9 11h2v8H9zm11 0h2v8h-2z"/></symbol>
   <symbol id="ic-rotate" viewBox="0 0 24 24"><path d="M16 4h2v6h-2zm-2-2h2v2h-2zm0 2h2v8h-2zM4 8H2v5h2z"/><path d="M2 6h18v2H2zm6 14H6v-6h2zm2 2H8v-2h2zm0-2H8v-8h2zm10-4h2v-5h-2z"/><path d="M22 18H4v-2h18z"/></symbol>
   <symbol id="ic-scan" viewBox="0 0 24 24"><path d="M22 22h-2v-2h2v2Zm-2-2h-2v-2h2v2Zm-6-2H6v-2h8v2Zm4 0h-2v-2h2v2ZM6 16H4v-2h2v2Zm10 0h-2v-2h2v2ZM4 14H2V6h2v8Zm14 0h-2V6h2v8ZM6 6H4V4h2v2Zm10 0h-2V4h2v2Zm-2-2H6V2h8v2Z"/></symbol>
   <!-- Pixel cube (axonometric box) — the 2D/3D mode toggle. -->
@@ -108,10 +114,10 @@ canvas{display:block}</style>
   </div>
   <div class="corner-row" id="corner-toggles">
     <span class="view-seg" id="view-seg">
-      <button data-view="canvas" title="Canvas view: maximise the output">▭</button>
-      <button data-view="split" title="Split view: canvas + panels">◫</button>
-      <button data-view="edit" title="Editor view: roomy panels">▤</button>
-      <button data-view="overlay" title="Float view: panels float translucent over a full-bleed canvas">⧉</button>
+      <button data-view="canvas" title="Canvas view: maximise the output"><svg class="ic" aria-hidden="true"><use href="#ic-view-canvas"/></svg></button>
+      <button data-view="split" title="Split view: canvas + panels"><svg class="ic" aria-hidden="true"><use href="#ic-view-split"/></svg></button>
+      <button data-view="edit" title="Editor view: roomy panels"><svg class="ic" aria-hidden="true"><use href="#ic-view-edit"/></svg></button>
+      <button data-view="overlay" title="Float view: panels float translucent over a full-bleed canvas"><svg class="ic" aria-hidden="true"><use href="#ic-view-overlay"/></svg></button>
     </span>
     <span class="corner-sep"></span>
     <button id="panel-left" class="g-icon on" title="show/hide the left panel (gives the canvas more space)"><svg class="ic" aria-hidden="true"><use href="#ic-panel-left"/></svg></button>

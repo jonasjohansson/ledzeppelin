@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#131110">
+<meta name="theme-color" content="#1c1c1c">
 <title>Library · LED Zeppelin</title>
 <link rel="icon" type="image/png" href="../icons/favicon.png">
 <link rel="stylesheet" href="../src/ui/ui.css">
@@ -25,7 +25,7 @@
      Hairline frames make each region structural (vs floating in empty space). */
   .inv-cols { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
   @media (max-width: 720px) { .inv-cols { grid-template-columns: 1fr; } }
-  .inv-pane { border: 1px solid var(--line); border-radius: var(--radius, 4px); padding: var(--s4); background: var(--bg-2, var(--bg)); }
+  .inv-pane { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s4); background: var(--panel); }
   .inv-pane-title { font: var(--fw-med) var(--fs-micro) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
     border-bottom: 1px solid var(--line); padding: 0 0 var(--s2); margin: 0 0 var(--s4); }
   .inv-detail { min-width: 0; }
