@@ -153,6 +153,8 @@ export function armStartupRiff() {
   // otherwise the gesture fallback above covers it.
   const ac = audioCtx();
   if (!ac) return;
-  if (ac.state === 'running') { playOnce(); return; }
-  ac.resume().then(() => { if (ac.state === 'running') playOnce(); }).catch(() => { /* blocked — wait for gesture */ });
+  // Only play if the context is ALREADY allowed to run — don't eagerly resume() before a
+  // user gesture (that logs Chrome's "AudioContext was not allowed to start" warning). The
+  // keydown/click listeners above cover the first-interaction case.
+  if (ac.state === 'running') playOnce();
 }

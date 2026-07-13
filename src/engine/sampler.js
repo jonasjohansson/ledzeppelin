@@ -495,6 +495,10 @@ export function makeSampler(gl, sampleUVs /* Float32Array len 2N */, samplePosit
       for (let i = 0; i < NUM; i++) { if (fences[i] === null && i !== justConsumed) { w = i; break; } }
       if (w >= 0) {
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[w]);
+        // Orphan (re-allocate) the PBO before readPixels: this discards the stale
+        // getBufferSubData shadow copy explicitly, so ANGLE stops logging the per-frame
+        // "READ-usage buffer written…before being read back / discarded shadow copy" warning.
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, byteLen, gl.STREAM_READ);
         gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);   // 0 = offset into bound PBO ⇒ async
         fences[w] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);

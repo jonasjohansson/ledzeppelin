@@ -1136,15 +1136,22 @@ input[type=checkbox]:checked::after {
 .anim-cog svg.ic { width: 12px; height: 12px; fill: currentColor; display: block; }   /* pixel gear, centred */
 .ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
 
-/* Parameter groups don't fold — always open (the ▼ stays as a static group marker so
-   labels keep aligning with the title). Output/fixture sections still fold. */
-.insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
-.insp-sec:not(.out-sec) > .insp-sec-head { cursor: default; }
-.insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
-.insp-sec:not(.out-sec) .insp-tri { transform: rotate(90deg); }
+/* Parameter groups don't fold — always open, no fold arrow. The header title aligns
+   with the label gutter and its underline runs FULL-BLEED to the panel edges. */
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head {
+  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s3) 5px calc(14px + var(--s3));
+}
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
+#grp-props .insp-sec:not(.out-sec) .insp-tri { display: none; }
 /* Every inspector field/row shares the 14px label gutter so labels align across plain
    fields (Title/BPM/Width), slider rows (Master, params) and the Color row. */
 #grp-props .fx-field { padding-left: 14px; }
+/* Row divider lines also run full-bleed. */
+#grp-props .insp-sec-body > .ly-param.ly-row, #grp-props .insp-sec-body > .anim-param { margin-left: calc(-1 * var(--s3)); margin-right: calc(-1 * var(--s3)); padding-right: var(--s3); }
+#grp-props .insp-sec-body > .ly-param.ly-row { padding-left: calc(14px + var(--s3)); }   /* direct row: own 14px gutter + bleed offset */
+#grp-props .insp-sec-body > .anim-param { padding-left: var(--s3); }   /* wrapper: the inner .ly-row already carries the 14px gutter */
+#grp-props .island-body { padding-top: 3px; }   /* less dead space at the top */
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
    modulation is always visible), or on keyboard focus. */
 .anim-param:hover .anim-cog, .anim-cog.on, .anim-cog.audio, .anim-cog:focus-visible { opacity: 1; }
@@ -1337,9 +1344,9 @@ input[type=checkbox]:checked::after {
    shared borders); the label gaps before it and the cog sits apart after. */
 /* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
    start at the same x — Duration and modulated params line up identically. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 28px; position: relative; padding-left: 14px; }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 30px; position: relative; padding-left: 14px; }
 /* Controls fill the FULL row height — no top/bottom breath. */
-.ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 28px; }
+.ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 30px; }
 .ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* fixed label column, left-aligned, flush with the group title → value + slider columns stay consistent */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
