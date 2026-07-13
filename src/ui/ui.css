@@ -1125,9 +1125,9 @@ input[type=checkbox]:checked::after {
 .anim-head .anim-cog-wrap { margin-left: 0; }
 .anim-cog-wrap { flex: 0 0 auto; }
 .anim-cog {
-  flex: 0 0 auto; padding: 0 4px; min-width: 20px; line-height: var(--lh-ctrl); font-size: 15px;
+  flex: 0 0 auto; padding: 0; min-width: 0; line-height: var(--lh-ctrl); font-size: 13px;
   color: var(--faint); border: none !important; background: none !important;   /* just the glyph, no box */
-  opacity: 0; transition: opacity .08s;   /* Resolume-style: hidden until the row is hovered */
+  opacity: 0; transition: opacity .08s;   /* appears on row hover, in the gutter beside the name */
 }
 /* Reveal on row hover, or whenever the param is actually modulated (so an active
    modulation is always visible), or on keyboard focus. */
@@ -1316,10 +1316,10 @@ input[type=checkbox]:checked::after {
    shared borders); the label gaps before it and the cog sits apart after. */
 /* Reserve a fixed cog gutter on EVERY row (with or without a cog) so labels always
    start at the same x — Duration and modulated params line up identically. */
-.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 28px; position: relative; padding-left: 24px; }
+.ly-param.ly-row { flex-direction: row; align-items: center; gap: 0; min-height: 28px; position: relative; padding-left: 14px; }
 /* Controls fill the FULL row height — no top/bottom breath. */
 .ly-row input.ly-readout, .ly-row .ly-step, .ly-row input[type=range] { height: 28px; }
-.ly-plabel { flex: 1 1 auto; order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* Resolume-style: names left-aligned so they scan down one hard left edge */
+.ly-plabel { flex: 0 0 var(--col-label); order: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 8px; text-align: left; }   /* fixed label column, left-aligned, flush with the group title → value + slider columns stay consistent */
 .ly-row .ly-readout { order: 1; flex: 0 0 var(--col-val); min-width: var(--col-val); text-align: right; border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 /* − / + step buttons; + drops its left border so − and + join as one stepper. */
 .ly-row .ly-step {
@@ -1330,8 +1330,9 @@ input[type=checkbox]:checked::after {
 }
 .ly-row .ly-step-plus { order: 3; border-left: 0; }
 .ly-row .ly-step:hover { color: var(--text); background: var(--hover); }
-/* Cog sits in the reserved left gutter — absolute so it never shifts the label. */
-.ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; display: flex; align-items: center; margin: 0; }
+/* Cog sits in the ~14px left gutter (the section-triangle position) — absolute so it
+   never shifts the label; appears next to the name on row hover. */
+.ly-row .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; display: flex; align-items: center; justify-content: center; margin: 0; }
 
 /* --- Control tactility (professional pass): press feedback, clearer selection,
    accent focus rings, one transition curve. Additive — no layout change. --- */
