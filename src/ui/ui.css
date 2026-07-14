@@ -1487,6 +1487,9 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .fx-act:hover { color: var(--accent); }
 .fx-act-danger:hover { color: var(--danger); }
 .fx-act:disabled { opacity: .25; cursor: default; }
+/* The clear/delete × sprite inside act buttons + deck clear buttons. */
+.fx-act .ic, .lh-clear .ic { width: 12px; height: 12px; fill: currentColor; display: block; }
+.lh-clear { display: inline-flex; align-items: center; justify-content: center; }
 .fx-act:disabled:hover { color: var(--faint); }
 .fx-acts .fx-menu-wrap { margin-left: 0; }
 

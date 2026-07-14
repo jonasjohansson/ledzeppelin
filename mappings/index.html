@@ -15,13 +15,8 @@
      fallbacks here only matter if ui.css ever fails to load. */
   html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
   .map-wrap { padding: var(--s5) var(--s5) 40px; max-width: none; margin: 0; }   /* full browser width — responsive */
-  /* Narrow (embedded in the sidebar tab): stack each row onto two lines. */
-  @media (max-width: 560px) {
-    .map-wrap { padding: var(--s4) var(--s4) 30px; }
-    .row { grid-template-columns: 1fr auto; grid-template-areas: "label acts" "osc chan"; row-gap: var(--s1); }
-    .row-label { grid-area: label; } .row-acts { grid-area: acts; }
-    .row-osc { grid-area: osc; } .row-chan { grid-area: chan; justify-self: end; }
-  }
+  /* Narrow: keep ONE line per row — truncate, never stack/wrap. */
+  @media (max-width: 560px) { .map-wrap { padding: var(--s4) var(--s4) 30px; } }
   .map-head { display: flex; align-items: center; gap: var(--s5); margin-bottom: var(--s5); }
   .map-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
   .map-status { margin-left: auto; font-size: var(--fs-body); color: var(--muted); }
@@ -42,7 +37,7 @@
   .row { display: grid; grid-template-columns: 1.1fr 1.5fr 116px 116px 64px; align-items: center; gap: var(--s4); min-height: var(--row-h); padding: 0 var(--s3); margin: 0 calc(-1 * var(--s3)); border-top: 1px solid var(--line); border-radius: var(--radius); }
   .row.bound .row-label { color: var(--accent-text); }
   .row-head { border-top: none; min-height: 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; padding-bottom: 0; }
-  .row-label { color: var(--text); }
+  .row-label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .row-osc { font-family: var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: copy; }
   .row-osc:hover { color: var(--accent); }
   .cell-h { font-family: var(--ui-font); color: var(--faint); }

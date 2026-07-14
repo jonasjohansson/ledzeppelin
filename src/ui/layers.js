@@ -51,6 +51,10 @@ import { createClipSpectrum } from './spectrum.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
+// The clear/delete affordance — a pixel × sprite (replaces the off-metric ✕ text glyph).
+const CLOSE_ICON = '<svg class="ic" aria-hidden="true"><use href="#ic-close"/></svg>';
+const setClose = (btn) => { btn.innerHTML = CLOSE_ICON; return btn; };
+
 // Param keys in the manifest are terse (lowercase / camelCase: `pos`, `headWidth`,
 // `modFreq`). Show them title-cased with the camelCase seam split, so labels read
 // like a pro UI ("Pos", "Head Width", "Mod Freq") without changing the model keys.
@@ -697,7 +701,8 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove, onDuplicate, resetLabel = 'reset', dirty }) {
     const wrap = el('div', { className: 'fx-acts' });
     const act = (glyph, title, onClick, cls = '') => {
-      const b = el('button', { type: 'button', className: 'fx-act ' + cls, textContent: glyph, title });
+      const b = el('button', { type: 'button', className: 'fx-act ' + cls, title });
+      if (glyph === '✕') setClose(b); else b.textContent = glyph;   // the clear/delete × is a sprite now
       b.onclick = (e) => { e.stopPropagation(); onClick(); };
       return b;
     };
@@ -1088,10 +1093,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     // Delete THIS layer — danger ✕ top-right. Refuses the last remaining layer.
     {
       const nLayers = (getShow().composition?.layers || []).length;
-      const del = el('button', {
-        className: 'fx-act fx-act-danger insp-del', textContent: '✕',
+      const del = setClose(el('button', {
+        className: 'fx-act fx-act-danger insp-del',
         title: nLayers <= 1 ? 'can’t delete the last layer' : 'delete this layer',
-      });
+      }));
       del.disabled = nLayers <= 1;
       del.onclick = (e) => {
         e.stopPropagation();
@@ -1169,10 +1174,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   function masterHead() {
     const comp = show().composition || {};
     const row = el('div', { className: 'master-head' });
-    const xBtn = el('button', {
-      className: 'lh-clear', textContent: '✕', title: 'clear all (eject every active clip)',
+    const xBtn = setClose(el('button', {
+      className: 'lh-clear', title: 'clear all (eject every active clip)',
       onclick: (e) => { e.stopPropagation(); let s = show(); for (const L of (s.composition?.layers || [])) s = setActiveClip(s, L.id, null); commit(s); },
-    });
+    }));
     const bBtn = el('button', {
       className: 'lh-tog' + (comp.bypass ? ' on' : ''), textContent: 'B',
       title: comp.bypass ? 'un-mute master' : 'master mute (blackout all output)',
@@ -1262,10 +1267,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       onclick: (e) => { e.stopPropagation(); fn(); },
     });
     body.append(
-      el('button', {
-        className: 'lh-clear', textContent: '✕', title: 'clear (eject active clip)',
+      setClose(el('button', {
+        className: 'lh-clear', title: 'clear (eject active clip)',
         onclick: (e) => { e.stopPropagation(); commit(setActiveClip(show(), id, null)); },
-      }),
+      })),
       tog('B', !!layer.bypass, layer.bypass ? 'un-bypass layer' : 'bypass (mute) this layer',
         () => commit(patchLayer(show(), id, { bypass: !layer.bypass }))),
       tog('S', !!layer.solo, layer.solo ? 'un-solo layer' : 'solo this layer',
@@ -1350,10 +1355,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     // the Delete-key behaviour.
     {
       const totalClips = (getShow().composition?.layers || []).reduce((n, L) => n + (L.clips?.length || 0), 0);
-      const del = el('button', {
-        className: 'fx-act fx-act-danger insp-del', textContent: '✕',
+      const del = setClose(el('button', {
+        className: 'fx-act fx-act-danger insp-del',
         title: totalClips <= 1 ? 'can’t delete the last clip' : 'delete this clip',
-      });
+      }));
       del.disabled = totalClips <= 1;
       del.onclick = (e) => { e.stopPropagation(); selectedClipId = clip.id; deleteActiveClip(); };
       clipHead.append(del);
