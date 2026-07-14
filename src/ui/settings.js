@@ -134,7 +134,7 @@ export function createSettingsPanel(hooks) {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),
     }));
-    mount.append(Slider('Accent tint %', appearance.getTint(), {
+    mount.append(Slider('Tint', appearance.getTint(), {
       min: 0, max: 220, step: 5, default: 100, commit: 'live',
       onInput: (v) => appearance.setTint(Math.round(v)),
     }));
