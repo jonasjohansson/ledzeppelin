@@ -13,9 +13,9 @@
 :root{
   /* Active UI typeface — MONO-FORWARD: one family for chrome AND data.
      Swap the look by switching the active line: Spline ⇄ Martian. */
-  /* Active UI face — System85 Mono Pro (pixel/system mono), rendered SMOOTH. Commit Mono +
-     Spline / Martian remain self-hosted below as swaps. */
-  --ui-font: "System85", "Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Active UI face — Commit Mono (clean humanist mono; the app's original face).
+     System85 / Spline / Martian remain self-hosted above as swaps. */
+  --ui-font: "Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --mono: var(--ui-font);
   /* SOLID SOFTWARE (Resolume-calibrated): panels are opaque dark-gray surfaces a
      step brighter than the old near-black, so chrome reads as solid tooling that
@@ -1925,9 +1925,9 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }
 
 /* --- UPPERCASE chrome (C6) --------------------------------------------------
-   App-authored text reads uppercase (System85's lowercase looks odd in chrome);
-   user-entered names stay as typed. Tabs, section titles, group labels and the
-   top-bar captions are already uppercase above — this covers the rest. */
+   App-authored chrome reads uppercase (design-system casing: buttons/nav/section
+   eyebrows are caps); user-entered names stay as typed. Tabs, section titles, group
+   labels and the top-bar captions are already uppercase above — this covers the rest. */
 button { text-transform: uppercase; }              /* all app-authored button labels */
 .fx-menu-item { text-transform: none; }            /* EXCEPT preset menus — user-authored names */
 .lr-name { text-transform: none; }                 /* fixture/clip display names — user-authored */
