@@ -504,7 +504,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         return field('Color', ci);
       })(),
       // Output gamma calibration (daemon-side LUT) — straightens LED fades. 1 = linear.
-      sliderRow('Gamma', d.gamma ?? 1, (x) => upd({ gamma: Math.round(x * 10) / 10 }), 0.5, 3, 0.1),
+      // Advanced-only: a technical calibration most shows never touch.
+      (() => { const g = sliderRow('Gamma', d.gamma ?? 1, (x) => upd({ gamma: Math.round(x * 10) / 10 }), 0.5, 3, 0.1); g.classList.add('adv-only'); return g; })(),
       patchRuler(show, d),
       controllerBlock(d),
     ]);

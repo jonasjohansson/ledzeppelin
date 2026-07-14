@@ -94,6 +94,16 @@ export function initPrefs({ preview, redrawOverlay }) {
   const setToolbarLabels = (on) => { try { localStorage.setItem('lz.tbl', on ? '1' : '0'); } catch { /* private */ } applyToolbarLabels(); };
   applyToolbarLabels();   // reflect on boot (default: hidden)
 
+  // --- Advanced mode: OFF by default. When off, the UI shows the simple set (fixed
+  // Editor layout, no view/panel controls, fewer settings); on reveals the extras
+  // (.adv-only elements). Callers can register onAdvancedChange to react (relayout).
+  let advancedCb = null;
+  const getAdvanced = () => { try { return localStorage.getItem('lz.advanced') === '1'; } catch { return false; } };
+  const applyAdvanced = () => { document.body.classList.toggle('advanced', getAdvanced()); advancedCb?.(getAdvanced()); };
+  const setAdvanced = (on) => { try { localStorage.setItem('lz.advanced', on ? '1' : '0'); } catch { /* private */ } applyAdvanced(); };
+  const onAdvancedChange = (fn) => { advancedCb = fn; };
+  applyAdvanced();   // reflect on boot (default: off)
+
   // --- Accent colour (user-selectable; persisted; live via CSS vars) -----------
   const ACCENT_KEY = 'lz.accent';
   const ACCENT_DEFAULT = '#3ecfa6';   // Resolume teal-mint (the one accent)
@@ -201,5 +211,6 @@ export function initPrefs({ preview, redrawOverlay }) {
     setUiScale, savedScale, setTranslucency, savedTranslucency,
     applyTips, setNativeCtxMenu,
     getToolbarLabels, setToolbarLabels, applyToolbarLabels,
+    getAdvanced, setAdvanced, applyAdvanced, onAdvancedChange,
   };
 }

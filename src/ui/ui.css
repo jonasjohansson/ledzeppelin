@@ -90,6 +90,9 @@ html, body {
 }
 input, textarea, [contenteditable] { cursor: text; caret-color: var(--accent); }
 ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); }
+/* Advanced-mode gate: .adv-only elements (layout controls, gamma, technical settings)
+   show ONLY when Settings › Advanced mode is on (body.advanced). Off = the simple set. */
+body:not(.advanced) .adv-only { display: none !important; }
 img, a, button, summary, label { -webkit-user-drag: none; user-drag: none; }
 input:focus-visible, summary:focus-visible, a:focus-visible {
   outline: 1px solid var(--line-2); outline-offset: 1px;

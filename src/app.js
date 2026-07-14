@@ -2277,10 +2277,18 @@ function focusGroup(id) {
     edit: { hide: [], style: 'view-edit' },
     overlay: { hide: [], style: 'view-overlay' },
   };
-  let hidden, cur;
-  try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); hidden = new Set(Array.isArray(h) ? h : []); } catch { hidden = new Set(); }
-  try { const v = localStorage.getItem(KEY); cur = (v && PRESETS[v]) ? v : ''; } catch { cur = ''; }
-  if (!localStorage.getItem(HKEY) && !cur) cur = 'split';   // first run
+  let hidden = new Set(), cur = 'edit';
+  const readSaved = () => {
+    try { const h = JSON.parse(localStorage.getItem(HKEY) || 'null'); hidden = new Set(Array.isArray(h) ? h : []); } catch { hidden = new Set(); }
+    try { const v = localStorage.getItem(KEY); cur = (v && PRESETS[v]) ? v : 'edit'; } catch { cur = 'edit'; }
+  };
+  // Simple mode (default): a FIXED Editor layout, every panel visible — the view/panel
+  // controls are hidden (.adv-only). Advanced mode restores the user's saved preset.
+  const applyLayout = () => {
+    if (document.body.classList.contains('advanced')) readSaved();
+    else { cur = 'edit'; hidden = new Set(); }
+    sync();
+  };
 
   const persist = () => { try { localStorage.setItem(KEY, cur); localStorage.setItem(HKEY, JSON.stringify([...hidden])); } catch { /* private */ } };
   // If the current visibility matches a pure-visibility preset, highlight it; else custom.
@@ -2310,7 +2318,8 @@ function focusGroup(id) {
       cur = matchPreset(); persist(); sync();   // toggling drops style presets to "custom"
     });
   }
-  sync();
+  applyLayout();
+  prefs.onAdvancedChange(applyLayout);   // relayout when Advanced mode is toggled
 })();
 
 // The one resize affordance: a "curtain" on the Timeline's top edge to trade height
@@ -2810,6 +2819,7 @@ if (setBus) {
     // Tooltips + native context menu (both idempotent appliers).
     prefs.applyTips();
     prefs.applyToolbarLabels();
+    prefs.applyAdvanced();   // Advanced-mode toggle flipped in the Settings popout → relayout + reveal .adv-only
     prefs.setNativeCtxMenu((() => { try { return localStorage.getItem('lz.ctxmenu') !== '0'; } catch { return true; } })());
     // Appearance: re-apply every CSS-var applier from the (just-written) keys.
     document.documentElement.dataset.theme = prefs.getTheme();   // Dark|Light chrome marker

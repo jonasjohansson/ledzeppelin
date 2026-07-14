@@ -72,8 +72,12 @@ function applyTheme() {
   s.setProperty('--pop-opacity', (100 - savedTranslucency()) + '%');
 }
 applyTheme();
-// `storage` fires here when ANOTHER window writes an lz.* key — keep the theme live.
-addEventListener('storage', (e) => { if ((e.key || '').startsWith('lz.')) applyTheme(); });
+// Advanced mode: reflect it on THIS document's body so the panel's own .adv-only rows
+// (Snap, Output, niche prefs) reveal in step with the main window.
+function applyAdvanced() { try { document.body.classList.toggle('advanced', localStorage.getItem('lz.advanced') === '1'); } catch { /* private */ } }
+applyAdvanced();
+// `storage` fires here when ANOTHER window writes an lz.* key — keep theme + advanced live.
+addEventListener('storage', (e) => { if ((e.key || '').startsWith('lz.')) { applyTheme(); applyAdvanced(); } });
 
 // --- Snap (lz.snap carries {on, grid, dist}; the on/off is the main window's
 // corner button — preserve it, edit only grid/dist here). ----------------------
@@ -117,6 +121,8 @@ const panel = createSettingsPanel({
     setToolbarLabels: (on) => { put('lz.tbl', on ? '1' : '0'); post(); },
     getNativeCtx: () => flag('lz.ctxmenu'),
     setNativeCtx: (on) => { put('lz.ctxmenu', on ? '1' : '0'); post(); },
+    getAdvanced: () => { try { return localStorage.getItem('lz.advanced') === '1'; } catch { return false; } },
+    setAdvanced: (on) => { put('lz.advanced', on ? '1' : '0'); applyAdvanced(); post(); },
   },
   appearance: {
     getTheme: savedTheme, setTheme: (v) => { put('lz.theme', v === 'light' ? 'light' : 'dark'); applyTheme(); post(); },

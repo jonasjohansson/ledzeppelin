@@ -79,34 +79,37 @@ export function createSettingsPanel(hooks) {
     mount.append(el('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
     mount.append(el('div', { className: 'seg-hint', textContent: 'to load: drag a project or composition .json onto the window' }));
 
+    // Advanced-only rows are revealed by Settings › Advanced mode (body.advanced).
+    const adv = (e) => { e.classList.add('adv-only'); return e; };
+
     // --- Snap (fixture placement): the grid step + neighbour-align tolerance. The
     // on/off lives on the main window's viewport corner button (a quick toggle). ---
-    mount.append(el('div', { className: 'fx-pts', textContent: 'snap' }));
+    mount.append(adv(el('div', { className: 'fx-pts', textContent: 'snap' })));
     const sv = snap.get();
-    mount.append(Slider('Grid', sv.grid, {
+    mount.append(adv(Slider('Grid', sv.grid, {
       min: 2, max: 100, step: 1, default: 20, commit: 'live',
       onInput: (v) => snap.set({ grid: Math.round(v) }),
-    }));
-    mount.append(Slider('Distance', sv.dist, {
+    })));
+    mount.append(adv(Slider('Distance', sv.dist, {
       min: 1, max: 40, step: 1, default: 10, commit: 'live',
       onInput: (v) => snap.set({ dist: Math.round(v) }),
-    }));
+    })));
 
     // --- Output: global framerate cap sent to the daemon (caps the DDP/Art-Net rate). ---
-    mount.append(el('div', { className: 'fx-pts', textContent: 'output' }));
-    mount.append(Slider('Max FPS', output.getFps(), {
+    mount.append(adv(el('div', { className: 'fx-pts', textContent: 'output' })));
+    mount.append(adv(Slider('Max FPS', output.getFps(), {
       min: 1, max: 60, step: 1, default: 42, commit: 'live',
       onInput: (v) => output.setFps(Math.max(1, Math.min(60, Math.round(v)))),
-    }));
+    })));
     // RGBW white derivation: Accurate pulls white onto the dedicated W LED
     // (subtracts it from RGB); Additive keeps RGB full and adds W on top.
-    mount.append(Segmented('White Mode', [['accurate', 'Accurate'], ['additive', 'Additive']],
-      () => output.getWhiteMode?.() || 'accurate', (v) => output.setWhiteMode?.(v)));
+    mount.append(adv(Segmented('White Mode', [['accurate', 'Accurate'], ['additive', 'Additive']],
+      () => output.getWhiteMode?.() || 'accurate', (v) => output.setWhiteMode?.(v))));
     // On-screen stage preview. OFF skips the fullscreen composite draw (the stage goes
     // static black) — LED output is unaffected. Turn it off to lighten the render on a
     // Raspberry Pi and stop VNC mirroring the full-motion stage. (Also ?preview=0 in URL.)
-    mount.append(Segmented('Preview', [['on', 'On'], ['off', 'Off']],
-      () => (output.getPreview?.() ?? true) ? 'on' : 'off', (v) => output.setPreview?.(v === 'on')));
+    mount.append(adv(Segmented('Preview', [['on', 'On'], ['off', 'Off']],
+      () => (output.getPreview?.() ?? true) ? 'on' : 'off', (v) => output.setPreview?.(v === 'on'))));
 
     // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
     const toggleRow = (label, get, set) => {
@@ -116,12 +119,15 @@ export function createSettingsPanel(hooks) {
       return el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: label })]);
     };
     mount.append(el('div', { className: 'fx-pts', textContent: 'preferences' }));
-    const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
-    mount.append(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } }));
+    // Advanced mode — ALWAYS visible (it's the switch that reveals the .adv-only extras:
+    // the view/panel layout controls, controller Gamma, and the technical settings above).
+    if (prefs.getAdvanced) mount.append(toggleRow('Advanced mode (layout controls & extra settings)', prefs.getAdvanced, (v) => prefs.setAdvanced(v)));
     mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
     mount.append(toggleRow('Show tooltips on hover', prefs.getTips, (v) => prefs.setTips(v)));
-    mount.append(toggleRow('Toolbar labels (footer text)', prefs.getToolbarLabels, (v) => prefs.setToolbarLabels(v)));
-    mount.append(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v)));
+    const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };
+    mount.append(adv(toggleRow('Play riff on every reload', riffAlways, (v) => { try { localStorage.setItem('lz.riff.always', v ? '1' : '0'); } catch { /* private */ } })));
+    mount.append(adv(toggleRow('Toolbar labels (footer text)', prefs.getToolbarLabels, (v) => prefs.setToolbarLabels(v))));
+    mount.append(adv(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v))));
 
     // --- Appearance: theme / brightness / accent tint / contrast / text size (all live). ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
