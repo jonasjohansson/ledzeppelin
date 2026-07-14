@@ -200,7 +200,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* Controller colour swatch before the header title (Output list). */
 .dev-swatch { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 1px; }
 .output-row:first-child { border-top: none; }
-.output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--dev-color, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* name in its controller's identity colour; plain text when unassigned */
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
    = faint, no-ip = hollow. Stays in the warm-mono palette (no green/blue). */
 .dev-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--faint); }
