@@ -385,9 +385,24 @@ body.mode-3d #stageinner canvas#stage { opacity: .1; }
   overflow-x: auto; overflow-y: hidden;
 }
 #topbar .corner-row { display: inline-flex; align-items: center; gap: 2px; }
-#corner-menus { justify-self: start; }
+#corner-menus { grid-column: 1; justify-self: start; }
 #corner-toggles { justify-self: center; }
-#corner-right { justify-self: end; }   /* bug + install at the far right */
+#corner-right { grid-column: 3; justify-self: end; }   /* bug + install — stays far-right even with the centre group floated out */
+
+/* CANVAS TOOLS — the canvas-pertaining toggle group (#corner-toggles) floats as a
+   translucent island top-centre over the viewport (mirrors the Timeline floating
+   bottom). The footer (#topbar) keeps only the left menus + right cluster. */
+#canvas-tools {
+  position: absolute; top: var(--dock-gap); left: 50%; transform: translateX(-50%); z-index: 50;
+  pointer-events: auto; display: flex; align-items: center; height: var(--topbar-h); padding: 0 10px;
+  background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  max-width: calc(100% - 2 * var(--dock-gap)); overflow-x: auto;
+}
+#canvas-tools #corner-toggles { display: inline-flex; align-items: center; gap: 10px; }
+body.gui-hidden #canvas-tools { display: none; }   /* Hide UI drops it with the rest */
+body.hide-toolbar-labels #canvas-tools .g-label { display: none; }
 
 /* INSTALLED PWA — window-controls-overlay: the OS folds its title bar into the window,
    so the top bar must live only inside the SAFE titlebar area (env(titlebar-area-*)),
@@ -744,7 +759,7 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 #g-hide { min-width: 74px; text-align: center; }
 /* Thin rule splitting the top bar into groups (menus | view-toggles). */
 .corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
-#topbar button {
+#topbar button, #canvas-tools button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
   font-variant-numeric: tabular-nums;
@@ -753,17 +768,17 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 /* Capitalise the canvas toggles (fixtures/snap/grid/color/live). */
 #corner-toggles button { text-transform: capitalize; }
 /* Layout-view switcher — 3 connected glyph buttons (Canvas / Split / Editor). */
-#topbar .view-seg { display: inline-flex; gap: 2px; }
-#topbar .view-seg button { border: none !important; background: none !important; box-shadow: none !important;
+#topbar .view-seg, #canvas-tools .view-seg { display: inline-flex; gap: 2px; }
+#topbar .view-seg button, #canvas-tools .view-seg button { border: none !important; background: none !important; box-shadow: none !important;
   padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; text-transform: none; color: var(--muted); }   /* plain icons, no dark box */
-#topbar .view-seg button .ic { width: 22px; height: 22px; fill: currentColor; display: block; }   /* match the other footer icons */
-#topbar .view-seg button.on { color: var(--accent); }
-#topbar .view-seg button:hover { color: var(--text); }
+#topbar .view-seg button .ic, #canvas-tools .view-seg button .ic { width: 22px; height: 22px; fill: currentColor; display: block; }   /* match the other footer icons */
+#topbar .view-seg button.on, #canvas-tools .view-seg button.on { color: var(--accent); }
+#topbar .view-seg button:hover, #canvas-tools .view-seg button:hover { color: var(--text); }
 /* Active toggle / open menu = a clearly FILLED pill (the fill IS the on/off signal). */
-#topbar button.on, #topbar button.open {
+#topbar button.on, #topbar button.open, #canvas-tools button.on, #canvas-tools button.open {
   color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line);
 }
-#topbar button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
+#topbar button:disabled, #canvas-tools button:disabled { opacity: .4; cursor: default; }                    /* e.g. snap is moot when the overlay is off */
 /* UI hidden = full-bleed canvas; the top bar goes too ('H' brings everything back). */
 body.gui-hidden #topbar { display: none; }
 /* The "Show UI" pill: hidden normally, floats top-left only while the UI is hidden,
