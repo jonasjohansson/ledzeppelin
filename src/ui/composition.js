@@ -42,11 +42,16 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     root.textContent = '';
     draft = currentCanvas();
 
+    // Identity rows (Title + Tempo) share ONE card so they read as a group with even
+    // internal spacing — mirroring the Width+Height pair below — instead of each row
+    // floating alone with a full card-gap above and below it.
+    const idRows = [];
+
     // --- Title — names the composition; saved with it (commits on blur/enter). ---
     if (setTitle) {
       const title = el('input', { type: 'text', placeholder: 'untitled', value: getShow().composition?.title || '' });
       title.addEventListener('change', () => setTitle(title.value.trim()));
-      root.append(el('div', { className: 'fx-card cmp-grid' }, [field('Title', title)]));
+      idRows.push(field('Title', title));
     }
 
     // --- Tempo (BPM) — drives beat-synced Timeline modulation; TAP sets by ear. ---
@@ -72,10 +77,9 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
         }
         rephase();   // flash now + re-align the beat pulse to this tap
       });
-      root.append(el('div', { className: 'fx-card cmp-grid' }, [
-        el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]),
-      ]));
+      idRows.push(el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]));
     }
+    if (idRows.length) root.append(el('div', { className: 'fx-card cmp-grid' }, idRows));
 
     // --- Width / height edit a DRAFT; the canvas only changes when Apply is clicked. ---
     const mkNum = (value, onInput) => {

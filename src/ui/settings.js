@@ -50,8 +50,8 @@ export function createSettingsPanel(hooks) {
     if (!mount) return;
     mount.textContent = '';
 
-    // --- Audio input (the hardware device for the "Audio External" modulator + gain) ---
-    mount.append(el('div', { className: 'fx-pts', textContent: 'audio input' }));
+    // --- Audio (the hardware input device for the "Audio External" modulator + gain) ---
+    mount.append(el('div', { className: 'fx-pts', textContent: 'audio' }));
     const inputs = await listInputs();
     const curDev = getShow().composition?.audioDevice || 'default';
     const sel = el('select', { title: 'hardware input device for the Audio External modulator' });
@@ -68,16 +68,14 @@ export function createSettingsPanel(hooks) {
       if (ok === false) sel.title = 'could not open that input, check permissions';
     });
     mount.append(el('label', { className: 'fx-field' }, [el('span', { textContent: 'Input' }), sel]));
-    if (!enableAudio) mount.append(el('div', { className: 'seg-hint', textContent: 'the main window opens the input (it owns audio capture)' }));
     mount.append(Slider('Gain', getShow().composition?.audioGain ?? 1, {
       min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
       onInput: (v) => { const s = getShow(); setShow({ ...s, composition: { ...s.composition, audioGain: v } }, { undoable: true, defer: true }); },
     }));
 
-    // --- Composition file (visuals only — the whole rig saves with the project, ⌘S) ---
-    mount.append(el('div', { className: 'fx-pts', textContent: 'composition file' }));
-    mount.append(el('button', { className: 'fx-add', textContent: 'Save composition…', title: 'export just the visuals (layers / clips / effects), without the rig', onclick: saveCompositionToFile }));
-    mount.append(el('div', { className: 'seg-hint', textContent: 'to load: drag a project or composition .json onto the window' }));
+    // (Project save/open/new live on the footer toolbar — ⌘S / ⌘O; loading also
+    // accepts a project or composition .json dropped onto the window. The visuals-only
+    // "Save composition…" export was removed from here as redundant with the footer.)
 
     // Advanced-only rows are revealed by Settings › Advanced mode (body.advanced).
     const adv = (e) => { e.classList.add('adv-only'); return e; };

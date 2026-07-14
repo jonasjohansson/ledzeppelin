@@ -54,7 +54,10 @@ export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, 
   const vars = { '--accent': hex };
 
   // Accent variants — contrast against the surface: dark mixes toward black, light toward white.
-  vars['--accent-soft'] = light ? mixHex(hex, '#ffffff', 0.82) : mixHex(hex, '#0a0a0a', 0.16);
+  // Selected/active fill tint. Dark: keep enough accent (0.26) that the tint reads as
+  // teal, not a swampy near-black green — a heavier black mix (was 0.16) looked muddy
+  // on the segmented on-state (e.g. Theme Dark|Light).
+  vars['--accent-soft'] = light ? mixHex(hex, '#ffffff', 0.82) : mixHex(hex, '#0a0a0a', 0.26);
   vars['--accent-line'] = light ? mixHex(hex, '#ffffff', 0.45) : mixHex(hex, '#0a0a0a', 0.40);
   vars['--accent-text'] = light ? mixHex(hex, '#141414', 0.30) : mixHex(hex, '#ffffff', 0.62);
 

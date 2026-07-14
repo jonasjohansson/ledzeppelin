@@ -33,7 +33,7 @@
   --line:#3a3a3a; --line-2:#4c4c4c;       /* hairline borders (neutral) */
   --text:#ffffff; --muted:#ccccd2; --faint:#959599;
   --accent:#3ecfa6;            /* the one teal-mint accent (Resolume) */
-  --accent-soft:#122a23;       /* selected/active background tint */
+  --accent-soft:#183d33;       /* selected/active background tint (0.26 accent — was muddy #122a23) */
   --accent-text:#87e1c8;       /* text on accent surfaces */
   --accent-line:#1f5948;       /* active border */
   --accent-head:#30564b;       /* muted teal group-header bar */
@@ -463,9 +463,10 @@ body.hide-toolbar-labels #topbar .g-label { display: none; }   /* Settings › T
 /* DOCK: three columns under the top bar, on the dark dock background. Gutters pass
    pointer events through; the islands re-enable them. */
 #dock {
-  /* Top offset = topbar height + ONE gutter; the dock's own padding supplies that
-     gutter, so the gap above the islands matches the side/inter-island gaps (6px). */
-  position: fixed; top: var(--dock-gap); left: 0; right: 0; bottom: calc(var(--topbar-h) + var(--dock-gap)); z-index: 6;
+  /* The topbar sits at the BOTTOM now (cleared by the bottom offset). Top gutter is
+     supplied by the dock's own padding alone, so the gap above the islands equals the
+     side/inter-island gaps (--dock-gap) — top:0 here or it would double to 2×gap. */
+  position: fixed; top: 0; left: 0; right: 0; bottom: calc(var(--topbar-h) + var(--dock-gap)); z-index: 6;
   display: flex; gap: var(--dock-gap); align-items: stretch;
   padding: var(--dock-gap); box-sizing: border-box; background: var(--bg); pointer-events: none;
 }
