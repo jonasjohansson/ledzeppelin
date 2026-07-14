@@ -2691,11 +2691,15 @@ function setPatchTab(which) {
   }
   try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
 }
-// Accordion: click a section header to open it (exclusive).
+// Accordion: click a section header to open it (exclusive) — but let the header's
+// action icons (add controller/fixture/scan) act without toggling the panel.
 document.getElementById('grp-patch')?.addEventListener('click', (e) => {
+  if (e.target.closest('.acc-head-acts')) return;
   const h = e.target.closest('.acc-head'); if (!h) return;
   const sec = h.closest('.acc-sec'); if (sec) setPatchTab(sec.dataset.acc);
 });
+// Scan icon on the Output header → the same network scan as the list button.
+document.getElementById('devices-scan')?.addEventListener('click', (e) => { e.stopPropagation(); panel?.runScan?.(renderOutput); });
 
 // Compat shim: there are no top-level sections anymore (everything is docked).
 function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }

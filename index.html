@@ -215,21 +215,17 @@ canvas{display:block}</style>
          time (setPatchTab). Kept under #grp-patch so scoped CSS holds. -->
     <section class="island acc-host" id="grp-patch">
       <div class="acc-sec is-open" data-acc="fixtures">
-        <header class="acc-head"><span class="acc-title">Output</span></header>
+        <header class="acc-head">
+          <span class="acc-title">Output</span>
+          <!-- Add-controller / add-fixture / scan live as icons on the Output header. -->
+          <span class="acc-head-acts">
+            <button id="devices-add-device" class="acc-act" title="Add a controller"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
+            <button id="devices-add-fixture" class="acc-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
+            <button id="devices-scan" class="acc-act" title="Scan the network for controllers"><svg class="ic" aria-hidden="true"><use href="#ic-scan"/></svg></button>
+          </span>
+        </header>
         <div class="acc-body">
-          <!-- the merged patch view: "Controller" + "Fixture" divider bars (each with a +
-               to add one); the controller-grouped list renders below. -->
-          <div id="patch-fixtures">
-            <div class="out-divider">
-              <span class="out-divider-label">Controller</span>
-              <button id="devices-add-device" class="out-plus" title="Add a controller">+</button>
-            </div>
-            <div class="out-divider">
-              <span class="out-divider-label">Fixture</span>
-              <button id="devices-add-fixture" class="out-plus" title="Add a fixture">+</button>
-            </div>
-            <div id="output-list"></div>
-          </div>
+          <div id="patch-fixtures"><div id="output-list"></div></div>
         </div>
       </div>
       <div class="acc-sec" data-acc="sources">

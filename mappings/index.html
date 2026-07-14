@@ -14,7 +14,7 @@
      [[ui-aesthetic-ocr-disguise]]). All colours/sizes come from var(--…); the
      fallbacks here only matter if ui.css ever fails to load. */
   html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
-  .map-wrap { padding: var(--s5) var(--s5) 40px; max-width: 920px; margin: 0 auto; }
+  .map-wrap { padding: var(--s5) var(--s5) 40px; max-width: none; margin: 0; }   /* full browser width — responsive */
   /* Narrow (embedded in the sidebar tab): stack each row onto two lines. */
   @media (max-width: 560px) {
     .map-wrap { padding: var(--s4) var(--s4) 30px; }

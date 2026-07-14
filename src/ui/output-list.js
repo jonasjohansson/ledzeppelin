@@ -265,6 +265,9 @@ export function createOutputList(hooks) {
         const sw = oel('i', { className: 'dev-swatch', title: 'controller colour' });
         sw.style.background = gdev.color;
         head.insertBefore(sw, head.querySelector('.insp-sec-title'));
+        // Expose the controller colour on the whole section so its selected header tints
+        // from it (fixture rows override with their own --dev-color shade).
+        sec.style.setProperty('--dev-color', gdev.color);
       }
       if (devOver) head.querySelector('.fx-badge')?.classList.add('out-over');
       if (getSelectedDeviceId() === dg.deviceId && !selectedFixtureIds.size) head.classList.add('is-sel');
@@ -296,12 +299,14 @@ export function createOutputList(hooks) {
     // render() — so background health checks never rebuild the patch list / inspector
     // mid-edit. The Inventory popout never reaches here, so it never pings.
     if (daemonUp) panel.pingDevices?.(show.devices, repaintDots);
-    outputListEl.append(oel('button', {
-      className: 'fx-add', textContent: scanning ? 'Scanning…' : '⌖ scan',
-      title: daemonUp ? 'scan the network for WLED + Art-Net controllers' : 'start the daemon (npm start) to scan',
-      disabled: scanning || !daemonUp,
-      onclick: () => panel.runScan?.(render),
-    }));
+    // Scan lives as an icon on the Output header (#devices-scan, wired in app.js) — reflect
+    // its live state here (disabled when the daemon's down / already scanning).
+    const scanIcon = document.getElementById('devices-scan');
+    if (scanIcon) {
+      scanIcon.disabled = scanning || !daemonUp;
+      scanIcon.classList.toggle('is-scanning', scanning);
+      scanIcon.title = daemonUp ? (scanning ? 'Scanning…' : 'Scan the network for controllers') : 'Start the daemon (npm start) to scan';
+    }
     const scanRes = panel.scanResultsEl?.(); if (scanRes) outputListEl.append(scanRes);
   }
 

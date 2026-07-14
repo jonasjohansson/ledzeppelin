@@ -166,15 +166,6 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
-/* Controller / Fixture add DIVIDERS — full-bleed muted-teal bars (like the inspector
-   group headers), each with a + to add one. Replace the old button toolbar. */
-.out-divider { display: flex; align-items: center; height: var(--row-h); margin: 0 calc(-1 * var(--s3)) 4px;
-  padding: 0 var(--s2) 0 var(--s5); background: var(--accent-head);
-  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
-.out-divider-label { flex: 1 1 auto; }
-.out-plus { flex: 0 0 auto; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; color: var(--text); font-size: var(--fs-glyph); line-height: 1; cursor: pointer; border-radius: var(--radius); }
-.out-plus:hover { color: var(--accent); background: color-mix(in srgb, #000 22%, transparent); }
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
 /* + Fixture / + Device side by side as square tiles. */
@@ -233,8 +224,9 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
    text colour. (The output tree's filled-selection pattern, applied here too.) */
-.output-row.selected { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); border-color: var(--accent-line); }
-.output-row.selected > span:first-of-type { color: var(--accent-text); }
+.output-row.selected { background: color-mix(in srgb, var(--dev-color, var(--accent)) 30%, var(--panel-2)); border-color: color-mix(in srgb, var(--dev-color, var(--accent)) 45%, var(--line)); }
+.output-row.selected > span:first-of-type { color: var(--text); }   /* white on the controller-colour highlight */
+.output-row.selected .lr-suffix { color: color-mix(in srgb, var(--text) 62%, transparent); }   /* size suffix stays legible on the tint */
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 /* When the editor is the inspector's only content (a selected fixture), the
    separator margin/rule above it is dead space — drop it so GEOMETRY sits at
@@ -537,6 +529,15 @@ html { scroll-behavior: smooth; }
 .acc-head:hover .acc-title { color: var(--text); }
 .acc-sec.is-open > .acc-head .acc-title,
 .acc-sec.is-open > .acc-head:hover .acc-title { color: var(--accent); }
+/* Action icons on a section header (Output: add controller / fixture / scan) — only on
+   the OPEN section; clicks are exempted from the accordion toggle in app.js. */
+.acc-head-acts { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.acc-sec:not(.is-open) > .acc-head .acc-head-acts { display: none; }
+.acc-act { background: none; border: none; color: var(--muted); cursor: pointer; padding: 3px; display: inline-flex; }
+.acc-act:hover { color: var(--accent); }
+.acc-act:disabled { opacity: .35; cursor: default; }
+.acc-act .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
+.acc-act.is-scanning { color: var(--accent); }
 .acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
 
 /* Small icon-only tab (the Settings cog in the left column's tab row). */
@@ -896,7 +897,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
 .out-sec .insp-sec-head { border-bottom: none; height: 24px; }   /* no hairline; matches the inspector section-header height */
 .insp-sec-head.out-unassigned { height: 24px; }
-.out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); }
+.out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--dev-color, var(--accent)) 30%, var(--panel-2)); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
    panel line through as hairline seams (no floating cells / unnecessary gaps). */
