@@ -84,6 +84,41 @@ export function makeDashboardAnim(from, to, link = '', invert = false) {
   return { mode: 'dashboard', from: Number(from) || 0, to: Number(to) || 0, link, invert: !!invert };
 }
 
+// --- COLOUR modulation ------------------------------------------------------
+// A colour param's components (HSB or RGB) can each be modulated independently.
+// The anim entry is { mode:'color', space:'hsb'|'rgb', comps:{ <name>: <spec> } }; the
+// base colour (params[key], a hex) supplies the UN-modulated components. resolveParams
+// decomposes the base to the space, overrides each present component with its
+// animatedValue (0..1), and recombines to a hex the compositor consumes unchanged.
+export const COLOR_COMPS = { hsb: ['h', 's', 'b'], rgb: ['r', 'g', 'b'] };
+export function makeColorAnim(space = 'hsb') { return { mode: 'color', space: space === 'rgb' ? 'rgb' : 'hsb', comps: {} }; }
+const hex01 = (hex) => {
+  let h = String(hex || '').replace('#', '').trim();
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  const n = parseInt(/^[0-9a-f]{6}$/i.test(h) ? h : 'ffffff', 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+};
+const toHex = (r, g, b) => '#' + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+export function rgbToHsb([r, g, b]) {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h = 0;
+  if (d) { if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; h /= 6; if (h < 0) h += 1; }
+  return [h, mx ? d / mx : 0, mx];
+}
+export function hsbToRgb([h, s, v]) {
+  h = ((h % 1) + 1) % 1; const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
+}
+export const hexToComps = (hex, space) => (space === 'rgb' ? hex01(hex) : rgbToHsb(hex01(hex)));
+export const compsToHex = (arr, space) => (space === 'rgb' ? toHex(arr[0], arr[1], arr[2]) : toHex(...hsbToRgb(arr)));
+function resolveColor(spec, baseHex, timeSec, signals) {
+  const space = spec.space === 'rgb' ? 'rgb' : 'hsb';
+  const comps = hexToComps(baseHex || '#ffffff', space);
+  const names = COLOR_COMPS[space];
+  for (let i = 0; i < 3; i++) { const cs = spec.comps?.[names[i]]; if (cs) comps[i] = animatedValue(cs, timeSec, signals); }
+  return compsToHex(comps, space);
+}
+
 // Normalized 0..1 phase for the given clock time, duration and direction.
 // `phase` is an offset in CYCLES (0..1) — retimeAnim() writes it so edits to
 // direction/duration stay continuous on the free-running clock.
@@ -216,6 +251,7 @@ export function resolveParams(params, anim, timeSec, signals, instanceKey) {
   const out = { ...(params || {}) };
   for (const k of keys) {
     const spec = anim[k];
+    if (spec && spec.mode === 'color') { out[k] = resolveColor(spec, params && params[k], timeSec, signals); continue; }
     if (spec && spec.mode === 'external') { out[k] = externalValue(spec, k, params, signals, timeSec, instanceKey); continue; }
     out[k] = animatedValue(spec, timeSec, signals);
   }

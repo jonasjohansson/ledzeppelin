@@ -1201,6 +1201,15 @@ input[type=checkbox]:checked::after {
 .anim-cog svg.ic { width: 12px; height: 12px; fill: currentColor; display: block; }   /* pixel gear, centred */
 .ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
 
+/* Modulatable COLOUR param: a swatch head + (when expanded) HSB/RGB component rows. */
+.color-param .color-head { display: flex; align-items: center; gap: 0; min-height: var(--row-h); position: relative; padding-left: var(--col-gutter); }
+.color-param .color-head .anim-cog-wrap { position: absolute; left: 0; top: 0; bottom: 0; width: var(--col-gutter); display: flex; align-items: center; justify-content: center; }
+.color-param .color-head .ly-plabel { flex: 0 0 var(--col-label); text-align: right; padding-right: 8px; color: var(--muted); }
+.color-param .color-head .fx-color { flex: 1 1 0; height: var(--row-h); min-width: 0; }
+.color-param .color-head:hover .color-cog, .color-param .color-cog.on, .color-param.is-open .color-cog { opacity: 1; }
+.color-param.is-open .color-cog { color: var(--accent); }
+.color-param:not(.is-open) .color-body { display: none; }
+
 /* Parameter groups don't fold — always open, no fold arrow. Resolume-style: the header
    is a FULL-BLEED muted-teal bar (obvious group divider), its title sharing the left
    indent of the CLIP tabs + clip-name field (structural left edge). */

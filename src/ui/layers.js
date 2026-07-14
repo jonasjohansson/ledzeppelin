@@ -36,7 +36,7 @@ import {
 } from '../model/layers.js';
 import { dashboardLinkLabels } from '../model/dashboard.js';
 import { Knob } from './kit/knob.js';
-import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim } from '../model/anim.js';
+import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim, COLOR_COMPS, hexToComps, compsToHex } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
 import { AUDIO_BANDS, enableAudio, audioEnabled, disableExternal } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
@@ -97,6 +97,74 @@ function paramControl(p, value, onInput) {
   const min = p.min ?? 0, max = p.max ?? 1;
   const v = value == null ? (p.default ?? min) : value;
   return sliderField(prettyParam(p.key), v, min, max, onInput, p.default ?? min, p.step);
+}
+
+// --- Modulatable COLOUR param (Resolume-style) ------------------------------
+// Collapsed: just the swatch (quick base picker) + a cog. Expanding reveals an
+// HSB|RGB space switch and three component rows (Hue/Sat/Bright or R/G/B), each a
+// FULL animatableParam — so any component can be held, swept (Timeline), or driven by
+// Audio/Dashboard/Control. The modulation lives in the ONE anim entry
+// { mode:'color', space, comps:{ <name>: spec } }; the base swatch supplies the rest,
+// and resolveParams recombines to a hex the compositor consumes unchanged.
+const COLOR_LABELS = { hsb: ['Hue', 'Sat', 'Bright'], rgb: ['Red', 'Green', 'Blue'] };
+const colorExpanded = new Set();   // colour keys the user has expanded (persist across re-renders)
+const colorSpace = new Map();      // UI-selected space per colour key (transient)
+function colorParam({ key, value, anim, onValue, onAnim, onAnimLive }) {
+  const baseHex = value || '#ffffff';
+  const cAnim = (anim && anim.mode === 'color') ? anim : null;
+  const modulated = !!(cAnim && Object.keys(cAnim.comps || {}).length);
+  let space = colorSpace.get(key) || cAnim?.space || 'hsb';
+  const comps = { ...(cAnim?.comps || {}) };
+
+  const wrap = el('div', { className: 'anim-param color-param' });
+  const cog = el('button', { className: 'anim-cog color-cog' + (modulated ? ' on' : ''), title: 'Modulate colour — HSB / RGB components' });
+  cog.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-settings"/></svg>';
+  const nameEl = el('span', { className: 'ly-plabel ly-plabel-mod', textContent: 'Color' });
+  const swatch = el('input', { type: 'color', className: 'fx-color', value: baseHex });
+  swatch.addEventListener('input', () => onValue(swatch.value));
+  nameEl.addEventListener('click', (e) => { e.stopPropagation(); cog.click(); });
+  const head = el('div', { className: 'ly-param color-head' }, [
+    el('div', { className: 'anim-cog-wrap' }, [cog]), nameEl, swatch,
+  ]);
+
+  const body = el('div', { className: 'color-body' });
+  const rebuild = () => {
+    body.textContent = '';
+    body.append(Segmented('Space', [['hsb', 'HSB'], ['rgb', 'RGB']], () => space, (v) => {
+      if (v === space) return;
+      space = v; colorSpace.set(key, v);
+      if (modulated) onAnim(null);   // old-space modulations don't carry over → clear + full re-render
+      else rebuild();                // nothing to clear → just swap the component rows in place
+    }));
+    const names = COLOR_COMPS[space], labels = COLOR_LABELS[space], baseC = hexToComps(baseHex, space);
+    const writeComps = (next, live) => {
+      const pruned = {}; for (const n of names) if (next[n]) pruned[n] = next[n];
+      const obj = Object.keys(pruned).length ? { mode: 'color', space, comps: pruned } : null;
+      (live ? (onAnimLive || onAnim) : onAnim)(obj);
+    };
+    names.forEach((n, i) => {
+      body.append(animatableParam({
+        key: `${key}::${n}`,
+        p: { key: labels[i], type: 'float', min: 0, max: 1, default: baseC[i], step: 0.01 },
+        value: baseC[i], anim: comps[n],
+        onValue: (cv) => { const arr = hexToComps(baseHex, space); arr[i] = cv; onValue(compsToHex(arr, space)); },
+        onAnim: (spec) => { const c = { ...comps }; if (spec) c[n] = spec; else delete c[n]; writeComps(c, false); },
+        onAnimLive: (spec) => { const c = { ...comps }; if (spec) c[n] = spec; else delete c[n]; writeComps(c, true); },
+      }));
+    });
+  };
+  rebuild();
+
+  wrap.append(head, body);
+  const setOpen = (o) => wrap.classList.toggle('is-open', o);
+  setOpen(modulated || colorExpanded.has(key));
+  cog.onclick = (e) => {
+    e.stopPropagation();
+    const open = !wrap.classList.contains('is-open');
+    if (open) colorExpanded.add(key); else colorExpanded.delete(key);
+    setOpen(open || modulated);   // a modulated colour stays open (its rows are the control)
+  };
+  return wrap;
 }
 
 // A dual-handle range track for an animated param: two thumbs mark `in` and `out`
@@ -182,7 +250,8 @@ function rangeTrack({ min, max, step, from, to, animKey, onFrom, onTo, onLiveFro
 //   oscAddress: the param's CANONICAL always-active OSC address (shown in the
 //   External controls as a copyable chip), when the scheme covers it.
 function animatableParam({ key, p, value, anim, onValue, onAnim, onAnimLive, oscAddress }) {
-  if (p.type === 'color' || p.type === 'bool' || isAxisParam(p)) return paramControl(p, value, onValue);
+  if (p.type === 'color') return colorParam({ key, p, value, anim, onValue, onAnim, onAnimLive });
+  if (p.type === 'bool' || isAxisParam(p)) return paramControl(p, value, onValue);
   const min = p.min ?? 0, max = p.max ?? 1;
   const animated = !!anim;
   const isAudio = anim?.mode === 'audio';
