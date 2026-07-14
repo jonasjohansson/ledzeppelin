@@ -167,10 +167,12 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
-/* + Controller / + Fixture / Scan — labelled buttons under the Output header. */
-.out-toolbar { display: flex; gap: var(--dock-gap); padding: 0 0 var(--s3); }
-.out-add { flex: 1 1 0; height: var(--ctrl-h); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
-  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+/* + Controller / + Fixture / Scan — COMPACT buttons on the Output header (next to the
+   title, hugging their text — no full-width whitespace). Only shown on the open section. */
+.acc-head-acts { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--s1); }
+.acc-sec:not(.is-open) > .acc-head .acc-head-acts { display: none; }
+.out-add { flex: 0 0 auto; height: 20px; padding: 0 var(--s3); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; cursor: pointer; white-space: nowrap; }
 .out-add:hover { color: var(--accent); border-color: var(--line-2); }
 .out-add:disabled { opacity: .35; cursor: default; }
 .out-add.is-scanning { color: var(--accent); border-color: var(--accent-line); }

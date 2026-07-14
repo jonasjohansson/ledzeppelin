@@ -233,17 +233,17 @@ canvas{display:block}</style>
         <div class="acc-body acc-embed"><iframe title="Library" data-embed="inventory/"></iframe></div>
       </div>
       <div class="acc-sec is-open" data-acc="fixtures">
-        <header class="acc-head"><span class="acc-title">Output</span></header>
+        <header class="acc-head">
+          <span class="acc-title">Output</span>
+          <!-- + Controller / + Fixture / Scan as compact buttons on the header (next to Output). -->
+          <span class="acc-head-acts">
+            <button id="devices-add-device" class="out-add" title="Add a controller">+ Controller</button>
+            <button id="devices-add-fixture" class="out-add" title="Add a fixture">+ Fixture</button>
+            <button id="devices-scan" class="out-add" title="Scan the network for controllers">Scan</button>
+          </span>
+        </header>
         <div class="acc-body">
-          <div id="patch-fixtures">
-            <!-- + Controller / + Fixture / Scan as labelled buttons (clearer than icons). -->
-            <div class="out-toolbar">
-              <button id="devices-add-device" class="out-add" title="Add a controller">+ Controller</button>
-              <button id="devices-add-fixture" class="out-add" title="Add a fixture">+ Fixture</button>
-              <button id="devices-scan" class="out-add" title="Scan the network for controllers">Scan</button>
-            </div>
-            <div id="output-list"></div>
-          </div>
+          <div id="patch-fixtures"><div id="output-list"></div></div>
         </div>
       </div>
       <div class="acc-sec" data-acc="sources">

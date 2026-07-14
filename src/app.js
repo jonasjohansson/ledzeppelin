@@ -75,10 +75,14 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   // Injected into each embedded app so it INTEGRATES into its sidebar section instead of
   // re-framing itself: hide its own title (the section already labels it) and flatten its
   // inner panes (drop the nested box borders / padding so it reads as one panel).
+  // A section header in an embedded app reads as the app's own teal group-header bar
+  // (matching the inspector's #grp-props .insp-sec-head), so Settings/Library look like
+  // native accordion content instead of a loose list of faint captions.
+  const HEAD_BAR = 'background:var(--accent-head);color:var(--text);min-height:var(--row-h);display:flex;align-items:center;padding:0 var(--s5);margin:var(--s4) -8px var(--s3);letter-spacing:var(--ls-caps)';
   const EMBED_CSS = {
-    'settings/': '.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}',
-    'inventory/': '.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 10px;background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:8px;max-width:none;margin:0}',
-    'mappings/': '.map-title{display:none}',
+    'settings/': `.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}.fx-pts{${HEAD_BAR}}.fx-pts:first-child{margin-top:0}`,
+    'inventory/': `.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 10px;background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:8px;max-width:none;margin:0}.inv-pane-title,.fx-pts{${HEAD_BAR}}`,
+    'mappings/': `.map-title{display:none}.map-sec{${HEAD_BAR}}`,
   };
   const setup = (f) => {
     if (f.dataset.wired) return; f.dataset.wired = '1';
