@@ -47,6 +47,7 @@
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
   --glass:var(--panel);                   /* SOLID — panels are opaque, not floating glass */
+  --badge-bg:rgba(0,0,0,.6);              /* dark chip background on thumbnails/clips (repeated) */
   /* Spacing scale — tightened (slim, Resolume-dense). */
   --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px; --s6:8px;   /* --s6 fills the common 8px gap */
   /* Typography system — mono-forward: --sans aliases the one --ui-font face so
@@ -132,7 +133,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .tab:hover { color: var(--text); }
 /* Active = ACCENT text (family rule shared with LEDger: the selected tab is
    warm, not just bright) — at every tier: workspace tab, sub-tab, section tab. */
-.tab-active, .tab-active:hover { color: var(--accent); background: var(--hover); }
+.tab-active, .tab-active:hover { color: var(--accent); background: none; }   /* one tab look: accent text, no fill */
 .tab:focus-visible { outline: 1px solid var(--line-2); outline-offset: -1px; }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
@@ -151,7 +152,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 }
 .subtab:hover { color: var(--muted); }
 /* The active SUBTAB pops in the BRIGHT accent with dark on-accent text. */
-.subtab-active, .subtab-active:hover { color: var(--accent-dark); background: var(--accent); }
+.subtab-active, .subtab-active:hover { color: var(--accent); background: none; }   /* same tab look at every tier */
 
 /* Output mapping hint line (small, muted). */
 .seg-hint { font-size: var(--fs-micro); color: var(--faint); line-height: var(--lh-ctrl); }
@@ -260,7 +261,7 @@ body.mode-3d #proj-row { display: flex; }
   color: var(--faint); cursor: pointer;
 }
 .shape-btn:hover { color: var(--accent); background: var(--accent-soft); }
-.shape-btn.on { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+.shape-btn.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }
 .shape-btn .ic-sm { width: 13px; height: 13px; fill: currentColor; display: block; }
 /* Per-vertex XYZ table (polyline/bezier fixture editor): # + X/Y/Z px columns.
    Inputs match the .fx-field chrome; Z is height off the canvas plane (3D). */
@@ -705,7 +706,7 @@ body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-sele
 .ctrl-section { font-size: var(--fs-micro); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--muted); margin: 14px 2px 8px; }
 /* A clip whose video file was lost on reload. */
 .clip-missing { position: absolute; left: 3px; top: 3px; font: var(--fs-micro) var(--mono); color: var(--danger);
-  background: rgba(0,0,0,.6); padding: 1px 4px; border-radius: var(--radius-sm); }
+  background: var(--badge-bg); padding: 1px 4px; border-radius: var(--radius-sm); }
 .ctrl-empty { color: var(--muted); text-align: center; padding: var(--s5) var(--s4); }
 #library {
   flex: 0 0 auto; max-height: 42%; overflow-y: auto;
@@ -905,7 +906,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .dist-cell { display: flex; align-items: center; justify-content: center; padding: 4px;
   background: var(--field-bg); border: none; color: var(--muted); cursor: pointer; }
 .dist-cell:hover { color: var(--text); }
-.dist-cell.on { background: var(--accent-soft); color: var(--accent-text); }
+.dist-cell.on { background: var(--accent-soft); color: var(--accent-text); border-color: var(--accent-line); }
 /* "Advanced" disclosure inside a device editor — a quiet, marker-free summary so
    niche fields (sync delay) stay tucked away without cluttering the common case. */
 .fx-advanced > summary { cursor: pointer; user-select: none; list-style: none; padding: 4px 0; color: var(--faint); font-size: var(--fs-micro); letter-spacing: var(--ls-ui); }
@@ -1303,7 +1304,7 @@ input[type=checkbox]:checked::after {
   background: var(--field-bg); color: var(--muted); border: 1px solid var(--line-2);
   border-radius: var(--radius-sm); font-size: var(--fs-ctrl);
 }
-.anim-unit.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+.anim-unit.on { color: var(--accent-text); border-color: var(--accent-line); background: var(--accent-soft); }
 .anim-ctrls { display: flex; align-items: center; gap: 6px; padding: 0 0 2px 4px; flex-wrap: wrap; }
 .anim-ctrls select {
   flex: 0 0 auto; background: var(--field-bg); color: var(--text); border: 1px solid var(--line-2);
@@ -1388,7 +1389,7 @@ input[type=checkbox]:checked::after {
 }
 .dir-btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .dir-btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-right-width: 1px; }
-.dir-btn.on { color: var(--text); background: var(--hover); border-color: var(--line-2); }
+.dir-btn.on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); }   /* was neutral — now the shared segmented-on look */
 /* ±90° steppers inline in the Rotation field: compact, after the number input. */
 .fx-field > .rot-step { flex: 0 0 auto; border-right-width: 0; }
 .fx-field > .rot-step:last-child { border-right-width: 1px; border-radius: 0 var(--radius) var(--radius) 0; }
@@ -1680,19 +1681,19 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 }
 .clip-fxcount {
   position: absolute; top: 3px; right: 4px; font-size: var(--fs-micro); color: var(--accent);
-  background: rgba(0,0,0,.6); padding: 0 4px; border-radius: var(--radius);
+  background: var(--badge-bg); padding: 0 4px; border-radius: var(--radius);
 }
 /* Triggerable source (e.g. Pulse) → a ⚡ badge in the opposite corner. */
 .clip-trig {
   position: absolute; top: 3px; left: 4px; font-size: var(--fs-micro); line-height: 1;
-  color: var(--accent); background: rgba(0,0,0,.6); padding: 1px 3px; border-radius: var(--radius);
+  color: var(--accent); background: var(--badge-bg); padding: 1px 3px; border-radius: var(--radius);
 }
 .deck-layer.is-min .clip-trig { display: none; }
 /* Volumetric source → a "3D" badge (bottom-left of the thumb): lights LEDs at
    their world xyz, never drawn on the canvas. Sits under a ⚡ when both apply. */
 .clip-vol {
   position: absolute; bottom: 3px; left: 4px; font-size: var(--fs-micro); line-height: 1;
-  color: var(--accent); background: rgba(0,0,0,.6); padding: 1px 3px; border-radius: var(--radius);
+  color: var(--accent); background: var(--badge-bg); padding: 1px 3px; border-radius: var(--radius);
 }
 .deck-layer.is-min .clip-vol { display: none; }
 /* Modulation badges (top-right of the thumb): A = audio-driven, E = external-
@@ -1700,7 +1701,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .clip-mods { position: absolute; top: 3px; right: 4px; display: flex; gap: 2px; }
 .clip-mod {
   font-size: var(--fs-micro); line-height: 1; color: var(--accent);
-  background: rgba(0,0,0,.6); padding: 1px 3px; border-radius: var(--radius);
+  background: var(--badge-bg); padding: 1px 3px; border-radius: var(--radius);
 }
 .deck-layer.is-min .clip-mods { display: none; }
 /* SELECTED (single click, edit target) = a colour FILL on the label bar.
@@ -1862,7 +1863,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg-2-btn + .seg-2-btn { border-left: 1px solid var(--field-border); }
 .seg-2-btn:hover { color: var(--text); background: var(--hover); }
-.seg-2-btn.is-on { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.seg-2-btn.is-on { color: var(--accent-text); background: var(--accent-soft); }   /* shared segmented-on tint (was a one-off 14% mix) */
 
 /* Transport bar (play-through of the clip timeline). */
 .composer-deckhead { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 4px; }

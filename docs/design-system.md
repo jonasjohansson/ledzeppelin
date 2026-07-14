@@ -8,7 +8,7 @@ teal-mint accent (`#3ecfa6`), Resolume-dense. `src/ui/palette.js` + `src/ui/ui.c
 
 ## Tokens — never write a raw value that a token covers
 
-**Spacing** (dense 2px ramp, monotonic): `--s1:2 --s2:4 --s3:6 --s4:8 --s5:10 --s6:12 --s7:14 --s8:16`. Off-ramp values (3/5/7/9/11/13/17/18/19) are strays — snap to the nearest step. If a value repeats 3+ times, promote it to a token.
+**Spacing** — CURRENT tokens (ui.css): `--s1:2 --s2:4 --s3:6 --s4:10 --s5:14 --s6:8`. ⚠️ KNOWN DEBT: this ramp is **non-monotonic** (`--s6:8` sits out of order, added later as "the common 8px gap") and lacks `--s7`/`--s8`; the intended clean ramp is `2/4/6/8/10/12/14/16`. Regularising it shifts spacing app-wide, so do it deliberately with visual regression — until then, snap raw px to the nearest EXISTING token (2→s1, 4→s2, 6→s3, 8→s6, 10→s4, 14→s5) and leave 12/16 as raw with a comment. If a value repeats 3+ times, promote it to a token.
 
 **Dimensions:** `--row-h` (one row height) · `--ctrl-h` (one control height inside a row) · `--col-gutter:14` (inspector label/cog gutter) · `--col-label:84` · `--col-val:44` · `--dock-gap:4` · `--topbar-h:42`. Sidebar widths: `--left-w`/`--side-w`/`--side2-w` (no new 2xx/3xx magic widths). **`var(--tok, fallback)` fallbacks must equal the token's real value.**
 
@@ -18,7 +18,7 @@ teal-mint accent (`#3ecfa6`), Resolume-dense. `src/ui/palette.js` + `src/ui/ui.c
 
 ## Typography
 
-Scale (× `--ui-scale`): `--fs-micro:10` (eyebrows/captions/badges) · `--fs-body:11` (body/menus) · `--fs-ctrl:12` (values, tabs, param labels) · `--fs-title:13` (panel titles) · `--fs-glyph:15` (icon glyphs). Weights: `--fw-reg:400`, `--fw-med:600` (the ONE emphasis — headers, active, modified). Tracking: `--ls-caps:.06em` (UPPERCASE only), `--ls-ui:.04em` (mixed-case chrome), `0` on numeric data. No raw `font-size`/`letter-spacing`.
+Scale (× `--ui-scale`, +1px from the original after the Commit Mono switch): `--fs-micro:11` (eyebrows/captions/badges) · `--fs-body:12` (body/menus) · `--fs-ctrl:13` (values, tabs, param labels) · `--fs-title:14` (panel titles) · `--fs-glyph:16` (icon glyphs). Weights: `--fw-reg:400`, `--fw-med:600` (the ONE emphasis — headers, active, modified). Tracking: `--ls-caps:.06em` (UPPERCASE only), `--ls-ui:.04em` (mixed-case chrome), `0` on numeric data. No raw `font-size`/`letter-spacing`.
 
 **Casing (one rule):** UPPERCASE = section-header eyebrows, nav (tabs), app buttons. Title Case = all content labels (`prettyParam`/`labelOf` already do it — `text-transform:none`). As-typed = user names.
 
@@ -26,7 +26,7 @@ Scale (× `--ui-scale`): `--fs-micro:10` (eyebrows/captions/badges) · `--fs-bod
 
 ## Color & state
 
-`palette.js` is the runtime source of truth (writes inline vars on `<html>`); the `ui.css :root` block is the FOUC/JS-fail fallback and MUST be kept regenerated from `themeVars({accent:'#d4a24a'})` so static == runtime.
+`palette.js` is the runtime source of truth (writes inline vars on `<html>`); the `ui.css :root` block is the FOUC/JS-fail fallback and MUST be kept regenerated from `themeVars({accent:'#3ecfa6'})` so static == runtime.
 
 Surfaces (neutral gray, ascending): `--bg → --field-bg → --panel → --panel-2 → --hover → --line → --line-2` (no accent tint on chrome — surfaces stay true neutral). Text (neutral): `--text → --readout → --muted → --faint`. Accent: ONE teal-mint `#3ecfa6`; variants `--accent-soft` (selected tint), `--accent-line` (selected border), `--accent-text` (text on tint), `--accent-dark` (glyph on a bright accent fill), `--accent-head` (muted-teal group-header bar).
 
