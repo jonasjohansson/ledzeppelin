@@ -194,14 +194,13 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0;
   background: var(--panel-2); border: none; border-top: 1px solid var(--line);
   font-size: var(--fs-ctrl); cursor: pointer;
-  /* Controller identity colour (C3): a 3px bar set via --dev-color on the row;
-     transparent when unassigned. Selection overrides it (.selected below). */
-  box-shadow: inset 3px 0 0 var(--dev-color, transparent);
+  /* No left identity bar — a fixture nests under its controller, so the tie is already
+     clear from position (the controller keeps its colour swatch + on-canvas tint). */
 }
 /* Controller colour swatch before the header title (Output list). */
 .dev-swatch { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 1px; }
 .output-row:first-child { border-top: none; }
-.output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
    = faint, no-ip = hollow. Stays in the warm-mono palette (no green/blue). */
 .dev-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--faint); }
@@ -231,7 +230,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
    text colour. (The output tree's filled-selection pattern, applied here too.) */
-.output-row.selected { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); border-color: var(--accent-line); box-shadow: inset 3px 0 0 var(--accent); }
+.output-row.selected { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); border-color: var(--accent-line); }
 .output-row.selected > span:first-of-type { color: var(--accent-text); }
 .output-edit { margin-top: var(--s3); border-top: 1px solid var(--line); padding-top: var(--s2); }
 /* When the editor is the inspector's only content (a selected fixture), the
@@ -909,7 +908,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .out-sec .insp-sec-title { flex: 1 1 auto; color: var(--text); }   /* white for contrast against the accent-soft selection */
 .out-sec .insp-sec-head { border-bottom: none; height: 24px; }   /* no hairline; matches the inspector section-header height */
 .insp-sec-head.out-unassigned { height: 24px; }
-.out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); box-shadow: inset 3px 0 0 var(--accent); }
+.out-sec .insp-sec-head.is-sel { background: color-mix(in srgb, var(--accent) 24%, var(--accent-soft)); }
 .fx-detail { margin-top: 2px; }
 /* Wiring (Distribution) picker: a tiled 4×4 glyph grid. The 1px gap shows the
    panel line through as hairline seams (no floating cells / unnecessary gaps). */
