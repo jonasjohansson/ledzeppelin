@@ -843,6 +843,10 @@ body.gui-hidden #show-ui-pill { display: block; }
    micro-caps + whitespace, NO accent, NO rule — so they don't compete. */
 .fx-pts { grid-column: 1 / -1; margin: 12px 0 5px; }
 .fx-pts:first-child { margin-top: 0; }
+/* Library section header with a right-pinned "+ …" action (Output-style). Flex here
+   so the plain-label (standalone popout) case matches the embedded teal-bar case, which
+   is already flex via the injected HEAD_BAR. */
+.fx-pts.lib-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 
 /* Collapsible inspector sections — accent header + an accent-tinted rule under it. */
 .insp-sec:first-child { border-top: none; }

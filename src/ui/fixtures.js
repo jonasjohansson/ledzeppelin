@@ -718,6 +718,15 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     // its editor below. Reuses the Output tab's list styling.
     const listRow = (label, badges, selected, onClick) => ListRow(label, { badges, selected, onClick });
 
+    // Section header, styled like the Output tab: a label bar with a compact "+ …"
+    // action pinned to the right (mirrors the +Controller/+Fixture buttons that sit on
+    // the Output header), instead of a separate full-width "+ new …" row below the list.
+    const libHead = (label, addLabel, addTitle, onAdd) => {
+      const head = el('div', { className: 'fx-pts lib-head' }, [el('span', { textContent: label })]);
+      head.append(el('button', { className: 'out-add', textContent: addLabel, title: addTitle, onclick: (e) => { e.stopPropagation(); onAdd(); } }));
+      return head;
+    };
+
     // Keep the device-editor selection valid for the app's left-sidebar editor
     // (deviceDetailEl / setDevice read selDeviceId). The device LIST itself is the
     // app's Output list (renderOutput); this panel only builds the catalog now.
@@ -732,7 +741,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     // --- Controller MODELS (flat — not foldable; just a label + the full list). ---
     const devTypes = show.deviceTypes || [];
     if (!devTypes.some((t) => t.id === selDevTypeId)) selDevTypeId = devTypes[0]?.id ?? null;
-    libraryBox.append(el('div', { className: 'fx-pts', textContent: 'controllers' }));
+    libraryBox.append(libHead('controllers', '+ Controller', 'New controller model', () => { addController(show); onPick?.(); }));
     {
       const list = el('div', { className: 'fx-list' });
       for (const t of devTypes) {
@@ -748,14 +757,12 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       }
       if (!devTypes.length) libraryBox.append(el('div', { className: 'seg-hint', textContent: 'no controller models yet' }));
       libraryBox.append(list);
-      // Create + open the new model directly.
-      libraryBox.append(el('button', { className: 'fx-add', textContent: '+ new controller model', onclick: () => { addController(show); onPick?.(); } }));
     }
 
     // --- Fixture DEFINITIONS (flat — define once, place many). ---
     const types = show.fixtureTypes || [];
     if (!types.some((t) => t.id === selTypeId)) selTypeId = types[0]?.id ?? null;
-    libraryBox.append(el('div', { className: 'fx-pts', textContent: 'fixtures' }));
+    libraryBox.append(libHead('fixtures', '+ Fixture', 'New fixture type', () => { addType(show); onPick?.(); }));
     {
       const list = el('div', { className: 'fx-list' });
       for (const t of types) {
@@ -770,7 +777,6 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       }
       if (!types.length) libraryBox.append(el('div', { className: 'seg-hint', textContent: 'no fixture definitions yet' }));
       libraryBox.append(list);
-      libraryBox.append(el('button', { className: 'fx-add', textContent: '+ new fixture type', onclick: () => { addType(show); onPick?.(); } }));
     }
     // Project file I/O lives in the Settings tab.
     if (mounted) onSelect?.();   // lists rebuilt → refresh the left sidebar editor too (covers status pings, edits)
