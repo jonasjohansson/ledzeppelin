@@ -45,7 +45,8 @@ export function Section(title, key, build, onReset, locked, dirty) {
     sec.classList.toggle('is-open');
   });
   if (onReset) {
-    const rst = el('button', { className: 'insp-sec-reset', type: 'button', textContent: '↺' });
+    const rst = el('button', { className: 'insp-sec-reset', type: 'button' });
+    rst.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-rotate"/></svg>';   // sprite reset (was ↺ text glyph)
     const evalDirty = () => {
       const d = typeof dirty === 'function' ? !!dirty() : dirty !== false; // undefined ⇒ always enabled
       rst.disabled = !d;

@@ -51,9 +51,13 @@ import { createClipSpectrum } from './spectrum.js';
 
 const BLEND_MODES = ['add', 'screen', 'multiply', 'alpha'];
 
-// The clear/delete affordance — a pixel × sprite (replaces the off-metric ✕ text glyph).
-const CLOSE_ICON = '<svg class="ic" aria-hidden="true"><use href="#ic-close"/></svg>';
+// Header/action glyphs migrated to sprite icons (off-metric text glyphs → #ic-* symbols).
+const GLYPH_ICON = { '✕': 'ic-close', '↺': 'ic-rotate', '⤓': 'ic-save', '⧉': 'ic-duplicate', '▾': 'ic-caret', '⠿': 'ic-drag', '↗': 'ic-external', '◀': 'ic-play-back', '■': 'ic-stop', '▶': 'ic-play' };
+const iconHTML = (id) => `<svg class="ic" aria-hidden="true"><use href="#${id}"/></svg>`;
+const CLOSE_ICON = iconHTML('ic-close');
 const setClose = (btn) => { btn.innerHTML = CLOSE_ICON; return btn; };
+// Render a glyph as its migrated sprite when one exists, else as text.
+const setGlyph = (btn, glyph) => { const ic = GLYPH_ICON[glyph]; if (ic) btn.innerHTML = iconHTML(ic); else btn.textContent = glyph; return btn; };
 
 // Param keys in the manifest are terse (lowercase / camelCase: `pos`, `headWidth`,
 // `modFreq`). Show them title-cased with the camelCase seam split, so labels read
@@ -701,8 +705,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   function fxMenu({ kind = 'effect', presetName, getParams, applyParams, onReset, onRemove, onDuplicate, resetLabel = 'reset', dirty }) {
     const wrap = el('div', { className: 'fx-acts' });
     const act = (glyph, title, onClick, cls = '') => {
-      const b = el('button', { type: 'button', className: 'fx-act ' + cls, title });
-      if (glyph === '✕') setClose(b); else b.textContent = glyph;   // the clear/delete × is a sprite now
+      const b = setGlyph(el('button', { type: 'button', className: 'fx-act ' + cls, title }), glyph);   // text glyphs → sprites
       b.onclick = (e) => { e.stopPropagation(); onClick(); };
       return b;
     };
@@ -1116,10 +1119,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     if (transport) {
       const dir = transport.getDirection?.() ?? (transport.isPlaying() ? 'forward' : 'off');
       box.append(Section('Autopilot', 'autopilot', (b) => {
-        const dirBtn = (d, glyph, title) => el('button', {
-          className: 'dir-btn' + (dir === d ? ' on' : ''), textContent: glyph, title,
+        const dirBtn = (d, glyph, title) => setGlyph(el('button', {
+          className: 'dir-btn' + (dir === d ? ' on' : ''), title,
           onclick: () => { transport.setDirection(d); if (d === 'off') setPlayhead(-1); render(); },
-        });
+        }), glyph);
         // LOOP rides in the same strip as a fourth, INDEPENDENT toggle (it's not
         // a direction — it's whether the deck wraps after the last clip). The
         // shuffle mode still exists in the transport but isn't exposed here.

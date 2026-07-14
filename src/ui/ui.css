@@ -1014,7 +1014,13 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Drag-to-assign: a fixture row is draggable onto a device/output header. */
 .output-row[draggable="true"] { cursor: grab; }
 .output-row[draggable="true"]:active { cursor: grabbing; }
-.out-group.drop-hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+/* Dropping a fixture onto a controller section: honour that controller's identity colour
+   (--dev-color set on the section) — a ring + faint tint, consistent with its selection. */
+.out-sec.drop-hover {
+  background: color-mix(in srgb, var(--dev-color, var(--accent)) 14%, transparent) !important;
+  box-shadow: inset 0 0 0 2px var(--dev-color, var(--accent)) !important;
+  border-color: transparent !important;
+}
 .out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: var(--radius); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
 .out-caret { color: var(--faint); font-size: var(--fs-micro); width: 10px; }
 .out-group-dev { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -1489,7 +1495,8 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .fx-act-danger:hover { color: var(--danger); }
 .fx-act:disabled { opacity: .25; cursor: default; }
 /* The clear/delete × sprite inside act buttons + deck clear buttons. */
-.fx-act .ic, .lh-clear .ic { width: 12px; height: 12px; fill: currentColor; display: block; }
+.fx-act .ic, .lh-clear .ic, .insp-sec-reset .ic { width: 12px; height: 12px; fill: currentColor; display: block; }
+.dir-btn .ic { width: 14px; height: 14px; fill: currentColor; display: block; margin: 0 auto; }   /* autopilot transport sprites */
 .lh-clear { display: inline-flex; align-items: center; justify-content: center; }
 .fx-act:disabled:hover { color: var(--faint); }
 .fx-acts .fx-menu-wrap { margin-left: 0; }
