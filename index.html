@@ -210,13 +210,17 @@ canvas{display:block}</style>
         <button class="island-tab" data-ptab="sources">Sources</button>
       </header>
       <div class="island-body">
-        <!-- the merged patch view: the + Controller / + Fixture / Library toolbar sits
-             right under the OUTPUT tab, then the controllers with their fixtures below. -->
+        <!-- the merged patch view: "Controller" + "Fixture" divider bars (each with a +
+             to add one) replace the old button toolbar; the controller-grouped list
+             renders below. The Library moved to its own tab. -->
         <div id="patch-fixtures">
-          <div class="out-toolbar">
-            <button id="devices-add-device" class="out-add" title="Add a controller"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg><span>Controller</span></button>
-            <button id="devices-add-fixture" class="out-add" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg><span>Fixture</span></button>
-            <button id="devices-inventory" class="out-add" title="Library — fixture & controller templates"><svg class="ic" aria-hidden="true"><use href="#ic-library"/></svg><span>Library</span></button>
+          <div class="out-divider">
+            <span class="out-divider-label">Controller</span>
+            <button id="devices-add-device" class="out-plus" title="Add a controller">+</button>
+          </div>
+          <div class="out-divider">
+            <span class="out-divider-label">Fixture</span>
+            <button id="devices-add-fixture" class="out-plus" title="Add a fixture">+</button>
           </div>
           <div id="output-list"></div>
         </div>

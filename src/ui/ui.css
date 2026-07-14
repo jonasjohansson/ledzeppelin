@@ -163,13 +163,15 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
-/* + Controller / + Fixture add toolbar — sits directly under the OUTPUT tab. */
-.out-toolbar { display: flex; gap: var(--dock-gap); padding: 0 0 var(--s3); }
-.out-add { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: var(--ctrl-h); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
-  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; cursor: pointer; }
-.out-add:hover { color: var(--accent); border-color: var(--line-2); }
-.out-add .ic { width: 14px; height: 14px; fill: currentColor; }
+/* Controller / Fixture add DIVIDERS — full-bleed muted-teal bars (like the inspector
+   group headers), each with a + to add one. Replace the old button toolbar. */
+.out-divider { display: flex; align-items: center; height: var(--row-h); margin: 0 calc(-1 * var(--s3)) 4px;
+  padding: 0 var(--s2) 0 var(--s5); background: var(--accent-head);
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
+.out-divider-label { flex: 1 1 auto; }
+.out-plus { flex: 0 0 auto; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--text); font-size: var(--fs-glyph); line-height: 1; cursor: pointer; border-radius: var(--radius); }
+.out-plus:hover { color: var(--accent); background: color-mix(in srgb, #000 22%, transparent); }
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
 /* + Fixture / + Device side by side as square tiles. */
