@@ -114,7 +114,10 @@ export function initPrefs({ preview, redrawOverlay }) {
   // branches the accent/contrast appliers below so the CHROME goes light while the
   // display surfaces (stage/preview/output/spectrum) stay dark (see ui.css --stage-bg).
   const THEME_KEY = 'lz.theme';
-  const savedTheme = () => { try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch { return 'dark'; } };
+  // The UI is dark-only — the Light theme (and its switcher) were removed. savedTheme is
+  // pinned to 'dark' so any previously-stored 'light' is ignored and every theme-derived
+  // var (accent soft/line/text, surface ramp, contrast) resolves against the dark ramp.
+  const savedTheme = () => 'dark';
   function setTheme(v) {
     try { localStorage.setItem(THEME_KEY, v === 'light' ? 'light' : 'dark'); } catch { /* private */ }
     document.documentElement.dataset.theme = savedTheme();
@@ -152,7 +155,9 @@ export function initPrefs({ preview, redrawOverlay }) {
   // Translucency of the floating panels (device editor + timeline): 0 = opaque … higher =
   // more see-through. Drives --pop-opacity = (100 − translucency)%.
   const TRANSLU_KEY = 'lz.translucency';
-  const savedTranslucency = () => num(TRANSLU_KEY, 0, 0, 90);
+  // Panel translucency was removed — the floating windows are opaque. Pinned to 0 so any
+  // previously-stored value is ignored and --pop-opacity stays 100%.
+  const savedTranslucency = () => 0;
   function setTranslucency(v) { const c = Math.max(0, Math.min(90, Math.round(v))); document.documentElement.style.setProperty('--pop-opacity', (100 - c) + '%'); try { localStorage.setItem(TRANSLU_KEY, String(c)); } catch { /* private */ } }
   document.documentElement.dataset.theme = savedTheme();   // mark the chrome theme on boot
   setUiScale(savedScale());        // apply text scale on boot

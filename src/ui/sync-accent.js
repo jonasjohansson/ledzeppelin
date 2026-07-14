@@ -9,21 +9,12 @@ export function syncAccent() {
   const apply = () => {
     let hex; try { hex = localStorage.getItem('lz.accent'); } catch { hex = null; }
     if (!valid(hex)) return;
-    let theme; try { theme = localStorage.getItem('lz.theme'); } catch { theme = null; }
-    // Popout windows (Inventory/Mappings) lack the editor's Brightness/Tint/Contrast
-    // sliders → defaults. The shared deriver keeps them in step with the editor's theme.
-    applyVars(themeVars({ accent: hex, theme: theme === 'light' ? 'light' : 'dark' }));
+    // The UI is dark-only now — popouts always derive against the dark ramp.
+    applyVars(themeVars({ accent: hex, theme: 'dark' }));
   };
-  // Theme (Dark|Light chrome) also travels in localStorage (lz.theme). Mark it on the
-  // root so these popouts follow the editor's theme; accent vars re-derive alongside.
-  const applyTheme = () => {
-    let t; try { t = localStorage.getItem('lz.theme'); } catch { t = null; }
-    document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
-    apply();
-  };
-  applyTheme();
+  document.documentElement.dataset.theme = 'dark';
+  apply();
   addEventListener('storage', (e) => {
     if (e.key === 'lz.accent') apply();
-    else if (e.key === 'lz.theme') applyTheme();
   });
 }

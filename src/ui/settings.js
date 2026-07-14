@@ -127,12 +127,9 @@ export function createSettingsPanel(hooks) {
     mount.append(adv(toggleRow('Toolbar labels (footer text)', prefs.getToolbarLabels, (v) => prefs.setToolbarLabels(v))));
     mount.append(adv(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v))));
 
-    // --- Appearance: theme / brightness / accent tint / contrast / text size (all live). ---
+    // --- Appearance: brightness / accent tint / contrast / text size (all live). The
+    // UI is dark-only (no light theme). ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
-    // Theme flips the UI CHROME light/dark; display surfaces (stage/preview/output/
-    // spectrum) stay dark. Discrete choice → a select, like the audio Input above.
-    mount.append(Segmented('Theme', [['dark', 'Dark'], ['light', 'Light']],
-      () => appearance.getTheme(), (v) => appearance.setTheme(v)));
     mount.append(Slider('Brightness', appearance.getBrightness(), {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),
@@ -144,10 +141,6 @@ export function createSettingsPanel(hooks) {
     mount.append(Slider('Contrast %', appearance.getContrast(), {
       min: 60, max: 130, step: 2, default: 100, commit: 'live',
       onInput: (v) => appearance.setContrast(Math.round(v)),
-    }));
-    mount.append(Slider('Translucency %', appearance.getTranslucency(), {
-      min: 0, max: 90, step: 2, default: 38, commit: 'live',
-      onInput: (v) => appearance.setTranslucency(v),
     }));
     mount.append(Slider('Text size %', Math.round(appearance.getScale() * 100), {
       min: 80, max: 140, step: 5, default: 100, commit: 'live',
