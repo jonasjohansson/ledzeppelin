@@ -517,6 +517,26 @@ html { scroll-behavior: smooth; }
 .dock-col > .island { flex: 0 0 auto; }
 #grp-props, #stage-island { flex: 1 1 0; min-height: 60px; }
 
+/* ACCORDION dock windows (left inspector · right patch): stacked collapsible sections,
+   exactly one open per host. The open section fills the column; closed = header only. */
+.acc-host { display: flex; flex-direction: column; padding: 0; }
+.acc-sec { display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--line); }
+.acc-sec:last-child { border-bottom: none; }
+.acc-sec.is-open { flex: 1 1 auto; }
+.acc-sec:not(.is-open) { flex: 0 0 auto; }
+.acc-sec:not(.is-open) .acc-body { display: none; }
+.acc-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  padding: 6px 10px; background: var(--panel-2); }
+.acc-head::before { content: ''; flex: 0 0 auto; width: 0; height: 0; transition: transform .12s;
+  border-left: 4px solid var(--faint); border-top: 3px solid transparent; border-bottom: 3px solid transparent; }
+.acc-sec.is-open > .acc-head::before { transform: rotate(90deg); border-left-color: var(--accent); }
+.acc-title { flex: 1 1 auto; font: var(--fw-med) var(--fs-body) var(--sans);
+  text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--muted); }
+.acc-head:hover .acc-title { color: var(--text); }
+.acc-sec.is-open > .acc-head .acc-title,
+.acc-sec.is-open > .acc-head:hover .acc-title { color: var(--accent); }
+.acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
+
 /* Small icon-only tab (the Settings cog in the left column's tab row). */
 .island-tab.island-tab-icon { flex: 0 0 auto; min-width: 0; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; }
 .island-tab-icon .ic { width: 14px; height: 14px; fill: currentColor; display: block; }

@@ -2638,14 +2638,16 @@ document.addEventListener('keydown', (e) => {
 // (Settings moved to its own popup window off the top-left gear — see
 // openSettingsWindow; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
-  const panes = { composition: 'insp-composition', layer: 'insp-layer', clip: 'insp-clip' };
-  if (!panes[which]) which = 'composition';
-  for (const [k, id] of Object.entries(panes)) { const el = document.getElementById(id); if (el) el.hidden = k !== which; }
-  const tabs = document.getElementById('props-tabs');
-  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.itab === which);
+  if (!['composition', 'layer', 'clip'].includes(which)) which = 'composition';
+  const host = document.getElementById('grp-props');
+  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
   try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
 }
-document.getElementById('props-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setInspectorTab(b.dataset.itab); });
+// Accordion: click a section header to open it (exclusive — the open one stays the one open).
+document.getElementById('grp-props')?.addEventListener('click', (e) => {
+  const h = e.target.closest('.acc-head'); if (!h) return;
+  const sec = h.closest('.acc-sec'); if (sec) setInspectorTab(sec.dataset.acc);
+});
 // (Scan is a button under the Unassigned heading in the Devices list — see renderOutput.)
 
 // Tracks which editor the Device group reflects: 'fixtures' (Devices = placement list +
@@ -2664,12 +2666,12 @@ function setOutputTab(which) {
 // imported sources appear; its items drag onto the layer slots' drop targets.
 function setPatchTab(which) {
   which = which === 'sources' ? 'sources' : 'fixtures';
-  const fx = document.getElementById('patch-fixtures');
-  const src = document.getElementById('patch-sources');
-  if (fx) fx.hidden = which !== 'fixtures';
-  if (src) {
-    src.hidden = which !== 'sources';
-    if (which === 'sources') {
+  const host = document.getElementById('grp-patch');
+  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
+  // Build the source palette fresh each time Sources opens (new thumbnails/imports).
+  if (which === 'sources') {
+    const src = document.getElementById('patch-sources');
+    if (src) {
       src.textContent = '';
       src.append(layerPanel.sourceBrowser({
         draggable: true,
@@ -2678,15 +2680,13 @@ function setPatchTab(which) {
       }));
     }
   }
-  const tabs = document.getElementById('patch-tabs');
-  if (tabs) for (const b of tabs.querySelectorAll('.island-tab')) b.classList.toggle('is-on', b.dataset.ptab === which);
-  // The add-fixture / add-device / library actions belong to the Output (patch) view —
-  // hide them on the Sources tab, where they'd be meaningless.
-  const acts = tabs?.querySelector('.island-acts');
-  if (acts) acts.hidden = which !== 'fixtures';
   try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
 }
-document.getElementById('patch-tabs')?.addEventListener('click', (e) => { const b = e.target.closest('.island-tab'); if (b) setPatchTab(b.dataset.ptab); });
+// Accordion: click a section header to open it (exclusive).
+document.getElementById('grp-patch')?.addEventListener('click', (e) => {
+  const h = e.target.closest('.acc-head'); if (!h) return;
+  const sec = h.closest('.acc-sec'); if (sec) setPatchTab(sec.dataset.acc);
+});
 
 // Compat shim: there are no top-level sections anymore (everything is docked).
 function setSection(which) { if (which === 'output') focusGroup('grp-patch'); }

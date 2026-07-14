@@ -155,19 +155,26 @@ canvas{display:block}</style>
   <!-- LEFT COLUMN: the selected item's properties as TABS (Composition · Layer · Clip).
        (Settings is a floating panel off the top-left gear now.) -->
   <div id="dock-left" class="dock-col">
-    <section class="island" id="grp-props">
-      <header class="island-head island-tabs" id="props-tabs">
-        <button class="island-tab is-on" data-itab="composition">Composition</button>
-        <button class="island-tab" data-itab="layer">Layer</button>
-        <button class="island-tab" data-itab="clip">Clip</button>
-      </header>
-      <div class="island-body">
-        <div id="insp-clip"></div>
-        <div id="insp-layer" hidden></div>
-        <div id="insp-composition" hidden>
-          <div id="comp-settings"></div>
-          <div id="insp-compfx"></div>
+    <!-- Left inspector: three stacked accordion windows (Composition · Layer · Clip);
+         exactly one open at a time, and it follows the current selection (onClipSelect
+         etc. → setInspectorTab). Kept under #grp-props so the scoped inspector CSS holds. -->
+    <section class="island acc-host" id="grp-props">
+      <div class="acc-sec is-open" data-acc="composition">
+        <header class="acc-head"><span class="acc-title">Composition</span></header>
+        <div class="acc-body">
+          <div id="insp-composition">
+            <div id="comp-settings"></div>
+            <div id="insp-compfx"></div>
+          </div>
         </div>
+      </div>
+      <div class="acc-sec" data-acc="layer">
+        <header class="acc-head"><span class="acc-title">Layer</span></header>
+        <div class="acc-body"><div id="insp-layer"></div></div>
+      </div>
+      <div class="acc-sec" data-acc="clip">
+        <header class="acc-head"><span class="acc-title">Clip</span></header>
+        <div class="acc-body"><div id="insp-clip"></div></div>
       </div>
     </section>
     <!-- legacy sources/effects shelf — kept mounted (createLayerPanel contract) but hidden. -->
@@ -204,28 +211,30 @@ canvas{display:block}</style>
        sidebar's "Device" tab. (The Inventory catalog moved to a popout window.) -->
   <div id="dock-right" class="dock-col">
     <!-- Patch island: the placement/wiring list + controller instances. -->
-    <section class="island" id="grp-patch">
-      <header class="island-head island-tabs" id="patch-tabs">
-        <button class="island-tab is-on" data-ptab="fixtures">Output</button>
-        <button class="island-tab" data-ptab="sources">Sources</button>
-      </header>
-      <div class="island-body">
-        <!-- the merged patch view: "Controller" + "Fixture" divider bars (each with a +
-             to add one) replace the old button toolbar; the controller-grouped list
-             renders below. The Library moved to its own tab. -->
-        <div id="patch-fixtures">
-          <div class="out-divider">
-            <span class="out-divider-label">Controller</span>
-            <button id="devices-add-device" class="out-plus" title="Add a controller">+</button>
+    <!-- Right patch: two stacked accordion windows (Output · Sources), one open at a
+         time (setPatchTab). Kept under #grp-patch so scoped CSS holds. -->
+    <section class="island acc-host" id="grp-patch">
+      <div class="acc-sec is-open" data-acc="fixtures">
+        <header class="acc-head"><span class="acc-title">Output</span></header>
+        <div class="acc-body">
+          <!-- the merged patch view: "Controller" + "Fixture" divider bars (each with a +
+               to add one); the controller-grouped list renders below. -->
+          <div id="patch-fixtures">
+            <div class="out-divider">
+              <span class="out-divider-label">Controller</span>
+              <button id="devices-add-device" class="out-plus" title="Add a controller">+</button>
+            </div>
+            <div class="out-divider">
+              <span class="out-divider-label">Fixture</span>
+              <button id="devices-add-fixture" class="out-plus" title="Add a fixture">+</button>
+            </div>
+            <div id="output-list"></div>
           </div>
-          <div class="out-divider">
-            <span class="out-divider-label">Fixture</span>
-            <button id="devices-add-fixture" class="out-plus" title="Add a fixture">+</button>
-          </div>
-          <div id="output-list"></div>
         </div>
-        <!-- Sources tab: a draggable source-library palette (mounted by app.js). -->
-        <div id="patch-sources" hidden></div>
+      </div>
+      <div class="acc-sec" data-acc="sources">
+        <header class="acc-head"><span class="acc-title">Sources</span></header>
+        <div class="acc-body"><div id="patch-sources"></div></div>
       </div>
     </section>
   </div>
