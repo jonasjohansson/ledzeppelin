@@ -121,18 +121,6 @@ let showScreen2 = () => {};   // showScreen2(tabId?) — scroll to SCREEN 2, opt
   }));
 })();
 
-// --- Float the canvas-tool toggles (#corner-toggles) as a translucent island top-centre
-// over the viewport (mirrors the Timeline floating at the bottom). The footer keeps only
-// the left window-menus + the right cluster (bug/install) — settings/debug stay put. ---
-(() => {
-  const toggles = document.getElementById('corner-toggles');
-  const center = document.getElementById('dock-center');
-  if (!toggles || !center || document.getElementById('canvas-tools')) return;
-  const island = document.createElement('div'); island.id = 'canvas-tools';
-  island.append(toggles);           // moves the group out of the footer
-  center.appendChild(island);       // #dock-center is position:relative → island floats within it
-})();
-
 const canvas = document.getElementById('stage');
 const gl = getGL(canvas);
 
