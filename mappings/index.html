@@ -14,7 +14,7 @@
      [[ui-aesthetic-ocr-disguise]]). All colours/sizes come from var(--…); the
      fallbacks here only matter if ui.css ever fails to load. */
   html, body { margin: 0; background: var(--bg); color: var(--text); font: var(--fs-ctrl) var(--ui-font); line-height: var(--lh-ui); }
-  .map-wrap { padding: var(--s5) var(--s5) 40px; max-width: none; margin: 0; }   /* full browser width — responsive */
+  .map-wrap { padding: var(--s3) var(--s5) 40px; max-width: none; margin: 0; }   /* full browser width — responsive; tight top */
   /* Narrow: keep ONE line per row — truncate, never stack/wrap. */
   @media (max-width: 560px) { .map-wrap { padding: var(--s4) var(--s4) 30px; } }
   .map-head { display: flex; align-items: center; gap: var(--s5); margin-bottom: var(--s5); }
@@ -76,7 +76,7 @@
   <div class="map-head">
     <span class="map-title">Mappings</span>
     <div class="map-toolbar">
-      <button class="m-btn" id="enable-midi">enable MIDI</button>
+      <button class="m-btn" id="enable-midi">Enable MIDI</button>
       <span class="hint" id="midi-status"></span>
     </div>
   </div>

@@ -72,15 +72,21 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   const onEsc = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && window.scrollY > window.innerHeight * 0.25) backToApp(); };
   window.addEventListener('keydown', onEsc);
 
-  // Hide each app's own title (the sidebar section / menu already labels it).
-  const EMBED_CSS = { 'settings/': '.set-head', 'inventory/': '.inv-head', 'mappings/': '.map-title' };
+  // Injected into each embedded app so it INTEGRATES into its sidebar section instead of
+  // re-framing itself: hide its own title (the section already labels it) and flatten its
+  // inner panes (drop the nested box borders / padding so it reads as one panel).
+  const EMBED_CSS = {
+    'settings/': '.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}',
+    'inventory/': '.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 10px;background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:8px;max-width:none;margin:0}',
+    'mappings/': '.map-title{display:none}',
+  };
   const setup = (f) => {
     if (f.dataset.wired) return; f.dataset.wired = '1';
     f.addEventListener('load', () => { try {
       const doc = f.contentDocument; if (!doc) return;
       doc.addEventListener('keydown', onEsc);
-      const sel = EMBED_CSS[f.dataset.embed];
-      if (sel) { const s = doc.createElement('style'); s.textContent = `${sel}{display:none!important}`; doc.head.appendChild(s); }
+      const css = EMBED_CSS[f.dataset.embed];
+      if (css) { const s = doc.createElement('style'); s.textContent = css; doc.head.appendChild(s); }
       // Only SCREEN 2 (Mapping) chains its overscroll to the page so scroll-up returns.
       if (f.closest('#screen-panels')) f.contentWindow?.addEventListener('wheel', (e) => {
         const el = doc.scrollingElement || doc.documentElement;

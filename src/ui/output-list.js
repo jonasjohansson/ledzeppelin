@@ -307,7 +307,14 @@ export function createOutputList(hooks) {
       scanIcon.classList.toggle('is-scanning', scanning);
       scanIcon.title = daemonUp ? (scanning ? 'Scanning…' : 'Scan the network for controllers') : 'Start the daemon (npm start) to scan';
     }
-    const scanRes = panel.scanResultsEl?.(); if (scanRes) outputListEl.append(scanRes);
+    // Scan results get their OWN heading + divider (matching the Unassigned section) so
+    // the discovered controllers read as a distinct group, not loose rows under the list.
+    const scanRes = panel.scanResultsEl?.();
+    if (scanRes && scanRes.childElementCount) {
+      outputListEl.append(oel('div', { className: 'insp-sec-head out-unassigned scan-head' },
+        [oel('span', { className: 'insp-sec-title', textContent: 'Scan' })]));
+    }
+    if (scanRes) outputListEl.append(scanRes);
   }
 
   return { render };

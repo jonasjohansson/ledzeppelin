@@ -166,6 +166,13 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .island-act { background: transparent; border: none; color: var(--muted); cursor: pointer; padding: 2px; display: inline-flex; }
 .island-act .ic { width: 18px; height: 18px; fill: currentColor; display: block; }
 .island-act:hover { color: var(--accent); }
+/* + Controller / + Fixture / Scan — labelled buttons under the Output header. */
+.out-toolbar { display: flex; gap: var(--dock-gap); padding: 0 0 var(--s3); }
+.out-add { flex: 1 1 0; height: var(--ctrl-h); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
+  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.out-add:hover { color: var(--accent); border-color: var(--line-2); }
+.out-add:disabled { opacity: .35; cursor: default; }
+.out-add.is-scanning { color: var(--accent); border-color: var(--accent-line); }
 .output-tools { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin: 0 0 8px; }
 /* + fixture / + device side by side; the type picker (if any) sits full-width below. */
 /* + Fixture / + Device side by side as square tiles. */
@@ -192,7 +199,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
      clear from position (the controller keeps its colour swatch + on-canvas tint). */
 }
 /* Controller colour swatch before the header title (Output list). */
-.dev-swatch { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 1px; }
+.dev-swatch { flex: 0 0 auto; width: 8px; height: 8px; border-radius: var(--radius); }
 .output-row:first-child { border-top: none; }
 .output-row span:first-of-type { flex: 1 1 auto; min-width: 0; color: var(--dev-color, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* name in its controller's identity colour; plain text when unassigned */
 /* Liveness dot (Devices list): online = accent ("on"), offline = danger, checking
@@ -474,8 +481,8 @@ html { scroll-behavior: smooth; }
 #screen-app { position: relative; height: 100vh; }
 #screen-app > #topbar { position: absolute; }   /* was fixed-to-viewport → now scrolls with screen 1 */
 #screen-app > #dock { position: absolute; }
-#screen-panels { position: relative; background: var(--bg); padding: var(--dock-gap); box-sizing: border-box; }
-.scroll-panel { height: calc(100vh - 2 * var(--dock-gap)); display: flex; flex-direction: column; min-height: 0;
+#screen-panels { position: relative; background: var(--bg); padding: 0 var(--dock-gap) var(--dock-gap); box-sizing: border-box; }
+.scroll-panel { height: calc(100vh - var(--dock-gap)); display: flex; flex-direction: column; min-height: 0;
   background: var(--panel); border: 1px solid var(--line); box-sizing: border-box; overflow: hidden; }
 /* SCREEN 2 is just the full-width Mapping panel (no tabs — Settings/Library moved to the
    sidebars). One iframe fills it. */
@@ -527,13 +534,6 @@ html { scroll-behavior: smooth; }
 .acc-sec.is-open > .acc-head:hover .acc-title { color: var(--accent); }
 /* Action icons on a section header (Output: add controller / fixture / scan) — only on
    the OPEN section; clicks are exempted from the accordion toggle in app.js. */
-.acc-head-acts { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
-.acc-sec:not(.is-open) > .acc-head .acc-head-acts { display: none; }
-.acc-act { background: none; border: none; color: var(--muted); cursor: pointer; padding: 3px; display: inline-flex; }
-.acc-act:hover { color: var(--accent); }
-.acc-act:disabled { opacity: .35; cursor: default; }
-.acc-act .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
-.acc-act.is-scanning { color: var(--accent); }
 .acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
 /* An embedded app (Settings / Library iframe) fills the accordion body edge-to-edge. */
 .acc-body.acc-embed { padding: 0; overflow: hidden; }
@@ -779,7 +779,7 @@ body.gui-hidden #topbar { display: none; }
   border: 1px solid var(--accent-line); pointer-events: none;
 }
 #out-hud[hidden] { display: none; }
-#out-hud.is-panic { background: color-mix(in srgb, #ff5252 28%, var(--panel)); color: #ffd9d9; border-color: #ff5252; }
+#out-hud.is-panic { background: color-mix(in srgb, var(--danger) 28%, var(--panel)); color: color-mix(in srgb, var(--danger) 35%, #ffffff); border-color: var(--danger); }
 #show-ui-pill {
   position: fixed; top: var(--s6); left: var(--s6); z-index: 40; display: none;
   font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps);
@@ -913,7 +913,9 @@ body.gui-hidden #show-ui-pill { display: block; }
 .fx-advanced > summary::before { content: '▸ '; }
 .fx-advanced[open] > summary::before { content: '▾ '; }
 .fx-budget { font-size: var(--fs-micro); color: var(--faint); padding: 4px 2px 2px; font-variant-numeric: tabular-nums; }
-.scan-block { display: flex; flex-direction: column; gap: 3px; }
+/* Scan section: a divider above the "Scan" heading, and its rows share the list gutter. */
+.scan-head { border-top: 1px solid var(--line); margin-top: var(--s3); }
+.scan-block { display: flex; flex-direction: column; gap: var(--s1); padding: 0 var(--s4); }
 .scan-row .ctrl-btn { margin-left: auto; }
 /* Scan result chips: tabular digits + a fixed IP slot so the rows column-align;
    long Art-Net names truncate instead of pushing the add button around. */
@@ -1013,7 +1015,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .output-row[draggable="true"] { cursor: grab; }
 .output-row[draggable="true"]:active { cursor: grabbing; }
 .out-group.drop-hover { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+.out-swatch { flex: 0 0 auto; width: 9px; height: 9px; border-radius: var(--radius); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
 .out-caret { color: var(--faint); font-size: var(--fs-micro); width: 10px; }
 .out-group-dev { flex: 1 1 auto; min-width: 0; color: var(--accent); font: var(--fs-body) var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .out-group-dev:hover { text-decoration: underline; }

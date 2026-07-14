@@ -225,17 +225,17 @@ canvas{display:block}</style>
         <div class="acc-body acc-embed"><iframe title="Library" data-embed="inventory/"></iframe></div>
       </div>
       <div class="acc-sec is-open" data-acc="fixtures">
-        <header class="acc-head">
-          <span class="acc-title">Output</span>
-          <!-- Add-controller / add-fixture / scan live as icons on the Output header. -->
-          <span class="acc-head-acts">
-            <button id="devices-add-device" class="acc-act" title="Add a controller"><svg class="ic" aria-hidden="true"><use href="#ic-device"/></svg></button>
-            <button id="devices-add-fixture" class="acc-act" title="Add a fixture"><svg class="ic" aria-hidden="true"><use href="#ic-fixture"/></svg></button>
-            <button id="devices-scan" class="acc-act" title="Scan the network for controllers"><svg class="ic" aria-hidden="true"><use href="#ic-scan"/></svg></button>
-          </span>
-        </header>
+        <header class="acc-head"><span class="acc-title">Output</span></header>
         <div class="acc-body">
-          <div id="patch-fixtures"><div id="output-list"></div></div>
+          <div id="patch-fixtures">
+            <!-- + Controller / + Fixture / Scan as labelled buttons (clearer than icons). -->
+            <div class="out-toolbar">
+              <button id="devices-add-device" class="out-add" title="Add a controller">+ Controller</button>
+              <button id="devices-add-fixture" class="out-add" title="Add a fixture">+ Fixture</button>
+              <button id="devices-scan" class="out-add" title="Scan the network for controllers">Scan</button>
+            </div>
+            <div id="output-list"></div>
+          </div>
         </div>
       </div>
       <div class="acc-sec" data-acc="sources">
