@@ -47,12 +47,14 @@ import { createVideoRuntime } from './ui/video.js';
 // Appearance/theme overrides removed — the app ships one curated base design
 // (the :root tokens in ui.css). No saved colour overrides are applied.
 
-// --- Two-screen shell: SCREEN 1 = the app (topbar + dock, 100vh). Scroll down (or click
-// a menu) for SCREEN 2 — a single 100vh panel with Settings / Library / Mapping as TABS,
-// replacing the popup windows. The iframes are the same self-contained apps
-// (settings/ · inventory/ · mappings/) that already sync via BroadcastChannel; each
-// loads lazily on first activation. Scroll back up — or press Escape — to return. ---
-let showScreen2 = () => {};   // showScreen2(tabId?) — scroll to SCREEN 2, optionally selecting a tab
+// --- Shell: SCREEN 1 = the app (topbar + dock, 100vh). Settings and Library now live as
+// accordion windows at the TOP of the sidebars (Settings → left, Library → right); SCREEN 2
+// (scroll down, or the Mapping menu) is just the full-width Mapping panel. All three are the
+// same self-contained iframe apps (settings/ · inventory/ · mappings/), lazy-loaded and
+// syncing via BroadcastChannel; each app's own title is hidden (the section/menu labels it).
+// Scroll back up — or press Escape — to return from Mapping. ---
+let showScreen2 = () => {};        // scroll to SCREEN 2 (Mapping)
+let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappings/') — lazy-load that app's iframe
 (() => {
   const topbar = document.getElementById('topbar');
   const dock = document.getElementById('dock');
@@ -61,64 +63,36 @@ let showScreen2 = () => {};   // showScreen2(tabId?) — scroll to SCREEN 2, opt
   topbar.parentNode.insertBefore(screenApp, topbar);
   screenApp.append(topbar, dock);
 
-  const TABS = [
-    { id: 'settings', label: 'Settings', src: 'settings/' },
-    { id: 'library',  label: 'Library',  src: 'inventory/' },
-    { id: 'mapping',  label: 'Mapping',  src: 'mappings/' },
-  ];
+  // SCREEN 2 = the full-width Mapping panel.
   const panels = document.createElement('div'); panels.id = 'screen-panels';
-  panels.innerHTML =
-    '<section class="scroll-panel"><header class="panel-tabs" role="tablist">'
-    + TABS.map((t, i) => `<button type="button" role="tab" class="panel-tab${i ? '' : ' on'}" data-tab="${t.id}">${t.label}</button>`).join('')
-    + '</header><div class="panel-bodies">'
-    + TABS.map((t, i) => `<iframe class="panel-frame${i ? '' : ' on'}" title="${t.label}" data-tab="${t.id}" data-src="${t.src}"${i ? '' : ` src="${t.src}"`}></iframe>`).join('')
-    + '</div></section>';
+  panels.innerHTML = '<section class="scroll-panel"><div class="panel-bodies"><iframe class="panel-frame on" title="Mapping" data-embed="mappings/"></iframe></div></section>';
   screenApp.after(panels);
 
-  const tabs = [...panels.querySelectorAll('.panel-tab')];
-  const frames = [...panels.querySelectorAll('.panel-frame')];
-  const activate = (name) => {
-    for (const t of tabs) t.classList.toggle('on', t.dataset.tab === name);
-    for (const f of frames) {
-      const on = f.dataset.tab === name;
-      f.classList.toggle('on', on);
-      if (on && !f.getAttribute('src')) f.setAttribute('src', f.dataset.src);   // lazy-load on first open
-    }
-  };
-  tabs.forEach((t) => t.addEventListener('click', () => activate(t.dataset.tab)));
-
-  showScreen2 = (name) => { if (name) activate(name); panels.scrollIntoView({ behavior: 'smooth' }); };
   const backToApp = () => screenApp.scrollIntoView({ behavior: 'smooth' });
-
-  // Escape returns to SCREEN 1 when we're on SCREEN 2. Listen on the parent AND (once
-  // loaded, same-origin) inside each iframe, so Esc works even with focus in a panel.
-  const onEsc = (e) => {
-    if (e.key === 'Escape' && !e.defaultPrevented && window.scrollY > window.innerHeight * 0.25) backToApp();
-  };
+  const onEsc = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && window.scrollY > window.innerHeight * 0.25) backToApp(); };
   window.addEventListener('keydown', onEsc);
-  // Each embedded app prints its own title (SETTINGS / LIBRARY / MAPPINGS) — redundant now
-  // that the tab labels it, so hide it in-frame. Settings/Library heads hold only the title
-  // (drop the whole head); Mappings' head also holds the MIDI toolbar (drop just the title).
-  const EMBED_CSS = { settings: '.set-head', library: '.inv-head', mapping: '.map-title' };
-  frames.forEach((f) => f.addEventListener('load', () => {
-    try {
+
+  // Hide each app's own title (the sidebar section / menu already labels it).
+  const EMBED_CSS = { 'settings/': '.set-head', 'inventory/': '.inv-head', 'mappings/': '.map-title' };
+  const setup = (f) => {
+    if (f.dataset.wired) return; f.dataset.wired = '1';
+    f.addEventListener('load', () => { try {
       const doc = f.contentDocument; if (!doc) return;
       doc.addEventListener('keydown', onEsc);
-      const sel = EMBED_CSS[f.dataset.tab];
+      const sel = EMBED_CSS[f.dataset.embed];
       if (sel) { const s = doc.createElement('style'); s.textContent = `${sel}{display:none!important}`; doc.head.appendChild(s); }
-      // Iframes don't chain scroll to the parent, so at a panel's top/bottom edge the
-      // page would feel stuck. Forward the overscroll to the window so you can always
-      // scroll up (back to SCREEN 1) or down from anywhere inside a panel.
-      f.contentWindow?.addEventListener('wheel', (e) => {
+      // Only SCREEN 2 (Mapping) chains its overscroll to the page so scroll-up returns.
+      if (f.closest('#screen-panels')) f.contentWindow?.addEventListener('wheel', (e) => {
         const el = doc.scrollingElement || doc.documentElement;
         const atTop = el.scrollTop <= 0, atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
-        if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
-          window.scrollBy({ top: e.deltaY, behavior: 'instant' });
-          e.preventDefault();
-        }
+        if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) { window.scrollBy({ top: e.deltaY, behavior: 'instant' }); e.preventDefault(); }
       }, { passive: false });
-    } catch { /* cross-origin — ignore */ }
-  }));
+    } catch { /* cross-origin — ignore */ } });
+  };
+  [...document.querySelectorAll('iframe[data-embed]')].forEach(setup);
+
+  openEmbed = (embed) => { const f = document.querySelector(`iframe[data-embed="${embed}"]`); if (f && !f.getAttribute('src')) f.setAttribute('src', embed); return f; };
+  showScreen2 = () => { openEmbed('mappings/'); panels.scrollIntoView({ behavior: 'smooth' }); };
 })();
 
 const canvas = document.getElementById('stage');
@@ -2647,9 +2621,10 @@ document.addEventListener('keydown', (e) => {
 // (Settings moved to its own popup window off the top-left gear — see
 // openSettingsWindow; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
-  if (!['composition', 'layer', 'clip'].includes(which)) which = 'composition';
+  if (!['settings', 'composition', 'layer', 'clip'].includes(which)) which = 'composition';
   const host = document.getElementById('grp-props');
   if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
+  if (which === 'settings') openEmbed('settings/');   // lazy-load the embedded Settings app
   try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
 }
 // Accordion: click a section header to open it (exclusive — the open one stays the one open).
@@ -2674,9 +2649,10 @@ function setOutputTab(which) {
 // mode). The rail is rebuilt each time Sources is shown so thumbnails/newly
 // imported sources appear; its items drag onto the layer slots' drop targets.
 function setPatchTab(which) {
-  which = which === 'sources' ? 'sources' : 'fixtures';
+  which = ['library', 'sources'].includes(which) ? which : 'fixtures';
   const host = document.getElementById('grp-patch');
   if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
+  if (which === 'library') openEmbed('inventory/');   // lazy-load the embedded Library app
   // Build the source palette fresh each time Sources opens (new thumbnails/imports).
   if (which === 'sources') {
     const src = document.getElementById('patch-sources');
@@ -2730,12 +2706,12 @@ controlPanel = createControlPanel({
 // the same window on repeat clicks; the page is a responsive full route.
 const POPUP_FEATURES = 'width=860,height=920';
 function openMappingsWindow() { try { return window.open('mappings/', 'lz-mappings', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-mapping')?.addEventListener('click', () => showScreen2('mapping'));
+document.getElementById('menu-mapping')?.addEventListener('click', () => showScreen2());
 // Library opens the standalone TEMPLATE-LIBRARY editor in its own popup window
 // (returns null if a popup blocker fires). Live type-merge sync runs over
 // 'lz-inventory' (below).
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', POPUP_FEATURES); } catch { return null; } }
-document.getElementById('menu-inventory')?.addEventListener('click', () => showScreen2('library'));
+document.getElementById('menu-inventory')?.addEventListener('click', () => setPatchTab('library'));
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
 document.getElementById('devices-add-device')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'device'));
@@ -2759,7 +2735,7 @@ outputTab = ((() => { try { return localStorage.getItem('lz.otab'); } catch { re
 // (src/ui/settings.js createSettingsPanel) with popout hooks and broadcasts
 // every edit as { type: 'settings-changed' } on BroadcastChannel('lz-settings').
 function openSettingsWindow() { try { return window.open('settings/', 'lz-settings', 'width=560,height=860'); } catch { return null; } }
-document.getElementById('menu-settings')?.addEventListener('click', () => showScreen2('settings'));
+document.getElementById('menu-settings')?.addEventListener('click', () => setInspectorTab('settings'));
 
 // Adopt the popout's edits. Two ownership domains:
 //   · show-owned fields — Settings edits ONLY composition.audioDevice and

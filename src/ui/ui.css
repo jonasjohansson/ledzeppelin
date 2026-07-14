@@ -477,12 +477,8 @@ html { scroll-behavior: smooth; }
 #screen-panels { position: relative; background: var(--bg); padding: var(--dock-gap); box-sizing: border-box; }
 .scroll-panel { height: calc(100vh - 2 * var(--dock-gap)); display: flex; flex-direction: column; min-height: 0;
   background: var(--panel); border: 1px solid var(--line); box-sizing: border-box; overflow: hidden; }
-/* Tab bar — shares the app's tab look: accent text on active, no fill. */
-.panel-tabs { flex: 0 0 auto; display: flex; align-items: stretch; background: var(--panel-2); border-bottom: 1px solid var(--line); }
-.panel-tab { padding: var(--s4) var(--s6); background: none; border: none; box-shadow: none; cursor: pointer;
-  font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint); }
-.panel-tab:hover { color: var(--text); }
-.panel-tab.on { color: var(--accent); }
+/* SCREEN 2 is just the full-width Mapping panel (no tabs — Settings/Library moved to the
+   sidebars). One iframe fills it. */
 .panel-bodies { flex: 1 1 auto; position: relative; min-height: 0; }
 .panel-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--panel-2); display: none; }
 .panel-frame.on { display: block; }
@@ -539,6 +535,9 @@ html { scroll-behavior: smooth; }
 .acc-act .ic { width: 16px; height: 16px; fill: currentColor; display: block; }
 .acc-act.is-scanning { color: var(--accent); }
 .acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
+/* An embedded app (Settings / Library iframe) fills the accordion body edge-to-edge. */
+.acc-body.acc-embed { padding: 0; overflow: hidden; }
+.acc-embed iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--panel-2); }
 
 /* Small icon-only tab (the Settings cog in the left column's tab row). */
 .island-tab.island-tab-icon { flex: 0 0 auto; min-width: 0; padding: 0 9px; display: inline-flex; align-items: center; justify-content: center; }

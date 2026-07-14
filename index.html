@@ -157,10 +157,14 @@ canvas{display:block}</style>
   <!-- LEFT COLUMN: the selected item's properties as TABS (Composition · Layer · Clip).
        (Settings is a floating panel off the top-left gear now.) -->
   <div id="dock-left" class="dock-col">
-    <!-- Left inspector: three stacked accordion windows (Composition · Layer · Clip);
-         exactly one open at a time, and it follows the current selection (onClipSelect
-         etc. → setInspectorTab). Kept under #grp-props so the scoped inspector CSS holds. -->
+    <!-- Left inspector: accordion windows Settings · Composition · Layer · Clip; exactly
+         one open at a time. Composition/Layer/Clip follow the current selection
+         (onClipSelect etc. → setInspectorTab); Settings is the embedded settings/ app. -->
     <section class="island acc-host" id="grp-props">
+      <div class="acc-sec" data-acc="settings">
+        <header class="acc-head"><span class="acc-title">Settings</span></header>
+        <div class="acc-body acc-embed"><iframe title="Settings" data-embed="settings/"></iframe></div>
+      </div>
       <div class="acc-sec is-open" data-acc="composition">
         <header class="acc-head"><span class="acc-title">Composition</span></header>
         <div class="acc-body">
@@ -216,6 +220,10 @@ canvas{display:block}</style>
     <!-- Right patch: two stacked accordion windows (Output · Sources), one open at a
          time (setPatchTab). Kept under #grp-patch so scoped CSS holds. -->
     <section class="island acc-host" id="grp-patch">
+      <div class="acc-sec" data-acc="library">
+        <header class="acc-head"><span class="acc-title">Library</span></header>
+        <div class="acc-body acc-embed"><iframe title="Library" data-embed="inventory/"></iframe></div>
+      </div>
       <div class="acc-sec is-open" data-acc="fixtures">
         <header class="acc-head">
           <span class="acc-title">Output</span>
