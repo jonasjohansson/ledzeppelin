@@ -21,7 +21,6 @@ const listEl = $('inv-list');
 const detailEl = $('inv-detail');
 const detailTitleEl = $('inv-detail-title');
 const importEl = $('inv-import');
-const importPickBtn = $('inv-import-pick');
 
 // Mirror the editor's chosen accent (persisted in lz.accent) so Inventory matches the
 // theme — shared with the Mappings popout.
@@ -102,7 +101,6 @@ const importPanel = createImportPanel({
   onApplied: () => panel.refresh(),
 });
 importEl.append(importPanel.el);
-importPickBtn.addEventListener('click', () => importPanel.trigger?.());
 
 // ⌫ deletes the selected library entry — same rule as the main app's keydown
 // (which this window doesn't share; this was the bug: the Library window had no

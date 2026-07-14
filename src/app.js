@@ -2722,6 +2722,18 @@ document.getElementById('menu-mapping')?.addEventListener('click', () => showScr
 // 'lz-inventory' (below).
 function openInventoryWindow() { try { return window.open('inventory/', 'lz-inventory', POPUP_FEATURES); } catch { return null; } }
 document.getElementById('menu-inventory')?.addEventListener('click', () => setPatchTab('library'));
+// Import from LEDger… — the importer + assign-IP UI lives in the Library (inventory)
+// iframe. Open the Library so its bus listener is live + the flow has a home, then post
+// 'open-import' so it opens the file picker. If the iframe was just created, wait for
+// its load before posting (a BroadcastChannel doesn't queue for a not-yet-live listener).
+document.getElementById('menu-import')?.addEventListener('click', () => {
+  const f = document.querySelector('iframe[data-embed="inventory/"]');
+  const wasLoaded = !!(f && f.getAttribute('src'));
+  setPatchTab('library');   // opens the Library accordion + lazy-loads the iframe
+  const post = () => { try { invBus?.postMessage({ type: 'open-import' }); } catch { /* closed */ } };
+  if (wasLoaded || !f) post();
+  else f.addEventListener('load', () => setTimeout(post, 60), { once: true });
+});
 document.getElementById('devices-inventory')?.addEventListener('click', openInventoryWindow);   // small inventory icon by the Devices title
 document.getElementById('devices-add-fixture')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'fixture'));
 document.getElementById('devices-add-device')?.addEventListener('click', (e) => openTemplateMenu(e.currentTarget, 'device'));

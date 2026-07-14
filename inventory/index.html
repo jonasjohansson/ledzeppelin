@@ -52,14 +52,11 @@
       <div id="inv-detail"></div>
     </div>
   </div>
-  <!-- LEDger import: pick a preset → assign controller IPs → apply. Lives here (the
-       Inventory popout already hosts the catalog) so the assign/apply UI has a
-       mounted, visible home. Triggered from the main window's "Import from LEDger…". -->
-  <div class="inv-import inv-pane">
-    <div class="inv-pane-title">import from ledger</div>
-    <button class="fx-add" id="inv-import-pick">Choose preset file…</button>
-    <div id="inv-import"></div>
-  </div>
+  <!-- LEDger import (pick a preset → assign controller IPs → apply). No always-visible
+       section — it's triggered from the footer "Import from LEDger…" button (posts
+       'open-import'); the preview + assign/apply UI renders inline here only while an
+       import is in progress. -->
+  <div class="inv-import inv-pane"><div id="inv-import"></div></div>
 </div>
 <script type="module" src="./inventory.js"></script>
 </body>
