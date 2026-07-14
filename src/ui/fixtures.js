@@ -491,7 +491,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       // controller, etc.); when any does, this order is only a fallback for the rest —
       // so surface that override inline instead of leaving it silent.
       (() => {
-        const orderField = field('Colour order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x })));
+        const orderField = field('Order', selectInput(COLOR_ORDERS, d.colorOrder ?? 'GRB', (x) => upd({ colorOrder: x })));
         const overridden = (show.fixtures || []).some((f) => f.output?.deviceId === d.id && f.colorFormat && f.colorFormat !== 'NONE');
         if (overridden) orderField.querySelector('span').append(el('span', { className: 'seg-hint', textContent: ' · order set per-fixture' }));
         return orderField;
@@ -506,7 +506,8 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       // Output gamma calibration (daemon-side LUT) — straightens LED fades. 1 = linear.
       // Advanced-only: a technical calibration most shows never touch.
       (() => { const g = sliderRow('Gamma', d.gamma ?? 1, (x) => upd({ gamma: Math.round(x * 10) / 10 }), 0.5, 3, 0.1); g.classList.add('adv-only'); return g; })(),
-      patchRuler(show, d),
+      // Patch ruler (PATCH · N px + the fixture segments) — technical; advanced-only.
+      (() => { const r = patchRuler(show, d); r.classList.add('adv-only'); return r; })(),
       controllerBlock(d),
     ]);
   }
