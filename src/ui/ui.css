@@ -374,7 +374,7 @@ body.mode-3d #stageinner canvas#stage { opacity: .1; }
    A full-width top bar over three columns of stacked "island" panels (Photoshop /
    MadMapper style). Everything is visible at once — no section switching. Splitters
    between islands (and on the column edges) resize neighbours. */
-:root { --dock-gap: 4px; --topbar-h: 42px; }
+:root { --dock-gap: 0px; --topbar-h: 42px; }   /* seamless dock — windows butt together, separated by hairlines */
 
 /* TOP BAR: an island-styled control strip (window menus + view presets + canvas
    toggles + the runtime zoom pill) — framed + inset by a dock gutter like the other
@@ -505,6 +505,12 @@ html { scroll-behavior: smooth; }
   box-sizing: border-box; position: relative; min-width: 0; min-height: 0;
   display: flex; flex-direction: column; overflow: hidden;
 }
+/* Zero-gap dock: adjacent 1px borders would double into 2px lines — keep exactly ONE
+   hairline at every seam. Side columns drop the edge facing the centre (the centre
+   island's own border is the divider); stacked islands in a column share one line. */
+#dock-left  > .island { border-right: none; }
+#dock-right > .island { border-left: none; }
+.dock-col > .island + .island { border-top: none; }
 .island-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
   padding: 4px 10px; background: var(--panel-2); border-bottom: 1px solid var(--line);

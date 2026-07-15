@@ -125,6 +125,11 @@ ENTPLIST
     spctl --assess --type execute --verbose=2 "$APP" || true
     echo "✓ signed + notarized + stapled"
   else echo "  (set NOTARY_PROFILE to also notarize — unnotarised downloads still show 'damaged')"; fi
+  # Re-install: the early /Applications copy predates signing (ad-hoc) — replace it
+  # with the signed (+stapled) bundle so the local install matches the release.
+  if [ -d /Applications ] && [ -z "${NO_INSTALL:-}" ]; then
+    ditto "$APP" "/Applications/$(basename "$APP")" && echo "→ re-installed signed build to /Applications"
+  fi
 else
   echo "  (unsigned — set SIGN_ID + NOTARY_PROFILE to sign + notarise. Bun ad-hoc"
   echo "   signs the binary, so a DOWNLOADED unsigned build is quarantined and macOS"
