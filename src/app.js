@@ -63,11 +63,8 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   topbar.parentNode.insertBefore(screenApp, topbar);
   screenApp.append(topbar, dock);
 
-  // SCREEN 2 = the full-width Mapping panel.
-  const panels = document.createElement('div'); panels.id = 'screen-panels';
-  panels.innerHTML = '<section class="scroll-panel"><div class="panel-bodies"><iframe class="panel-frame on" title="Mapping" data-embed="mappings/"></iframe></div></section>';
-  screenApp.after(panels);
-
+  // The app is a single 100vh screen now — Mapping opens in its OWN popup window
+  // (openMappingsWindow), not a scroll-down "screen 2" below the footer.
   const backToApp = () => screenApp.scrollIntoView({ behavior: 'smooth' });
   const onEsc = (e) => { if (e.key === 'Escape' && !e.defaultPrevented && window.scrollY > window.innerHeight * 0.25) backToApp(); };
   window.addEventListener('keydown', onEsc);
@@ -106,7 +103,7 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   [...document.querySelectorAll('iframe[data-embed]')].forEach(setup);
 
   openEmbed = (embed) => { const f = document.querySelector(`iframe[data-embed="${embed}"]`); if (f && !f.getAttribute('src')) f.setAttribute('src', embed); return f; };
-  showScreen2 = () => { openEmbed('mappings/'); panels.scrollIntoView({ behavior: 'smooth' }); };
+  showScreen2 = () => openMappingsWindow();   // Mapping is a popup window again
 })();
 
 const canvas = document.getElementById('stage');
@@ -2093,17 +2090,19 @@ mode3dBtn?.addEventListener('click', toggleMode3d);
 const footerToggles = document.getElementById('corner-toggles');
 let fieldGhosts = (() => { try { return localStorage.getItem('lz.fieldghosts') !== '0'; } catch { return true; } })();
 if (footerToggles) {
-  const fg = oel('button', { className: 'g-icon proj-fields mode3d-only', textContent: 'Fields', id: 'field-ghosts-btn',
-    title: 'ghost the active volumetric fields in the viewport (plane / gradient arrow / sphere rings / noise lattice)',
+  const fg = oel('button', { className: 'g-icon proj-fields mode3d-only', id: 'field-ghosts-btn',
+    title: 'Fields — ghost the active volumetric fields in the viewport (plane / gradient arrow / sphere rings / noise lattice)',
     onclick: () => {
       fieldGhosts = !fieldGhosts;
       try { localStorage.setItem('lz.fieldghosts', fieldGhosts ? '1' : '0'); } catch { /* private mode */ }
       fg.classList.toggle('on', fieldGhosts);
     } });
+  fg.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-fields"/></svg>';
   fg.classList.toggle('on', fieldGhosts);
   // RESET VIEW — snap the orbit camera back to its default framing (angle + zoom +
   // centre). Only the view-only orbit moves; sampling (front-ortho in 3D) is fixed.
-  const rv = oel('button', { className: 'g-icon proj-reset mode3d-only', textContent: '⟲', title: 'reset the 3D view — orbit angle, zoom & centre' });
+  const rv = oel('button', { className: 'g-icon proj-reset mode3d-only', title: 'reset the 3D view — orbit angle, zoom & centre' });
+  rv.innerHTML = '<svg class="ic" aria-hidden="true"><use href="#ic-rotate"/></svg>';
   rv.addEventListener('click', () => {
     const next = resetOrbit(show);
     if (next === show) return;

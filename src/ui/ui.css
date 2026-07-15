@@ -541,7 +541,7 @@ html { scroll-behavior: smooth; }
 .acc-sec.is-open > .acc-head:hover .acc-title { color: var(--accent); }
 /* Action icons on a section header (Output: add controller / fixture / scan) — only on
    the OPEN section; clicks are exempted from the accordion toggle in app.js. */
-.acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--panel-2); padding: var(--s3); }
+.acc-body { flex: 1 1 0; min-height: 0; overflow-y: auto; background: var(--bg); padding: var(--s3); }
 /* An embedded app (Settings / Library iframe) fills the accordion body edge-to-edge. */
 .acc-body.acc-embed { padding: 0; overflow: hidden; }
 .acc-embed iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--panel-2); }
@@ -754,10 +754,8 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 /* Thin rule splitting the top bar into groups (menus | view-toggles). */
 .corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
 /* 3D-only footer controls (Fields ghosts + Reset view, moved off the stage corner) —
-   hidden in 2D like the retired #proj-row. Fields is a micro-caps label, ⟲ a glyph. */
+   hidden in 2D like the retired #proj-row. Both are icon buttons now (ic-fields / ic-rotate). */
 body:not(.mode-3d) .mode3d-only { display: none; }
-#corner-toggles .proj-fields { font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; }
-#corner-toggles .proj-reset { font: var(--fs-glyph)/1 var(--sans); }
 #topbar button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
