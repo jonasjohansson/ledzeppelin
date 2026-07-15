@@ -200,7 +200,7 @@ off the plane.
 
 - **Drag** orbits the view, **Shift-drag** pans, the **wheel** dollies in/out.
   The view is remembered but never enters undo history — it's a camera, not an edit.
-  The **⟲ Reset view** button (below the stage in 3D) returns the orbit to home.
+  The **⟲ Reset view** icon (in the footer, 3D only) returns the orbit to home.
 - **Click** a strip to select it.
 - **Edit in 3D:** a polyline's vertex handles (and a bezier's ends + diamond
   control) are draggable — a plain drag slides the point on the horizontal plane
@@ -218,7 +218,7 @@ off the plane.
 through a fixed front-ortho camera — **there is no projection or camera preset to
 pick**. Fixtures at Z = 0 keep sampling *exactly* where 2D put them; a lifted
 shape spaces its LEDs evenly along its true 3D length (an arch bunches toward its
-steep ends on the canvas). The stage's 3D-only row also has a **Fields** toggle
+steep ends on the canvas). The footer's 3D-only controls include a **Fields** icon
 that ghosts the active volumetric fields (plane / gradient arrow / sphere rings /
 noise lattice) so you can see how light will move through space. For light that
 moves *through* the rig (up an arch, across the room), use the **Volumetric**

@@ -2,7 +2,7 @@
 
 > Control LED Zeppelin live — from a MIDI controller, the keyboard, OSC, or a phone.
 
-The **Mapping** panel is where you wire external controls to the show: trigger a clip, ride a parameter, block a layer, or set the OSC listen port. Open it from the **mapping icon** in the top bar. It slides in as a **full-width panel below the app** (its own "screen 2") — press **Esc** or scroll back up to the app to leave it. The editor still owns the show; the Mapping panel is just a view onto it, kept in sync over a broadcast channel, so bindings you make here are live immediately and are saved in the composition.
+The **Mapping** panel is where you wire external controls to the show: trigger a clip, ride a parameter, block a layer, or set the OSC listen port. Open it from the **mapping icon** in the top bar — it opens in its **own popup window** (close the window to leave it). The editor still owns the show; the Mapping window is just a view onto it, kept in sync over a broadcast channel, so bindings you make there are live immediately and are saved in the composition.
 
 ![The Mapping panel: a parameter table with an OSC address, a MIDI cell, and a Key cell per row.](img/mappings.png)
 

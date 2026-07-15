@@ -165,9 +165,9 @@ canvas); the **3D viewport** (the `mode3d` toggle) and the wall **Preview** are
 where fields read. In the 3D viewport each active field also draws a schematic
 **ghost** in its clip's colour — a translucent plane, a gradient arrow,
 wireframe sphere rings, or a sparse noise lattice — so you can see *where* the
-field sits in space even where no LED catches it. The stage-corner **FIELDS**
-chip (3D only) toggles the ghosts; the **⟲** next to it resets the orbit view
-(angle, zoom, centre). 3D always samples through a fixed front-ortho camera —
+field sits in space even where no LED catches it. The footer's **Fields** icon
+(3D only) toggles the ghosts; the **⟲** reset-view icon next to it returns the orbit
+to home (angle, zoom, centre). 3D always samples through a fixed front-ortho camera —
 there are no projection presets to choose.
 
 The top bar's **Outlines** toggle (dashed-frame icon, next to the fixture-tint

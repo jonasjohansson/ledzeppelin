@@ -84,7 +84,7 @@ The editor is a three-column **dock** — everything visible at once, splitters 
 | Column | Holds |
 | --- | --- |
 | **Left** | An accordion: **Settings · Composition · Layer · Clip**. One section open at a time (or all folded to header strips). |
-| **Centre** | The output **canvas** with the clip/layer **deck** below it. In 3D mode an orbit view with a **Fields** ghost toggle and a reset-view button. |
+| **Centre** | The output **canvas** with the clip/layer **deck** below it. In 3D mode it becomes an orbit view; the **Fields** ghost toggle and **⟲** reset-view sit in the footer. |
 | **Right** | An accordion: **Library · Output · Sources**. Output is the live device/fixture patch; Library is the template catalog; Sources is the generator palette. |
 
 Selecting a controller, fixture, or library model opens its editor in a small floating panel
