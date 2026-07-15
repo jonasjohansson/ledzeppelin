@@ -3152,6 +3152,7 @@ canvas.addEventListener('webglcontextrestored', () => { rebuildGL(); glLost = fa
 // Apply a whole show (open/import): resize the stage to its canvas if it changed,
 // then rebuild + persist + refresh panels.
 function applyFullShow(next) {
+  next = tidyEmptyLayers(next);   // a loaded project may have zero layers — always keep ≥1
   const c = next.composition?.canvas || { w: 1280, h: 720 };
   const cur = show.composition?.canvas;
   if (c.w !== cur?.w || c.h !== cur?.h) {

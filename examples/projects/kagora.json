@@ -27971,7 +27971,19 @@
    "w": 1328,
    "h": 1174
   },
-  "layers": [],
+  "layers": [
+   {
+    "id": "l1",
+    "name": "Layer 1",
+    "blend": "alpha",
+    "opacity": 0.5,
+    "transitionMs": 500,
+    "clips": [],
+    "activeClipId": null,
+    "effects": [],
+    "params": {}
+   }
+  ],
   "bpm": 120,
   "dashboard": {
    "links": [
