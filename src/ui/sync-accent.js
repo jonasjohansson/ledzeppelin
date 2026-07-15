@@ -8,7 +8,7 @@ export function syncAccent() {
   const valid = (x) => /^#?[0-9a-f]{6}$/i.test(x || '');
   const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
   const apply = () => {
-    const hex = '#3ecfa6';   // accent is FIXED (no picker) — the one teal, matching prefs.js
+    const hex = '#d4a24a';   // accent is FIXED (no picker) — amber-orange, matching prefs.js
     if (!valid(hex)) return;
     // Derive surfaces from the SAME accent AND brightness/tint/contrast the editor uses
     // (same lz.* keys as prefs.js / settings.js) — dark-only. Passing just the accent
