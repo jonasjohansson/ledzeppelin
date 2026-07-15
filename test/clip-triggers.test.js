@@ -69,3 +69,38 @@ test('prune drops buses + detectors for dead clips', () => {
   assert.equal(ct.trigsFor('a').length, 1);
   assert.equal(ct.trigsFor('b').length, 0);
 });
+
+test('per-channel triggers: two clips on the same band, different input channels', () => {
+  const ct = createClipTriggers();
+  // Channel-aware sampler: mic 1 on channel 1, mic 2 on channel 2 (a multi-channel
+  // interface like a Flow 8); channel 0 = the mix.
+  const chBands = (byCh) => (name, channel = 0) => (byCh[channel] ?? {})[name] ?? 0;
+  const clips = [
+    { id: 'm1', audioTrigger: { enabled: true, band: 'level', channel: 1, sensitivity: 0.5, refractoryMs: 100 } },
+    { id: 'm2', audioTrigger: { enabled: true, band: 'level', channel: 2, sensitivity: 0.5, refractoryMs: 100 } },
+  ];
+  let ms = 0, sec = 0;
+  const step = (ch1, ch2) => {
+    const f = ct.poll(clips, chBands({ 1: { level: ch1 }, 2: { level: ch2 } }), ms, sec);
+    ms += 16.7; sec += 0.0167; return f;
+  };
+  for (let i = 0; i < 30; i++) step(0.1, 0.1);        // settle
+  assert.deepEqual(step(0.9, 0.1), ['m1']);           // mic 1 spike → only its clip
+  for (let i = 0; i < 30; i++) step(0.1, 0.1);
+  assert.deepEqual(step(0.1, 0.9), ['m2']);           // mic 2 spike → only its clip
+});
+
+test('changing a trigger\'s channel re-arms its detector (no stale-EMA fire)', () => {
+  const ct = createClipTriggers();
+  const at = { enabled: true, band: 'level', channel: 1, sensitivity: 0.5, refractoryMs: 100 };
+  const clips = [{ id: 'a', audioTrigger: at }];
+  const chBands = (byCh) => (name, channel = 0) => (byCh[channel] ?? {})[name] ?? 0;
+  let ms = 0, sec = 0;
+  const step = (byCh) => { const f = ct.poll(clips, chBands(byCh), ms, sec); ms += 16.7; sec += 0.0167; return f; };
+  for (let i = 0; i < 30; i++) step({ 1: { level: 0.1 }, 2: { level: 0.9 } });   // ch2 held loud
+  at.channel = 2;                                     // switch to the loud channel
+  // The detector rebuilds (channel is in the sig) — a HELD level is not an onset,
+  // so the switch itself must not machine-gun a fire.
+  const first = step({ 1: { level: 0.1 }, 2: { level: 0.9 } });
+  assert.deepEqual(first, []);
+});

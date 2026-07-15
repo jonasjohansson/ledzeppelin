@@ -13,13 +13,14 @@ export function createClipTriggers() {
   // NOTE: `threshold` is deliberately NOT in the sig — a level clip's threshold is live-tuned
   // in place via det.setThreshold() below, so dragging the line doesn't rebuild+re-arm the gate
   // (which would machine-gun fires over a held-loud band). Mode/sensitivity/hold changes rebuild.
-  const sigOf = (a) => `${a.mode || 'onset'}|${a.sensitivity}|${a.refractoryMs}|${a.floor}`;
+  const sigOf = (a) => `${a.mode || 'onset'}|${a.sensitivity}|${a.refractoryMs}|${a.floor}|${a.band || 'bass'}|${a.channel || 0}`;
   const push = (id, sec) => { let b = buses.get(id); if (!b) { b = []; buses.set(id, b); } b.push(sec); if (b.length > CAP) b.splice(0, b.length - CAP); };
 
   return {
     fire(clipId, sec) { if (clipId != null) push(clipId, sec); },
 
-    // clips: active triggerable clips (each {id, audioTrigger?}). bandOf(name)→0..1.
+    // clips: active triggerable clips (each {id, audioTrigger?}). bandOf(name, channel)→0..1
+    // (channel 0/undefined = the mix; 1..N = one input channel of a multi-channel interface).
     // nowMs: monotonic ms (detector clock). nowSec: elapsed seconds (bus stamp). bpm: tempo
     // for mode:'bpm' clips (fire on the beat grid).
     poll(clips, bandOf, nowMs, nowSec, bpm = 120) {
@@ -39,7 +40,7 @@ export function createClipTriggers() {
         const sig = sigOf(at);
         if (!d || d.sig !== sig) { d = { det: (at.mode === 'level') ? createLevelGateDetector(at) : createOnsetDetector(at), sig }; detectors.set(c.id, d); }
         if (at.mode === 'level' && d.det.setThreshold) d.det.setThreshold(at.threshold);   // live-tune, no rebuild
-        if (d.det.push(bandOf(at.band || 'bass'), nowMs)) { push(c.id, nowSec); fired.push(c.id); }
+        if (d.det.push(bandOf(at.band || 'bass', at.channel || 0), nowMs)) { push(c.id, nowSec); fired.push(c.id); }
       }
       return fired;
     },

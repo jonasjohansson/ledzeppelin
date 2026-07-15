@@ -39,7 +39,7 @@ import { Knob } from './kit/knob.js';
 import { makeAnim, makeAudioAnim, makeExternalAnim, makeDashboardAnim, animatedValue, retimeAnim, COLOR_COMPS, hexToComps, compsToHex } from '../model/anim.js';
 import { addressFor } from '../model/osc-map.js';
 import { hasRemoteControl, toggleRemoteControl } from '../model/remote.js';
-import { AUDIO_BANDS, enableAudio, audioEnabled, disableExternal } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
+import { AUDIO_BANDS, enableAudio, audioEnabled, disableExternal, externalChannelCount } from '../model/audio.js';   // enableAudio(source) — 'external' | 'composition'
 import { extList } from '../model/external.js';
 import { listPresets, savePreset, loadPreset, deletePreset } from '../model/presets.js';
 import { Section } from './section.js';
@@ -1426,6 +1426,17 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
           String(at.division ?? 1), (v) => setATu({ division: Number(v) }))));
         box.append(el('div', { className: 'seg-hint', textContent: 'fires THIS clip on the beat grid — set BPM / TAP in Composition' }));
       } else {
+        // Input CHANNEL — on a multi-channel interface (e.g. a Behringer Flow 8 with a
+        // mic per USB channel) each clip trigger can listen to ONE channel instead of
+        // the mix, so different mics fire different clips. 0 = the mix (default).
+        const chN = externalChannelCount();
+        const cur = at.channel || 0;
+        if (chN >= 2 || cur >= 1) {
+          const chOpts = [{ value: '0', label: 'Mix' }];
+          for (let i = 1; i <= Math.max(chN, cur); i++) chOpts.push({ value: String(i), label: `Ch ${i}` });
+          box.append(field('Input', selectInput(chOpts, String(cur), (v) => setATu({ channel: Number(v) }))));
+          if (cur >= 1 && cur > chN) box.append(el('div', { className: 'seg-hint', textContent: `channel ${cur} isn’t live — the open input has ${chN || 'no separate'} channels` }));
+        }
         box.append(field('Band', selectInput(
           ['bass', 'mid', 'high', 'level'].map((b) => ({ value: b, label: b[0].toUpperCase() + b.slice(1) })),
           at.band || 'bass', (v) => setATu({ band: v }))));
@@ -1440,7 +1451,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         box.append(el('div', { className: 'seg-hint', textContent: mode === 'level'
           ? 'fires THIS clip while the band level is over the line — drag it on the spectrum'
           : 'fires THIS clip on a spike above the running average in this band' }));
-        box.append(createClipSpectrum({ band: at.band || 'bass', trigsFor: () => clipTrigsFor?.(clip.id), mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined, onThresholdChange: (v) => setAT({ threshold: v }) }).el);
+        box.append(createClipSpectrum({ band: at.band || 'bass', channel: at.channel || 0, trigsFor: () => clipTrigsFor?.(clip.id), mode, threshold: mode === 'level' ? (at.threshold ?? 0.5) : undefined, onThresholdChange: (v) => setAT({ threshold: v }) }).el);
       }
     }
 

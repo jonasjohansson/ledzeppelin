@@ -119,7 +119,19 @@ default; the **↺** in the section header resets all source params at once.
 
 **Triggerable** sources (Pulse, Radial, and the triggerable fields) show a ⚡
 badge on their clip thumbnail and a prominent **⚡ trigger** button in the Clip
-inspector — press it to fire a beam / ring / shell.
+inspector — press it to fire a beam / ring / shell. The Clip inspector's **audio
+trigger** section can fire it automatically instead: **Onset** (a spike above the
+running average), **Level** (band over a draggable line on the spectrum), or
+**BPM** (the tempo grid).
+
+On a **multi-channel audio interface** (e.g. a Behringer Flow 8 with a mic per
+USB channel) the trigger's **Input** selector picks *which channel* it listens
+to — **Mix** (default) or **Ch 1…N** — so different mics fire different clips:
+mic 1 launches a Sphere Pulse while mic 3 drives a Shockwave, each with its own
+Band/Threshold/Hold. Pick the interface under **Settings › Audio › Input**,
+enable the mic once (any clip's trigger section), and the channels appear. The
+browser's speech processing is switched off on capture, so a mixer feed arrives
+clean and channel-separated.
 
 ### Volumetric sources
 
