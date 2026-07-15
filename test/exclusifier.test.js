@@ -6,12 +6,13 @@ import { emptyShow, addDevice, addFixture } from '../src/model/show.js';
 
 test('controllerMaskBits: include-list → bits by device order; null → -1 (all)', () => {
   const devices = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const UNROUTED = (1 << 31) | 0;   // bit 31 always set — unrouted fixtures are immune
   assert.equal(controllerMaskBits(devices, null), -1);
   assert.equal(controllerMaskBits(devices, undefined), -1);
-  assert.equal(controllerMaskBits(devices, ['a']), 0b001);
-  assert.equal(controllerMaskBits(devices, ['b', 'c']), 0b110);
-  assert.equal(controllerMaskBits(devices, []), 0);            // explicit nothing
-  assert.equal(controllerMaskBits(devices, ['nope']), 0);      // unknown ids don't set bits
+  assert.equal(controllerMaskBits(devices, ['a']), (0b001 | UNROUTED) | 0);
+  assert.equal(controllerMaskBits(devices, ['b', 'c']), (0b110 | UNROUTED) | 0);
+  assert.equal(controllerMaskBits(devices, []), UNROUTED);       // explicit nothing (previews still show)
+  assert.equal(controllerMaskBits(devices, ['nope']), UNROUTED); // unknown ids don't set bits
 });
 
 test('pipeline emits a controller index per LED (device order; unrouted = 31)', () => {

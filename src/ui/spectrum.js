@@ -85,7 +85,9 @@ export function createClipSpectrum({ band = 'bass', channel = 0, trigsFor, mode 
     }
     // level tick for the selected band
     const lv = externalBand(band, channel);
-    const reg = bandRegions(AUDIO_BAND_SPLIT, W).find((r) => r.band === band);
+    // 'level' is the FULL range (no bass/mid/high slice) — give it the whole width so
+    // the live tick + Level-mode threshold line actually draw for band = Level.
+    const reg = bandRegions(AUDIO_BAND_SPLIT, W).find((r) => r.band === band) || (band === 'level' ? { x0: 0, x1: W, band: 'level' } : null);
     peak = Math.max(peak * 0.94, lv);             // decaying peak-hold for the selected band
     base = base * 0.9 + lv * 0.1;                 // trailing average ≈ onset running baseline
     ctx.fillStyle = 'rgba(120,200,255,0.9)';

@@ -892,7 +892,9 @@ export function moveLayerEffect(show, layerId, fxIndex, delta) {
 export function controllerMaskBits(devices, controllers) {
   if (!Array.isArray(controllers)) return -1;
   let m = 0;
-  const n = Math.min((devices || []).length, 32);
+  const n = Math.min((devices || []).length, 31);
   for (let k = 0; k < n; k++) if (controllers.includes(devices[k].id)) m |= (1 << k);
-  return m | 0;
+  // Bit 31 = UNROUTED fixtures (preview-only, no controller) — always included, so a
+  // mask never darkens fixtures the mask UI can't even list.
+  return (m | (1 << 31)) | 0;
 }

@@ -108,14 +108,26 @@ if [ -n "${SIGN_ID:-}" ]; then
   <key>com.apple.security.cs.allow-jit</key><true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
   <key>com.apple.security.cs.disable-library-validation</key><true/>
+  <key>com.apple.security.device.audio-input</key><true/>
 </dict></plist>
 ENTPLIST
+  # The LAUNCHER (the responsible process for TCC) also needs the audio-input
+  # entitlement under hardened runtime — without it macOS feeds CAPTURE SILENCE
+  # to the daemon's ffmpeg child (multichannel triggers read all-zero).
+  APPENT="$ENT/app-entitlements.plist"
+  cat > "$APPENT" <<'APPPLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>com.apple.security.device.audio-input</key><true/>
+</dict></plist>
+APPPLIST
   # Sign inside-out (no --deep; Apple deprecates it): first the auxiliary Bun daemon
   # (the JavaScriptCore binary that needs the JIT entitlements), then the bundle —
   # which signs the Swift launcher as the main executable (hardened runtime, no
   # special entitlements needed).
   codesign --force --options runtime --timestamp --entitlements "$ENTFILE" --sign "$SIGN_ID" "$C/MacOS/ledzeppelin-daemon"
-  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP"
+  codesign --force --options runtime --timestamp --entitlements "$APPENT" --sign "$SIGN_ID" "$APP"
   codesign --verify --strict --verbose=2 "$APP"
   rm -rf "$ENT"
   if [ -n "${NOTARY_PROFILE:-}" ]; then

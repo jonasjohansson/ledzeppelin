@@ -1455,31 +1455,6 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       }
     }
 
-    // --- Controllers (exclusifier): limit THIS clip to specific controllers — e.g. a
-    // Plane Pulse that only lights two of the twelve DigQuads. Checked = included;
-    // all checked = no mask (the field/canvas reaches everything, as before).
-    {
-      const devs = show().devices || [];
-      if (devs.length > 1) {
-        const cur = Array.isArray(clip.controllers) ? clip.controllers : null;
-        const maskedN = cur ? cur.length : devs.length;
-        box.append(Section(`Controllers${cur ? ` · ${maskedN}/${devs.length}` : ''}`, 'ctl-mask', (b) => {
-          const commitBoxes = () => {
-            const ids = [...b.querySelectorAll('input[data-devid]')].filter((i) => i.checked).map((i) => i.dataset.devid);
-            commit(patchClipControllers(show(), id, clip.id, ids.length >= devs.length ? null : ids));
-          };
-          for (const d of devs) {
-            const cb = el('input', { type: 'checkbox' });
-            cb.dataset.devid = d.id;
-            cb.checked = !cur || cur.includes(d.id);
-            cb.addEventListener('change', commitBoxes);
-            b.append(el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: d.name || d.id })]));
-          }
-          b.append(el('div', { className: 'seg-hint', textContent: 'this clip only lights the checked controllers' }));
-        }));
-      }
-    }
-
     // Playback: how long the layer's autopilot dwells on this clip.
     // (Dirty checks are FUNCTIONS over liveClip — live drags commitLive without
     //  re-rendering, so the ↺ must re-read fresh state, not the render snapshot.)
@@ -1551,7 +1526,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     // the per-LED blend, animatable like any param) and stop here.
     if (gen?.volumetric) {
       box.append(Section('Blend', 'transform', (b) => {
-        b.append(el('div', { className: 'ly-hint', textContent: 'volumetric — lights each LED at its 3D position (z = height off the canvas); not drawn on the canvas. Max 4 volumetric clips active at once; no effect chain in v1.' }));
+        b.append(el('div', { className: 'ly-hint', textContent: 'volumetric — lights each LED at its 3D position (z = height off the canvas); not drawn on the canvas. Max 4 volumetric clips active at once.' }));
         b.append(animatableParam({
           key: 'tf.opacity', p: { key: 'opacity', type: 'float', min: 0, max: 1, default: 1 },
           value: clip.opacity ?? 1, anim: clip.anim?.['tf.opacity'],
@@ -1562,6 +1537,23 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         }));
       }, () => commit(resetClipTransform(show(), id, clip.id)), undefined,
       () => Math.abs(Number((liveClip(clip.id) ?? clip).opacity ?? 1) - 1) > 1e-6));
+      // Effects for a volumetric clip: colour-class effects (they fold over the field's
+      // per-LED colour) + the Exclusifier controller mask.
+      const volFx = clip.effects || [];
+      box.append(Section('Effects', 'effects', (b) => {
+        for (let fx = 0; fx < volFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, volFx));
+        if (Array.isArray(clip.controllers)) b.append(exclusifierBlock(id, clip));
+        const addBtn = el('button', { className: 'composer-add', textContent: '+' });
+        addBtn.onclick = () => openPicker(addBtn, (name) => {
+          if (name === '__exclusifier__') {
+            if (!Array.isArray(clip.controllers)) commit(patchClipControllers(show(), id, clip.id, (show().devices || []).map((d) => d.id)));
+            return;
+          }
+          commit(addClipEffect(show(), id, clip.id, name));
+        }, { colorOnly: true,
+             extras: (show().devices || []).length > 1 && !Array.isArray(clip.controllers) ? [{ id: '__exclusifier__', label: 'Exclusifier' }] : [] });
+        b.append(addBtn);
+      }, undefined, volFx.length === 0 && !Array.isArray(clip.controllers)));
       return box;
     }
 
@@ -1596,12 +1588,48 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     const clipFx = clip.effects || [];
     box.append(Section('Effects', 'effects', (b) => {
       for (let fx = 0; fx < clipFx.length; fx++) b.append(clipEffectBlock(id, clip, fx, clipFx));
+      // The Exclusifier renders as a chain block too (it's added from the picker) —
+      // a sampler-stage controller mask rather than a shader, so it has no chain index.
+      if (Array.isArray(clip.controllers)) b.append(exclusifierBlock(id, clip));
       const addBtn = el('button', { className: 'composer-add', textContent: '+' });
-      addBtn.onclick = () => openPicker(addBtn, (name) => commit(addClipEffect(show(), id, clip.id, name)),
-        { colorOnly: !!getEntry(clip.generator)?.volumetric });
+      addBtn.onclick = () => openPicker(addBtn, (name) => {
+        if (name === '__exclusifier__') {
+          if (!Array.isArray(clip.controllers)) commit(patchClipControllers(show(), id, clip.id, (show().devices || []).map((d) => d.id)));
+          return;
+        }
+        commit(addClipEffect(show(), id, clip.id, name));
+      }, { colorOnly: !!getEntry(clip.generator)?.volumetric,
+           extras: (show().devices || []).length > 1 && !Array.isArray(clip.controllers) ? [{ id: '__exclusifier__', label: 'Exclusifier' }] : [] });
       b.append(addBtn);
-    }, undefined, clipFx.length === 0));
+    }, undefined, clipFx.length === 0 && !Array.isArray(clip.controllers)));
     return box;
+  }
+
+  // The Exclusifier chain block — limit THIS clip to specific controllers (e.g. a
+  // Plane Pulse on two of the twelve DigQuads). Checked = included. Removing the
+  // block clears the mask (the clip reaches every controller again).
+  function exclusifierBlock(id, clip) {
+    const devs = show().devices || [];
+    const cur = Array.isArray(clip.controllers) ? clip.controllers : [];
+    const block = el('div', { className: 'ly-fx ly-fx-clip' });
+    const head = el('div', { className: 'ly-fxhead' }, [
+      el('span', { className: 'ly-fxname', textContent: `Exclusifier · ${cur.length}/${devs.length}` }),
+    ]);
+    head.append(fxMenu({ presetName: 'Exclusifier', onRemove: () => { if (confirmDelete('Remove this effect?')) commit(patchClipControllers(show(), id, clip.id, null)); } }));
+    block.append(head);
+    const commitBoxes = () => {
+      const ids = [...block.querySelectorAll('input[data-devid]')].filter((i) => i.checked).map((i) => i.dataset.devid);
+      commit(patchClipControllers(show(), id, clip.id, ids));
+    };
+    for (const d of devs) {
+      const cb = el('input', { type: 'checkbox' });
+      cb.dataset.devid = d.id;
+      cb.checked = cur.includes(d.id);
+      cb.addEventListener('change', commitBoxes);
+      block.append(el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: d.name || d.id })]));
+    }
+    block.append(el('div', { className: 'seg-hint', textContent: 'this clip only lights the checked controllers' }));
+    return block;
   }
 
   // An ISF effect block (effect item is an { isf, params } object). Its params are
@@ -1701,6 +1729,13 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     const grid = (names) => { const g = el('div', { className: 'pick-grid' }); names.forEach((n) => g.append(item(n))); return g; };
     const names = opts.colorOnly ? effectNames().filter((n) => effectKind(n) === 'color') : effectNames();
     pop.append(grid(names));
+    // Extra non-shader entries (e.g. the Exclusifier controller mask) — same card look.
+    for (const x of opts.extras || []) {
+      const row = el('div', { className: 'pick-item' });
+      row.append(el('span', { className: 'lib-label', textContent: x.label }));
+      row.onclick = (e) => { e.stopPropagation(); closePicker(); onPick(x.id); };
+      pop.append(row);
+    }
     placePopover(pop, anchor);          // anchor + viewport-clamp (kit)
     pickPop = pop;
     pickDismiss = dismissOnOutside(pop, closePicker);   // click-outside + Esc (kit)
