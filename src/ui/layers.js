@@ -1455,6 +1455,31 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       }
     }
 
+    // --- Controllers (exclusifier): limit THIS clip to specific controllers — e.g. a
+    // Plane Pulse that only lights two of the twelve DigQuads. Checked = included;
+    // all checked = no mask (the field/canvas reaches everything, as before).
+    {
+      const devs = show().devices || [];
+      if (devs.length > 1) {
+        const cur = Array.isArray(clip.controllers) ? clip.controllers : null;
+        const maskedN = cur ? cur.length : devs.length;
+        box.append(Section(`Controllers${cur ? ` · ${maskedN}/${devs.length}` : ''}`, 'ctl-mask', (b) => {
+          const commitBoxes = () => {
+            const ids = [...b.querySelectorAll('input[data-devid]')].filter((i) => i.checked).map((i) => i.dataset.devid);
+            commit(patchClipControllers(show(), id, clip.id, ids.length >= devs.length ? null : ids));
+          };
+          for (const d of devs) {
+            const cb = el('input', { type: 'checkbox' });
+            cb.dataset.devid = d.id;
+            cb.checked = !cur || cur.includes(d.id);
+            cb.addEventListener('change', commitBoxes);
+            b.append(el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: d.name || d.id })]));
+          }
+          b.append(el('div', { className: 'seg-hint', textContent: 'this clip only lights the checked controllers' }));
+        }));
+      }
+    }
+
     // Playback: how long the layer's autopilot dwells on this clip.
     // (Dirty checks are FUNCTIONS over liveClip — live drags commitLive without
     //  re-rendering, so the ↺ must re-read fresh state, not the render snapshot.)
@@ -1909,6 +1934,20 @@ function patchClipName(show, layerId, clipId, name) {
   const layers = (show.composition?.layers || []).map((l) => {
     if (l.id !== layerId) return l;
     return { ...l, clips: (l.clips || []).map((c) => c && c.id === clipId ? { ...c, name } : c) };
+  });
+  return { ...show, composition: { ...show.composition, layers } };
+}
+
+// Set (or clear, with null) a clip's controller INCLUDE list — the "exclusifier":
+// clip.controllers = array of deviceIds the clip is limited to; absent = everywhere.
+function patchClipControllers(show, layerId, clipId, controllers) {
+  const layers = (show.composition?.layers || []).map((l) => {
+    if (l.id !== layerId) return l;
+    return { ...l, clips: (l.clips || []).map((c) => {
+      if (!c || c.id !== clipId) return c;
+      if (!controllers) { const { controllers: _drop, ...rest } = c; return rest; }
+      return { ...c, controllers };
+    }) };
   });
   return { ...show, composition: { ...show.composition, layers } };
 }

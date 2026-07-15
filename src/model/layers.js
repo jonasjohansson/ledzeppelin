@@ -884,3 +884,15 @@ export function moveLayerEffect(show, layerId, fxIndex, delta) {
     return { ...layer, effects };
   });
 }
+
+// --- Exclusifier: per-clip controller mask ------------------------------------------
+// clip.controllers = null/undefined (all controllers) | array of INCLUDED deviceIds.
+// Bitmask for the sampler: bit k = show.devices[k] included; -1 = no mask (all).
+// Controllers beyond 31 always show (the mask can't address them).
+export function controllerMaskBits(devices, controllers) {
+  if (!Array.isArray(controllers)) return -1;
+  let m = 0;
+  const n = Math.min((devices || []).length, 32);
+  for (let k = 0; k < n; k++) if (controllers.includes(devices[k].id)) m |= (1 << k);
+  return m | 0;
+}

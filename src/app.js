@@ -17,7 +17,7 @@ import { Slider } from './ui/controls.js';
 import { Section } from './ui/section.js';
 import { activateTabs } from './ui/kit/tabs.js';
 import {
-  prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers,
+  prefixedDefaults, normalizeComposition, makeClip, setActiveClip, tidyEmptyLayers, controllerMaskBits,
   setCanvasSize as setCanvasSizeModel, clampCanvasSize, playheadClip, setShowBpm, setCompositionOpacity,
   copyName,
 } from './model/layers.js';
@@ -286,10 +286,10 @@ function rebuild(next) {
   //    out to all its placed copies), 2) auto-pack pixel offsets contiguous per
   //    device, 3) sync derived sample points to transforms + canvas.
   show = syncShowFixtures(repackOffsets(syncFixtureTypes(syncDeviceTypes(next))));
-  const { sampleUVs, samplePositions, sampleBands, route, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, sampleBands, sampleControllers, route, spans } = buildPipelineInputs(show);
   curRoute = route;     // kept so the render loop can live-resolve layer-bound params
   sampler?.dispose?.(); // free the previous sampler's GL objects before reassigning
-  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
+  sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds, sampleControllers) : null;
   // Push the new route over the existing socket (no reconnect blip); only
   // construct a bridge on first build. Keeps output live + stats across edits.
   if (bridge?.setRoute) bridge.setRoute(route);
@@ -305,7 +305,7 @@ function rebuild(next) {
 // Cheap sampler-only rebuild (no route/manifest/bridge churn) — used live during a
 // fixture drag so the sampled colours follow the new positions each frame.
 function refreshSampler() {
-  const { sampleUVs, samplePositions, sampleBands, spans } = buildPipelineInputs(show);
+  const { sampleUVs, samplePositions, sampleBands, sampleControllers, spans } = buildPipelineInputs(show);
   const n = sampleUVs.length / 2;
   // DRAG path: the LED count is unchanged, only per-LED UV/xyz moved — refresh the
   // textures IN PLACE so the PBO readback ring stays warm (sample() keeps returning
@@ -316,11 +316,11 @@ function refreshSampler() {
   // set are unchanged — a different field set needs a freshly compiled program, so
   // fall through to a full rebuild (which passes curFieldIds to makeSampler).
   if (sampler && n > 0 && sampler.n === n && sampler.fieldKey === fieldKeyOf(curFieldIds)
-      && sampler.update?.(sampleUVs, samplePositions, sampleBands)) {
+      && sampler.update?.(sampleUVs, samplePositions, sampleBands, sampleControllers)) {
     // updated in place
   } else {
     sampler?.dispose?.();
-    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds) : null;
+    sampler = sampleUVs.length ? makeSampler(gl, sampleUVs, samplePositions, sampleBands, curFieldIds, sampleControllers) : null;
   }
   lastSpans = spans; recomputeHiddenSpans();
 }
@@ -3050,7 +3050,7 @@ function loopBody(ts) {
         const c = (L.clips || []).find((x) => x && x.id === L.activeClipId);
         if (!c || !getEntry(c.generator)?.volumetric) continue;
         act.push({
-          id: c.id, generator: c.generator, params: c.params, blend: L.blend, effects: c.effects,
+          id: c.id, generator: c.generator, params: c.params, blend: L.blend, effects: c.effects, controllers: c.controllers,
           // The LAYER's effect chain too — packColorFx appends its colour-class effects to
           // this clip's per-LED fx (mirroring the 2D clip→layer order), so a layer effect
           // reaches its 3D clips. Non-colour layer effects are auto-filtered.
@@ -3058,7 +3058,21 @@ function loopBody(ts) {
           opacity: (L.opacity == null ? 1 : Number(L.opacity)) * (c.opacity == null ? 1 : Number(c.opacity)) * masterOpacity,
         });
       }
-      if (act.length) vol = { ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)),
+      // Exclusifier masks: per-vol-clip controller bitmasks, and per-controller CANVAS
+      // attenuation from the active 2D clips (a masked 2D clip zeroes the canvas sample
+      // for excluded controllers; layers multiply). null when nothing is masked.
+      const ctlMasks = new Int32Array(4).fill(-1);
+      for (let k = 0; k < Math.min(act.length, 4); k++) ctlMasks[k] = controllerMaskBits(show.devices, act[k].controllers);
+      let canvasCtl = null;
+      for (const L of renderLayers) {
+        if (!L || L.bypass) continue;
+        const c2 = (L.clips || []).find((x) => x && x.id === L.activeClipId);
+        if (!c2 || getEntry(c2.generator)?.volumetric || !Array.isArray(c2.controllers)) continue;
+        if (!canvasCtl) canvasCtl = new Float32Array(32).fill(1);
+        const bits = controllerMaskBits(show.devices, c2.controllers);
+        for (let k = 0; k < 32; k++) if ((bits & (1 << k)) === 0) canvasCtl[k] = 0;
+      }
+      if (act.length) vol = { ctlMasks, canvasCtl, ...packVolumetrics(act), ...packColorFx(act), time: t, volTrigs: act.map((e) => clipTriggers.trigsFor(e.id)),
         // Live mic band levels (bass, mid, high) for the audiobars field. The plain
         // band keys in frameSignals are the EXTERNAL (mic) source (see updateAudio).
         // A test hook (__lz.setAudioBands) can force these when there's no mic.
@@ -3069,6 +3083,7 @@ function loopBody(ts) {
       // sampler stale so refreshSampler rebuilds its program for the new fields.
       curFieldIds = act.map((a) => FIELD_IDS[a.generator]).filter((v) => v != null);
       if (sampler && sampler.fieldKey !== fieldKeyOf(curFieldIds)) samplerDirty = true;
+      if (!vol && canvasCtl) vol = { count: 0, canvasCtl };   // 2D-only mask still applies
     }
     // Hand the SAME packed fields to the viewport so 3D mode can ghost each
     // field's place in space (or nothing while the FIELDS chip is off / no

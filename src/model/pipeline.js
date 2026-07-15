@@ -89,6 +89,10 @@ export function buildPipelineInputs(show) {
   // LEDs — feeds the "Audio Bars" volumetric source (each fixture pulses on its
   // band). Derived from the fixture's name (or its audioBand override).
   const bands = [];
+  // Per-LED CONTROLLER index (position in show.devices, capped at 31; 31 also =
+  // unrouted) — feeds the sampler's controller-mask pass ("exclusifier": a clip
+  // limited to specific controllers). Same order + length as the LEDs.
+  const ctls = [];
   const spans = [];
   const fixtureOrder = [];
   const route = [];
@@ -100,7 +104,10 @@ export function buildPipelineInputs(show) {
   const NO_OFF = [0, 0];
   let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
+  let devIdx = -1;
   for (const d of show.devices) {
+    devIdx++;
+    const ctlIdx = Math.min(devIdx, 31);
     const mine = show.fixtures.filter((f) => f.output?.deviceId === d.id);
     const fs = mine.filter((f) => !isDmxFixture(f))
       .sort((a, b) => ((a.output?.port ?? 0) - (b.output?.port ?? 0)) || ((a.output?.pixelOffset ?? 0) - (b.output?.pixelOffset ?? 0)));
@@ -121,7 +128,7 @@ export function buildPipelineInputs(show) {
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
       for (const [x, y, z] of pos) { poss.push(x, y, z); }
-      { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) bands.push(bi); }
+      { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) { bands.push(bi); ctls.push(ctlIdx); } }
       // Colour format per segment: a fixture's own colorFormat WINS when set (so an
       // RGBW strip can sit on the same controller as RGB ones); otherwise inherit
       // the controller's colour order (the common case — its strips are wired alike).
@@ -143,7 +150,7 @@ export function buildPipelineInputs(show) {
       fixtureOrder.push(f);
       uvs.push(u + ox, v + oy);
       poss.push(u, v, 0);   // DMX fixture: its centre, on the canvas plane
-      bands.push(fixtureBandIndex(f.name, f.audioBand));
+      bands.push(fixtureBandIndex(f.name, f.audioBand)); ctls.push(ctlIdx);
       const cfg = f.input.dmx;
       // `fixed` is COPIED (not referenced) so a per-frame layer-binding update can
       // mutate the route's overrides without touching the saved show. `bind` maps a
@@ -187,7 +194,7 @@ export function buildPipelineInputs(show) {
     fixtureOrder.push(f);
     for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
     for (const [x, y, z] of pos) { poss.push(x, y, z); }
-    { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) bands.push(bi); }
+    { const bi = fixtureBandIndex(f.name, f.audioBand); for (let k = 0; k < pts.length; k++) { bands.push(bi); ctls.push(31); } }   // unrouted → 31
     cursor += pts.length;
   }
 
@@ -201,5 +208,5 @@ export function buildPipelineInputs(show) {
   for (let i = 2; i < poss.length; i += 3) { const a = Math.abs(poss[i]); if (a > zMax) zMax = a; }
   if (zMax > 1e-4) for (let i = 2; i < poss.length; i += 3) poss[i] /= zMax;
 
-  return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), sampleBands: new Float32Array(bands), route, fixtureOrder, spans };
+  return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), sampleBands: new Float32Array(bands), sampleControllers: new Float32Array(ctls), route, fixtureOrder, spans };
 }
