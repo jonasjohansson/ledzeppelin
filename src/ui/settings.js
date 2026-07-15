@@ -118,7 +118,7 @@ export function createSettingsPanel(hooks) {
     mount.append(el('div', { className: 'fx-pts', textContent: 'preferences' }));
     // Advanced mode — ALWAYS visible (it's the switch that reveals the .adv-only extras:
     // the view/panel layout controls, controller Gamma, and the technical settings above).
-    if (prefs.getAdvanced) mount.append(toggleRow('Advanced mode (layout controls & extra settings)', prefs.getAdvanced, (v) => prefs.setAdvanced(v)));
+    if (prefs.getAdvanced) mount.append(toggleRow('Advanced mode', prefs.getAdvanced, (v) => prefs.setAdvanced(v)));
     mount.append(toggleRow('Confirm before deleting', confirmDeletesOn, (v) => setConfirmDeletes(v)));
     mount.append(toggleRow('Show tooltips on hover', prefs.getTips, (v) => prefs.setTips(v)));
     const riffAlways = () => { try { return localStorage.getItem('lz.riff.always') === '1'; } catch { return false; } };

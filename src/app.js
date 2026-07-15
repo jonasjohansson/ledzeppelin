@@ -85,7 +85,7 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   const AIRY_HEAD = 'background:none;color:var(--accent);min-height:24px;display:flex;align-items:center;padding:0 var(--s1) var(--s2);margin:var(--s4) 0 var(--s3);border-bottom:1px solid var(--accent-underline);letter-spacing:var(--ls-caps)';
   const EMBED_CSS = {
     'settings/': `.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}.fx-pts{${HEAD_BAR}}.fx-pts:first-child{margin-top:0}`,
-    'inventory/': `.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 10px;background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:8px;max-width:none;margin:0}.inv-pane-title,.fx-pts{${AIRY_HEAD}}.fx-pts:first-child{margin-top:0}`,
+    'inventory/': `.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 var(--s2);background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:0;max-width:none;margin:0}.inv-pane-title,.fx-pts{${AIRY_HEAD}}.fx-pts:first-child{margin-top:0}`,
     'mappings/': `.map-title{display:none}.map-sec{${HEAD_BAR}}`,
   };
   const setup = (f) => {
@@ -2647,16 +2647,18 @@ document.addEventListener('keydown', (e) => {
 // (Settings moved to its own popup window off the top-left gear — see
 // openSettingsWindow; a stored 'settings' itab from older builds falls back here.)
 function setInspectorTab(which) {
-  if (!['settings', 'composition', 'layer', 'clip'].includes(which)) which = 'composition';
+  const collapse = which === 'none';   // fold everything closed (overview)
+  if (!collapse && !['settings', 'composition', 'layer', 'clip'].includes(which)) which = 'composition';
   const host = document.getElementById('grp-props');
-  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
-  if (which === 'settings') openEmbed('settings/');   // lazy-load the embedded Settings app
-  try { localStorage.setItem('lz.itab', which); } catch { /* private */ }
+  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', !collapse && s.dataset.acc === which);
+  if (!collapse && which === 'settings') openEmbed('settings/');   // lazy-load the embedded Settings app
+  try { localStorage.setItem('lz.itab', collapse ? 'none' : which); } catch { /* private */ }
 }
-// Accordion: click a section header to open it (exclusive — the open one stays the one open).
+// Accordion: click a header to open that section; click the OPEN one to fold it closed
+// (so every section can be collapsed at once for an overview).
 document.getElementById('grp-props')?.addEventListener('click', (e) => {
   const h = e.target.closest('.acc-head'); if (!h) return;
-  const sec = h.closest('.acc-sec'); if (sec) setInspectorTab(sec.dataset.acc);
+  const sec = h.closest('.acc-sec'); if (sec) setInspectorTab(sec.classList.contains('is-open') ? 'none' : sec.dataset.acc);
 });
 // (Scan is a button under the Unassigned heading in the Devices list — see renderOutput.)
 
@@ -2675,12 +2677,13 @@ function setOutputTab(which) {
 // mode). The rail is rebuilt each time Sources is shown so thumbnails/newly
 // imported sources appear; its items drag onto the layer slots' drop targets.
 function setPatchTab(which) {
-  which = ['library', 'sources'].includes(which) ? which : 'fixtures';
+  const collapse = which === 'none';   // fold everything closed (overview)
+  if (!collapse) which = ['library', 'sources'].includes(which) ? which : 'fixtures';
   const host = document.getElementById('grp-patch');
-  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', s.dataset.acc === which);
-  if (which === 'library') openEmbed('inventory/');   // lazy-load the embedded Library app
+  if (host) for (const s of host.querySelectorAll('.acc-sec')) s.classList.toggle('is-open', !collapse && s.dataset.acc === which);
+  if (!collapse && which === 'library') openEmbed('inventory/');   // lazy-load the embedded Library app
   // Build the source palette fresh each time Sources opens (new thumbnails/imports).
-  if (which === 'sources') {
+  if (!collapse && which === 'sources') {
     const src = document.getElementById('patch-sources');
     if (src) {
       src.textContent = '';
@@ -2691,14 +2694,14 @@ function setPatchTab(which) {
       }));
     }
   }
-  try { localStorage.setItem('lz.ptab', which); } catch { /* private */ }
+  try { localStorage.setItem('lz.ptab', collapse ? 'none' : which); } catch { /* private */ }
 }
-// Accordion: click a section header to open it (exclusive) — but let the header's
-// action icons (add controller/fixture/scan) act without toggling the panel.
+// Accordion: click a header to open that section; click the OPEN one to fold it closed.
+// The header's action icons (add controller/fixture/scan) act without toggling the panel.
 document.getElementById('grp-patch')?.addEventListener('click', (e) => {
   if (e.target.closest('.acc-head-acts')) return;
   const h = e.target.closest('.acc-head'); if (!h) return;
-  const sec = h.closest('.acc-sec'); if (sec) setPatchTab(sec.dataset.acc);
+  const sec = h.closest('.acc-sec'); if (sec) setPatchTab(sec.classList.contains('is-open') ? 'none' : sec.dataset.acc);
 });
 // Scan icon on the Output header → the same network scan as the list button.
 document.getElementById('devices-scan')?.addEventListener('click', (e) => { e.stopPropagation(); panel?.runScan?.(renderOutput); });

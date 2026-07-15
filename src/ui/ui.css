@@ -24,23 +24,23 @@
   /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#d4a24a'}) so a
      pre-JS / FOUC flash matches the runtime (palette.js writes these inline on <html>).
      Keep in sync: re-run themeVars if the accent default or anchors change.
-     NEUTRAL gray base + ONE fixed amber-orange accent that pops against it. */
+     NEUTRAL gray base + ONE fixed cyan accent (MadMapper blue × Resolume teal) that pops. */
   --bg:#1c1c1c; --panel:#242424; --panel-2:#2b2b2b; --hover:#383838;
   --stage-bg:#101011;          /* display surfaces stay near-black in BOTH themes (LED content wants black) */
   --panel-solid:#242424;       /* menus/popovers share the panel surface */
   --line:#3a3a3a; --line-2:#4c4c4c;       /* hairline borders (neutral) */
   --text:#ffffff; --muted:#ccccd2; --faint:#959599;
-  --accent:#d4a24a;            /* the one fixed amber-orange accent */
-  --accent-soft:#3f321b;       /* selected/active background tint */
-  --accent-text:#e4c58f;       /* text on accent surfaces */
-  --accent-line:#5b4724;       /* active border */
-  --accent-head:#574a33;       /* muted amber group-header bar */
+  --accent:#22bcd6;            /* the one fixed cyan accent (MadMapper blue × Resolume teal) */
+  --accent-soft:#10383f;       /* selected/active background tint */
+  --accent-text:#76d5e6;       /* text on accent surfaces */
+  --accent-line:#14515c;       /* active border */
+  --accent-head:#295157;       /* muted cyan group-header bar */
   --accent-underline: color-mix(in srgb, var(--accent) 24%, transparent);   /* section-header underline (auto-tracks --accent) */
   --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
   --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
-  --accent-dark:#221c12;       /* dark glyph ON a bright accent-filled surface */
+  --accent-dark:#0d1f22;       /* dark glyph ON a bright accent-filled surface */
   --field-bg:#141414;                 /* recessed input fill */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
@@ -817,7 +817,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 /* Library column hosts the Sources/Effects rail full-width (no side border). */
 #library .composer-rail { flex: 1 1 auto; border-left: none; padding-left: 0; gap: 4px; }
 
-.fx-panel { display: flex; flex-direction: column; gap: 6px; }
+.fx-panel { display: flex; flex-direction: column; gap: 0; }
 .fx-title { font-size: var(--fs-title); font-weight: var(--fw-med); color: var(--text); }
 .fx-section { margin: 12px 0 4px; }   /* recipe above; faint uppercase, no border */
 
@@ -896,7 +896,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .insp-sec-body .ly-param.ly-row:first-child, .insp-sec-body .anim-param:first-child { border-top: none; }
 
 /* Master-detail Fixtures tab: compact selectable list rows + one detail editor. */
-.fx-list { display: flex; flex-direction: column; gap: 0; margin: 4px 0 6px; }
+.fx-list { display: flex; flex-direction: column; gap: 0; margin: var(--s1) 0; }
 .fx-badge {
   flex: 0 0 auto; font-size: var(--fs-micro); color: var(--muted);
   background: var(--field-bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 1px 6px;
