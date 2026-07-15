@@ -2814,7 +2814,8 @@ async function applyMultichannelAudio() {
   if (want && !running) {
     let label = '';
     try { const devs = await listInputs(); label = devs.find((d) => d.deviceId === (show.composition?.audioDevice || 'default'))?.label || ''; } catch { /* permission not granted → daemon picks the widest input */ }
-    await enableDaemonAudio(label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, ''));   // strip the browser's (vid:pid) suffix
+    const ok = await enableDaemonAudio(label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, ''));   // strip the browser's (vid:pid) suffix
+    if (ok) layerPanel?.refresh?.();   // an open trigger panel re-renders its Input dropdown with the new channels
   } else if (!want && running) disableDaemonAudio();
 }
 applyMultichannelAudio();   // restore on boot — fetch+SSE only, no user gesture needed

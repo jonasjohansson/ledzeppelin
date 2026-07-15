@@ -12,6 +12,16 @@
 // The DSP core (createChannelBands) is pure and node-tested; only start() does IO.
 
 import { spawn, execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
+// Resolve ffmpeg robustly: a PACKAGED app launches with the minimal GUI PATH
+// (/usr/bin:/bin:…), which does NOT include Homebrew — so a bare 'ffmpeg' spawn
+// ENOENTs in the installed app even when ffmpeg is on the machine.
+function ffmpegPath() {
+  if (process.env.LZ_FFMPEG) return process.env.LZ_FFMPEG;
+  for (const c of ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg']) if (existsSync(c)) return c;
+  return 'ffmpeg';
+}
 
 // --- pure DSP: interleaved f32 chunks → per-channel {level,bass,mid,high} ---------
 // One-pole splits (≈ the analyser's band ranges): bass < ~200Hz < mid < ~2kHz < high.
@@ -118,7 +128,7 @@ export function stopCapture() {
 }
 
 export function startCapture(deviceName, cb) {
-  const ffmpeg = process.env.LZ_FFMPEG || 'ffmpeg';
+  const ffmpeg = ffmpegPath();
   stopCapture();
   const launch = (args, channels) => {
     const proc = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'] });
