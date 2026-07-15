@@ -67,6 +67,7 @@ cat > "$C/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>LEDZeppelin</string>
   <key>CFBundleIdentifier</key><string>se.jonasjohansson.ledzeppelin</string>
   <key>CFBundleVersion</key><string>${VERSION:-1.0.0}</string>
+  <key>NSMicrophoneUsageDescription</key><string>Multichannel audio capture — per-channel clip triggers from your audio interface.</string>
   <key>CFBundleShortVersionString</key><string>${VERSION:-1.0.0}</string>
   <key>CFBundleExecutable</key><string>ledzeppelin</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>

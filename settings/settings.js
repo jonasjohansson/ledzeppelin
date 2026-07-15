@@ -125,6 +125,10 @@ const panel = createSettingsPanel({
     getAdvanced: () => { try { return localStorage.getItem('lz.advanced') === '1'; } catch { return false; } },
     setAdvanced: (on) => { put('lz.advanced', on ? '1' : '0'); applyAdvanced(); post(); },
   },
+  multichannel: {
+    get: () => { try { return localStorage.getItem('lz.audio.multich') === '1'; } catch { return false; } },
+    set: (on) => { put('lz.audio.multich', on ? '1' : '0'); post(); },   // main window starts/stops the daemon capture
+  },
   appearance: {
     getTheme: savedTheme, setTheme: (v) => { put('lz.theme', v === 'light' ? 'light' : 'dark'); applyTheme(); post(); },
     getBrightness: savedBright, setBrightness: (v) => { put('lz.brightness', v); applyTheme(); postSoon(); },

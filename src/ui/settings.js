@@ -41,7 +41,7 @@ import { confirmDeletesOn, setConfirmDeletes } from './confirm.js';
 // near-white · cool slate · brick red.
 
 export function createSettingsPanel(hooks) {
-  const { getShow, setShow, enableAudio, snap, output, prefs, appearance } = hooks;
+  const { getShow, setShow, enableAudio, snap, output, prefs, appearance, multichannel } = hooks;
 
   // Async because the audio device list needs enumerateDevices(); re-run build()
   // whenever the panel is (re)opened so the list and any granted labels refresh.
@@ -71,6 +71,16 @@ export function createSettingsPanel(hooks) {
       min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
       onInput: (v) => { const s = getShow(); setShow({ ...s, composition: { ...s.composition, audioGain: v } }, { undoable: true, defer: true }); },
     }));
+    // Multichannel capture — the DAEMON opens every channel of the interface (browsers
+    // cap mic capture at 2), so clip triggers can target Ch 1…N (one mic per channel).
+    if (multichannel?.get) {
+      const mcRow = el('label', { className: 'set-toggle' });
+      const mc = el('input', { type: 'checkbox' }); mc.checked = !!multichannel.get();
+      mc.addEventListener('change', () => multichannel.set(mc.checked));
+      mcRow.append(mc, el('span', { textContent: 'Multichannel capture' }));
+      mount.append(mcRow);
+      mount.append(el('div', { className: 'seg-hint', textContent: 'captures every interface channel via the daemon — clip triggers can then listen to Ch 1…N (e.g. one mic per channel on a Flow 8)' }));
+    }
 
     // (Project save/open/new live on the footer toolbar — ⌘S / ⌘O; loading also
     // accepts a project or composition .json dropped onto the window. The visuals-only

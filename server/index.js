@@ -15,6 +15,7 @@ import { VERSION } from '../src/version.js';
 import { scanArtnet } from './artpoll.js';
 import { getState, postState, scanSubnet, pushConfig, getOutputs } from './wled.js';
 import { createApiHandler, readJson, authorized, problem, statusBody, parseManifest, clipsBody, controlsBody } from './api.js';
+import { listDevices as listAudioDevices, startCapture, stopCapture, audioStatus, subscribe as subscribeAudio } from './audio-capture.js';
 
 // Proxy a WLED JSON-API call (GET state, POST partial state) for the browser.
 // Always returns JSON; failures come back as { error } with a 502 so the UI can
@@ -132,6 +133,35 @@ const http = createServer(async (req, res) => {
     catch (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
     return;
   }
+  // --- Multi-channel audio capture (per-channel triggers; see audio-capture.js) ----
+  if (url.pathname === '/api/audio/devices') {
+    res.setHeader('content-type', 'application/json');
+    listAudioDevices((e, devs) => res.end(JSON.stringify(e ? { error: e.message, devices: [] } : { devices: devs })));
+    return;
+  }
+  if (url.pathname === '/api/audio/start' && req.method === 'POST') {
+    res.setHeader('content-type', 'application/json');
+    try {
+      const body = await readJson(req);
+      startCapture(body.device, (e, info) => {
+        if (e) { res.writeHead(502); res.end(JSON.stringify({ error: e.message })); }
+        else res.end(JSON.stringify({ ok: true, ...info }));
+      });
+    } catch (e) { res.writeHead(400); res.end(JSON.stringify({ error: e.message })); }
+    return;
+  }
+  if (url.pathname === '/api/audio/stop' && req.method === 'POST') {
+    res.setHeader('content-type', 'application/json');
+    stopCapture(); res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  if (url.pathname === '/api/audio/status') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(audioStatus()));
+    return;
+  }
+  if (url.pathname === '/api/audio/stream') return subscribeAudio(res);
+
   if (url.pathname === '/api/wled/state') return handleWled(req, res, url.searchParams.get('ip'));
   if (url.pathname === '/api/artnet/scan') {
     res.setHeader('content-type', 'application/json');

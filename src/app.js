@@ -32,7 +32,7 @@ import { fieldState, applyField } from './model/selection.js';
 import { DMX_PROFILES, dmxProfile, dmxChannelsOf, isDmxFixture, DMX_CHANNEL_KINDS, DMX_COLOUR_KINDS, DMX_KIND_LABELS, fixtureTypeChannels, fixtureControlChannels, paramKinds, paramSpan, isColourParam, channelsToParams, isDmxType } from './model/dmx.js';
 import { resolveParams, animatedValue } from './model/anim.js';
 import { dashboardSignals } from './model/dashboard.js';
-import { updateAudio, setAudioGain, enableAudio, audioEnabled, externalBand } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
+import { updateAudio, setAudioGain, enableAudio, audioEnabled, externalBand, enableDaemonAudio, disableDaemonAudio, daemonAudio, listInputs } from './model/audio.js';   // (register/unregisterMediaElement moved with the video runtime → ui/video.js)
 import { createClipTriggers } from './model/clip-triggers.js';
 import { enableMidi, midiEnabled, midiInputs, setBpmCallback } from './model/midi.js';
 import { extSet, extChannels } from './model/external.js';
@@ -2805,6 +2805,20 @@ document.getElementById('menu-settings')?.addEventListener('click', () => setIns
 // Adopted edits are NOT undoable here — same rule as inventory merges: the undo
 // stack is main-window-local, and the popout streams micro-edits (a gain drag
 // would flood it). ⌘Z keeps working on composition edits made in this window.
+// Multichannel capture (lz.audio.multich): the DAEMON opens every channel of the
+// selected interface and streams per-channel bands — see model/audio.js. The device is
+// sent by LABEL (the daemon matches Core Audio names); resolved from the saved deviceId.
+async function applyMultichannelAudio() {
+  const want = (() => { try { return localStorage.getItem('lz.audio.multich') === '1'; } catch { return false; } })();
+  const running = daemonAudio().enabled;
+  if (want && !running) {
+    let label = '';
+    try { const devs = await listInputs(); label = devs.find((d) => d.deviceId === (show.composition?.audioDevice || 'default'))?.label || ''; } catch { /* permission not granted → daemon picks the widest input */ }
+    await enableDaemonAudio(label.replace(/\s*\([0-9a-f]{4}:[0-9a-f]{4}\)\s*$/i, ''));   // strip the browser's (vid:pid) suffix
+  } else if (!want && running) disableDaemonAudio();
+}
+applyMultichannelAudio();   // restore on boot — fetch+SSE only, no user gesture needed
+
 let setBus = null;
 try { setBus = new BroadcastChannel('lz-settings'); } catch { /* unsupported */ }
 let lastAdoptedAccent = prefs.savedAccent();   // only re-broadcast the remote manifest on a real accent change
@@ -2848,6 +2862,7 @@ if (setBus) {
     document.documentElement.dataset.theme = prefs.getTheme();   // Dark|Light chrome marker
     prefs.applyAccent(prefs.savedAccent()); prefs.applyContrast();
     prefs.setUiScale(prefs.savedScale()); prefs.setTranslucency(prefs.savedTranslucency());
+    applyMultichannelAudio();   // Multichannel-capture toggle flipped in Settings
     redrawOverlay();
     const acc = prefs.savedAccent();
     if (acc !== lastAdoptedAccent) { lastAdoptedAccent = acc; broadcastManifest(true); }   // remote surface follows the accent

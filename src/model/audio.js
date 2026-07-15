@@ -28,6 +28,44 @@ const SRC = {
   composition: { analyser: null, data: null, enabled: false, bands: { level: 0, bass: 0, mid: 0, high: 0 } },
 };
 
+// --- daemon multi-channel capture ------------------------------------------------
+// Browsers cap getUserMedia at 2 channels, so a 10-in interface (Flow 8) can't feed
+// per-channel triggers from the browser. The DAEMON captures natively (ffmpeg) and
+// streams per-channel bands over SSE; when running, its channels take precedence in
+// externalBand/externalChannelCount, so the trigger system needs no other change.
+const DAEMON = { enabled: false, channels: [], es: null, device: null, error: null };
+
+export function daemonAudio() { return { enabled: DAEMON.enabled, channels: DAEMON.channels.length, device: DAEMON.device, error: DAEMON.error }; }
+
+export async function enableDaemonAudio(device) {
+  disableDaemonAudio();
+  try {
+    const r = await fetch('/api/audio/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device }) });
+    const info = await r.json();
+    if (!r.ok || info.error) { DAEMON.error = info.error || `HTTP ${r.status}`; return false; }
+    DAEMON.channels = Array.from({ length: info.channels || 0 }, () => ({ level: 0, bass: 0, mid: 0, high: 0 }));
+    DAEMON.device = device || null; DAEMON.error = null;
+    DAEMON.es = new EventSource('/api/audio/stream');
+    DAEMON.es.onmessage = (e) => {
+      try {
+        const m = JSON.parse(e.data);
+        if (Array.isArray(m.bands)) for (let i = 0; i < m.bands.length && i < DAEMON.channels.length; i++) {
+          const b = m.bands[i], t = DAEMON.channels[i];
+          t.level = b.level; t.bass = b.bass; t.mid = b.mid; t.high = b.high;
+        }
+      } catch { /* malformed frame */ }
+    };
+    DAEMON.enabled = true;
+    return true;
+  } catch (e) { DAEMON.error = e?.message || 'daemon unreachable'; return false; }
+}
+
+export function disableDaemonAudio() {
+  if (DAEMON.es) { try { DAEMON.es.close(); } catch { /* closed */ } DAEMON.es = null; }
+  if (DAEMON.enabled) { try { fetch('/api/audio/stop', { method: 'POST' }); } catch { /* daemon gone */ } }
+  DAEMON.enabled = false; DAEMON.channels = []; DAEMON.device = null;
+}
+
 export function audioGain() { return globalGain; }
 export function setAudioGain(g) { const v = Number(g); globalGain = Number.isFinite(v) && v >= 0 ? v : 1; }
 export function audioEnabled(src) { return src ? !!SRC[src]?.enabled : (SRC.external.enabled || SRC.composition.enabled); }
@@ -35,8 +73,14 @@ export function audioEnabled(src) { return src ? !!SRC[src]?.enabled : (SRC.exte
 // Current external (mic) band value 0..1 (0 when the mic isn't running). Per-clip triggers
 // (src/model/clip-triggers.js) sample this in the render loop.
 export function externalBand(name, channel = 0) {
+  if (channel >= 1 && DAEMON.enabled) {
+    const ch = DAEMON.channels[channel - 1];
+    if (!ch) return 0;
+    const v = (ch[name] || 0) * globalGain;
+    return v > 1 ? 1 : v < 0 ? 0 : v;
+  }
   const s = SRC.external;
-  if (!s.enabled) return 0;
+  if (!s.enabled) return channel >= 1 ? 0 : 0;
   if (channel >= 1) { const ch = s.channels[channel - 1]; return ch ? (ch.bands[name] || 0) : 0; }
   return s.bands[name] || 0;
 }
@@ -44,7 +88,7 @@ export function externalBand(name, channel = 0) {
 // How many separate input channels the open external device exposes (0 = mono/stereo
 // treated as one mix — no splitter built). A multi-channel interface (Behringer Flow 8
 // etc.) reports its USB channel count here; per-clip triggers can target one channel.
-export function externalChannelCount() { return SRC.external.enabled ? SRC.external.channels.length : 0; }
+export function externalChannelCount() { return DAEMON.enabled ? DAEMON.channels.length : (SRC.external.enabled ? SRC.external.channels.length : 0); }
 
 // Live mic spectrum into a caller-owned Uint8Array (length >= binCount). Returns the bin
 // count, or 0 when the mic isn't running. Self-refreshing → the visualiser reads it on its
@@ -115,7 +159,7 @@ export async function enableExternal(deviceId) {
     // fans the stream out so each USB channel gets its own FFT → its own bands, letting a
     // clip trigger listen to ONE mic on a multi-channel interface instead of the mix.
     const trackCh = s.stream.getAudioTracks()[0]?.getSettings?.().channelCount || 0;
-    const chN = Math.min(8, Math.max(s.node.channelCount || 0, trackCh));
+    const chN = Math.min(16, Math.max(s.node.channelCount || 0, trackCh));   // Flow 8 'Recording' = 10 (4 mics · 2×stereo line · main LR)
     s.channels = [];
     if (chN >= 2) {   // build even for stereo — L/R can be two separate mics
       s.splitter = ctx.createChannelSplitter(Math.max(2, chN));
