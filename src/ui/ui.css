@@ -37,8 +37,8 @@
   --accent-head:#295157;       /* muted cyan group-header bar */
   --accent-underline: color-mix(in srgb, var(--accent) 24%, transparent);   /* section-header underline (auto-tracks --accent) */
   --t-fast: 120ms;             /* the ONE hover/reveal transition duration */
-  --shadow-pop: 0 6px 16px rgba(0,0,0,.5);    /* anchored menus / flyouts */
-  --shadow-modal: 0 10px 30px rgba(0,0,0,.5); /* modals / floating islands */
+  --shadow-pop: none;    /* NO drop shadows — floating chrome separates by its 1px hairline (flat/structural) */
+  --shadow-modal: none;  /* (kept as tokens so a future elevation change is one line) */
   --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
   --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
