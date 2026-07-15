@@ -42,9 +42,9 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     root.textContent = '';
     draft = currentCanvas();
 
-    // Identity rows (Title + Tempo) share ONE card so they read as a group with even
-    // internal spacing — mirroring the Width+Height pair below — instead of each row
-    // floating alone with a full card-gap above and below it.
+    // Title · BPM · Width · Height are collected into ONE card so all four rows are
+    // evenly spaced. (Splitting them across cards puts a full card-gap between BPM and
+    // Width while the other pairs stay tight, which reads as uneven.)
     const idRows = [];
 
     // --- Title — names the composition; saved with it (commits on blur/enter). ---
@@ -79,8 +79,6 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
       });
       idRows.push(el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]));
     }
-    if (idRows.length) root.append(el('div', { className: 'fx-card cmp-grid' }, idRows));
-
     // --- Width / height edit a DRAFT; the canvas only changes when Apply is clicked. ---
     const mkNum = (value, onInput) => {
       const i = el('input', { type: 'number', value: String(value), step: '1', min: '16', max: '4096' });
@@ -89,7 +87,9 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
     };
     const wInput = mkNum(draft.w, (x) => { draft = { ...draft, w: x }; });
     const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; });
-    root.append(el('div', { className: 'fx-card cmp-grid' }, [field('Width', wInput), field('Height', hInput)]));
+    idRows.push(field('Width', wInput), field('Height', hInput));
+
+    if (idRows.length) root.append(el('div', { className: 'fx-card cmp-grid' }, idRows));
     root.append(el('button', {
       className: 'fx-add cmp-apply', textContent: 'apply',
       onclick: () => { const c = clampCanvasSize(draft.w, draft.h); setSize(c.w, c.h); render(); },
