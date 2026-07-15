@@ -146,9 +146,15 @@ export function startCapture(deviceName, cb) {
   };
   if (process.platform === 'darwin') {
     listDevices((_e, devs) => {
-      const want = String(deviceName || '').toLowerCase();
-      const byWidth = [...devs].sort((a, b) => b.channels - a.channels);
-      const dev = (want && devs.find((d) => want.includes(d.name.toLowerCase()) || d.name.toLowerCase().includes(want))) || byWidth[0];   // no label → the widest input (a multi-channel interface beats the built-in mic)
+      // Match by FAMILY, then take the widest sibling: interfaces expose multiple USB
+      // devices (Flow 8: "… (Recording)" = 10-ch multitrack vs "… (Streaming)" = the
+      // stereo mix; macOS "default" often resolves to the narrow one). Stripping the
+      // parenthetical + "Default -" prefix lets any Flow 8 pick land on the 10-ch device.
+      const base = (n) => String(n || '').toLowerCase().replace(/^default\s*[-–—]\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+      const wantBase = base(deviceName);
+      let candidates = wantBase ? devs.filter((d) => { const b = base(d.name); return b === wantBase || b.includes(wantBase) || wantBase.includes(b); }) : [];
+      if (!candidates.length) candidates = devs;   // nothing named / no match → any input
+      const dev = [...candidates].sort((a, b) => b.channels - a.channels)[0];   // widest wins
       if (!dev) return cb(new Error('no input devices'));
       state.device = dev.name;
       avfIndexFor(ffmpeg, dev.name, (idx) => {
@@ -164,6 +170,11 @@ export function startCapture(deviceName, cb) {
     launch(['-hide_banner', '-loglevel', 'error', '-f', 'alsa', '-i', dev,
             '-ar', '48000', '-ac', String(ch), '-f', 'f32le', 'pipe:1'], ch);
   }
+}
+
+// Never orphan a capture: kill the ffmpeg child when the daemon exits/terminates.
+for (const sig of ['exit', 'SIGTERM', 'SIGINT']) {
+  try { process.on(sig, () => { if (state.proc) { try { state.proc.kill('SIGKILL'); } catch { /* gone */ } } }); } catch { /* readonly env */ }
 }
 
 // --- SSE fan-out -----------------------------------------------------------------

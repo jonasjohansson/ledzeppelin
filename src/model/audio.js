@@ -49,6 +49,9 @@ export async function enableDaemonAudio(device) {
     DAEMON.es.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data);
+        if (Number.isFinite(m.channels) && m.channels !== DAEMON.channels.length && m.running) {
+          DAEMON.channels = Array.from({ length: m.channels }, () => ({ level: 0, bass: 0, mid: 0, high: 0 }));
+        }
         if (Array.isArray(m.bands)) for (let i = 0; i < m.bands.length && i < DAEMON.channels.length; i++) {
           const b = m.bands[i], t = DAEMON.channels[i];
           t.level = b.level; t.bass = b.bass; t.mid = b.mid; t.high = b.high;
