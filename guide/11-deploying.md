@@ -2,9 +2,10 @@
 
 LED Zeppelin is built to run permanently: a 12-QuinLED rig that powers on, comes
 back from a reboot on its own, and is reachable from any browser on the LAN. This
-page covers the permanent-install model, deploying on a Raspberry Pi, packaging the
-Node-free app for desktop, macOS signing & notarization, the network ports, and
-recovery when something drops.
+page covers the permanent-install model, deploying on a Raspberry Pi, running the Pi
+as its own render kiosk, booting straight into a fixed show with `?project=`,
+packaging the Node-free app for desktop, macOS signing & notarization, the network
+ports, and recovery when something drops.
 
 ## The permanent-install model
 
@@ -22,6 +23,18 @@ Raspberry Pi), runs as a service that starts on power-on and restarts on crash, 
 you open the editor from any laptop or phone on the same network. The single QuinLED
 on the bench is just a test piece; the deploy story is the same for both.
 
+> **A browser must render for pixels to flow.** The daemon only *serves* the UI and
+> *streams* DDP/Art-Net — it never renders frames itself. Output moves only while at
+> least one browser is connected and painting; the health snapshot proves it with
+> `clients` and `fpsOut` (see [Recovery](#recovery)). That gives you two ways to run a
+> permanent show:
+>
+> - **Attended** — an operator browser (laptop/phone) stays open on the LAN and does the
+>   rendering. Raspberry Pi OS **Lite** (no desktop) is enough on the server.
+> - **Unattended** — the Pi renders *itself* by running a **kiosk browser** pointed at its
+>   own daemon, so output flows 24/7 with nothing else plugged in. This needs a desktop /
+>   Wayland session on the Pi — see [Render on the Pi (kiosk)](#5-render-on-the-pi-kiosk-mode).
+
 Two ways to run the server:
 
 - **Raspberry Pi** as a permanent always-on, headless show server (below).
@@ -32,15 +45,17 @@ Two ways to run the server:
 ## Raspberry Pi deployment
 
 Goal: the server **boots on power-on**, **restarts on crash**, and is reachable on the
-LAN at `http://ledzeppelin.local`. Because rendering is client-side, **Raspberry Pi OS
-Lite (no desktop)** is all you need.
+LAN at `http://ledzeppelin.local`. If a laptop/phone will always be the renderer,
+**Raspberry Pi OS Lite (no desktop)** is all you need. If the Pi will render its own
+show (kiosk mode), use the full **Desktop** image instead — see step 5.
 
 The only runtime dependency is `ws` (pure JS, no native build). `playwright` is
 dev-only — install with `--omit=dev` to skip its browser download.
 
 ### 1. Flash the OS
 
-Use **Raspberry Pi Imager** → *Raspberry Pi OS Lite (64-bit, Bookworm)*. In the OS
+Use **Raspberry Pi Imager** → *Raspberry Pi OS Lite (64-bit, Bookworm)* for a headless
+server, or the full **Desktop** image if the Pi will run the kiosk. In the OS
 customisation (the gear before writing), set:
 
 - **hostname:** `ledzeppelin` (gives you `ledzeppelin.local`)
@@ -111,7 +126,70 @@ sudo reboot                       # prove it auto-starts; then open http://ledze
 Prefer port 7070? Set `Environment=PORT=7070`, drop the two capability lines, and use
 `http://ledzeppelin.local:7070`.
 
-### 5. mDNS (`ledzeppelin.local`)
+> **The daemon exits when its last browser closes.** By design, once a client has
+> connected, the server quits the moment the last window disconnects — `Restart=always`
+> brings it straight back, ready for the next client. That keeps a stale render from
+> streaming forever; it also means the service must be paired with a browser that stays
+> connected (an operator's, or the Pi's own kiosk).
+
+### 5. Render on the Pi (kiosk mode)
+
+For a truly unattended install — no laptop left open — the Pi must run its own browser
+to render frames so DDP keeps flowing. Use the **Desktop** image (a Wayland session,
+`labwc` on Bookworm) with autologin, and autostart Chromium in kiosk mode against the
+local daemon:
+
+```bash
+# ~/.local/bin/lz-kiosk.sh  (wait for the daemon, then launch Chromium fullscreen)
+until curl -sf http://localhost:7070/api/health >/dev/null; do sleep 1; done
+chromium --kiosk --ozone-platform=wayland \
+  --user-data-dir="$HOME/.config/lz-kiosk" \
+  "http://localhost:7070/"
+```
+
+Wire it to run on login from the compositor's autostart (`~/.config/labwc/autostart`,
+plus an XDG `~/.config/autostart/*.desktop` as a belt-and-braces fallback). A few
+Pi-specific gotchas worth knowing:
+
+- **Wayland env is mandatory.** Launched from a detached SSH shell Chromium dies with an
+  empty `WAYLAND_DISPLAY`; run it from the graphical session (autologin → compositor →
+  script) and pass `--ozone-platform=wayland`.
+- **After deploying new JS**, relaunch with a fresh profile (`rm -rf ~/.config/lz-kiosk`)
+  or the service worker keeps serving stale assets. The top-bar **force-update** button
+  does the same for an operator browser.
+- **Confirm it's rendering:** `curl -s http://localhost:7070/api/health` should show
+  `clients: 1` and `fpsOut > 0`.
+
+### `?project=` — boot straight into a fixed show
+
+Append `?project=<file>` to the URL to load a bundled example from
+`examples/projects/` immediately, with **no confirm prompt**, overriding whatever is in
+that browser's saved show:
+
+```
+http://localhost:7070/?project=kagora.json
+http://localhost:7070/?project=balena-voladora.json
+```
+
+Only a bare filename is accepted (no `/` or `..`). This is the clean way to force a
+kiosk onto a known show. Note the persistence model, though: a loaded show is saved in
+**that browser's `localStorage`** (`ledzeppelin.show`) — there is **no server-side
+show state**. So:
+
+- Point the kiosk at the **plain URL** (`.../`) for day-to-day running, and any edits
+  made on the Pi persist across reboots (they live in its browser's localStorage).
+- Point it at **`?project=…`** once when you want to *reset* the Pi to a preset (this
+  overwrites the saved show — and any live clip edits with it), then switch back to the
+  plain URL.
+
+Because the running show is the browser's localStorage copy, not the on-disk preset, it
+can silently drift from the file you edited on your Mac — a fixture you added to the
+preset later never reaches a kiosk that's still on its old saved show, which usually
+shows up as a dark strip or output. See
+[Troubleshooting](12-troubleshooting.md) and the `/api/debug/route` diagnostic in
+[Recovery](#recovery) for how to catch and reseed it.
+
+### 6. mDNS (`ledzeppelin.local`)
 
 Pi OS ships `avahi-daemon`, so the hostname resolves on the LAN out of the box
 (`systemctl status avahi-daemon`). macOS / iOS / Linux / Windows 10+ all resolve
@@ -119,7 +197,7 @@ Pi OS ships `avahi-daemon`, so the hostname resolves on the LAN out of the box
 client-isolation Wi-Fi) or routing across subnets — fall back to a DHCP-reserved
 static IP.
 
-### 6. Firewall (only if `ufw` is enabled)
+### 7. Firewall (only if `ufw` is enabled)
 
 ```bash
 sudo ufw allow 80/tcp      # HTTP + WebSocket (same port)
@@ -130,16 +208,26 @@ sudo ufw allow ssh
 DDP / Art-Net to the controllers is **outbound** — no inbound rule needed; just keep
 the Pi and controllers on the same subnet.
 
-### 7. Running vs updating
+### 8. Running vs updating
 
 - **Run/edit a show:** no Pi access needed — open `http://ledzeppelin.local` in a
-  browser; the phone surface is `http://ledzeppelin.local/control/`.
-- **Update the code:**
+  browser; the phone control surface is `http://ledzeppelin.local/control/` (the daemon
+  prints this LAN URL on startup).
+- **Update the code (Pi has internet):**
   ```bash
   ssh led@ledzeppelin.local
   cd ~/ledzeppelin && git pull && npm ci --omit=dev
   sudo systemctl restart ledzeppelin
   ```
+- **Update the code (Pi is offline / LAN-only):** the only runtime dep is `ws`, so push
+  the source from your working copy and restart — no git/npm on the Pi:
+  ```bash
+  rsync -rltz --exclude=node_modules --exclude=.git --exclude=dist \
+    ./ led@ledzeppelin.local:/home/led/ledzeppelin/
+  ssh led@ledzeppelin.local 'sudo systemctl restart ledzeppelin'
+  ```
+  Skip `--delete` so `node_modules` and any saved state survive. If the Pi runs the
+  kiosk, relaunch it with a fresh profile afterward so it picks up the new assets.
 
 ## Packaging: a Node-free app
 
@@ -266,6 +354,14 @@ curl -s -X POST http://ledzeppelin.local/api/v1/blackout -d '{"on":true}'
 
 When something drops, work outward from the server:
 
+- **Is anything rendering?** Hit the health snapshot first — it's the fastest triage:
+  ```bash
+  curl -s http://ledzeppelin.local/api/health   # version, uptime, fpsOut, clients
+  ```
+  `clients: 0` or `fpsOut: 0` means **nothing is painting** — no browser (or kiosk) is
+  connected, so the daemon has no frames to stream. Open the show in a browser (or
+  relaunch the Pi kiosk) and output resumes. The top-bar offline chip appears in the UI
+  for the same condition, and opens `/health` when clicked.
 - **Restart the daemon (Pi):**
   ```bash
   sudo systemctl restart ledzeppelin
@@ -275,14 +371,22 @@ When something drops, work outward from the server:
   this is for a manual kick.
 - **Restart the daemon (desktop app):** quit and relaunch the binary / `.app`.
 - **After a controller reboot:** a power-cycled WLED/QuinLED may come back on a new IP
-  (DHCP). Open the [Output](04-devices-and-scanning.md) panel and **rescan** (the
-  add-device icon in the Output header); a scanned controller shows live progress and
-  appears in the list immediately. If a device keeps moving, give it a DHCP reservation
-  on the router so its IP is stable across reboots. Devices are always shown expanded,
-  so a reconnected controller's outputs are visible right away.
-- **Verify output:** use **Preview** (the wall button) to dim the canvas and light only
-  each fixture's sampled pixels — fast confirmation that the server is reaching every
-  controller. See [Output & calibration](10-output-and-calibration.md).
+  (DHCP). Open the [Output](04-devices-and-scanning.md) section (right-hand dock) and
+  **Scan** (the button on the Output header, alongside + Controller / + Fixture); a
+  scan shows live progress and drops found controllers into the list. If a device keeps
+  moving, give it a DHCP reservation on the router so its IP is stable across reboots.
+- **A single strip / output is dark:** the running show (the browser's localStorage
+  copy) has probably drifted from the current preset — a fixture missing from the live
+  show shifts every later DDP output downstream. Ground truth is the daemon, not the UI:
+  ```bash
+  curl -s http://ledzeppelin.local/api/debug/route   # per-device pixels / wireBytes / segments
+  ```
+  If the segment counts fall short of your fixture map, **reseed** by loading the show
+  once with `?project=<file>` (see [`?project=`](#project-boot-straight-into-a-fixed-show)),
+  confirm the pixel totals via `/api/debug/route`, then return to the plain URL.
+- **Verify output:** use **Preview** (the wall button in the top bar) to dim the canvas
+  and light only each fixture's sampled pixels — fast confirmation that the server is
+  reaching every controller. See [Output & calibration](10-output-and-calibration.md).
 - **Re-open the show:** the browser only needs `http://ledzeppelin.local` again; if the
   page is blank, the daemon is down — check `systemctl status ledzeppelin`.
 

@@ -26,53 +26,101 @@ fixture you stamp from that type picks up the new value. The same rule holds for
 devices: a controller instance owns its own outputs / per-output budget and falls
 back to the model only for fields it genuinely lacks.
 
+The one deliberate exception is the fixture editor's **Push to placed fixtures
+(N)** button, which fans a template's spec out to the N instances that came from
+it — an explicit, opt-in re-sync when you *do* want existing fixtures updated.
+
 This is deliberate. A show is a record of the real rig — once a fixture is on the
 wall, its definition shouldn't shift under you because you tidied the catalog.
 
-## The Library window
+## Where things live
 
-The Library opens as its own **popup window** (the box icon in the top bar,
-captioned LIBRARY). It's the template library — where you define the gear you
-own so you can stamp it repeatedly:
+The app is a **dock of three columns**. Fixtures and the Library live in the
+**right column**, an accordion of three sections — **Library · Output ·
+Sources** — with one section open at a time (click a header to open it, or
+click the open header again to fold the column to header strips):
 
-- **Controller models** — a board's physical output count and per-output pixel
-  budget (e.g. a QuinLED *DigQuad* = 4 outputs). QuinLED presets (DigUno / DigQuad
-  / DigOcta) and a permanent **Generic** model are always present.
-- **Fixture types** — reusable physical definitions:
-  - **Strips**, by density × length: LEDs/m × metres → pixel count, plus colour
-    order (default GRB) and an optional colour format (`RGBW`, etc.).
+- **Library** — the template catalog: your controller *models* and fixture
+  *types*. Authoring only, no canvas.
+- **Output** — the *live* patch list: the actual devices and the fixtures wired
+  under them, with status dots. This is where you add and assign fixtures. See
+  also [Devices & scanning](04-devices-and-scanning.md).
+- **Sources** — the visual palette (covered in the canvas chapter).
+
+The **selected item's editor** (a fixture, a device, or a Library model) opens
+in a small **floating panel that docks into the canvas's top-right corner** —
+not inline in the sidebar. Select something and its editor pops up over the
+stage; press **Esc** or click away to dismiss it.
+
+## The Library section
+
+Open the Library from the **Library** icon in the top bar, or by clicking the
+**Library** header in the right column. It's the template library — where you
+define the gear you own so you can stamp it repeatedly.
+
+It renders two flat catalog lists:
+
+- **Controllers** — controller *models*: a board's physical output count and
+  per-output pixel budget (e.g. a QuinLED *DigQuad* = 4 outputs). QuinLED presets
+  (DigUno / DigQuad / DigOcta) and a permanent **Generic** model are always
+  present.
+- **Fixtures** — fixture *types*, reusable physical definitions:
+  - **Strips**, by density × length: LEDs/m × metres → pixel count, plus a colour
+    order (default GRB) and an optional colour format (`RGBW`, amber variants,
+    "None — channels only", or *From controller* to inherit).
   - **Matrices / panels**, by columns × rows, wired in a chosen distribution
     (snake / row order). Pixel count is always cols × rows.
-  - **DMX-profile fixtures**, defined as a list of named **parameters** (a colour
+  - **DMX-profile fixtures**, defined as a list of named **channels** (a colour
     block like `RGB`, or a function like Dimmer / Strobe), which expand into a
-    flat **DMX channel map**. A generic **Generic** fixture type is always present.
+    flat **DMX channel map**. A permanent **Generic** fixture type is always
+    present.
 
-![The Library tab: the template library of controller models and fixture types, with the model editor and LEDger import.](img/inventory.png)
+![The Library section: the template catalog of controller models and fixture types.](img/inventory.png)
 
-The Library tab also hosts **LEDger import** — *import from ledger / choose
-preset file* — which brings a whole rig (controllers + fixtures + layout) in at
-once. There is no separate LEDger button in the top bar; the import flow lives
-here. See [Importing from LEDger](09-importing-from-ledger.md).
+Each section header carries a right-pinned **+ Controller** / **+ Fixture**
+button that authors a fresh blank model in that section and selects it for
+editing. Every catalog row shows an instance count (`×N`) and two row actions:
 
-> The Library authors *templates only* — there's no canvas in this tab. Placing
-> and patching fixtures happens in the main window (next section). Edits sync
-> live between the Library tab and the main app.
+- **⧉ Duplicate** (⌘D) — author an independent numbered copy ("DigQuad 2") of
+  the model. No placed fixtures are created; only the definition is copied.
+- **✕ Delete** — remove the model from the catalog (with the confirm and
+  in-use guard). The permanent **Generic** model/type has no ✕.
+
+Click a row to open its editor in the floating panel over the canvas. A
+controller-model editor sets Name, Outputs, Max px/output, and Art-Net sync; a
+fixture-type editor sets Name (+ size suffix), layout (Pixels / DMX), Width,
+Height, the read-only Pixel count, colour channels, the matrix wiring picker,
+physical size (LEDs/m + Length), and the **Push to placed fixtures (N)** button.
+
+> The Library authors *templates only* — there's no canvas here, so its rows have
+> no "+ place" button. Placing fixtures onto the canvas happens from the **Output**
+> header (next section). Edits sync live between the Library and the rest of the
+> app.
+
+### LEDger import
+
+To bring a whole rig — controllers + fixtures + layout — in at once, use the
+**Import from LEDger…** button in the **top bar** (not inside the Library). It
+opens the Library section and loads the importer. See
+[Importing from LEDger](09-importing-from-ledger.md).
 
 ## Adding fixtures and devices
 
-In the main window, the **Output** panel header (titled "Output") carries three
-small icons — **add-fixture**, **add-device**, and **library**. There are no big
-"+ Fixture / + Device" buttons.
+Everything you place goes through the **Output** header, which carries three
+buttons: **+ Controller**, **+ Fixture**, and **Scan**.
 
-Click **add-fixture** and a menu drops down listing your fixture types by name
-(with a size hint like `144px` or `16×16` or `7ch`), plus a **Blank** entry at the
+Click **+ Fixture** and a menu drops down listing your fixture types by name
+(with a size hint like `144px`, `16×16`, or `7ch`), plus a **Blank** entry at the
 bottom. Pick a type to stamp a standalone copy, centred on the canvas and left
 **unassigned** (no device yet) so you can patch it deliberately. **Blank** stamps
-from the always-present Generic type. **add-device** works the same way against
-your controller models, with **Blank** stamping a generic 4-output controller.
+from the always-present Generic type.
 
-The new instance is selected immediately, so its editor opens in the inspector and
-the canvas overlay reveals it.
+**+ Controller** works the same way against your controller models, with
+**Blank** stamping a generic 4-output controller. **Scan** sweeps the network for
+WLED and Art-Net nodes — covered in [Devices & scanning](04-devices-and-scanning.md).
+
+The new instance is selected immediately, so its editor opens in the floating
+panel and the canvas overlay reveals it.
 
 ### Duplicate to multiply
 
@@ -83,21 +131,23 @@ its device's pixel address space, so addressing stays valid. Duplicating is fast
 than stamping repeatedly when you've already positioned and patched the first one.
 A selected **controller** duplicates too (its settings, not its fixtures).
 
-## The flat fixture editor
+## The fixture editor
 
-Select a fixture and the inspector shows a flat editor in two always-open groups —
-**Position** and **Patch** (no fold/collapse, same as the controller list). The fixture's
-name is in the title bar.
+Select a fixture and its editor opens in the floating panel over the canvas, in
+two groups — **Position** and **Patch**. The fixture's name is in the panel title.
 
 ![The fixture editor: Position (x/y/w/h/rotation) and Patch (device/output, pixel range).](img/fixture-editor.png)
 
 ### Position
 
-A shape row on top picks what the fixture *is*: **Bar** (a straight strip),
-**Polyline** (a bendable multi-segment run) or **Bezier** (a quadratic arch —
-two ends + one control point). Conversions keep the endpoints.
+A **shape** toggle in the Position header picks what the fixture *is*:
+**Linear** (a straight strip — x / y / w / h / rotation) or, in 3D mode,
+**Bezier** (a curved arch — two ends + one control point). A **Polyline** (a
+bendable multi-segment run) isn't a chip — it emerges when you add vertices to a
+run on the canvas; a straight two-point polyline is edited exactly like a Linear
+bar. Conversions keep the endpoints.
 
-For a **Bar**:
+For a **Linear** bar:
 
 - **X / Y** — the bounding box's top-left corner (Figma-style), in canvas pixels.
 - **Z** — the whole fixture's height off the canvas plane, in pixels (`0` = flat
@@ -129,7 +179,19 @@ to pull the middle up into a standing arch.
 > output are set by the **head** (first) fixture; downstream members inherit them
 > and their pickers are locked. Moving the head moves the whole run together.
 
-## 3D mode (beta)
+### DMX-profile fixtures
+
+A DMX fixture gets a different editor. **Fixture** shows its type (its channel
+layout is owned by the type — edit it in the Library) and the on-canvas
+footprint (X/Y/W/H — the box is where it *samples* colour, independent of the
+channel layout). **Patch** sets the **Controller**, **Universe**, and **Address**,
+and shows a footprint badge (`Nch · U{universe}.{address}`).
+
+Below that, **Parameters** gives one row per channel group (an RGB block is one
+row, not three). Each parameter picks a **source**: *Canvas* (sample the visual,
+default for colour), *Manual* (a fader), a *Layer*'s level, or a *Dashboard* link.
+
+## 3D mode
 
 The **3D** cube in the top bar switches the stage to a 3D viewport: a ground grid
 with the canvas rectangle on it (the plane the visuals live on), every fixture as
@@ -138,6 +200,7 @@ off the plane.
 
 - **Drag** orbits the view, **Shift-drag** pans, the **wheel** dollies in/out.
   The view is remembered but never enters undo history — it's a camera, not an edit.
+  The **⟲ Reset view** button (below the stage in 3D) returns the orbit to home.
 - **Click** a strip to select it.
 - **Edit in 3D:** a polyline's vertex handles (and a bezier's ends + diamond
   control) are draggable — a plain drag slides the point on the horizontal plane
@@ -152,27 +215,17 @@ off the plane.
   type one **Arc Z** — every selected strip stands up as an arch of that height.
 
 **How 3D samples.** In 3D mode the output samples the composition *front-on*,
-with physical spacing on lifted geometry: fixtures at Z = 0 keep sampling
-*exactly* where 2D put them, and a lifted shape spaces its LEDs evenly along
-its true 3D length (an arch bunches toward its steep ends on the canvas).
-There's nothing to configure — no camera to pick. For light that moves *through
-space* (up an arch, across the room), use the **Volumetric** sources
-(see the sources chapter).
+through a fixed front-ortho camera — **there is no projection or camera preset to
+pick**. Fixtures at Z = 0 keep sampling *exactly* where 2D put them; a lifted
+shape spaces its LEDs evenly along its true 3D length (an arch bunches toward its
+steep ends on the canvas). The stage's 3D-only row also has a **Fields** toggle
+that ghosts the active volumetric fields (plane / gradient arrow / sphere rings /
+noise lattice) so you can see how light will move through space. For light that
+moves *through* the rig (up an arch, across the room), use the **Volumetric**
+sources (see the sources chapter).
 
 The daemon/output path is unchanged; 3D only decides *where each LED reads*
 the 2D composition.
-
-### DMX-profile fixtures
-
-A DMX fixture gets a different editor. **Fixture** shows its type (its channel
-layout is owned by the type — edit it in the Library) and the on-canvas
-footprint (X/Y/W/H — the box is where it *samples* colour, independent of the
-channel layout). **Patch** sets the **Controller**, **Universe**, and **Address**,
-and shows a footprint badge (`Nch · U{universe}.{address}`).
-
-Below that, **Parameters** gives one row per parameter (an RGB block is one row,
-not three). Each parameter picks a **source**: *Canvas* (sample the visual,
-default for colour), *Manual* (a fader), a *Layer*'s level, or a *Dashboard* link.
 
 ## Multi-select bulk edit
 
@@ -189,8 +242,9 @@ fixtures. When every selected fixture is a DMX fixture of the *same* type, a sha
 **Parameters** section drives one named fader across all of them. (Per-chain
 settings and the derived pixel range aren't bulk-editable.)
 
-The Align corner button (active with 2+ selected) aligns and distributes the
-selection against either the other selected fixtures or the composition.
+The **Align** button in the top bar (active with 2+ selected) aligns and
+distributes the selection against either the other selected fixtures or the
+composition.
 
 ## Patching & auto-packed offsets
 
@@ -203,15 +257,16 @@ array.
 
 This re-packs whenever a fixture's device, port, count, or membership changes — so
 assigning a fixture to a device (via the Patch picker, or by **dragging** its row
-onto a controller header in the Output panel) can't leave gaps or overlaps. The
+onto a controller header in the Output list) can't leave gaps or overlaps. The
 read-only **Pixels** range you see is the result of this packing.
 
-Controllers in the Output panel are **always expanded** — fixtures appear nested
+Controllers in the Output list are **always expanded** — fixtures appear nested
 under their controller, with an *Unassigned* group for any not yet patched.
 
 ---
 
-To verify your patch looks right on the wall, use **Preview** (the wall button):
-it dims the canvas and lights only each fixture's sampled pixels.
+To verify your patch looks right on the wall, use **Output preview** (the wall
+button in the top bar): it dims the canvas and lights only each fixture's sampled
+pixels.
 
 _See also: [Getting started](03-getting-started.md) · [Devices & scanning](04-devices-and-scanning.md) · [Importing from LEDger](09-importing-from-ledger.md)._

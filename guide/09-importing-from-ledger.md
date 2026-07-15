@@ -10,7 +10,7 @@ This page covers what comes across, where to trigger the import, how to assign
 controller IPs, and the two rules worth remembering — the import **replaces** your
 rig (it is not additive) and it is **undoable** with ⌘Z.
 
-![Library window with the LEDger importer](img/inventory.png)
+![The Library, where the LEDger importer renders](img/inventory.png)
 
 ## What a LEDger preset contains
 
@@ -39,24 +39,30 @@ reconciles instead of silently dropping it.
 
 ## Triggering the import
 
-Import lives **inside the Library window**, not on the top bar. Open the Library
-(the box icon in the top bar — it opens as a popup window) and use **import from
-ledger → choose preset file** to pick the exported `.json`.
+Import lives on the **top bar**: press the **Import from LEDger…** button (the
+`import` icon, between _New project_ and the _Mapping_ button). It opens the
+**Library** (the right-sidebar section) and immediately shows the file picker —
+choose the exported `.json` preset.
+
+The preview, warnings, assign-IPs and apply UI all render **inside the Library
+section** while an import is in progress; there is no always-visible import panel,
+so if you dismiss an import the section returns to its normal fixture/controller
+catalog.
 
 You can also **drag the preset onto the LED Zeppelin window**. Because a LEDger
-preset is a rig (not a project or composition), dropping it doesn't load
-anything directly — it shows the hint:
+preset is a rig (not a project or composition), dropping it doesn't load anything
+directly — it shows the hint:
 
 > That looks like a LEDger preset — import it from the Library window.
 
-So either drop reminds you of, or you go straight to, the same place: the Library
-window's importer.
+So either the drop reminds you of, or you go straight to, the same place: the
+top-bar **Import from LEDger…** button.
 
 > Other drops behave differently: a project `.json` loads rig + visuals, a
 > composition `.json` loads visuals only, an ISF shader (`.fs`/`.isf`/`.frag`/`.glsl`)
 > becomes a new generator clip, and a 3D model (`.obj`) imports as a rig — see
 > [Import from 3D (OBJ)](#import-from-3d-obj) below.
-> See also [Canvas, sources & effects](06-canvas-sources-effects.md).
+> See also [Canvas: sources & effects](06-canvas-sources-effects.md).
 
 ## Preview and warnings
 
@@ -71,6 +77,10 @@ default pixel count so it stays addressable), a tube that fans out to several tu
 (one branch is kept, the rest are dropped with a note), an unwired tube, or ignored
 instance kinds. Read these — they tell you exactly what the importer did and didn't
 model.
+
+> A structurally valid preset that yields no controllers **and** no fixtures is a
+> no-op: the importer says _"Nothing to import — this file has no controllers or
+> strips,"_ and there is nothing to apply.
 
 ## Assigning controller IPs
 
@@ -90,12 +100,17 @@ stopped at.
 You don't have to use auto-fill — edit any row by hand. Colour order is pre-set per
 device from the first tube on it, and you can override it here too.
 
+> **Heads-up:** if you've typed IPs and then re-open the file picker, drop a new
+> preset, or cancel, the importer asks before discarding them — and it warns on
+> window close too. Nothing is lost silently.
+
 ### IPs carry across re-import
 
 If you re-import the same rig (id-for-id) after editing it in LEDger, the importer
 **carries forward the IP and colour order** from each matching device already in
 your live rig. Addressing a rig once means a re-import doesn't blank it — you only
-re-confirm.
+re-confirm. (Auto-fill won't clobber those carried-over addresses; it only runs on
+open for a fresh rig where no device has an IP yet.)
 
 ## Applying — it replaces the rig, and it's undoable
 
@@ -149,6 +164,11 @@ per `dev`, a fixture per run, sized to the model's footprint. Any skipped runs o
 notes appear in an **imported with notes** dialog. See `test/fixtures/whale-sample.obj`
 for a minimal example.
 
+> The OBJ path reuses the same rig-building pipeline as LEDger import, so it also
+> replaces the current rig and adopts the model's footprint as the canvas. It does
+> **not** stop for the assign-IPs panel — put addresses on with `out=dev.port` and
+> then set device IPs in [Output](04-devices-and-scanning.md).
+
 ## After import
 
 The imported devices still need to reach their controllers on the network. Head to
@@ -159,3 +179,5 @@ and identify, then use [Output & calibration](10-output-and-calibration.md) and 
 _See also: [Fixtures & the Library](05-fixtures-and-inventory.md) ·
 [Devices & scanning](04-devices-and-scanning.md) ·
 [Output & calibration](10-output-and-calibration.md)._
+</content>
+</invoke>
