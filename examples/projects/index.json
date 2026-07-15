@@ -1,4 +1,4 @@
 [
   { "name": "Balena Voladora", "file": "balena-voladora.json", "note": "2× DigOcta (.110/.120) · Tail + 12 ribs + spline + 2 fins · SK6812 RGBW (GRBW) 60/m" },
-  { "name": "Kagora", "file": "kagora.json", "note": "The full install — 12× DigQuad · 120 WS2815 tubes (~31.8k px) · assign controller IPs after loading" }
+  { "name": "Kagora", "file": "kagora.json", "note": "The full install in 3D — 12× DigQuad · 120 WS2815 tubes standing as arches (~31.8k px) · assign controller IPs after loading" }
 ]
