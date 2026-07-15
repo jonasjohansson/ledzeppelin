@@ -49,6 +49,15 @@ export function createSettingsPanel(hooks) {
     if (!mount) return;
     mount.textContent = '';
 
+    // Simple label + checkbox row (the label IS the instruction) — shared by the audio
+    // Multichannel toggle and every Preferences row, so all checkboxes read identically.
+    const toggleRow = (label, get, set) => {
+      const cb = el('input', { type: 'checkbox' }); cb.checked = !!get();
+      cb.addEventListener('change', () => set(cb.checked));
+      // Checkbox FIRST so the label has the full remaining width (no truncation).
+      return el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: label })]);
+    };
+
     // --- Audio (the hardware input device for the "Audio External" modulator + gain) ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'audio' }));
     const inputs = await listInputs();
@@ -71,16 +80,9 @@ export function createSettingsPanel(hooks) {
       min: 0, max: 8, step: 0.05, default: 1, commit: 'live',
       onInput: (v) => { const s = getShow(); setShow({ ...s, composition: { ...s.composition, audioGain: v } }, { undoable: true, defer: true }); },
     }));
-    // Multichannel capture — the DAEMON opens every channel of the interface (browsers
-    // cap mic capture at 2), so clip triggers can target Ch 1…N (one mic per channel).
-    if (multichannel?.get) {
-      const mcRow = el('label', { className: 'set-toggle' });
-      const mc = el('input', { type: 'checkbox' }); mc.checked = !!multichannel.get();
-      mc.addEventListener('change', () => multichannel.set(mc.checked));
-      mcRow.append(mc, el('span', { textContent: 'Multichannel capture' }));
-      mount.append(mcRow);
-      mount.append(el('div', { className: 'seg-hint', textContent: 'captures every interface channel via the daemon — clip triggers can then listen to Ch 1…N (e.g. one mic per channel on a Flow 8)' }));
-    }
+    // Multichannel — the DAEMON opens every channel of the interface (browsers cap mic
+    // capture at 2), so clip triggers can target Ch 1…N (one mic per channel).
+    if (multichannel?.get) mount.append(toggleRow('Multichannel', multichannel.get, (v) => multichannel.set(v)));
 
     // (Project save/open/new live on the footer toolbar — ⌘S / ⌘O; loading also
     // accepts a project or composition .json dropped onto the window. The visuals-only
@@ -118,13 +120,6 @@ export function createSettingsPanel(hooks) {
     mount.append(adv(Segmented('Preview', [['on', 'On'], ['off', 'Off']],
       () => (output.getPreview?.() ?? true) ? 'on' : 'off', (v) => output.setPreview?.(v === 'on'))));
 
-    // --- Preferences as simple label + checkbox rows (the label IS the instruction). ---
-    const toggleRow = (label, get, set) => {
-      const cb = el('input', { type: 'checkbox' }); cb.checked = !!get();
-      cb.addEventListener('change', () => set(cb.checked));
-      // Checkbox FIRST so the label has the full remaining width (no truncation).
-      return el('label', { className: 'fx-field set-toggle' }, [cb, el('span', { textContent: label })]);
-    };
     mount.append(el('div', { className: 'fx-pts', textContent: 'preferences' }));
     // Advanced mode — ALWAYS visible (it's the switch that reveals the .adv-only extras:
     // the view/panel layout controls, controller Gamma, and the technical settings above).
