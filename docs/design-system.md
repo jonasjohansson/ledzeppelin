@@ -43,7 +43,7 @@ Surfaces (**neutral** medium-dark gray, ascending): `--bg → --field-bg → --p
 - **Tabs:** all tiers share ONE active look (accent text, no fill).
 - **Headers:** two tiers only — `.insp-sec-head` (accent caps + underline) and the shared faint micro-caps sub-label recipe (join the selector list, don't re-declare).
 - **Dividers:** always `1px var(--line)` (accent-24% only for the section underline).
-- **Panels:** `--panel` frame, `--panel-2` head/body, `1px --line`, `--s3` padding. Popovers: `--panel-solid`/`--line-2` + shadow.
+- **Panels:** `--panel` frame, `--panel-2` head/body, `1px --line`, `--s3` padding. Popovers: `--panel-solid`/`--line-2`, **NO drop shadows** (--shadow-pop/--shadow-modal are `none`) — floating chrome separates by its hairline.
 
 ## Prioritized consistency backlog (from the audit)
 
