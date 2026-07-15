@@ -54,25 +54,14 @@ function persistAndBroadcast(next) {
 // instantiate-into-scene handlers are intentionally omitted — there's no canvas
 // here; this page authors TEMPLATES (the "+ new …" authoring buttons go through
 // commit()/setShow()). getConnected:false keeps any network UI quiet.
-// Embedded (right-sidebar iframe) vs standalone popout window. When embedded, the
-// selected item's editor floats in the MAIN window's #device-pop (like the Output
-// controller/fixture editor) instead of stacking inline here — we post the pick and
-// the main window opens the pop. The standalone popout keeps its two-column inline
-// detail (it has no main-window pop to defer to).
-const embedded = window.parent !== window;
-if (embedded) document.querySelector('.inv-detail')?.setAttribute('style', 'display:none');
-
-// Post the current Library selection so the main window opens its floating editor.
-function postPick() {
-  const s = panel.librarySelection?.();
-  if (s) bus.postMessage({ type: 'library-select', kind: s.kind.toLowerCase(), id: s.id });
-}
-
+// The selected model's DETAIL editor renders INLINE below the lists (in the Library
+// accordion / popout), not in the main window's floating #device-pop — template editing
+// docks in the sidebar rather than covering the canvas.
 const panel = createFixturePanel({
   getShow: () => show,
   setShow: (next) => persistAndBroadcast(next),
   onSelect: () => mountDetail(),
-  onPick: () => { if (embedded) postPick(); mountDetail(); },
+  onPick: () => mountDetail(),
   // "Push to placed fixtures": apply locally (covers the standalone case), then
   // tell the MAIN window to apply the push on its LIVE fixtures — the ordinary
   // 'inventory-changed' sync merges TYPE arrays only and would clobber a
@@ -93,7 +82,6 @@ listEl.append(panel.libraryEl);
 // (onSelect) and selection change (onPick) so the editor follows the selection,
 // just like the main app's updateInspector().
 function mountDetail() {
-  if (embedded) return;   // embedded: the editor floats in the main window's #device-pop
   const detail = panel.libraryDetailEl?.();
   const sel = panel.librarySelection?.();
   detailTitleEl.textContent = sel ? `${sel.kind}: ${sel.name}` : 'properties';
