@@ -189,5 +189,15 @@ export function buildPipelineInputs(show) {
     cursor += pts.length;
   }
 
+  // Volumetric "volume height" fits the rig: normalize each LED's z so the HIGHEST
+  // fixture point sits at z = 1. Import normalizes z by the y-span (so a tall-but-narrow
+  // rig like Kagora only reaches z ≈ 0.38), which left a z-axis field (Plane Pulse / Axis
+  // Gradient / drift) sweeping mostly empty space above the arches. Rescaling to the real
+  // z-extent makes those effects span the whole rig. Flat rigs (all z ≈ 0) are untouched,
+  // so the 2D field pass stays byte-identical.
+  let zMax = 0;
+  for (let i = 2; i < poss.length; i += 3) { const a = Math.abs(poss[i]); if (a > zMax) zMax = a; }
+  if (zMax > 1e-4) for (let i = 2; i < poss.length; i += 3) poss[i] /= zMax;
+
   return { sampleUVs: new Float32Array(uvs), samplePositions: new Float32Array(poss), sampleBands: new Float32Array(bands), route, fixtureOrder, spans };
 }
