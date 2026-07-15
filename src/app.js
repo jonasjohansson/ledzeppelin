@@ -82,7 +82,7 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   // Airy section header (matches the Output list's .insp-sec-head): no fill, accent
   // caps, a thin accent-24% underline. The Library uses this so it reads like the
   // Output tab rather than a stack of heavy teal bars.
-  const AIRY_HEAD = 'background:none;color:var(--accent);min-height:24px;display:flex;align-items:center;padding:0 2px 4px;margin:var(--s4) 0 var(--s3);border-bottom:1px solid color-mix(in srgb, var(--accent) 24%, transparent);letter-spacing:var(--ls-caps)';
+  const AIRY_HEAD = 'background:none;color:var(--accent);min-height:24px;display:flex;align-items:center;padding:0 var(--s1) var(--s2);margin:var(--s4) 0 var(--s3);border-bottom:1px solid var(--accent-underline);letter-spacing:var(--ls-caps)';
   const EMBED_CSS = {
     'settings/': `.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}.fx-pts{${HEAD_BAR}}.fx-pts:first-child{margin-top:0}`,
     'inventory/': `.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 10px;background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:8px;max-width:none;margin:0}.inv-pane-title,.fx-pts{${AIRY_HEAD}}.fx-pts:first-child{margin-top:0}`,
