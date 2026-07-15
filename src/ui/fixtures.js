@@ -875,10 +875,17 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       const show = getShow();
       if (libSel === 'controller') {
         const t = (show.deviceTypes || []).find((x) => x.id === selDevTypeId);
-        return t ? { kind: 'Controller', name: t.name } : null;
+        return t ? { kind: 'Controller', name: t.name, id: t.id } : null;
       }
       const t = (show.fixtureTypes || []).find((x) => x.id === selTypeId);
-      return t ? { kind: 'Fixture', name: t.name } : null;
+      return t ? { kind: 'Fixture', name: t.name, id: t.id } : null;
+    },
+    // Point the Library editor at a specific controller MODEL / fixture DEFINITION by id
+    // WITHOUT a list click — used when the selection is driven from another frame (the
+    // embedded Library list posts the pick; the main window opens the floating editor).
+    selectLibraryItem: (kind, id) => {
+      if (kind === 'controller' || kind === 'Controller') { selDevTypeId = id; libSel = 'controller'; lastSel = 'devtype'; }
+      else { selTypeId = id; libSel = 'fixture'; lastSel = 'type'; }
     },
     // ⌫ deletes the last-clicked device (Devices tab) or model/definition
     // (Library tab). A model/definition still IN USE is NOT deleted. Returns

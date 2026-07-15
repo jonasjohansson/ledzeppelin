@@ -943,6 +943,15 @@ function maybeBroadcastTypes() {
 }
 if (invBus) {
   invBus.onmessage = (e) => {
+    // Embedded Library list row clicked → point our library editor at it and float it
+    // in #device-pop over the canvas, exactly like selecting a controller/fixture in
+    // the Output list (the list lives in the iframe; the floating editor lives here).
+    if (e.data?.type === 'library-select') {
+      panel.selectLibraryItem?.(e.data.kind, e.data.id);
+      outputTab = 'library';
+      openDevicePop();   // updateInspector's library branch fills it; parks in the canvas corner
+      return;
+    }
     // A LEDger import was applied in the popout → adopt the WHOLE saved show (devices
     // + fixtures + composition), not just the type arrays. This is the one inbound
     // message that replaces the live rig (the import flow's old applyShow path).
