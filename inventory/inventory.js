@@ -127,6 +127,15 @@ window.addEventListener('keydown', (e) => {
   if (panel.deleteSelected?.()) { e.preventDefault(); mountDetail(); }
 });
 
+// ⌘D duplicates the selected model/type — the rows advertise "duplicate (⌘D)", so the
+// chord must work HERE too (the main window's handler can't see keys inside this window).
+window.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'd' || e.altKey || e.shiftKey) return;
+  if (/^(input|textarea|select)$/i.test(e.target?.tagName || '')) return;
+  e.preventDefault();   // never the browser bookmark dialog
+  if (panel.duplicateSelected?.()) mountDetail();
+});
+
 // Receive: another window changed the show → reload + re-render so we stay in sync.
 // A main-window "Import from LEDger…" click also reaches us as 'open-import' →
 // open the file picker so the import flow starts here.

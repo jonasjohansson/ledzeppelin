@@ -75,15 +75,13 @@ let openEmbed = () => {};          // openEmbed('settings/'|'inventory/'|'mappin
   // A section header in an embedded app reads as the app's own teal group-header bar
   // (matching the inspector's #grp-props .insp-sec-head), so Settings/Library look like
   // native accordion content instead of a loose list of faint captions.
-  const HEAD_BAR = 'background:var(--accent-head);color:var(--text);min-height:var(--row-h);display:flex;align-items:center;padding:0 var(--s5);margin:var(--s4) -8px var(--s3);letter-spacing:var(--ls-caps)';
   // Airy section header (matches the Output list's .insp-sec-head): no fill, accent
-  // caps, a thin accent-24% underline. The Library uses this so it reads like the
-  // Output tab rather than a stack of heavy teal bars.
+  // caps, a thin accent-24% underline. The ONE header language across the app — the
+  // embedded Settings/Library adopt it so they read like native accordion content.
   const AIRY_HEAD = 'background:none;color:var(--accent);min-height:24px;display:flex;align-items:center;padding:0 var(--s1) var(--s2);margin:var(--s4) 0 var(--s3);border-bottom:1px solid var(--accent-underline);letter-spacing:var(--ls-caps)';
   const EMBED_CSS = {
-    'settings/': `.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}.fx-pts{${HEAD_BAR}}.fx-pts:first-child{margin-top:0}`,
+    'settings/': `.set-head{display:none}.set-pane{border:none;border-radius:0;padding:0;background:none}.set-wrap{padding:8px;max-width:none;margin:0}.fx-pts{${AIRY_HEAD}}.fx-pts:first-child{margin-top:0}`,
     'inventory/': `.inv-head{display:none}.inv-cols>.inv-pane:first-child>.inv-pane-title{display:none}.inv-pane{border:none;border-radius:0;padding:0 0 var(--s2);background:none;margin:0}.inv-cols{gap:0}.inv-wrap{padding:0;max-width:none;margin:0}.inv-pane-title,.fx-pts{${AIRY_HEAD}}.fx-pts:first-child{margin-top:0}`,
-    'mappings/': `.map-title{display:none}.map-sec{${HEAD_BAR}}`,
   };
   const setup = (f) => {
     if (f.dataset.wired) return; f.dataset.wired = '1';
@@ -989,8 +987,14 @@ document.addEventListener('keydown', (e) => { if (!e.repeat && !isTyping(e.targe
 document.addEventListener('keyup', (e) => { if (!isTyping(e.target)) setKeyChannel(e.code, false); });
 
 if (mapBus) {
+  // Only stream while a Mappings window is actually listening — it pings every 5s
+  // (plus a hello on open); with no window the 10Hz channel stream + 2s params walk
+  // are pure waste (they ran forever on the Pi kiosk).
+  let mapAlive = 0;
   mapBus.onmessage = (e) => {
     const m = e.data || {};
+    mapAlive = Date.now();
+    if (m.type === 'ping') return;   // liveness only
     if (m.type === 'hello') { postMapParams(); postMapMidi(); }
     else if (m.type === 'key') setKeyChannel(m.code, m.down);              // a key pressed in the Mappings window
     else if (m.type === 'enableMidi') { enableMidi().then(postMapMidi); }
@@ -1001,8 +1005,9 @@ if (mapBus) {
     }
     else if (m.type === 'mode') { snapshotForUndo(show); show = setMappingMode(show, m.id, m.mode); saveShow(show); postMapParams(); }
   };
-  setInterval(pushMapChannels, 100);   // stream live channel values @10Hz
-  setInterval(postMapParams, 2000);    // catch structural show changes (clips added/removed)
+  const mapListening = () => Date.now() - mapAlive < 12_000;
+  setInterval(() => { if (mapListening()) pushMapChannels(); }, 100);   // live channel values @10Hz — only while a window listens
+  setInterval(() => { if (mapListening()) postMapParams(); }, 2000);    // structural show changes — only while a window listens
 }
 const oel = (tag, props = {}, kids = []) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
 // Output is PLACEMENT only — fixtures are designed/created in the Fixtures tab.
@@ -1265,7 +1270,7 @@ function positionEditor(sel) {
     flatGroup('Patch', 'routing', (body) => {
       body.append(
         oel('div', { className: 'output-grid' }, [
-          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Device' }), devSel]),
+          oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Controller' }), devSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Output' }), portSel]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Pixels' }), oel('span', { className: 'fx-readonly', textContent: fixtureRange(sel) })]),
           oel('label', { className: 'fx-field' }, [oel('span', { textContent: 'Colour format' }), fmtSel]),
@@ -1568,7 +1573,7 @@ function multiPositionEditor(ids) {
     // it's derived by repackOffsets, never authored.
     flatGroup('Patch', 'routing', (body) => {
       const grid = [
-        selFieldMulti('Device', devOpts, fieldState(list, 'output.deviceId'),
+        selFieldMulti('Controller', devOpts, fieldState(list, 'output.deviceId'),
           (v) => setFieldAll('output.deviceId', v)),
       ];
       // Output port — pixel-strip concept; show whenever the selection has a strip.
@@ -1801,14 +1806,14 @@ function updateInspector() {
     if (ids.length > 1) { detail = multiPositionEditor(ids); title = `${ids.length} fixtures`; }
   } else if (selectedDeviceId && (show.devices || []).some((d) => d.id === selectedDeviceId)) {
     detail = panel.deviceDetailEl?.();
-    title = (show.devices || []).find((d) => d.id === selectedDeviceId)?.name || 'Device';
+    title = (show.devices || []).find((d) => d.id === selectedDeviceId)?.name || 'Controller';
   }
   // Never leave the Device group empty: with nothing selected, fall back to the first
   // fixture's editor (else the first device) so there's always something to edit.
   if (!detail && outputTab !== 'library') {
     const f0 = (show.fixtures || [])[0];
     if (f0) { detail = isDmxFixture(f0) ? dmxEditor(f0) : positionEditor(f0); title = fxName(f0); }
-    else { const d0 = (show.devices || [])[0]; if (d0) { panel.setDevice?.(d0.id); detail = panel.deviceDetailEl?.(); title = d0.name || 'Device'; } }
+    else { const d0 = (show.devices || [])[0]; if (d0) { panel.setDevice?.(d0.id); detail = panel.deviceDetailEl?.(); title = d0.name || 'Controller'; } }
   }
   const titleEl = document.getElementById('fxedit-title');
   if (titleEl) titleEl.textContent = title;
@@ -1828,7 +1833,7 @@ function updateInspector() {
   }
   fxBodyEl.textContent = '';
   if (detail) fxBodyEl.append(detail);   // no title bar — the selection is already visible on the canvas/list
-  else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, device, or model' }));
+  else fxBodyEl.append(oel('div', { className: 'ly-hint', textContent: 'select a fixture, controller, or model' }));
   if (focusKey || vtxKey) {
     const fld = focusKey && [...fxBodyEl.querySelectorAll('.fx-field')].find((f) => f.querySelector('span')?.textContent === focusKey);
     // Re-focus the SAME kind of control by its label-key (a <select> and a colour
@@ -1872,7 +1877,14 @@ window.addEventListener('resize', () => {
   if (!devicePopOpen() || popResizeRaf) return;
   popResizeRaf = requestAnimationFrame(() => { popResizeRaf = 0; positionDevicePop(); });
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && devicePopOpen() && !typingIn(e.target)) closeDevicePop(); });
+// Esc is LAYERED — one press dismisses ONE thing, topmost first (menu → this pop →
+// the fixture selection). Skip when the corner menu is open (it's on top of us) and
+// stop the event after closing so the selection-clear handler doesn't also fire.
+const menuPopOpen = () => { const m = document.getElementById('menu-pop'); return !!m && !m.hidden; };
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !devicePopOpen() || typingIn(e.target) || menuPopOpen()) return;
+  closeDevicePop(); e.preventDefault(); e.stopImmediatePropagation();
+});
 document.addEventListener('pointerdown', (e) => {
   if (!devicePopOpen()) return;
   if (devicePop.contains(e.target)) return;
@@ -2142,6 +2154,7 @@ function clearFixtureSelection() {
 }
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || typingIn(e.target)) return;
+  if (menuPopOpen()) return;   // layered Esc: the corner menu (topmost) takes this press
   if (clearFixtureSelection()) e.preventDefault();
 });
 document.addEventListener('pointerdown', (e) => {
@@ -2355,8 +2368,8 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'd' || e.altKey || e.shiftKey) return;
   if (typingIn(e.target)) return;
+  e.preventDefault();   // the app owns ⌘D — never fall through to the browser's bookmark dialog
   if (outputTab === 'library') {
-    e.preventDefault();
     if (panel.duplicateSelected?.()) { renderOutput(); redrawOverlay(); }
   }
 });
@@ -2365,8 +2378,9 @@ document.addEventListener('keydown', (e) => {
 // chain / delete). Only fires in Output, and never while typing in a field.
 document.addEventListener('keydown', (e) => {
   if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'a') return;
-  if (typingIn(e.target) || !overlayVisible) return;   // only while editing fixtures
-  e.preventDefault();
+  if (typingIn(e.target)) return;
+  e.preventDefault();   // the app owns ⌘A — never page-wide text select-all
+  if (!overlayVisible) return;   // only while editing fixtures
   selectedFixtureIds = new Set((show.fixtures || []).map((f) => f.id));
   renderOutput(); redrawOverlay();
 });

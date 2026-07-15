@@ -20,10 +20,10 @@
   .map-head { display: flex; align-items: center; gap: var(--s5); margin-bottom: var(--s5); }
   .map-title { font: var(--fw-med) var(--fs-title) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text); }
   .map-status { margin-left: auto; font-size: var(--fs-body); color: var(--muted); }
-  /* Section label: uppercase micro caps, hairline underline (restrained accent
-     tint — not a coloured fill). */
-  .map-sec { font: var(--fw-med) var(--fs-micro) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--faint);
-    border-bottom: 1px solid var(--line); padding: 0 0 var(--s2); margin: var(--s5) 0 var(--s6); }
+  /* Section header — the app's ONE airy header language (accent caps + accent underline),
+     matching the Output/Library/inspector sections in the main window. */
+  .map-sec { font: var(--fw-med) var(--fs-micro) var(--ui-font); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--accent);
+    border-bottom: 1px solid var(--accent-underline); padding: 0 0 var(--s2); margin: var(--s5) 0 var(--s6); }
   /* live channel monitor */
   .chips { display: flex; flex-wrap: wrap; gap: var(--s3); }
   .chip { display: flex; align-items: center; gap: var(--s3); height: var(--ctrl-h); padding: 0 var(--s6); border: 1px solid var(--line); border-radius: var(--radius); background: var(--field-bg); box-sizing: border-box; }
@@ -60,7 +60,8 @@
      soft accent surface, no big fill). */
   button.m-btn { background: var(--field-bg); color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); height: var(--ctrl-h); padding: 0 var(--s5); cursor: pointer; font: var(--fs-ctrl) var(--ui-font); letter-spacing: var(--ls-ui); }
   button.m-btn:hover { color: var(--text); border-color: var(--line-2); }
-  button.m-btn:disabled { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); cursor: default; }
+  button.m-btn:disabled { opacity: .35; cursor: default; }   /* disabled = dimmed (app convention) */
+  button.m-btn.is-on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-line); opacity: 1; }   /* MIDI enabled = the shared toggle-on look */
   .map-toolbar { display: flex; gap: var(--s6); align-items: center; }
   .hint { font-size: var(--fs-body); color: var(--faint); }
   .map-socket { margin: calc(-1 * var(--s2)) 0 var(--s4); display: flex; flex-direction: column; gap: var(--s2); align-items: flex-start; }

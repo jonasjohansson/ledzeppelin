@@ -21,7 +21,7 @@
      step brighter than the old near-black, so chrome reads as solid tooling that
      the canvas sits INSIDE of, not a ghost floating over it. One gray ramp,
      hairlines one step stronger. */
-  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#d4a24a'}) so a
+  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#22bcd6'}) so a
      pre-JS / FOUC flash matches the runtime (palette.js writes these inline on <html>).
      Keep in sync: re-run themeVars if the accent default or anchors change.
      NEUTRAL gray base + ONE fixed cyan accent (MadMapper blue × Resolume teal) that pops. */
@@ -36,6 +36,9 @@
   --accent-line:#14515c;       /* active border */
   --accent-head:#295157;       /* muted cyan group-header bar */
   --accent-underline: color-mix(in srgb, var(--accent) 24%, transparent);   /* section-header underline (auto-tracks --accent) */
+  --t-fast: 120ms;             /* the ONE hover/reveal transition duration */
+  --shadow-pop: 0 6px 16px rgba(0,0,0,.5);    /* anchored menus / flyouts */
+  --shadow-modal: 0 10px 30px rgba(0,0,0,.5); /* modals / floating islands */
   --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
   --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
@@ -133,7 +136,6 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 /* Active = ACCENT text (family rule shared with LEDger: the selected tab is
    warm, not just bright) — at every tier: workspace tab, sub-tab, section tab. */
 .tab-active, .tab-active:hover { color: var(--accent); background: none; }   /* one tab look: accent text, no fill */
-.tab:focus-visible { outline: 1px solid var(--line-2); outline-offset: -1px; }
 
 /* --- Inspector sub-tabs (Clip | Composition) --- */
 /* CHILD row of the Design/Output switch: full width, equal thirds (big touch
@@ -170,7 +172,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    title, hugging their text — no full-width whitespace). Only shown on the open section. */
 .acc-head-acts { flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--s1); }
 .acc-sec:not(.is-open) > .acc-head .acc-head-acts { display: none; }
-.out-add { flex: 0 0 auto; height: 20px; padding: 0 var(--s3); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
+.out-add { flex: 0 0 auto; height: var(--ctrl-h); padding: 0 var(--s3); background: var(--field-bg); border: 1px solid var(--line); color: var(--muted);
   font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-ui); text-transform: uppercase; cursor: pointer; white-space: nowrap; }
 .out-add:hover { color: var(--accent); border-color: var(--line-2); }
 .out-add:disabled { opacity: .35; cursor: default; }
@@ -187,7 +189,7 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 }
 #add-fixture { color: var(--accent); border-color: var(--line); }
 .snap-toggle { display: flex; align-items: center; gap: 4px; font-size: var(--fs-body); color: var(--muted); cursor: pointer; }
-.snap-toggle input { width: auto; accent-color: var(--accent); }
+.snap-toggle input { width: auto; }
 .output-eye { padding: 0 6px; line-height: var(--lh-ctrl); font-size: var(--fs-body); color: var(--accent); }
 .output-eye.off { color: var(--faint); }
 /* Full-bleed list rows: no outer border, no side margins, no rounded card — just a
@@ -218,21 +220,21 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
    hidden until the row is hovered or selected — a HIDDEN fixture keeps its eye
    shown so you can still see/restore it. (Touch has no hover, but fixture
    editing is a desktop task.) */
-.output-row .ly-rmfx, .output-row .output-eye { opacity: 0; transition: opacity .1s; }
+.output-row .ly-rmfx, .output-row .output-eye { opacity: 0; transition: opacity var(--t-fast); }
 .output-row:hover .ly-rmfx, .output-row:hover .output-eye,
 .output-row.selected .ly-rmfx, .output-row.selected .output-eye,
 .output-row .output-eye.off { opacity: 1; }
 /* Inventory row duplicate (⧉): reveal on hover, like the delete/eye affordances. */
-.lib-dup { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 4px; font-size: 11px; line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
+.lib-dup { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 4px; font-size: var(--fs-micro); line-height: var(--lh-ctrl); transition: opacity var(--t-fast), color var(--t-fast); }
 .output-row:hover .lib-dup { opacity: 0.6; }
 .lib-dup:hover { opacity: 1; color: var(--accent); }
 /* Inventory row delete (✕): same hover-reveal affordance, danger on hover. */
-.lib-del { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 var(--s2); font-size: var(--fs-micro); line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
+.lib-del { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 var(--s2); font-size: var(--fs-micro); line-height: var(--lh-ctrl); transition: opacity var(--t-fast), color var(--t-fast); }
 .output-row:hover .lib-del { opacity: 0.6; }
 .lib-del:hover { opacity: 1; color: var(--danger); }
 /* "+" = instantiate into the scene. Always visible (the primary Inventory action),
    accent on hover. */
-.lib-add { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 var(--s3); font-size: var(--fs-glyph); line-height: var(--lh-ctrl); opacity: .8; transition: opacity .1s; }
+.lib-add { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 var(--s3); font-size: var(--fs-glyph); line-height: var(--lh-ctrl); opacity: .8; transition: opacity var(--t-fast); }
 .lib-add:hover { opacity: 1; }
 /* Selected = a FILLED accent tint (same as the Fixtures tree), so a picked
    controller / definition reads clearly as selected, with its name in the accent
@@ -319,8 +321,9 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
 #menu-pop .menu-pad { padding: 8px 14px; }   /* control popover body (e.g. Audio gain) */
 #menu-pop .menu-title { font: var(--fw-med) var(--fs-micro) var(--sans); text-transform: uppercase; letter-spacing: var(--ls-caps); color: var(--faint); padding: 4px 14px 6px; }
 
-/* Matte-style PASTEBOARD: a subtle transparency checker fills the Stage island body
-   AROUND the letterboxed composite. The canvas sits on top as a clean rectangle. */
+/* FLAT dark PASTEBOARD around the letterboxed composite (disguise/Notch-style desk —
+   the transparency checker read as a web image editor). The canvas is distinguished
+   from the desk by #stageinner's thin frame, not a pattern. */
 #stagewrap {
   /* The canvas is the BODY of the Stage island — it fills the island below the header
      and clips its own zoom/pan, so it can't bleed over the neighbouring islands. A
@@ -329,11 +332,6 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; appear
   display: flex; align-items: center; justify-content: center;
   z-index: 0; pointer-events: none; overflow: hidden;
   background-color: var(--stage-bg);   /* display surface — stays dark in light mode */
-  background-image:
-    linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%),
-    linear-gradient(45deg, rgba(255,255,255,.11) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.11) 75%);
-  background-size: 26px 26px;
-  background-position: 0 0, 13px 13px;
 }
 /* In OUTPUT mode the desk is the fixture-editing surface and is inset BETWEEN the
    sidebars (so it never overlaps a panel) — make it catch pointer events so a
@@ -531,7 +529,7 @@ html { scroll-behavior: smooth; }
 .acc-sec:not(.is-open) .acc-body { display: none; }
 .acc-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
   padding: 6px 10px; background: var(--panel-2); }
-.acc-head::before { content: ''; flex: 0 0 auto; width: 0; height: 0; transition: transform .12s;
+.acc-head::before { content: ''; flex: 0 0 auto; width: 0; height: 0; transition: transform var(--t-fast);
   border-left: 4px solid var(--faint); border-top: 3px solid transparent; border-bottom: 3px solid transparent; }
 .acc-sec.is-open > .acc-head::before { transform: rotate(90deg); border-left-color: var(--accent); }
 .acc-title { flex: 1 1 auto; font: var(--fw-med) var(--fs-body) var(--sans);
@@ -557,7 +555,7 @@ html { scroll-behavior: smooth; }
   background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line-2); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-modal);
 }
 #timeline-island .island-body { flex: 0 0 auto; overflow: auto; background: color-mix(in srgb, var(--panel-2) calc(var(--pop-opacity) - 14%), transparent); }
 #timeline-island #deckbar { flex: 1 1 auto; width: 100%; }
@@ -637,7 +635,7 @@ body.view-overlay .island:not(#stage-island) .island-body { background: color-mi
   background: color-mix(in srgb, var(--panel) var(--pop-opacity), transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line-2); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-modal);
 }
 #device-pop[hidden] { display: none; }
 /* Override the docked-island body flex (1 1 0) so the group sizes to its CONTENT, and
@@ -655,7 +653,7 @@ body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-sele
 
 /* Settings preference rows: checkbox on the LEFT, then the full-width label. */
 .set-toggle { justify-content: flex-start; gap: 9px; cursor: pointer; }
-.set-toggle input[type=checkbox] { flex: 0 0 auto; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.set-toggle input[type=checkbox] { flex: 0 0 auto; width: 15px; height: 15px; cursor: pointer; }
 .set-toggle span { flex: 1 1 auto; }
 
 /* Dashboard knob disabled until something links to it. */
@@ -697,13 +695,13 @@ body.resizing-row, body.resizing-row * { cursor: ns-resize !important; user-sele
 .ctrl-layer-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .ctrl-layer-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font: var(--fs-ctrl) var(--mono); }
 .ctrl-blk { flex: 0 0 auto; width: 26px; height: var(--ctrl-h); border-radius: var(--radius); border: 1px solid var(--line-2);
-  background: var(--field-bg); color: var(--muted); font: var(--fs-body) var(--mono); cursor: pointer; }
+  background: var(--field-bg); color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer; }
 .ctrl-blk.on { background: var(--danger); border-color: var(--danger); color: var(--accent-dark); }
 /* Clip triggers: compact, flat chips (one accent, hairline) — not chunky filled
    blocks. Active clip = accent text + hairline; press = brief accent fill. */
 .ctrl-clips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 7px; }
 .ctrl-clip { height: var(--ctrl-h); border-radius: var(--radius); border: 1px solid var(--line); background: transparent;
-  color: var(--muted); font: var(--fs-body) var(--mono); padding: 0 10px; cursor: pointer; white-space: nowrap;
+  color: var(--muted); font: var(--fs-body) var(--sans); padding: 0 10px; cursor: pointer; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .ctrl-clip:hover { color: var(--accent-text); border-color: var(--line-2); }
 .ctrl-clip:active { background: var(--accent); border-color: var(--accent); color: var(--accent-dark); }
@@ -800,7 +798,7 @@ body.gui-hidden #topbar { display: none; }
 #show-ui-pill:hover { color: var(--accent-text); border-color: var(--line-2); }
 body.gui-hidden #show-ui-pill { display: block; }
 /* The '?' help button reads as a glyph, not an icon — size it like the sprite icons. */
-.topbar-help { font: var(--fw-med) 15px var(--mono); }
+.topbar-help { font: var(--fw-med) var(--fs-glyph) var(--sans); }
 
 
 /* Layer header: B/S toggles + click-to-select. */
@@ -868,7 +866,7 @@ body.gui-hidden #show-ui-pill { display: block; }
 .insp-tri {
   width: 0; height: 0; flex: 0 0 auto;
   border-left: 4px solid var(--accent); border-top: 3px solid transparent; border-bottom: 3px solid transparent;
-  transition: transform .12s;
+  transition: transform var(--t-fast);
 }
 .insp-sec.is-open .insp-tri { transform: rotate(90deg); }
 /* Unassigned: a plain heading (no triangle) — indent the title to line up with the
@@ -1093,7 +1091,7 @@ button {
 }
 /* No blue browser focus rings on controls (keyboard focus shows on the thumb). */
 input[type=range]:focus, button:focus, select:focus { outline: none; }
-input[type=range]:focus-visible { outline: 1px solid var(--line-2); outline-offset: 1px; }   /* select handled by the accent focus rule below */
+input[type=range]:focus-visible { outline: 1px solid var(--accent-line); outline-offset: 1px; }   /* select handled by the accent focus rule below */
 
 /* Custom checkbox to match the dark theme. */
 input[type=checkbox] {
@@ -1202,9 +1200,9 @@ input[type=checkbox]:checked::after {
   flex: 0 0 auto; padding: 0; min-width: 0; width: 14px; height: 14px; font-size: 13px;
   display: flex; align-items: center; justify-content: center; line-height: 1;   /* glyph vertically centred */
   color: var(--faint); border: none !important; background: none !important; outline: none !important; box-shadow: none !important;   /* just the glyph, no box */
-  opacity: 0; transition: opacity .08s; cursor: pointer;   /* appears on row hover, beside the name */
+  opacity: 0; transition: opacity var(--t-fast); cursor: pointer;   /* appears on row hover, beside the name */
 }
-.anim-cog:focus-visible { outline: none !important; }
+.anim-cog:focus-visible { outline: 1px solid var(--accent-line) !important; outline-offset: 1px; }
 .anim-cog svg.ic { width: 12px; height: 12px; fill: currentColor; display: block; }   /* pixel gear, centred */
 .ly-plabel-mod { cursor: pointer; }   /* the name opens the modulation picker too */
 
@@ -1217,17 +1215,12 @@ input[type=checkbox]:checked::after {
 .color-param.is-open .color-cog { color: var(--accent); }
 .color-param:not(.is-open) .color-body { display: none; }
 
-/* Parameter groups don't fold — always open, no fold arrow. Resolume-style: the header
-   is a FULL-BLEED muted-teal bar (obvious group divider), its title sharing the left
-   indent of the CLIP tabs + clip-name field (structural left edge). */
+/* Parameter groups don't fold — always open, no fold arrow. AIRY header (accent caps +
+   thin accent underline), matching the Output/Library/device-pop section headers — the
+   filled muted-teal bar was the one divergent header language left. */
 #grp-props .insp-sec:not(.out-sec) > .insp-sec-body { display: block; }
-#grp-props .insp-sec:not(.out-sec) > .insp-sec-head {
-  cursor: default; margin: 0 calc(-1 * var(--s3)) 5px; padding: 0 var(--s5);
-  height: var(--row-h); background: var(--accent-head); border-bottom: none;
-}
-#grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: var(--accent-head); }
-#grp-props .insp-sec:not(.out-sec) > .insp-sec-head .insp-sec-title { color: var(--text); }
-#grp-props .insp-sec:not(.out-sec) > .insp-sec-head .insp-sec-reset { color: color-mix(in srgb, var(--text) 55%, transparent); }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head { cursor: default; }
+#grp-props .insp-sec:not(.out-sec) > .insp-sec-head:hover { background: none; }
 #grp-props .insp-sec:not(.out-sec) .insp-tri { display: none; }
 /* Every inspector field/row shares the 14px label gutter so labels align across plain
    fields (Title/BPM/Width), slider rows (Master, params) and the Color row. */
@@ -1251,7 +1244,7 @@ input[type=checkbox]:checked::after {
   position: fixed; z-index: 60; min-width: 132px;
   background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius);
   padding: 3px; display: flex; flex-direction: column; gap: 1px;
-  box-shadow: 0 6px 16px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-pop);
   animation: anim-pop-in 120ms ease;
   /* Robustness: if the panel ever grows taller than the viewport (it can't with
      today's ~7 rows, but future modes could), cap it and scroll rather than
@@ -1285,8 +1278,6 @@ input[type=checkbox]:checked::after {
 .anim-pop-tick.is-on .fx-tick-box { background: var(--accent); border-color: var(--accent); }
 .anim-pop-tick.is-on .fx-tick-box::after { content: ''; position: absolute; left: 3px; top: 0;
   width: 3px; height: 6px; border: solid var(--accent-dark); border-width: 0 2px 2px 0; transform: rotate(45deg); }
-.is-audio input[type=range] { accent-color: var(--accent); }
-.is-animated input[type=range] { accent-color: var(--accent); }
 /* Modulation rail: any DRIVEN param (timeline/audio/external) wears an inset accent
    bar down its left edge, so it's obvious at a glance which params are animated vs
    static — no badge or label. Inset shadow ⇒ zero layout shift. */
@@ -1297,7 +1288,7 @@ input[type=checkbox]:checked::after {
 .cmp-tap {
   flex: 0 0 auto; padding: 0 10px; height: var(--ctrl-h); cursor: pointer;
   background: var(--field-bg); color: var(--accent); border: 1px solid var(--line-2);
-  border-radius: var(--radius); font: var(--fw-med) var(--fs-ctrl) var(--mono); letter-spacing: var(--ls-ui);
+  border-radius: var(--radius); font: var(--fw-med) var(--fs-ctrl) var(--sans); letter-spacing: var(--ls-ui);
 }
 .cmp-tap:active { transform: scale(0.94); }
 /* TAP pulses on the beat (animation-duration = one beat, set inline as --beat).
@@ -1522,7 +1513,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
   position: absolute; right: 0; top: 100%; margin-top: 3px; z-index: 20;
   background: var(--panel-2); border: 1px solid var(--line-2); border-radius: var(--radius);
   padding: 3px; min-width: 126px; display: flex; flex-direction: column; gap: 1px;
-  box-shadow: 0 6px 16px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-pop);
 }
 .fx-menu-label { font-size: var(--fs-micro); color: var(--muted); padding: 3px 7px 1px; text-transform: uppercase; letter-spacing: var(--ls-caps); }
 .fx-menu-sep { height: 1px; background: var(--line); margin: 2px 0; }
@@ -1566,7 +1557,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .deck-layer:last-child { border-bottom: none; }
 /* Solo active elsewhere → this layer isn't rendering. Dim the whole row so the
    deck mirrors the output; the row stays clickable (its S still un-solos it). */
-.deck-layer.is-muted { opacity: .4; transition: opacity .12s; }
+.deck-layer.is-muted { opacity: .4; transition: opacity var(--t-fast); }
 /* MASTER row above the layers: ✕ · B (each the layer-button width) + a horizontal
    opacity fader filling the rest — same look as the vertical layer fader, on its side. */
 .deck-master { align-self: stretch; }
@@ -1737,7 +1728,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
   position: relative; flex: 0 0 auto; width: var(--clip-w); height: var(--clip-h);
   background: var(--surface); border: 1px solid var(--field-border); border-top: 0; border-bottom: 0; border-radius: 0;
   overflow: hidden; cursor: pointer; user-select: none; display: flex; flex-direction: column;
-  transition: border-color .12s, box-shadow .12s;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
 .clip-add {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -1781,9 +1772,9 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .deck-ghost {
   position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none;
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 3px 8px; font: var(--fs-body) var(--mono); color: var(--accent-text);
+  padding: 3px 8px; font: var(--fs-body) var(--sans); color: var(--accent-text);
   background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: var(--radius);
-  box-shadow: 0 4px 14px rgba(0,0,0,.5);
+  box-shadow: var(--shadow-pop);
 }
 .composer-drop {
   grid-column: 1 / -1; text-align: center; font-size: var(--fs-body); color: var(--faint);
@@ -1800,7 +1791,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .pick-pop {
   position: fixed; z-index: 50; min-width: 190px; max-height: 60vh; overflow-y: auto;
   background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: var(--radius);
-  padding: 4px; display: flex; flex-direction: column; gap: 1px; box-shadow: 0 8px 22px rgba(0,0,0,.55);
+  padding: 4px; display: flex; flex-direction: column; gap: 1px; box-shadow: var(--shadow-pop);
   /* Long option names scroll inside the popover (per-group, below) instead of
      widening it past the window edge. */
   max-width: min(300px, calc(100vw - 16px));
@@ -1888,7 +1879,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .transport-play { height: var(--ctrl-h); padding: 0 12px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--accent); border-color: var(--line); }
 .transport-play.is-playing { color: var(--danger); border-color: var(--line); background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .transport-loop { display: flex; align-items: center; gap: 3px; font-size: var(--fs-micro); color: var(--muted); }
-.transport-loop input { width: auto; accent-color: var(--accent); }
+.transport-loop input { width: auto; }
 .transport-fire { height: var(--ctrl-h); padding: 0 10px; font-size: var(--fs-body); font-weight: var(--fw-med); color: var(--accent); border-color: var(--line); }
 .transport-fire:active { background: color-mix(in srgb, var(--accent) 28%, transparent); }
 
@@ -1922,7 +1913,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .modal-card {
   position: relative; margin: 7vh 0; width: min(620px, 92vw); max-height: 86vh;
   display: flex; flex-direction: column; background: var(--panel);
-  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: 0 18px 60px rgba(0,0,0,.5);
+  border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: var(--shadow-modal);
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto;
@@ -1945,7 +1936,7 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 .accent-swatch {
   flex: 1 1 0; min-width: 0; height: 28px; padding: 0; border-radius: var(--radius);
   border: 1px solid var(--line-2); cursor: pointer;
-  opacity: .4; transition: opacity .12s;   /* inactive colours read dimmed */
+  opacity: .4; transition: opacity var(--t-fast);   /* inactive colours read dimmed */
 }
 .accent-swatch:hover { opacity: .75; }
 .accent-swatch.is-on { opacity: 1; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--text); }

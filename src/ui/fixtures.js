@@ -795,7 +795,7 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     if (lastSel === 'device' && selDeviceId && (show.devices || []).some((d) => d.id === selDeviceId)) {
       const dev = show.devices.find((d) => d.id === selDeviceId);
       const used = (show.fixtures || []).filter((f) => (f.output?.deviceId || '') === selDeviceId).length;
-      const msg = `Delete device “${dev?.name || selDeviceId}”?`
+      const msg = `Delete controller “${dev?.name || selDeviceId}”?`
         + (used ? `\n\n${used} fixture${used === 1 ? '' : 's'} routed to it will be unrouted.` : '');
       if (!confirmDelete(msg)) return false;
       const next = structuredClone(show);

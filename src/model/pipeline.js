@@ -1,5 +1,5 @@
 import { samplePoints, samplePoints3D } from './sampling.js';
-import { chainOffset } from './chains.js';
+import { chainOffsetMap } from './chains.js';
 import { gridPoints, isGridFixture } from './grid.js';
 import { isDmxFixture, dmxChannelsOf } from './dmx.js';
 import { fixtureCentreUV } from './fixture-transform.js';
@@ -96,6 +96,8 @@ export function buildPipelineInputs(show) {
   // Projection camera for this composition: flat in 2D (no-op), the view's
   // camera in 3D. Derived once and threaded into every strip sample.
   const cam = cameraFromView3d(show.composition?.view3d);
+  const chainOffs = chainOffsetMap(show);   // one O(n) pass (chainOffset per fixture is O(n²))
+  const NO_OFF = [0, 0];
   let cursor = 0; // running GLOBAL pixel position into the flat buffer
 
   for (const d of show.devices) {
@@ -114,7 +116,7 @@ export function buildPipelineInputs(show) {
       const { uvs: pts, pos } = fixtureSamples(f, canvas, cam);
       // Chain stagger: shift this fixture's sample position by its chain offset so
       // a travelling source cascades across the run (no-op when not chained).
-      const [ox, oy] = chainOffset(show, f.id);
+      const [ox, oy] = chainOffs.get(f.id) || NO_OFF;
       spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
       fixtureOrder.push(f);
       for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }
@@ -136,7 +138,7 @@ export function buildPipelineInputs(show) {
     const dmx = [];
     for (const f of dmxFs) {
       const [u, v] = fixtureCentreUV(f, canvas);
-      const [ox, oy] = chainOffset(show, f.id);
+      const [ox, oy] = chainOffs.get(f.id) || NO_OFF;
       spans.push({ id: f.id, start: cursor, count: 1, hidden: !!f.hidden });
       fixtureOrder.push(f);
       uvs.push(u + ox, v + oy);
@@ -180,7 +182,7 @@ export function buildPipelineInputs(show) {
   for (const f of show.fixtures) {
     if (deviceIds.has(f.output?.deviceId)) continue;   // already routed above
     const { uvs: pts, pos } = fixtureSamples(f, canvas, cam);
-    const [ox, oy] = chainOffset(show, f.id);
+    const [ox, oy] = chainOffs.get(f.id) || NO_OFF;
     spans.push({ id: f.id, start: cursor, count: pts.length, hidden: !!f.hidden });
     fixtureOrder.push(f);
     for (const [u, v] of pts) { uvs.push(u + ox, v + oy); }

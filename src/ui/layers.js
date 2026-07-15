@@ -905,7 +905,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       getParams: () => paramsForPrefix(getShow().composition?.params, name),
       applyParams: (p) => commit(mergeCompositionParams(show(), p)),
       onReset: () => commit(mergeCompositionParams(show(), prefixedDefaults(name), true)),
-      onRemove: () => commit(removeCompositionEffect(show(), fx)),
+      onRemove: () => { if (confirmDelete('Remove this effect?')) commit(removeCompositionEffect(show(), fx)); },
     }));
     block.append(head);
     if (entry) {
@@ -949,7 +949,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       getParams: () => paramsForPrefix(layerById(id)?.params, name),
       applyParams: (p) => commit(mergeLayerParams(show(), id, p)),
       onReset: () => commit(mergeLayerParams(show(), id, prefixedDefaults(name), true)),
-      onRemove: () => commit(removeLayerEffect(show(), id, fx)),
+      onRemove: () => { if (confirmDelete('Remove this effect?')) commit(removeLayerEffect(show(), id, fx)); },
     }));
     block.append(head);
 
@@ -1105,7 +1105,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
         e.stopPropagation();
         const layers = show().composition?.layers || [];
         if (layers.length <= 1) return;
-        if (!confirmDelete('Delete this layer?')) return;
+        if (!confirmDelete(`Delete layer “${layerById(id)?.name ?? 'Layer'}”?`)) return;
         const i = layers.findIndex((l) => l.id === id);
         selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;
         commit(removeLayer(show(), id));
@@ -1773,6 +1773,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
   function deleteSelectedEffect() {
     const s = selectedEffect;
     if (!s) return false;
+    if (!confirmDelete('Remove this effect?')) return true;   // handled (cancelled)
     selectedEffect = null;
     if (s.scope === 'clip') commit(removeClipEffect(show(), s.layerId, s.clipId, s.index));
     else if (s.scope === 'layer') commit(removeLayerEffect(show(), s.layerId, s.index));
@@ -1788,8 +1789,10 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     // A project must keep at least one clip — refuse to delete the very last one
     // (across all layers). Emptying a layer that has siblings is still allowed.
     const totalClips = (show().composition?.layers || []).reduce((n, L) => n + (L.clips?.length || 0), 0);
-    if (totalClips <= 1) return;
-    if (!confirmDelete('Delete this clip?')) return;
+    if (totalClips <= 1) { window.alert('This is the last clip — a project keeps at least one.'); return; }
+    const doomed = l.clips?.find((c) => c.id === target);
+    const clipName = doomed?.name || doomed?.id || 'this clip';
+    if (!confirmDelete(`Delete clip “${clipName}”?`)) return;
     // Keep a clip selected: hop to the next clip (or the previous if it was last).
     const clips = l.clips || [];
     const i = clips.findIndex((c) => c && c.id === target);
@@ -1808,7 +1811,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     if (!selectedLayerId || layers.length <= 1) return false;
     const i = layers.findIndex((l) => l.id === selectedLayerId);
     if (i < 0) return false;
-    if (!confirmDelete('Delete this layer?')) return true;   // handled (cancelled)
+    if (!confirmDelete(`Delete layer “${layers[i]?.name ?? 'Layer'}”?`)) return true;   // handled (cancelled)
     const target = selectedLayerId;
     // Keep a layer selected: hop to a neighbour.
     selectedLayerId = layers[i + 1]?.id ?? layers[i - 1]?.id ?? null;

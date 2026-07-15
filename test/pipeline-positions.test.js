@@ -41,16 +41,19 @@ test('a lifted arch in 3D carries real z (samplePoints3D before projection)', ()
   const sp = spans.find((x) => x.id === 'arc');
   assert.equal(sp.count, 7);
   assert.equal(samplePositions.length, sampleUVs.length / 2 * 3);
-  // Positions = the raw 3D arc-length resample, unprojected.
+  // Positions = the raw 3D arc-length resample, unprojected — with z RESCALED so the
+  // rig's highest point sits at z = 1 ("volume height fits the rig", v1.0.551).
   const expect = samplePoints3D(pts, 7);
+  const zMax = Math.max(...expect.map((p) => Math.abs(p[2])));
   for (let i = 0; i < 7; i++) {
     assert.equal(samplePositions[i * 3], Math.fround(expect[i][0]), `x[${i}]`);
     assert.equal(samplePositions[i * 3 + 1], Math.fround(expect[i][1]), `y[${i}]`);
-    assert.equal(samplePositions[i * 3 + 2], Math.fround(expect[i][2]), `z[${i}]`);
+    assert.equal(samplePositions[i * 3 + 2], Math.fround(Math.fround(expect[i][2]) / zMax), `z[${i}]`);
   }
-  // The apex actually left the plane…
-  const zs = expect.map((p) => p[2]);
-  assert.ok(Math.max(...zs) > 0.4, 'arch apex is lifted');
+  // The apex actually left the plane — and after the rescale it IS the volume top.
+  const zs = [];
+  for (let i = 0; i < 7; i++) zs.push(samplePositions[i * 3 + 2]);
+  assert.ok(Math.abs(Math.max(...zs) - 1) < 1e-6, 'arch apex sits at z = 1');
 });
 
 test('a plain 2D show is all z = 0 (and chain-free positions equal the UVs)', () => {

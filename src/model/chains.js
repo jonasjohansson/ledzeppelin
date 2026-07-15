@@ -105,6 +105,32 @@ export function chainOffset(show, fixtureId) {
   return ch.axis === 'y' ? [0, s] : [s, 0];
 }
 
+// All fixtures' chain offsets in ONE O(n) pass — Map<fixtureId, [dx,dy]>. chainOf()
+// re-filters the whole fixture array per call, so calling chainOffset per fixture is
+// O(n²): at Kagora scale (120 fixtures) that's ~14k runKey string builds per preview
+// frame / pipeline rebuild. Callers that walk every fixture use this map instead.
+const ZERO_OFFSET = [0, 0];
+export function chainOffsetMap(show) {
+  const map = new Map();
+  const runs = new Map();   // runKey → fixture ids in wiring (array) order
+  for (const f of show?.fixtures || []) {
+    const key = runKey(f);
+    let ids = runs.get(key);
+    if (!ids) { ids = []; runs.set(key, ids); }
+    ids.push(f.id);
+  }
+  const cs = settingsOf(show);
+  for (const [key, ids] of runs) {
+    const stagger = Number(cs[key]?.stagger) || 0;
+    const axisY = cs[key]?.axis === 'y';
+    for (let i = 0; i < ids.length; i++) {
+      // Same rule as chainOffset: shifting needs a real chain (≥2 members) AND a stagger.
+      map.set(ids[i], (ids.length < 2 || !stagger) ? ZERO_OFFSET : (axisY ? [0, stagger * i] : [stagger * i, 0]));
+    }
+  }
+  return map;
+}
+
 // Set a run's stagger / axis (keyed by device:port). Returns a new show.
 export function setRunStagger(show, key, stagger) {
   const cs = settingsOf(show);

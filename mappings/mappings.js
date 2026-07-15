@@ -46,6 +46,8 @@ let rowFills = [];               // [{ channel, el }] live value bars
 let lastBus = 0;
 
 bus.postMessage({ type: 'hello' });
+// Liveness ping — the editor gates its 10Hz channel stream on a listening window.
+setInterval(() => { try { bus.postMessage({ type: 'ping' }); } catch { /* closed */ } }, 5000);
 $('enable-midi').addEventListener('click', () => bus.postMessage({ type: 'enableMidi' }));
 addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (learn) { learn = null; renderParams(); } return; }
@@ -61,7 +63,7 @@ bus.onmessage = (e) => {
   else if (m.type === 'channels') { channels = m.data || {}; updateValues(); tickLearn(); }
   else if (m.type === 'midi') {
     const btn = $('enable-midi'), st = $('midi-status');
-    btn.disabled = !!m.enabled; btn.textContent = m.enabled ? 'MIDI on ✓' : 'enable MIDI';
+    btn.disabled = !!m.enabled; btn.classList.toggle('is-on', !!m.enabled); btn.textContent = m.enabled ? 'MIDI on ✓' : 'enable MIDI';
     st.textContent = m.enabled ? (m.inputs?.length ? m.inputs.join(', ') : 'no inputs') : '';
   }
 };

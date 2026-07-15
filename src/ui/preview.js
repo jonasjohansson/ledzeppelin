@@ -5,7 +5,7 @@ import {
   ORBIT_EL_MIN, ORBIT_EL_MAX, ORBIT_DIST_MIN, ORBIT_DIST_MAX,
 } from '../model/project3d.js';
 import { gridPoints, isGridFixture } from '../model/grid.js';
-import { chainOffset, runsOf, runKey, controllerColorMap } from '../model/chains.js';
+import { chainOffsetMap, runsOf, runKey, controllerColorMap } from '../model/chains.js';
 import { isDmxFixture } from '../model/dmx.js';
 import {
   setFixtureTransform, isPolylineFixture, snapDeg, transformFromPoints,
@@ -250,6 +250,8 @@ export function createPreview(canvasEl, opts = {}) {
     // is selected), so a lit fixture reads as "selected", not the default — and a
     // marquee/selection lights up only what it actually catches.
 
+    const chainOffs = chainOffsetMap(show);   // one O(n) pass, not chainOffset per fixture (O(n²))
+    const NO_OFF = [0, 0];
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
       // Cull off-screen fixtures (footprint AABB vs the visible region). Grids skip
@@ -264,7 +266,7 @@ export function createPreview(canvasEl, opts = {}) {
       if (f.hidden) continue;   // hidden → no lights; its ghost outline is drawn on the SVG chrome
       const span = spans[fi];
       const pts = samplePts[fi];               // cached resampled points
-      const [ox, oy] = chainOffset(show, f.id);   // dots show WHERE it samples (cascade)
+      const [ox, oy] = chainOffs.get(f.id) || NO_OFF;   // dots show WHERE it samples (cascade)
       const reversed = !!f.input.reversed;        // which geometric end is pixel 0
       const count = pts.length;
       const cvT = show.composition?.canvas;
@@ -296,13 +298,13 @@ export function createPreview(canvasEl, opts = {}) {
           const chh = Math.max(1.5, (th / Math.max(1, f.rows)) * sY) * 0.92;
           const ang = (Number(f.input?.transform?.rotation) || 0) * Math.PI / 180;
           const aa = Math.abs(ang) < 1e-3;
-          let last = '';
+          let last = -1;   // packed (r<<16|g<<8|b); -1 = force first fillStyle
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            const css = `rgb(${r},${g},${b})`;
-            if (css !== last) { ctx.fillStyle = css; last = css; }
+            const packed = (r << 16) | (g << 8) | b;
+            if (packed !== last) { ctx.fillStyle = `rgb(${r},${g},${b})`; last = packed; }
             const cx = sx(i), cy = sy(i);
             if (aa) ctx.fillRect(Math.round(cx - cw / 2), Math.round(cy - chh / 2), Math.round(cw), Math.round(chh));
             else { ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang); ctx.fillRect(-cw / 2, -chh / 2, cw, chh); ctx.restore(); }
@@ -329,13 +331,13 @@ export function createPreview(canvasEl, opts = {}) {
           const across = Math.max(1.5, thick);
           const axisAligned = Math.abs(ux) < 1e-3 || Math.abs(uy) < 1e-3;
           const ang = Math.atan2(uy, ux);
-          let last = '';
+          let last = -1;   // packed (r<<16|g<<8|b); -1 = force first fillStyle
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            const css = `rgb(${r},${g},${b})`;
-            if (css !== last) { ctx.fillStyle = css; last = css; }
+            const packed = (r << 16) | (g << 8) | b;
+            if (packed !== last) { ctx.fillStyle = `rgb(${r},${g},${b})`; last = packed; }
             const cx = ax + ux * i * pitch, cy = ay + uy * i * pitch;
             if (axisAligned) {
               const horiz = Math.abs(ux) >= Math.abs(uy);
@@ -350,13 +352,13 @@ export function createPreview(canvasEl, opts = {}) {
           // cycle (litFrac of the pitch along the line), capped by the bar thickness.
           const spacing = count >= 2 ? (Math.hypot(sx(1) - sx(0), sy(1) - sy(0)) || thick) : thick;
           const cell = Math.max(1.5, Math.min(Math.max(2, thick), spacing * litFrac));
-          let last = '';   // only touch fillStyle when the colour changes (matches the bar path)
+          let last = -1;   // packed (r<<16|g<<8|b); -1 = force first fillStyle   // only touch fillStyle when the colour changes (matches the bar path)
           for (let i = 0; i < count; i++) {
             const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
             let r = 0, g = 0, b = 0;
             if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-            const css = `rgb(${r},${g},${b})`;
-            if (css !== last) { ctx.fillStyle = css; last = css; }
+            const packed = (r << 16) | (g << 8) | b;
+            if (packed !== last) { ctx.fillStyle = `rgb(${r},${g},${b})`; last = packed; }
             ctx.fillRect(sx(i) - cell / 2, sy(i) - cell / 2, cell, cell);
           }
         }
@@ -430,6 +432,8 @@ export function createPreview(canvasEl, opts = {}) {
     // sits, so they don't move the dots here.)
     const { fixtureOrder, spans } = pipelineFor(show);
     const pts3 = samplePts3DFor(show);
+    const chainOffs = chainOffsetMap(show);   // one O(n) pass, not chainOffset per fixture (O(n²))
+    const NO_OFF = [0, 0];
     for (let fi = 0; fi < fixtureOrder.length; fi++) {
       const f = fixtureOrder[fi];
       if (f.hidden) continue;
@@ -441,15 +445,15 @@ export function createPreview(canvasEl, opts = {}) {
       // the dots ARE the picture once the outlines are gone.
       ctx.globalAlpha = (!outlines || liveView || isSelected(selectedIds, f.id)) ? 1 : 0.22;
       const cell = outlines ? Math.max(1.5, 2.5 * ck) : Math.max(2, 3.5 * ck);
-      let last = '';
+      let last = -1;   // packed (r<<16|g<<8|b); -1 = force first fillStyle
       for (let i = 0; i < count; i++) {
         const [u, v] = project(pts[i], cam);
         if (!Number.isFinite(u) || !Number.isFinite(v)) continue;   // behind the orbit camera
         const si = (span.start + (reversed ? count - 1 - i : i)) * 4;
         let r = 0, g = 0, b = 0;
         if (si + 2 <= rgba.length - 1) { r = rgba[si]; g = rgba[si + 1]; b = rgba[si + 2]; }
-        const css = `rgb(${r},${g},${b})`;
-        if (css !== last) { ctx.fillStyle = css; last = css; }
+        const packed = (r << 16) | (g << 8) | b;
+        if (packed !== last) { ctx.fillStyle = `rgb(${r},${g},${b})`; last = packed; }
         ctx.fillRect(u * W - cell / 2, v * Hh - cell / 2, cell, cell);
       }
     }

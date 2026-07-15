@@ -3,7 +3,7 @@
 The one reference for keeping the UI consistent. Synthesized from a 4-lens audit
 (spacing, typography, color, components). **Identity:** Resolume profile — neutral
 medium-dark gray chrome, monospace, hairline dividers, square corners, ONE
-teal-mint accent (`#3ecfa6`), Resolume-dense. `src/ui/palette.js` + `src/ui/ui.css
+cyan accent (`#22bcd6`, MadMapper blue × Resolume teal), Resolume-dense. `src/ui/palette.js` + `src/ui/ui.css
 :root` are the token source.
 
 ## Tokens — never write a raw value that a token covers
@@ -26,11 +26,11 @@ Scale (× `--ui-scale`, +1px from the original after the Commit Mono switch): `-
 
 ## Color & state
 
-`palette.js` is the runtime source of truth (writes inline vars on `<html>`); the `ui.css :root` block is the FOUC/JS-fail fallback and MUST be kept regenerated from `themeVars({accent:'#3ecfa6'})` so static == runtime.
+`palette.js` is the runtime source of truth (writes inline vars on `<html>`); the `ui.css :root` block is the FOUC/JS-fail fallback and MUST be kept regenerated from `themeVars({accent:'#22bcd6'})` so static == runtime.
 
-Surfaces (**neutral** medium-dark gray, ascending): `--bg → --field-bg → --panel → --panel-2 → --hover → --line → --line-2` (no accent tint on chrome — the ground stays true-neutral so the warm accent + category colours pop). Text (neutral): `--text → --readout → --muted → --faint`. Accent: ONE **fixed** amber-orange `#d4a24a` (no picker — pinned in palette code); variants `--accent-soft` (selected tint), `--accent-line` (selected border), `--accent-text` (text on tint), `--accent-dark` (glyph on a bright accent fill), `--accent-head` (muted-amber group-header bar).
+Surfaces (**neutral** medium-dark gray, ascending): `--bg → --field-bg → --panel → --panel-2 → --hover → --line → --line-2` (no accent tint on chrome — the ground stays true-neutral so the warm accent + category colours pop). Text (neutral): `--text → --readout → --muted → --faint`. Accent: ONE **fixed** cyan `#22bcd6` (no picker — pinned in palette code); variants `--accent-soft` (selected tint), `--accent-line` (selected border), `--accent-text` (text on tint), `--accent-dark` (glyph on a bright accent fill), `--accent-head` (muted group-header bar — now unused by headers; every section header is the AIRY accent-caps + `--accent-underline` recipe).
 
-**Accent law:** accent is a line / edge / glyph / thin tint / small fill. Never a big solid fill on panels, rows or wide areas — solid `var(--accent)` only on small name chips + the checkbox tick. **Exception (Resolume):** inspector param-group headers ARE a filled muted-teal bar (`--accent-head`) — a deliberate group divider, the one sanctioned filled header.
+**Accent law:** accent is a line / edge / glyph / thin tint / small fill. Never a big solid fill on panels, rows or wide areas — solid `var(--accent)` only on small name chips + the checkbox tick. There are NO filled header bars any more — every section header, in every window and popout, is the ONE airy recipe (accent caps + `--accent-underline`).
 
 **One rule per state:** hover → accent glyph/text OR `--hover` fill (not both) · selected-fill → `--accent-soft` + `--accent-line` + `--accent-text` · selected-text (tabs/modes) → `--accent` · modified → `--accent-text` · focus → `--accent-line` (interactive) / `--line-2` (passive input) · disabled → `opacity:.35`. Semantic set is closed: `--danger` (error/destructive/panic), `--success` (online/live). Route panic/warn through tokens, never raw hex.
 
