@@ -39,7 +39,6 @@ import { confirmDeletesOn, setConfirmDeletes } from './confirm.js';
 // Curated + desaturated — a restrained set, not a full-spectrum swatch row (the
 // rainbow picker was a strong "theme-generator" tell). Teal-mint (Resolume) ·
 // near-white · cool slate · brick red.
-export const ACCENT_PRESETS = ['#3ecfa6', '#e8eaee', '#7d8a99', '#c25a4a'];
 
 export function createSettingsPanel(hooks) {
   const { getShow, setShow, enableAudio, snap, output, prefs, appearance } = hooks;
@@ -127,16 +126,12 @@ export function createSettingsPanel(hooks) {
     mount.append(adv(toggleRow('Toolbar labels (footer text)', prefs.getToolbarLabels, (v) => prefs.setToolbarLabels(v))));
     mount.append(adv(toggleRow('Right-click shows the browser menu', prefs.getNativeCtx, (v) => prefs.setNativeCtx(v))));
 
-    // --- Appearance: brightness / accent tint / contrast / text size (all live). The
-    // UI is dark-only (no light theme). ---
+    // --- Appearance: brightness / contrast / text size (all live). The UI is dark-only
+    // with a fixed natural warm base + one teal accent (no theme / accent-colour picker). ---
     mount.append(el('div', { className: 'fx-pts', textContent: 'appearance' }));
     mount.append(Slider('Brightness', appearance.getBrightness(), {
       min: -12, max: 20, step: 1, default: 7, commit: 'live',
       onInput: (v) => appearance.setBrightness(Math.round(v)),
-    }));
-    mount.append(Slider('Tint', appearance.getTint(), {
-      min: 0, max: 220, step: 5, default: 100, commit: 'live',
-      onInput: (v) => appearance.setTint(Math.round(v)),
     }));
     mount.append(Slider('Contrast %', appearance.getContrast(), {
       min: 60, max: 130, step: 2, default: 100, commit: 'live',
@@ -146,21 +141,6 @@ export function createSettingsPanel(hooks) {
       min: 80, max: 140, step: 5, default: 100, commit: 'live',
       onInput: (v) => appearance.setScale(v / 100),
     }));
-
-    // --- Accent colour (least priority → last): preset swatches. ---
-    mount.append(el('div', { className: 'fx-pts', textContent: 'accent colour' }));
-    const cur = appearance.getAccent();
-    const swatches = [];
-    const mark = (hex) => swatches.forEach((s) => s.classList.toggle('is-on', s.dataset.hex.toLowerCase() === hex.toLowerCase()));
-    const row = el('div', { className: 'accent-swatches' });
-    for (const p of ACCENT_PRESETS) {
-      const sw = el('button', { className: 'accent-swatch', title: p });
-      sw.dataset.hex = p; sw.style.background = p;
-      sw.onclick = () => { appearance.setAccent(p); mark(p); };
-      swatches.push(sw); row.append(sw);
-    }
-    mount.append(row);
-    mark(cur);
   }
 
   // Composition file = just the visuals (canvas + layers/clips/effects), no rig.

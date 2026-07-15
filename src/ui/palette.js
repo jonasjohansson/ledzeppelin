@@ -27,22 +27,22 @@ function flipL(hex) {
 // Dark surface anchors (the tuned base) + their accent-tint weight. Light reuses them
 // luminance-inverted. field-bg is nudged toward the ramp extreme in light so inputs
 // stay the brightest surface (raised), matching the light convention of white fields.
-// Resolume-style: neutral medium-dark grays (no accent tint on chrome — the teal reads
-// only where it's an accent). Tint weights are 0 so surfaces stay true neutral gray.
+// NATURAL WARM base — a tan/beige-tinted dark greige (R>G>B) rather than true neutral
+// gray, so the teal UI accent and the category colours (controller / source / effect)
+// read as cool pops against a warm ground. Tint weights stay 0 (no accent bleed on chrome).
 const SURFACES = [
-  ['--bg',       '#1c1c1c', 0.0, 0],   // neutral dark chrome (Resolume mid-dark, not near-black)
-  ['--field-bg', '#141414', 0.0, 0.5],   // recessed input troughs — darkest; 4th = light-only lift
-  ['--panel',    '#242424', 0.0, 0],
-  ['--panel-2',  '#2b2b2b', 0.0, 0],
-  ['--hover',    '#383838', 0.0, 0],
-  ['--line',     '#3a3a3a', 0.0, 0],
-  ['--line-2',   '#4c4c4c', 0.0, 0],
+  ['--bg',       '#201c14', 0.0, 0],   // warm dark chrome (tan-tinted, not neutral gray)
+  ['--field-bg', '#18140c', 0.0, 0.5],   // recessed input troughs — darkest; 4th = light-only lift
+  ['--panel',    '#28241c', 0.0, 0],
+  ['--panel-2',  '#2f2b23', 0.0, 0],
+  ['--hover',    '#3c3830', 0.0, 0],
+  ['--line',     '#3e3a32', 0.0, 0],
+  ['--line-2',   '#504c44', 0.0, 0],
 ];
-// Text anchors (dark). Light mirrors them luminance-inverted; contrast mixes toward
-// the surface extreme (black in dark, white in light) in the same slider direction.
-// Neutral ramp (was blue-gray, fighting the warm accent): equalized RGB, --text
-// eased off pure white to soften the near-black/pure-white glare.
-const TEXT = [['--text', '#eaeaec'], ['--muted', '#a0a0a5'], ['--faint', '#757579'], ['--readout', '#d3d3d7']];
+// Text anchors (dark) — warm cream instead of neutral white, to sit naturally on the
+// warm ground. Light mirrors them luminance-inverted; contrast mixes toward the surface
+// extreme (black in dark, white in light) in the same slider direction.
+const TEXT = [['--text', '#ece9e2'], ['--muted', '#a6a097'], ['--faint', '#7b756a'], ['--readout', '#d7d2c9']];
 
 // Compute the full chrome var map for the given accent + theme + slider values.
 export function themeVars({ accent, theme = 'dark', brightness = 0, tint = 100, contrast = 130 } = {}) {

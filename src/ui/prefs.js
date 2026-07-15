@@ -135,7 +135,9 @@ export function initPrefs({ preview, redrawOverlay }) {
     applyVars(themeVars({ accent, theme: savedTheme(), brightness: savedBright(), tint: savedTint(), contrast: savedContrast() }));
     preview?.setAccentColor?.(accent);   // fixture chrome on the canvas follows the accent
   }
-  const savedAccent = () => { try { return localStorage.getItem(ACCENT_KEY) || ACCENT_DEFAULT; } catch { return ACCENT_DEFAULT; } };
+  // The accent is FIXED (the Settings colour picker was removed) — always the one teal,
+  // so any previously-stored lz.accent is ignored and it pops against the warm base.
+  const savedAccent = () => ACCENT_DEFAULT;
 
   // --- Appearance (Settings › Appearance): UI brightness (surface lift, can go negative
   // = darker than base), accent tint, text contrast, text size. Persisted; live. ---
