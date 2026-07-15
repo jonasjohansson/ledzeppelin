@@ -1829,7 +1829,7 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
       const cat = sourceCategory(name);
       const c = el('div', { className: 'src-card', title: labelOf(name), draggable: !!draggable });
       c.style.setProperty('--cat', CATEGORY_COLORS[cat] || 'var(--faint)');
-      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: labelOf(name) }));
+      c.append(el('span', { className: 'src-label', textContent: labelOf(name) }));
       c.addEventListener('mouseenter', () => setDesc(name));
       if (onPick) c.addEventListener('click', () => onPick(name));
       if (draggable) {
@@ -1841,14 +1841,14 @@ export function createLayerPanel({ getShow, setShow, onChange, transport, clipTr
     const isfCard = (file) => {
       const c = el('div', { className: 'src-card src-isf', title: file });
       c.style.setProperty('--cat', CATEGORY_COLORS.Shaders);
-      c.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
+      c.append(el('span', { className: 'src-label', textContent: file.replace(/\.[^.]+$/, '') }));
       c.addEventListener('click', () => onAddISF(file));
       return c;
     };
     const videoCard = () => {
       const v = el('div', { className: 'src-card src-video', title: 'add a video clip' });
       // A placeholder tile so the card is the same size as the thumbnail cards.
-      v.append(el('span', { className: 'src-dot' }), el('span', { className: 'src-label', textContent: 'Video…' }));
+      v.append(el('span', { className: 'src-label', textContent: 'Video…' }));
       v.addEventListener('click', () => onVideo());
       return v;
     };

@@ -21,27 +21,27 @@
      step brighter than the old near-black, so chrome reads as solid tooling that
      the canvas sits INSIDE of, not a ghost floating over it. One gray ramp,
      hairlines one step stronger. */
-  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#3ecfa6'}) so a
+  /* FALLBACK palette — regenerated from palette.js themeVars({accent:'#d4a24a'}) so a
      pre-JS / FOUC flash matches the runtime (palette.js writes these inline on <html>).
      Keep in sync: re-run themeVars if the accent default or anchors change.
-     NATURAL WARM base: a tan/beige-tinted dark greige + one teal-mint accent that pops. */
-  --bg:#201c14; --panel:#28241c; --panel-2:#2f2b23; --hover:#3c3830;
+     NEUTRAL gray base + ONE fixed amber-orange accent that pops against it. */
+  --bg:#1c1c1c; --panel:#242424; --panel-2:#2b2b2b; --hover:#383838;
   --stage-bg:#101011;          /* display surfaces stay near-black in BOTH themes (LED content wants black) */
-  --panel-solid:#28241c;       /* menus/popovers share the panel surface */
-  --line:#3e3a32; --line-2:#504c44;       /* hairline borders (warm) */
-  --text:#ffffff; --muted:#d4ccc0; --faint:#9c9585;
-  --accent:#3ecfa6;            /* the one teal-mint accent (Resolume) */
-  --accent-soft:#183d33;       /* selected/active background tint (0.26 accent — was muddy #122a23) */
-  --accent-text:#87e1c8;       /* text on accent surfaces */
-  --accent-line:#1f5948;       /* active border */
-  --accent-head:#335645;       /* muted teal group-header bar (over the warm panel) */
+  --panel-solid:#242424;       /* menus/popovers share the panel surface */
+  --line:#3a3a3a; --line-2:#4c4c4c;       /* hairline borders (neutral) */
+  --text:#ffffff; --muted:#ccccd2; --faint:#959599;
+  --accent:#d4a24a;            /* the one fixed amber-orange accent */
+  --accent-soft:#3f321b;       /* selected/active background tint */
+  --accent-text:#e4c58f;       /* text on accent surfaces */
+  --accent-line:#5b4724;       /* active border */
+  --accent-head:#574a33;       /* muted amber group-header bar */
   --accent-underline: color-mix(in srgb, var(--accent) 24%, transparent);   /* section-header underline (auto-tracks --accent) */
   --readout:#ffffff;           /* numeric readouts */
   --danger:#ff6b6b;
   --warn:#cfa14f;              /* advisory (over an fps budget), not an error */
   --success:#57c98a;           /* online / live status (the one non-accent semantic colour) */
-  --accent-dark:#10221d;       /* dark glyph ON a bright accent-filled surface */
-  --field-bg:#18140c;                 /* recessed input fill (warm) */
+  --accent-dark:#221c12;       /* dark glyph ON a bright accent-filled surface */
+  --field-bg:#141414;                 /* recessed input fill */
   --field-border:var(--line-2);
   --surface:var(--panel); --surface-2:var(--panel-2); --surface-hover:var(--hover);
   --border-2:var(--line);
@@ -1850,13 +1850,12 @@ input.ly-readout:focus { outline: none; background: var(--field-bg); border-colo
 /* A compact PALETTE — responsive columns instead of one long single-column scroll (the
    set is large). Adapts: ~2 cols in the narrow sidebar, more in the wide clip picker.
    --src-col = the min card width that triggers a new column (one-off layout constant). */
-.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--src-col, 108px), 1fr)); gap: 1px var(--s1); align-content: start; }
+.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--src-col, 150px), 1fr)); gap: 1px var(--s1); align-content: start; }
 .src-card { position: relative; display: flex; flex-direction: row; align-items: center; gap: var(--s6); padding: var(--s2) var(--s6); cursor: grab; border: 1px solid transparent; }
 .src-card:hover { background: var(--hover); }
 .src-card:active { cursor: grabbing; }
 .src-thumb { width: 100%; height: 46px; object-fit: cover; display: block; background: #000; }
 .src-thumb-add { display: flex; align-items: center; justify-content: center; color: var(--faint); font: 20px/1 var(--mono); background: var(--panel-2); }
-.src-dot { position: static; width: 5px; height: 5px; border-radius: 50%; background: var(--cat, var(--faint)); flex: none; opacity: .6; }
 .src-label { font: var(--fs-ctrl) var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .src-card:hover .src-label { color: var(--text); }
 /* Source + effect NAMES read as uppercase (mono/OCR aesthetic) — browser cards,
