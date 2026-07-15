@@ -2087,10 +2087,13 @@ mode3dBtn?.addEventListener('click', toggleMode3d);
 // were retired: 3D always samples front-ortho). The render loop hands preview
 // the packed fields only while this is on (see the packVolumetrics glue in
 // loopBody).
-const projRow = document.getElementById('proj-row');
+// The 3D viewport controls (Fields ghosts + Reset view) live in the FOOTER toolbar
+// with the other view toggles, behind a divider — not floating on the stage. They're
+// gated 3D-only (`.mode3d-only`, hidden by CSS in 2D), like the retired #proj-row was.
+const footerToggles = document.getElementById('corner-toggles');
 let fieldGhosts = (() => { try { return localStorage.getItem('lz.fieldghosts') !== '0'; } catch { return true; } })();
-if (projRow) {
-  const fg = oel('button', { className: 'dir-btn proj-fields', textContent: 'Fields', id: 'field-ghosts-btn',
+if (footerToggles) {
+  const fg = oel('button', { className: 'g-icon proj-fields mode3d-only', textContent: 'Fields', id: 'field-ghosts-btn',
     title: 'ghost the active volumetric fields in the viewport (plane / gradient arrow / sphere rings / noise lattice)',
     onclick: () => {
       fieldGhosts = !fieldGhosts;
@@ -2098,21 +2101,19 @@ if (projRow) {
       fg.classList.toggle('on', fieldGhosts);
     } });
   fg.classList.toggle('on', fieldGhosts);
-  projRow.append(fg);
-}
-// (The fixture-outlines toggle lives in the top bar — see setFixtureOutlines by
-//  the Tint wiring; it covers 2D and 3D, so no 3D-only chip here.)
-// RESET VIEW — snap the orbit camera back to its default framing (angle + zoom +
-// centre). Only the view-only orbit moves; sampling (front-ortho in 3D) is fixed.
-if (projRow) {
-  const rv = oel('button', { className: 'dir-btn proj-reset', textContent: '⟲', title: 'reset the 3D view — orbit angle, zoom & centre' });
+  // RESET VIEW — snap the orbit camera back to its default framing (angle + zoom +
+  // centre). Only the view-only orbit moves; sampling (front-ortho in 3D) is fixed.
+  const rv = oel('button', { className: 'g-icon proj-reset mode3d-only', textContent: '⟲', title: 'reset the 3D view — orbit angle, zoom & centre' });
   rv.addEventListener('click', () => {
     const next = resetOrbit(show);
     if (next === show) return;
     show = next; saveShow(show); redrawOverlay();
   });
-  projRow.append(rv);
+  const sep = document.createElement('span'); sep.className = 'corner-sep mode3d-only';
+  footerToggles.append(sep, fg, rv);
 }
+// (The fixture-outlines toggle lives in the top bar — see setFixtureOutlines by
+//  the Tint wiring; it covers 2D and 3D, so no 3D-only chip here.)
 syncMode3d();   // reflect a persisted 3D mode on load
 
 // (Canvas fit: the composite always fits the window as the BASE view — letterboxed

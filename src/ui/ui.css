@@ -753,6 +753,11 @@ body.gui-hidden #mapping-pane, body.gui-hidden #control-pane { display: none !im
 #g-hide { min-width: 74px; text-align: center; }
 /* Thin rule splitting the top bar into groups (menus | view-toggles). */
 .corner-sep { flex: 0 0 auto; align-self: center; width: 1px; height: 16px; background: var(--line-2); margin: 0 2px; }
+/* 3D-only footer controls (Fields ghosts + Reset view, moved off the stage corner) —
+   hidden in 2D like the retired #proj-row. Fields is a micro-caps label, ⟲ a glyph. */
+body:not(.mode-3d) .mode3d-only { display: none; }
+#corner-toggles .proj-fields { font: var(--fw-med) var(--fs-micro) var(--sans); letter-spacing: var(--ls-caps); text-transform: uppercase; }
+#corner-toggles .proj-reset { font: var(--fs-glyph)/1 var(--sans); }
 #topbar button {
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 0;
   height: var(--ctrl-h); padding: 0 11px; color: var(--muted); font: var(--fs-body) var(--sans); cursor: pointer;
