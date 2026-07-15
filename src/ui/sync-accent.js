@@ -6,15 +6,26 @@ import { themeVars, applyVars } from './palette.js';
 
 export function syncAccent() {
   const valid = (x) => /^#?[0-9a-f]{6}$/i.test(x || '');
+  const num = (key, def, lo, hi) => { try { const raw = localStorage.getItem(key); const v = Number(raw); return (raw != null && Number.isFinite(v)) ? Math.max(lo, Math.min(hi, v)) : def; } catch { return def; } };
   const apply = () => {
     let hex; try { hex = localStorage.getItem('lz.accent'); } catch { hex = null; }
     if (!valid(hex)) return;
-    // The UI is dark-only now — popouts always derive against the dark ramp.
-    applyVars(themeVars({ accent: hex, theme: 'dark' }));
+    // Derive surfaces from the SAME accent AND brightness/tint/contrast the editor uses
+    // (same lz.* keys as prefs.js / settings.js) — dark-only. Passing just the accent
+    // (the old behaviour) left these popouts on the DEFAULT ramp, so a non-default tint
+    // gave them a visibly different (darker) background than the main window.
+    applyVars(themeVars({
+      accent: hex, theme: 'dark',
+      brightness: num('lz.brightness', 0, -12, 20),
+      tint: num('lz.tint.amt', 100, 0, 220),
+      contrast: num('lz.contrast', 130, 60, 130),
+    }));
   };
   document.documentElement.dataset.theme = 'dark';
   apply();
+  // Re-derive when the editor changes the accent OR any appearance value (the Settings
+  // popout writes these keys → a 'storage' event fires in this cross-context frame).
   addEventListener('storage', (e) => {
-    if (e.key === 'lz.accent') apply();
+    if (['lz.accent', 'lz.brightness', 'lz.tint.amt', 'lz.contrast'].includes(e.key)) apply();
   });
 }
