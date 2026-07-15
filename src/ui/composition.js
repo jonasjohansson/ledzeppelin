@@ -9,7 +9,7 @@
 //                  compositor). The canvas resolution does NOT affect
 //                  fixtures/pipeline/routing/sampler.
 //
-// Just two free fields (width/height) + a readout; Apply commits via setSize.
+// Two free fields (width/height) that commit via setSize on blur/Enter (no Apply button).
 
 import { clampCanvasSize } from '../model/layers.js';
 import { el, field } from './dom.js';
@@ -79,21 +79,23 @@ export function createCompositionPanel({ getShow, setSize, fitToFixtures, setTit
       });
       idRows.push(el('label', { className: 'fx-field cmp-bpm' }, [el('span', { textContent: 'BPM' }), bpmInput, tap]));
     }
-    // --- Width / height edit a DRAFT; the canvas only changes when Apply is clicked. ---
-    const mkNum = (value, onInput) => {
-      const i = el('input', { type: 'number', value: String(value), step: '1', min: '16', max: '4096' });
-      i.addEventListener('input', () => onInput(i.value === '' ? 0 : Number(i.value)));
+    // --- Width / height apply on COMMIT (blur or Enter) — no Apply button. A live
+    // 'input' resize would rebuild the compositor on every keystroke, so we commit on
+    // 'change' (which also covers the spinner steps; focus is restored below). ---
+    const sizeInput = (dim) => {
+      const i = el('input', { type: 'number', value: String(draft[dim]), step: '1', min: '16', max: '4096' });
+      i.addEventListener('change', () => {
+        const v = Number(i.value);
+        const next = Number.isFinite(v) ? { ...draft, [dim]: v } : draft;   // invalid → keep current
+        const c = clampCanvasSize(next.w, next.h);
+        setSize(c.w, c.h);
+        render();
+      });
       return i;
     };
-    const wInput = mkNum(draft.w, (x) => { draft = { ...draft, w: x }; });
-    const hInput = mkNum(draft.h, (x) => { draft = { ...draft, h: x }; });
-    idRows.push(field('Width', wInput), field('Height', hInput));
+    idRows.push(field('Width', sizeInput('w')), field('Height', sizeInput('h')));
 
     if (idRows.length) root.append(el('div', { className: 'fx-card cmp-grid' }, idRows));
-    root.append(el('button', {
-      className: 'fx-add cmp-apply', textContent: 'apply',
-      onclick: () => { const c = clampCanvasSize(draft.w, draft.h); setSize(c.w, c.h); render(); },
-    }));
     // (Fit-to-fixtures stays removed; crossfade is a PER-LAYER setting in the Layer inspector.)
     // Master opacity — the composition-wide dimmer (mirrors the deck's master fader).
     if (setMasterOpacity) {
