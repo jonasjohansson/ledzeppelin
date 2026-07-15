@@ -535,7 +535,6 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         c.addEventListener('change', () => upd((nt) => { nt.artnetSync = c.checked; }));
         return c;
       })()),
-      ...(t.id !== 'generic' ? [deleteEntryBtn('Delete controller model…')] : []),
     ]);
   }
 
@@ -653,7 +652,6 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
       sliderRow('LEDs / m', round2(t.ledsPerMeter), (x) => upd((nt) => { nt.ledsPerMeter = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round(x * (Number(nt.meters) || 0))); }), 0, 200, 1),
       sliderRow('Length (m)', round2(t.meters), (x) => upd((nt) => { nt.meters = Math.max(0, x); if ((Number(nt.rows) || 1) === 1) nt.cols = Math.max(1, Math.round((Number(nt.ledsPerMeter) || 0) * x)); }), 0, 20, 0.1),
     );
-    if (t.id !== 'generic') rows.push(deleteEntryBtn('Delete fixture type…'));
     // Colour order is set per CONTROLLER (Devices tab), not per strip definition.
     rows.push(pushRow());
     return el('div', { className: 'fx-card fx-detail' }, rows);
@@ -751,7 +749,10 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         // handler and the button doesn't appear (it would be inert).
         const add = onInstantiateController && el('button', { className: 'lib-add', textContent: '+', title: 'add a controller of this model to the scene', onclick: (e) => { e.stopPropagation(); onInstantiateController(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateController(getShow(), t.id); } });
-        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, add, dup].filter(Boolean),
+        // Delete lives on the ROW (not the floating editor). Select this model, then run
+        // the shared delete (confirm + in-use guard). 'generic' is the default → no delete.
+        const del = t.id !== 'generic' && el('button', { className: 'lib-del', textContent: '✕', title: 'delete this controller model', onclick: (e) => { e.stopPropagation(); selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; deleteSelectedItem(); } });
+        list.append(listRow(t.name, [`${t.outputs} out`, `×${count}`, add, dup, del].filter(Boolean),
           libSel === 'controller' && t.id === selDevTypeId,
           () => { selDevTypeId = t.id; lastSel = 'devtype'; libSel = 'controller'; render(); onPick?.(); }));
       }
@@ -770,8 +771,9 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
         // "+" only when an instantiate handler is wired (see controllers, above).
         const add = onInstantiateFixture && el('button', { className: 'lib-add', textContent: '+', title: 'place a fixture of this type on the canvas', onclick: (e) => { e.stopPropagation(); onInstantiateFixture(t.id); } });
         const dup = el('button', { className: 'lib-dup', textContent: '⧉', title: 'duplicate (⌘D)', onclick: (e) => { e.stopPropagation(); duplicateType(getShow(), t.id); } });
+        const del = t.id !== 'generic' && el('button', { className: 'lib-del', textContent: '✕', title: 'delete this fixture type', onclick: (e) => { e.stopPropagation(); selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; deleteSelectedItem(); } });
         // Size shows as a greyed suffix on the name ("(6ch)" / "(60px)"); ×N = instances.
-        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, add, dup].filter(Boolean),
+        list.append(ListRow(t.name, { suffix: `(${typeSizeSuffix(t)})`, badges: [`×${count}`, add, dup, del].filter(Boolean),
           selected: libSel === 'fixture' && t.id === selTypeId,
           onClick: () => { selTypeId = t.id; lastSel = 'type'; libSel = 'fixture'; render(); onPick?.(); } }));
       }
@@ -825,13 +827,6 @@ export function createFixturePanel({ getShow, setShow, onSelect, onPick, onInsta
     }
     return false;
   }
-
-  // Danger button for the Library detail editors — the ⌫ shortcut only exists in
-  // the main app's keydown, so the Library window needs a visible affordance.
-  const deleteEntryBtn = (label) => el('button', {
-    className: 'fx-add fx-delete', textContent: label,
-    title: 'delete this library entry', onclick: () => deleteSelectedItem(),
-  });
 
   return {
     libraryEl: libraryBox, refresh: render,

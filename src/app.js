@@ -980,6 +980,9 @@ if (invBus) {
     saveShow(show);            // persist our live show + merged types (the popout's blob has stale fixtures)
     closeTemplateMenu();       // drop any open + Fixture/+ Device menu so it rebuilds with fresh types
     panel.refresh(); renderOutput(); redrawOverlay();   // renderOutput rebuilds the add toolbar from fresh show.*Types
+    // If the floating Library editor is open, keep it in step: refresh it, or close it
+    // when its model/type was the one just deleted (row ✕ in the Library list).
+    if (devicePopOpen() && outputTab === 'library') { if (panel.librarySelection?.()) updateInspector(); else closeDevicePop(); }
   };
 }
 

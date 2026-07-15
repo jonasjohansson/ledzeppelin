@@ -228,6 +228,10 @@ input,textarea,[contenteditable]{ user-select:text; -webkit-user-select:text; }
 .lib-dup { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 4px; font-size: 11px; line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
 .output-row:hover .lib-dup { opacity: 0.6; }
 .lib-dup:hover { opacity: 1; color: var(--accent); }
+/* Inventory row delete (✕): same hover-reveal affordance, danger on hover. */
+.lib-del { opacity: 0; background: none; border: 0; color: var(--faint); cursor: pointer; padding: 0 var(--s2); font-size: var(--fs-micro); line-height: var(--lh-ctrl); transition: opacity .1s, color .1s; }
+.output-row:hover .lib-del { opacity: 0.6; }
+.lib-del:hover { opacity: 1; color: var(--danger); }
 /* "+" = instantiate into the scene. Always visible (the primary Inventory action),
    accent on hover. */
 .lib-add { background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0 var(--s3); font-size: var(--fs-glyph); line-height: var(--lh-ctrl); opacity: .8; transition: opacity .1s; }
