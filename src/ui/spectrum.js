@@ -1,6 +1,6 @@
 // Live FFT spectrum for a clip's Audio Trigger inspector. Pure draw-model helpers (tested)
 // + a self-animating <canvas> that stops when detached. Reads the mic via externalFFT.
-import { externalFFT, externalBinCount, externalBand, AUDIO_BAND_SPLIT } from '../model/audio.js';
+import { externalFFT, externalBinCount, externalBand, externalChannelCount, AUDIO_BAND_SPLIT } from '../model/audio.js';
 
 // Pixel spans for each band across `width`, ordered, gapless. [{band, x0, x1}].
 export function bandRegions(split, width) {
@@ -51,7 +51,10 @@ export function createClipSpectrum({ band = 'bass', channel = 0, trigsFor, mode 
     // panel colour (the chrome may be light — this display surface stays dark).
     ctx.fillStyle = 'rgba(12,12,14,0.9)'; ctx.fillRect(0, 0, W, H);
     const n = externalFFT(buf, channel);
-    if (!n) {                                     // mic off
+    // A DAEMON channel has band values but no FFT (the daemon streams levels, not
+    // bins) — draw its bands as three region bars instead of a dead "mic off" scope.
+    const bandsOnly = !n && channel >= 1 && externalChannelCount() >= channel;
+    if (!n && !bandsOnly) {                       // mic off
       ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.font = '10px monospace';
       ctx.fillText('mic off — turn on the Microphone above', 8, H / 2 + 3);
       requestAnimationFrame(frame); return;
@@ -67,10 +70,19 @@ export function createClipSpectrum({ band = 'bass', channel = 0, trigsFor, mode 
       ctx.fillStyle = sel ? (flashing ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)') : 'rgba(255,255,255,0.03)';
       ctx.fillRect(r.x0, 0, r.x1 - r.x0, H);
     }
-    // spectrum bars (bin → x across width)
-    const hs = barHeights(buf, n, H);
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    for (let i = 0; i < n; i++) { const x = (i / n) * W; ctx.fillRect(x, H - hs[i], Math.max(1, W / n), hs[i]); }
+    // spectrum bars (bin → x across width) — or, for a daemon channel, one bar per
+    // band region at that band's live level (same layout the FFT view shades).
+    if (n) {
+      const hs = barHeights(buf, n, H);
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      for (let i = 0; i < n; i++) { const x = (i / n) * W; ctx.fillRect(x, H - hs[i], Math.max(1, W / n), hs[i]); }
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for (const r of bandRegions(AUDIO_BAND_SPLIT, W)) {
+        const v = externalBand(r.band, channel);
+        ctx.fillRect(r.x0 + 2, H - v * H, (r.x1 - r.x0) - 4, v * H);
+      }
+    }
     // level tick for the selected band
     const lv = externalBand(band, channel);
     const reg = bandRegions(AUDIO_BAND_SPLIT, W).find((r) => r.band === band);
