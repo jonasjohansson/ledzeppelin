@@ -44,10 +44,11 @@ branch).
   (default `127.0.0.1:9000`, overridable).
 - Port normalization/calibration from `leap-bridge.js`, same CLI flags:
   axis mm-ranges (`--xlo/--xhi` …), floor/ceil trims, `--conf` gesture
-  gating, `--rate`, tent (height) remap. The branch's unit tests
-  (`test/leap-bridge.test.js`, `test/tent-remap.test.js`) define expected
-  behavior; port them against the C logic's reference implementation or a
-  test harness.
+  gating, `--rate`. (Correction: the branch's tent remap is a show-JSON
+  preprocessing script for the old Kagora arch rig, not bridge logic — it
+  stays on the branch, YAGNI.) The branch's unit tests
+  (`test/leap-bridge.test.js`) define expected behavior; port them as C
+  tests against the same logic.
 - Same channel scheme as the branch: `/leap/hand/*` (one hand),
   `/leap/left/*` + `/leap/right/*` (two), `/leap/hands` count; all 0..1.
   Channels: x y z, grab, pinch, roll pitch yaw, spread, vel, point, ball.
