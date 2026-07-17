@@ -137,9 +137,10 @@ int main(int argc, char **argv) {
   signal(SIGTERM, on_signal);
 
   /* Fixed per-tick sleep. We don't subtract work time — at these rates the
-     drift is negligible and keeping it simple avoids a clock read per frame. */
-  struct timespec period = { 0, 0 };
-  period.tv_nsec = (long)(1000000000L / rate);
+     drift is negligible and keeping it simple avoids a clock read per frame.
+     Split seconds/nanos so rate==1 (period 1e9 ns) stays a valid timespec. */
+  long ns = 1000000000L / rate;
+  struct timespec period = { ns / 1000000000L, ns % 1000000000L };
 
   fprintf(stderr, "leap-osc: %s feed -> %s:%d @ %d Hz\n",
           fake ? "fake" : "leapc", host, port, rate);

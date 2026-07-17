@@ -40,12 +40,15 @@ int feed_poll(lo_hand *hands, int max) {
   h.confidence = 1.0f;
   h.is_left = 0;
 
-  /* Index + middle extended -> point/spread channels have something to chew on. */
+  /* Animate the gesture channels so point/ball/spread aren't frozen (the
+     /leap/ monitor needs to see them move). Index + middle always out; ring
+     pulses so point/ball toggle; finger separation sweeps so spread fills 0..1. */
   h.extended[1] = 1;
   h.extended[2] = 1;
-  h.finger_dir[1][2] = -1.0f;
-  h.finger_dir[2][0] =  0.3f;
-  h.finger_dir[2][2] = -1.0f;
+  h.extended[3] = (counter / 80) % 2;               /* point=1 when clear, 0 when set */
+  float a = 0.5f * (0.5f + 0.5f * sinf(t * 0.4f));  /* half-angle sweep */
+  h.finger_dir[1][0] = -sinf(a); h.finger_dir[1][2] = -cosf(a);
+  h.finger_dir[2][0] =  sinf(a); h.finger_dir[2][2] = -cosf(a);
 
   hands[0] = h;
   return 1;
