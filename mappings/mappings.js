@@ -55,7 +55,7 @@ addEventListener('keydown', (e) => {
   if (!e.repeat && !typing(e.target)) bus.postMessage({ type: 'key', code: e.code, down: true });
 });
 addEventListener('keyup', (e) => { if (!typing(e.target)) bus.postMessage({ type: 'key', code: e.code, down: false }); });
-const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+const typing = (t) => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
 
 bus.onmessage = (e) => {
   const m = e.data || {};
@@ -96,6 +96,8 @@ function liveBar(ch) {
   const bar = el('div', 'cell-bar'); const fill = el('div', 'cell-fill'); bar.append(fill);
   rowFills.push({ channel: ch, el: fill }); return bar;
 }
+// Arm a cell for move-to-learn: snapshot the channels, then re-render.
+function arm(p, slot) { learn = { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); }
 
 function cell(p, slot) {
   const c = el('div', 'cell');
@@ -109,7 +111,7 @@ function cell(p, slot) {
     if (armed) { c.classList.add('armed'); c.append(el('span', 'cell-arm', 'press…')); }
     else if (ch) { c.append(el('span', 'cell-chan', ch.replace(/^key:/, '')), clearBtn(p, slot)); }
     else c.append(el('span', 'cell-none', '+'));
-    c.addEventListener('click', () => { learn = armed ? null : { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); });
+    c.addEventListener('click', () => { if (armed) { learn = null; renderParams(); } else arm(p, slot); });
     return c;
   }
 
@@ -143,7 +145,7 @@ function cell(p, slot) {
   sel.addEventListener('focus', fillOpts);   // refresh the channel list right before the dropdown opens
   sel.addEventListener('change', () => {
     const v = sel.value;
-    if (v === '__learn__') { learn = { id: p.id, slot }; learnBaseline = { ...channels }; renderParams(); }
+    if (v === '__learn__') arm(p, slot);
     else if (v === '__clear__') bus.postMessage({ type: 'clear', id: p.id, slot });
     else if (v !== '__none__') bus.postMessage({ type: 'bind', id: p.id, channel: v, slot });
   });

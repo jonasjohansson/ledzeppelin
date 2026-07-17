@@ -195,6 +195,7 @@ void main(){
 const SPOT = `#version 300 es
 precision highp float; in vec2 uv; out vec4 frag;
 uniform float centerX; uniform float centerY; uniform float radius; uniform float softness; uniform float aspect;
+uniform vec3 color;   // tint (default white = the classic look)
 void main(){
   vec2 p = uv - vec2(centerX, centerY);
   p.x *= max(aspect, 1e-4);                       // correct the canvas stretch => a round dot
@@ -202,7 +203,7 @@ void main(){
   float edge = max(1e-4, radius);
   float inner = edge * (1.0 - clamp(softness, 0.0, 1.0));
   float v = 1.0 - smoothstep(inner, edge, d);     // 1 in the core, fading to 0 by the radius
-  frag = vec4(vec3(v), 1.0);
+  frag = vec4(color * v, 1.0);
 }`;
 
 const DISPLACE = `#version 300 es
@@ -1586,12 +1587,13 @@ export const REGISTRY = {
     ],
   },
   spot: {
-    name: 'spot', type: 'generator', src: SPOT,
+    name: 'spot', type: 'generator', desc: 'A soft positionable dot.', src: SPOT,
     params: [
       { key: 'centerX', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'centerY', type: 'float', min: 0, max: 1, default: 0.5 },
       { key: 'radius', type: 'float', min: 0, max: 1, default: 0.25 },
       { key: 'softness', type: 'float', min: 0, max: 1, default: 0.5 },
+      { key: 'color', type: 'color', default: '#ffffff' },
     ],
   },
   noise: {
