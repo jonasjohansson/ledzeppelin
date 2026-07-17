@@ -4,7 +4,7 @@
 #include "channels.h"
 
 static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
-static float remapf(float v, float lo, float hi) { return clamp01((v - lo) / (hi - lo)); }
+static float remapf(float v, float lo, float hi) { return hi > lo ? clamp01((v - lo) / (hi - lo)) : 0; }
 /* Re-stretch an already-normalised 0..1 value so [floor..ceil] fills 0..1. */
 static float trimf(float v, float fl, float ce) { return ce > fl ? clamp01((v - fl) / (ce - fl)) : v; }
 
@@ -53,6 +53,7 @@ static int put(lo_msg *out, int n, int max, const char *prefix, const char *name
 
 int lo_channels(const lo_hand *hands, int nhands, const lo_cal *cal, lo_msg *out, int max) {
   int n = 0;
+  if (nhands > 2) nhands = 2;   /* only /leap/left + /leap/right exist */
   n = put(out, n, max, "/leap", "/hands", clamp01(nhands / 2.0f));
 
   for (int i = 0; i < nhands; i++) {

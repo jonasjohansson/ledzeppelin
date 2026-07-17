@@ -42,6 +42,37 @@ int main(void) {
   assert(fabsf(get(n, "/leap/hand/pitch") - 0.5f) < 1e-3f);
   assert(fabsf(get(n, "/leap/hand/yaw")   - 0.5f) < 1e-3f);
 
+  /* tilted orientation: neutral is 0.5 for ANY atan2 sign, so tilt each axis
+     45 deg to pin the sign/axis of roll/pitch/yaw (0.625 = +45, 0.375 = -45). */
+  h = centred(); h.normal[0] = 0.70710678f; h.normal[1] = -0.70710678f;  /* roll +45 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/roll")  - 0.625f) < 1e-3f);
+  assert(fabsf(get(n, "/leap/hand/pitch") - 0.5f)   < 1e-3f);  /* dir untouched */
+  assert(fabsf(get(n, "/leap/hand/yaw")   - 0.5f)   < 1e-3f);
+  h = centred(); h.normal[0] = -0.70710678f; h.normal[1] = -0.70710678f; /* roll -45 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/roll")  - 0.375f) < 1e-3f);
+  h = centred(); h.dir[1] = 0.70710678f; h.dir[2] = -0.70710678f;        /* pitch +45 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/pitch") - 0.625f) < 1e-3f);
+  assert(fabsf(get(n, "/leap/hand/yaw")   - 0.5f)   < 1e-3f);
+  h = centred(); h.dir[0] = 0.70710678f; h.dir[2] = -0.70710678f;        /* yaw +45 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/yaw")   - 0.625f) < 1e-3f);
+  assert(fabsf(get(n, "/leap/hand/pitch") - 0.5f)   < 1e-3f);
+
+  /* pinch: raw value passes through clamped */
+  h = centred(); h.pinch = 0.7f;
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/pinch") - 0.7f) < 1e-6f);
+
+  /* finger spread: two fingers 22.5 deg apart -> (pi/8)/(pi/4) = 0.5 (un-clamped) */
+  h = centred(); h.extended[1] = 1; h.extended[2] = 1;
+  h.finger_dir[1][2] = -1.0f;                                  /* index: straight forward */
+  h.finger_dir[2][0] = 0.38268343f; h.finger_dir[2][2] = -0.92387953f;  /* middle: +22.5 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/spread") - 0.5f) < 1e-3f);
+
   /* confidence gate suppresses the phantom edge fist */
   h = centred(); h.grab = 1.0f;
   n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
@@ -91,6 +122,12 @@ int main(void) {
   h.pos[1] = 225.0f;                                       /* raw 0.5 -> (0.5-0.2)/0.8 */
   n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
   assert(fabsf(get(n, "/leap/hand/y") - 0.375f) < 1e-6f);
+
+  /* trims: ceil 0.8 rescales so raw 0.8 pins to 1.0 (top of range) */
+  cal = lo_cal_defaults(); cal.yceil = 0.8f;
+  h = centred(); h.pos[1] = 300.0f;                        /* raw 0.8 -> trimmed 1.0 */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/y") - 1.0f) < 1e-6f);
 
   /* velocity: 1500 mm/s = 1.0, clamped */
   cal = lo_cal_defaults();
