@@ -7,9 +7,9 @@
 
 static long counter = 0;
 
-int feed_open(void) { return 0; }
+int fake_feed_open(void) { return 0; }
 
-int feed_poll(lo_hand *hands, int max) {
+int fake_feed_poll(lo_hand *hands, int max) {
   if (max < 1) return 0;
   float t = counter * 0.05f;
   counter++;

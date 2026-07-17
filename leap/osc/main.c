@@ -2,10 +2,11 @@
    main.c wires the pieces: flags -> lo_cal, a swappable frame source (feed.h),
    and a timed feed_poll -> lo_channels -> osc_bundle -> sendto loop.
 
-   Feed selection is compile-time by design (see the next task's CMake): the
-   fake and real feeds export the SAME feed_open/feed_poll symbols, so exactly
-   one is linked. Today only feed_fake.c is built, so a non-fake run without
-   HAVE_LEAPC has no real source and bails with a hint. */
+   Both feeds can be linked into one binary, so each prefixes its symbols
+   (fake_feed_* / leapc_feed_*, see feed.h). We pick one at startup via a pair
+   of function pointers: --fake -> the synthetic feed; otherwise the LeapC feed
+   when HAVE_LEAPC is defined, else bail with a hint (that build has no real
+   source). --fake works in either build — it's the no-hardware spoof. */
 #include <arpa/inet.h>
 #include <errno.h>
 #include <signal.h>
@@ -105,13 +106,19 @@ int main(int argc, char **argv) {
   cal.zceil  = numflag(argc, argv, "--zceil",  cal.zceil);
   cal.conf   = numflag(argc, argv, "--conf",   cal.conf);
 
-#ifndef HAVE_LEAPC
-  /* Only the fake feed is linked today; a real run has no source. */
+  /* Pick the frame source once. Default to the fake feed; a real run needs
+     the LeapC feed, which only exists when built with the SDK. */
+  int (*feed_open_fn)(void)          = fake_feed_open;
+  int (*feed_poll_fn)(lo_hand *, int) = fake_feed_poll;
   if (!fake) {
+#ifdef HAVE_LEAPC
+    feed_open_fn = leapc_feed_open;
+    feed_poll_fn = leapc_feed_poll;
+#else
     fputs("built without LeapC — run with --fake, or build on the mini\n", stderr);
     return 1;
-  }
 #endif
+  }
 
   /* UDP socket — connectionless, so one sendto per frame, no reconnect. */
   int sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -127,7 +134,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  if (feed_open() != 0) {
+  if (feed_open_fn() != 0) {
     fprintf(stderr, "leap-osc: feed_open failed\n");
     close(sock);
     return 1;
@@ -150,7 +157,7 @@ int main(int argc, char **argv) {
   unsigned char pkt[2048];
 
   while (running) {
-    int nh = feed_poll(hands, 2);
+    int nh = feed_poll_fn(hands, 2);
     if (nh < 0) { fprintf(stderr, "leap-osc: feed_poll error\n"); break; }
 
     int nm = lo_channels(hands, nh, &cal, msgs, LO_MAX_MSGS);
