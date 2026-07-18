@@ -65,7 +65,11 @@ bus.onmessage = (e) => {
     // changes. Re-rendering on an UNCHANGED snapshot would snap an open picker
     // shut, so only rebuild when the structure actually differs.
     const next = m.data || [];
-    const sig = JSON.stringify(next);
+    // Fingerprint only the fields a row actually renders (id/label/osc/group/
+    // kind/keyable + the two bindings) instead of JSON-serialising the whole
+    // payload every 2s — cheaper on the Pi, and still re-renders on any real
+    // change (incl. a bind/clear, which alters midi/key).
+    const sig = next.map((p) => [p.id, p.label, p.osc, p.group, p.kind, p.keyable ? 1 : 0, p.midi || '', p.key || ''].join('\x1f')).join('\x1e');
     if (sig === lastParamsSig) return;
     lastParamsSig = sig; params = next; renderParams();
   }

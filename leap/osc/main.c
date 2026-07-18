@@ -54,15 +54,20 @@ static float numflag(int argc, char **argv, const char *name, float def) {
   return v && *v ? (float)atof(v) : def;
 }
 
-/* Every flag this program understands — anything else is an error. */
-static const char *KNOWN[] = {
-  "--fake", "--verbose", "--help", "--rate", "--host", "--port",
-  "--xlo", "--xhi", "--ylo", "--yhi", "--zlo", "--zhi",
-  "--xfloor", "--xceil", "--yfloor", "--yceil", "--zfloor", "--zceil", "--conf",
+/* Every flag this program understands, with its arity (1 = takes a value) — one
+   source of truth for both the unknown-flag scan and the value-skip, so adding a
+   flag can't desync them. Returns 1/0 if known (via *takes_value), -1 if not. */
+static const struct { const char *name; int takes_value; } FLAGS[] = {
+  { "--fake", 0 }, { "--verbose", 0 }, { "--help", 0 },
+  { "--rate", 1 }, { "--host", 1 }, { "--port", 1 },
+  { "--xlo", 1 }, { "--xhi", 1 }, { "--ylo", 1 }, { "--yhi", 1 }, { "--zlo", 1 }, { "--zhi", 1 },
+  { "--xfloor", 1 }, { "--xceil", 1 }, { "--yfloor", 1 }, { "--yceil", 1 }, { "--zfloor", 1 }, { "--zceil", 1 },
+  { "--conf", 1 },
 };
-/* Value-taking flags — their argument is skipped when scanning for unknowns. */
-static int takes_value(const char *a) {
-  return strcmp(a, "--fake") && strcmp(a, "--verbose") && strcmp(a, "--help");
+static int flag_arity(const char *a) {
+  for (unsigned k = 0; k < sizeof FLAGS / sizeof *FLAGS; k++)
+    if (!strcmp(a, FLAGS[k].name)) return FLAGS[k].takes_value;
+  return -1;   /* unknown */
 }
 
 int main(int argc, char **argv) {
@@ -70,14 +75,12 @@ int main(int argc, char **argv) {
 
   /* Reject unknown flags (skip the value that follows a known value-flag). */
   for (int i = 1; i < argc; i++) {
-    int known = 0;
-    for (unsigned k = 0; k < sizeof KNOWN / sizeof *KNOWN; k++)
-      if (!strcmp(argv[i], KNOWN[k])) { known = 1; break; }
-    if (!known) {
+    int arity = flag_arity(argv[i]);
+    if (arity < 0) {
       fprintf(stderr, "leap-osc: unknown flag '%s'\n%s", argv[i], USAGE);
       return 2;
     }
-    if (takes_value(argv[i])) i++;   /* consume its argument */
+    if (arity) i++;   /* consume its argument */
   }
 
   int fake    = has(argc, argv, "--fake");
