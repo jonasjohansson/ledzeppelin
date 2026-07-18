@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ledzeppelin.leap-osc</string>
+
+  <!-- ProgramArguments: the binary path is where you copied/symlinked the
+       cmake build output (build/leap-osc). The calibration flags below are
+       PLACEHOLDER values — tune --ylo/--yfloor (and any x/z range + trim) per
+       install using http://localhost:7070/leap/ before committing them here. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/leap-osc</string>
+    <string>--ylo</string>
+    <string>190</string>
+    <string>--yfloor</string>
+    <string>0.2</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/leap-osc.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/leap-osc.log</string>
+</dict>
+</plist>

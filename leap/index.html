@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#131110">
+<link rel="icon" type="image/png" href="../icons/favicon.png">
+<title>LED Zeppelin — Leap Monitor</title>
+<style>
+  @font-face{ font-family:"Commit Mono"; font-style:normal; font-weight:400; font-display:swap;
+              src:url("../fonts/CommitMono.woff2") format("woff2"); }
+  :root{
+    --bg:#131110; --panel:#201d19; --panel-2:#2b2722; --hover:#38332b;
+    --line:#3a342d; --line-2:#4c4538;
+    --field-bg:#161310;
+    --text:#f4f5f7; --muted:#a3aab4; --faint:#737a84; --readout:#d7dbe0;
+    --accent:#e8a35c; --accent-soft:#33271a; --accent-text:#f1d6bb; --accent-line:#54402b;
+    --danger:#ff6b6b;
+    --mono:"Commit Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius:3px; --radius-sm:2px; --ls-caps:.1em;
+    --s1:2px; --s2:4px; --s3:6px; --s4:10px; --s5:14px; --s6:8px;
+  }
+  *{ box-sizing:border-box; margin:0; }
+  html,body{ background:var(--bg); color:var(--text); font-family:var(--mono); font-size:14px;
+    -webkit-font-smoothing:antialiased; height:100%; }
+  body{ display:flex; flex-direction:column; padding:12px 16px; gap:10px; }
+
+  header{ display:flex; align-items:center; gap:8px; flex:0 0 auto; }
+  header h1{ font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--muted); font-weight:400; }
+  .dot{ width:8px; height:8px; border-radius:var(--radius-sm); background:var(--danger); flex:0 0 auto; transition:background .2s; }
+  .dot.on{ background:var(--accent); }
+  .dots{ display:flex; gap:6px; align-items:center; margin-left:auto; }
+  .dots .tag{ font-size:10px; letter-spacing:var(--ls-caps); text-transform:uppercase; color:var(--faint); }
+
+  .main{ display:flex; gap:12px; flex:1 1 auto; min-height:0; }
+
+  /* Left: XY pad (read-only plot of hand position) */
+  .viz{ flex:1 1 60%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .viz canvas{ display:block; }
+  .viz .no-hand{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--faint); font-size:12px; letter-spacing:var(--ls-caps); text-transform:uppercase; pointer-events:none; }
+
+  /* Right: channel readouts */
+  .channels{ flex:0 0 260px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+  .ch{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:6px 8px; }
+  .ch-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:3px; }
+  .ch-name{ font-size:11px; color:var(--muted); letter-spacing:var(--ls-caps); text-transform:uppercase; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ch-val{ font-size:13px; color:var(--readout); font-variant-numeric:tabular-nums; min-width:40px; text-align:right; }
+  .ch-bar{ height:4px; border-radius:1px; background:var(--field-bg); overflow:hidden; }
+  .ch-fill{ height:100%; background:var(--accent); border-radius:1px; transition:width .05s linear; }
+  .ch-empty{ color:var(--faint); font-size:11px; letter-spacing:var(--ls-caps); text-transform:uppercase; text-align:center; padding:16px 8px; }
+
+  .status{ flex:0 0 auto; font-size:11px; color:var(--faint); letter-spacing:var(--ls-caps); text-transform:uppercase; text-align:center; padding:4px; }
+
+  @media (max-width:640px){
+    .main{ flex-direction:column; }
+    .channels{ flex:0 0 auto; max-height:40vh; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Leap Motion — Channel Monitor</h1>
+    <div class="dots">
+      <span class="tag">Daemon</span><span class="dot" id="dot"></span>
+    </div>
+  </header>
+  <div class="main">
+    <div class="viz">
+      <canvas id="canvas"></canvas>
+      <div class="no-hand" id="noHand">No hand</div>
+    </div>
+    <div class="channels" id="channels">
+      <div class="ch-empty" id="chEmpty">Waiting for /leap/ channels…</div>
+    </div>
+  </div>
+  <div class="status" id="status">connecting…</div>
+
+<script>
+// Read-only monitor: subscribes to the daemon's /frames websocket and shows
+// every /leap/* channel it rebroadcasts. NO outbound messages, no :6437, no
+// stream-to-LZ — this page only reads what the editor receives.
+
+const $ = (id) => document.getElementById(id);
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+// --- State ------------------------------------------------------------------
+const values = Object.create(null);   // channel -> latest numeric value
+let lastFrameAt = 0;                    // ms timestamp of last /leap/* message
+let connected = false;
+
+// --- Channel readout rows (created lazily, kept sorted) ---------------------
+const rowEls = Object.create(null);    // channel -> { row, val, fill }
+
+function ensureRow(channel){
+  if (rowEls[channel]) return rowEls[channel];
+  const empty = $('chEmpty');
+  if (empty) empty.remove();
+
+  const row = document.createElement('div');
+  row.className = 'ch';
+  // Strip the /leap/ prefix for a tidier label, but keep it if that would be ambiguous.
+  const label = channel.replace(/^\/leap\//, '') || channel;
+  row.innerHTML =
+    '<div class="ch-head"><span class="ch-name"></span><span class="ch-val">0.000</span></div>' +
+    '<div class="ch-bar"><div class="ch-fill"></div></div>';
+  row.querySelector('.ch-name').textContent = label;
+  row.title = channel;
+
+  const rec = { row, val: row.querySelector('.ch-val'), fill: row.querySelector('.ch-fill') };
+  rowEls[channel] = rec;
+
+  // Insert keeping the container sorted by channel name.
+  const container = $('channels');
+  const names = Object.keys(rowEls).sort();
+  const idx = names.indexOf(channel);
+  const nextName = names[idx + 1];
+  if (nextName) container.insertBefore(row, rowEls[nextName].row);
+  else container.appendChild(row);
+  return rec;
+}
+
+function applyValue(channel, value){
+  const rec = ensureRow(channel);
+  const num = Number(value);
+  const shown = Number.isFinite(num) ? num : 0;
+  rec.val.textContent = shown.toFixed(3);        // show the TRUE number
+  rec.fill.style.width = (clamp01(shown) * 100) + '%';  // clamp only the bar
+}
+
+// --- XY pad -----------------------------------------------------------------
+// Single hand: plots /leap/hand/(x,y); dot radius scales with /leap/hand/grab
+// (bigger fist -> bigger dot). Two hands: plots /leap/left/(x,y) and
+// /leap/right/(x,y), each sized by that side's grab. Canvas y is flipped so
+// y-up hand space reads bottom-up on screen.
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+
+function css(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function haveXY(px, py){ return values[px] !== undefined && values[py] !== undefined; }
+
+function drawDot(cx, cy, side, grab){
+  const w = canvas.clientWidth || canvas.width;
+  const r = 8 + clamp01(grab) * 22;                 // grab -> radius
+  const x = clamp01(values[side + '/x']) * w;
+  const y = (1 - clamp01(values[side + '/y'])) * w; // y-up -> canvas y-down
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = css('--accent');
+  ctx.globalAlpha = 0.85;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+function render(){
+  requestAnimationFrame(render);
+
+  // Size to the square that fits the panel.
+  const parent = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const size = Math.max(0, Math.min(parent.clientWidth, parent.clientHeight));
+  if (canvas.clientWidth !== size){
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+  }
+  const px = Math.round(size * dpr);
+  if (canvas.width !== px){ canvas.width = px; canvas.height = px; }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+  if (size <= 0) return;
+
+  // Frame + crosshair.
+  ctx.strokeStyle = css('--line');
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+  ctx.strokeStyle = css('--faint');
+  ctx.globalAlpha = 0.35;
+  ctx.beginPath();
+  ctx.moveTo(size / 2, 0); ctx.lineTo(size / 2, size);
+  ctx.moveTo(0, size / 2); ctx.lineTo(size, size / 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Drive the hand count off the authoritative /leap/hands channel (0 none,
+  // 0.5 one, 1 two), NOT channel existence — the daemon streams relax frames
+  // continuously, so left/right/hand channels stay "defined" long after a hand
+  // has left. Thresholds tolerate any float fuzz.
+  const hands = values['/leap/hands'] ?? 0;
+  let drew = false;
+  if (hands > 0.75){            // two hands
+    if (haveXY('/leap/left/x', '/leap/left/y')){ drawDot(0, 0, '/leap/left', values['/leap/left/grab'] || 0); drew = true; }
+    if (haveXY('/leap/right/x', '/leap/right/y')){ drawDot(0, 0, '/leap/right', values['/leap/right/grab'] || 0); drew = true; }
+  } else if (hands > 0.25 && haveXY('/leap/hand/x', '/leap/hand/y')){  // one hand
+    drawDot(0, 0, '/leap/hand', values['/leap/hand/grab'] || 0);
+    drew = true;
+  }
+  $('noHand').style.display = drew ? 'none' : '';
+}
+requestAnimationFrame(render);
+
+// --- Status -----------------------------------------------------------------
+function updateStatus(){
+  const dot = $('dot');
+  if (connected){
+    dot.classList.add('on');
+    const n = Object.keys(rowEls).length;
+    const ago = lastFrameAt ? Math.max(0, Math.round(performance.now() - lastFrameAt)) : '—';
+    $('status').textContent = 'connected · ' + n + ' channels · last frame ' + ago + 'ms ago';
+  } else {
+    dot.classList.remove('on');
+    $('status').textContent = 'daemon disconnected — retrying';
+  }
+}
+setInterval(updateStatus, 250);
+
+// --- WebSocket (read-only, auto-reconnect) ----------------------------------
+let ws = null, backoff = 500;
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  try { ws = new WebSocket(proto + '://' + location.host + '/frames'); }
+  catch { scheduleReconnect(); return; }
+
+  ws.addEventListener('open', () => { connected = true; backoff = 500; updateStatus(); });
+  ws.addEventListener('message', (ev) => {
+    let m;
+    try { m = JSON.parse(ev.data); } catch { return; }   // tolerate malformed JSON
+    if (!m || m.type !== 'ext') return;
+    const channel = String(m.channel);
+    if (!channel.startsWith('/leap/')) return;
+    values[channel] = Number(m.value);
+    lastFrameAt = performance.now();
+    applyValue(channel, m.value);
+  });
+  ws.addEventListener('close', () => { connected = false; updateStatus(); scheduleReconnect(); });
+  ws.addEventListener('error', () => { try { ws.close(); } catch {} });
+}
+function scheduleReconnect(){
+  setTimeout(connect, backoff);
+  backoff = Math.min(backoff * 2, 5000);
+}
+
+connect();
+updateStatus();
+</script>
+</body>
+</html>
