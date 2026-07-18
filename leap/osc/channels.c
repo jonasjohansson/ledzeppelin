@@ -3,6 +3,12 @@
 #include <string.h>
 #include "channels.h"
 
+/* glibc's <math.h> only defines M_PI outside strict-ISO mode; we compile with
+   -std=c99, so define it ourselves (Apple's libc defines it unconditionally). */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 static float clamp01(float v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 static float remapf(float v, float lo, float hi) { return hi > lo ? clamp01((v - lo) / (hi - lo)) : 0; }
 /* Re-stretch an already-normalised 0..1 value so [floor..ceil] fills 0..1. */
@@ -25,7 +31,14 @@ static void palm_angles(const lo_hand *h, float *roll, float *pitch, float *yaw)
 /* Average angle between adjacent extended-finger directions, /(pi/4), clamped. */
 static float finger_spread(const lo_hand *h) {
   float dirs[5][3]; int nd = 0;
-  for (int i = 0; i < 5; i++) if (h->extended[i]) { memcpy(dirs[nd], h->finger_dir[i], sizeof dirs[0]); nd++; }
+  for (int i = 0; i < 5; i++) {
+    if (!h->extended[i]) continue;
+    const float *d = h->finger_dir[i];
+    /* Skip a degenerate (zero-length) bone: dot=0 -> acos(0)=pi/2 would wrongly
+       read as a wide spread. A missing distal bone contributes no angle. */
+    if (d[0]*d[0] + d[1]*d[1] + d[2]*d[2] < 1e-6f) continue;
+    memcpy(dirs[nd], d, sizeof dirs[0]); nd++;
+  }
   if (nd < 2) return 0;
   float sum = 0; int n = 0;
   for (int i = 1; i < nd; i++) {
@@ -58,7 +71,16 @@ int lo_channels(const lo_hand *hands, int nhands, const lo_cal *cal, lo_msg *out
 
   for (int i = 0; i < nhands; i++) {
     const lo_hand *h = &hands[i];
-    const char *prefix = nhands > 1 ? (h->is_left ? "/leap/left" : "/leap/right") : "/leap/hand";
+    /* One hand -> /leap/hand. Two hands -> name by handedness, but if both hands
+       report the same (LeapC misclassification, or two same-handed people) give
+       the second the opposite prefix so their OSC addresses never collide. */
+    const char *prefix;
+    if (nhands <= 1) prefix = "/leap/hand";
+    else {
+      int left = h->is_left;
+      if (i > 0 && hands[i].is_left == hands[0].is_left) left = !hands[0].is_left;
+      prefix = left ? "/leap/left" : "/leap/right";
+    }
 
     n = put(out, n, max, prefix, "/x", trimf(remapf(h->pos[0], cal->xlo, cal->xhi), cal->xfloor, cal->xceil));
     n = put(out, n, max, prefix, "/y", trimf(remapf(h->pos[1], cal->ylo, cal->yhi), cal->yfloor, cal->yceil));
@@ -87,13 +109,23 @@ int lo_channels(const lo_hand *hands, int nhands, const lo_cal *cal, lo_msg *out
     n = put(out, n, max, prefix, "/vel", remapf(speed, 0, 1500));
   }
 
-  /* No hand visible: zero the generic channels so bound params relax. */
+  /* No hand visible: relax the bound channels so params return to neutral.
+     Always relax /leap/hand; if we just dropped from two hands, also relax
+     /leap/left + /leap/right for this one transition frame (they'd otherwise
+     freeze at their last value). last_seen keeps sustained idle at 13 msgs,
+     not 37 — important for the always-on Pi's websocket traffic. */
+  static int last_seen = 0;
   if (!nhands) {
-    static const char *keys[]   = { "/x", "/y", "/z", "/grab", "/pinch", "/roll", "/pitch", "/yaw", "/spread", "/vel", "/point", "/ball" };
-    for (unsigned k = 0; k < sizeof keys / sizeof *keys; k++) {
-      int neutral = !strcmp(keys[k], "/y") || !strcmp(keys[k], "/roll") || !strcmp(keys[k], "/pitch") || !strcmp(keys[k], "/yaw");
-      n = put(out, n, max, "/leap/hand", keys[k], neutral ? 0.5f : 0.0f);
-    }
+    static const char *keys[] = { "/x", "/y", "/z", "/grab", "/pinch", "/roll", "/pitch", "/yaw", "/spread", "/vel", "/point", "/ball" };
+    const char *prefixes[3]; int np = 0;
+    prefixes[np++] = "/leap/hand";
+    if (last_seen > 1) { prefixes[np++] = "/leap/left"; prefixes[np++] = "/leap/right"; }
+    for (int p = 0; p < np; p++)
+      for (unsigned k = 0; k < sizeof keys / sizeof *keys; k++) {
+        int neutral = !strcmp(keys[k], "/y") || !strcmp(keys[k], "/roll") || !strcmp(keys[k], "/pitch") || !strcmp(keys[k], "/yaw");
+        n = put(out, n, max, prefixes[p], keys[k], neutral ? 0.5f : 0.0f);
+      }
   }
+  last_seen = nhands;
   return n;
 }

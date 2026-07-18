@@ -1,7 +1,9 @@
 #ifndef LEAP_OSC_CHANNELS_H
 #define LEAP_OSC_CHANNELS_H
 
-#define LO_MAX_MSGS 32
+/* Worst case is the 0-hand relax after two hands: /leap/hand + /leap/left +
+   /leap/right (12 each) + /leap/hands = 37. Round up for headroom. */
+#define LO_MAX_MSGS 40
 #define LO_ADDR_MAX 32
 
 /* One tracked hand, decoupled from LeapC so this module tests anywhere. */

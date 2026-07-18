@@ -72,6 +72,10 @@ int main(void) {
   h.finger_dir[2][0] = 0.38268343f; h.finger_dir[2][2] = -0.92387953f;  /* middle: +22.5 */
   n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
   assert(fabsf(get(n, "/leap/hand/spread") - 0.5f) < 1e-3f);
+  /* a degenerate (zero-length) extended finger is skipped, not read as a wide angle */
+  h.extended[3] = 1;                                           /* ring "extended", finger_dir[3] left {0,0,0} */
+  n = lo_channels(&h, 1, &cal, M, LO_MAX_MSGS);
+  assert(fabsf(get(n, "/leap/hand/spread") - 0.5f) < 1e-3f);  /* still fingers 1+2 only, not saturated to 1 */
 
   /* confidence gate suppresses the phantom edge fist */
   h = centred(); h.grab = 1.0f;
@@ -113,6 +117,20 @@ int main(void) {
   assert(has(n, "/leap/left/x"));
   assert(has(n, "/leap/right/x"));
   assert(get(n, "/leap/hands") == 1.0f);
+
+  /* two SAME-handed hands still get distinct prefixes (no address collision) */
+  lo_hand same[2] = { centred(), centred() };
+  same[0].is_left = 1; same[1].is_left = 1;
+  n = lo_channels(same, 2, &cal, M, LO_MAX_MSGS);
+  assert(has(n, "/leap/left/x"));
+  assert(has(n, "/leap/right/x"));                            /* second hand forced to the other prefix */
+
+  /* dropping from two hands relaxes /leap/left + /leap/right too, not just /leap/hand */
+  n = lo_channels(NULL, 0, &cal, M, LO_MAX_MSGS);
+  assert(get(n, "/leap/left/y")    == 0.5f);
+  assert(get(n, "/leap/right/y")   == 0.5f);
+  assert(get(n, "/leap/left/grab") == 0.0f);
+  assert(get(n, "/leap/hand/y")    == 0.5f);                  /* generic namespace relaxes as well */
 
   /* trims: floor 0.2 pins the bottom 20% to 0 and rescales */
   cal.yfloor = 0.2f;
