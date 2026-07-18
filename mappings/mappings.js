@@ -86,7 +86,7 @@ bus.onmessage = (e) => {
 
 // One MIDI/Key cell.
 //   KEY slot  → press-to-learn (a dropdown of key codes would be useless).
-//   MIDI slot → an explicit channel PICKER: choose e.g. /leap/hand/y straight from
+//   MIDI slot → an explicit channel PICKER: choose e.g. /osc/fader1 straight from
 //               the live channel list, so you SEE and SELECT the binding instead of
 //               wiggling and hoping the right axis wins the max-delta race. The old
 //               move-to-learn is still available as the "⊙ learn" entry (handy for

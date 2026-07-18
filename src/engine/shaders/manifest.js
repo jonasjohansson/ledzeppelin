@@ -189,7 +189,7 @@ void main(){
 
 // Spot — a soft round dot at (centerX, centerY) with a controllable radius. The
 // hand-controlled twin of two crossed Lines, but RADIAL (a ball, not a box): bind
-// centerX/centerY to a 2-D input (e.g. Leap hand x/y) to move it, and `radius` to
+// centerX/centerY to a 2-D input (e.g. an x/y control pair) to move it, and `radius` to
 // a gesture (e.g. grab) to focus it down to a point. `aspect` (auto-injected) keeps
 // it circular on any canvas.
 const SPOT = `#version 300 es
