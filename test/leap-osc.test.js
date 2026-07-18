@@ -16,8 +16,10 @@ test('leap-osc C unit tests pass', { skip: !hasCC && 'no C compiler' }, () => {
 // same code that receives them in production. parseOsc(buf) → [{ address, value }],
 // recursing '#bundle' into a flat array of messages in wire order.
 test('leap-osc bundle round-trips through the daemon OSC parser', { skip: !hasCC && 'no C compiler' }, () => {
-  execFileSync('cc', ['-std=c99', '-o', '/tmp/lo_test_osc', 'leap/osc/test_osc.c', 'leap/osc/osc.c', 'leap/osc/channels.c', '-lm']);
-  const bundle = execFileSync('/tmp/lo_test_osc', ['--emit']);   // raw datagram bytes (a Buffer)
+  // Own binary path (NOT run-tests.sh's /tmp/lo_test_osc) so the two tests can't
+  // race on the same file if the suite is run concurrently or shares /tmp.
+  execFileSync('cc', ['-std=c99', '-o', '/tmp/lo_emit_osc', 'leap/osc/test_osc.c', 'leap/osc/osc.c', 'leap/osc/channels.c', '-lm']);
+  const bundle = execFileSync('/tmp/lo_emit_osc', ['--emit']);   // raw datagram bytes (a Buffer)
   const parsed = parseOsc(bundle);
   assert.deepEqual(parsed.map(m => m.address), ['/leap/hand/x', '/leap/hands']);
   assert.ok(Math.abs(parsed[0].value - 0.25) < 1e-6);

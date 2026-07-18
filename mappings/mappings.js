@@ -109,7 +109,7 @@ function cell(p, slot) {
   // KEY: unchanged press-to-learn.
   if (slot === 'key') {
     if (armed) { c.classList.add('armed'); c.append(el('span', 'cell-arm', 'press…')); }
-    else if (ch) { c.append(el('span', 'cell-chan', ch.replace(/^key:/, '')), clearBtn(p, slot)); }
+    else if (ch) { c.append(el('span', 'cell-chan', ch.replace(/^key:/, '')), liveBar(ch), clearBtn(p, slot)); }
     else c.append(el('span', 'cell-none', '+'));
     c.addEventListener('click', () => { if (armed) { learn = null; renderParams(); } else arm(p, slot); });
     return c;

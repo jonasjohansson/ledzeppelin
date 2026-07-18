@@ -184,12 +184,16 @@ function render(){
   ctx.stroke();
   ctx.globalAlpha = 1;
 
-  const twoHands = haveXY('/leap/left/x', '/leap/left/y') || haveXY('/leap/right/x', '/leap/right/y');
+  // Drive the hand count off the authoritative /leap/hands channel (0 none,
+  // 0.5 one, 1 two), NOT channel existence — the daemon streams relax frames
+  // continuously, so left/right/hand channels stay "defined" long after a hand
+  // has left. Thresholds tolerate any float fuzz.
+  const hands = values['/leap/hands'] ?? 0;
   let drew = false;
-  if (twoHands){
+  if (hands > 0.75){            // two hands
     if (haveXY('/leap/left/x', '/leap/left/y')){ drawDot(0, 0, '/leap/left', values['/leap/left/grab'] || 0); drew = true; }
     if (haveXY('/leap/right/x', '/leap/right/y')){ drawDot(0, 0, '/leap/right', values['/leap/right/grab'] || 0); drew = true; }
-  } else if (haveXY('/leap/hand/x', '/leap/hand/y')){
+  } else if (hands > 0.25 && haveXY('/leap/hand/x', '/leap/hand/y')){  // one hand
     drawDot(0, 0, '/leap/hand', values['/leap/hand/grab'] || 0);
     drew = true;
   }
